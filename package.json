@@ -1,0 +1,16 @@
+{
+  "name": "gracestowel-monorepo",
+  "version": "0.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:storefront": "npm run dev --workspace=apps/storefront",
+    "deploy:storefront": "npm run deploy --workspace=apps/storefront",
+    "dev:api": "npm run dev --workspace=apps/api",
+    "deploy:api": "npm run deploy --workspace=apps/api",
+    "dev:background": "npm run dev --workspace=apps/background",
+    "deploy:background": "npm run deploy --workspace=apps/background"
+  }
+}
