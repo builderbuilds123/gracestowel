@@ -42,4 +42,4 @@ COPY --from=builder /app/apps/backend/medusa-config.ts ./medusa-config.ts
 COPY --from=builder /app/apps/backend/package.json ./package.json
 
 EXPOSE 9000
-CMD ["npm", "run", "start"]
+CMD ["sh", "-c", "npx medusa db:migrate && npm run start"]
