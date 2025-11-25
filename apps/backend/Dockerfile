@@ -20,10 +20,10 @@ COPY . .
 # Build Medusa backend
 WORKDIR /app/apps/backend
 
-# Create a minimal tailwind.config.js to avoid pattern errors
-RUN echo 'module.exports = { content: ["./src/**/*.{js,jsx,ts,tsx}"] }' > tailwind.config.js
-
-RUN npx medusa build || echo "Build completed with warnings"
+# Build - backend compiles to .medusa/server, admin errors can be ignored
+RUN npx medusa build || echo "Build completed with warnings" && \
+    # Ensure .medusa/server exists (backend build output)
+    test -d .medusa/server || (echo "Backend build failed" && exit 1)
 
 # Production image
 FROM base AS runner
@@ -34,7 +34,7 @@ ENV PORT=9000
 
 # Copy built app and dependencies
 COPY --from=builder /app/apps/backend/node_modules ./node_modules
-COPY --from=builder /app/apps/backend/dist ./dist
+COPY --from=builder /app/apps/backend/.medusa ./.medusa
 COPY --from=builder /app/apps/backend/medusa-config.ts ./medusa-config.ts
 COPY --from=builder /app/apps/backend/package.json ./package.json
 
