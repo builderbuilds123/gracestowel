@@ -12,5 +12,8 @@
     "deploy:api": "npm run deploy --workspace=apps/api",
     "dev:background": "npm run dev --workspace=apps/background",
     "deploy:background": "npm run deploy --workspace=apps/background"
+  },
+  "dependencies": {
+    "@railway/cli": "^4.11.1"
   }
 }
