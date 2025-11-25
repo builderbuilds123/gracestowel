@@ -32,6 +32,9 @@ WORKDIR /app/apps/backend
 ENV NODE_ENV=production
 ENV PORT=9000
 
+# Copy root node_modules (where hoisted deps live)
+COPY --from=builder /app/node_modules /app/node_modules
+
 # Copy built app and dependencies
 COPY --from=builder /app/apps/backend/node_modules ./node_modules
 COPY --from=builder /app/apps/backend/.medusa ./.medusa
