@@ -15,7 +15,18 @@
     "rootDir": "./",
     "jsx": "react-jsx",
     "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true,
+    "baseUrl": ".",
+    "paths": {
+      "@medusajs/framework/utils": [
+        "node_modules/@medusajs/framework/utils"
+      ],
+      "@medusajs/framework/*": [
+        "node_modules/@medusajs/framework/*"
+      ],
+      "@medusajs/*": [
+        "node_modules/@medusajs/*"
+      ]
+    },
     "checkJs": false,
     "strictNullChecks": true
   },

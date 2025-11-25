@@ -40,6 +40,7 @@ COPY --from=builder /app/apps/backend/node_modules ./node_modules
 COPY --from=builder /app/apps/backend/.medusa ./.medusa
 COPY --from=builder /app/apps/backend/medusa-config.ts ./medusa-config.ts
 COPY --from=builder /app/apps/backend/package.json ./package.json
+COPY --from=builder /app/apps/backend/tsconfig.json ./tsconfig.json
 
 EXPOSE 9000
 CMD ["sh", "-c", "npx medusa db:migrate && npm run start"]
