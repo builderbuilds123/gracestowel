@@ -3,9 +3,8 @@
 
 [build]
 builder = "dockerfile"
-dockerfilePath = "Dockerfile"
-# Build from apps/backend directory
-watchPatterns = ["**"]
+dockerfilePath = "apps/backend/Dockerfile"
+watchPatterns = ["apps/backend/**"]
 
 [deploy]
 healthcheckPath = "/health"
