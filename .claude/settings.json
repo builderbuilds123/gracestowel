@@ -20,24 +20,6 @@
           }
         ]
       }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": ".claude/hooks/stop-prettier-formatter.sh"
-          },
-          {
-            "type": "command",
-            "command": ".claude/hooks/stop-build-check-enhanced.sh"
-          },
-          {
-            "type": "command",
-            "command": ".claude/hooks/error-handling-reminder.sh"
-          }
-        ]
-      }
     ]
   }
 }
