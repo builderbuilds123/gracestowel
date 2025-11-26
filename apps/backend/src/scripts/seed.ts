@@ -62,7 +62,8 @@ export default async function seedDemoData({ container }: ExecArgs) {
   const salesChannelModuleService = container.resolve(Modules.SALES_CHANNEL);
   const storeModuleService = container.resolve(Modules.STORE);
 
-  const countries = ["gb", "de", "dk", "se", "fr", "es", "it"];
+  // Grace Stowel ships to US, Canada, and select European countries
+  const countries = ["us", "ca", "gb", "de", "dk", "se", "fr", "es", "it"];
 
   logger.info("Seeding store data...");
   const [store] = await storeModuleService.listStores();
@@ -114,15 +115,22 @@ export default async function seedDemoData({ container }: ExecArgs) {
     input: {
       regions: [
         {
+          name: "North America",
+          currency_code: "usd",
+          countries: ["us", "ca"],
+          payment_providers: ["pp_system_default"],
+        },
+        {
           name: "Europe",
           currency_code: "eur",
-          countries,
+          countries: ["gb", "de", "dk", "se", "fr", "es", "it"],
           payment_providers: ["pp_system_default"],
         },
       ],
     },
   });
-  const region = regionResult[0];
+  const regionNA = regionResult[0];
+  const regionEU = regionResult[1];
   logger.info("Finished seeding regions.");
 
   logger.info("Seeding tax regions...");
@@ -141,10 +149,10 @@ export default async function seedDemoData({ container }: ExecArgs) {
     input: {
       locations: [
         {
-          name: "European Warehouse",
+          name: "Grace Stowel Warehouse",
           address: {
-            city: "Copenhagen",
-            country_code: "DK",
+            city: "Los Angeles",
+            country_code: "US",
             address_1: "",
           },
         },
@@ -193,9 +201,22 @@ export default async function seedDemoData({ container }: ExecArgs) {
   }
 
   const fulfillmentSet = await fulfillmentModuleService.createFulfillmentSets({
-    name: "European Warehouse delivery",
+    name: "Grace Stowel Global Delivery",
     type: "shipping",
     service_zones: [
+      {
+        name: "North America",
+        geo_zones: [
+          {
+            country_code: "us",
+            type: "country",
+          },
+          {
+            country_code: "ca",
+            type: "country",
+          },
+        ],
+      },
       {
         name: "Europe",
         geo_zones: [
@@ -241,31 +262,28 @@ export default async function seedDemoData({ container }: ExecArgs) {
     },
   });
 
+  // Create shipping options for North America zone
   await createShippingOptionsWorkflow(container).run({
     input: [
       {
-        name: "Standard Shipping",
+        name: "Standard Shipping (3-5 days)",
         price_type: "flat",
         provider_id: "manual_manual",
-        service_zone_id: fulfillmentSet.service_zones[0].id,
+        service_zone_id: fulfillmentSet.service_zones[0].id, // North America
         shipping_profile_id: shippingProfile.id,
         type: {
           label: "Standard",
-          description: "Ship in 2-3 days.",
+          description: "Delivery in 3-5 business days. Free on orders $99+",
           code: "standard",
         },
         prices: [
           {
             currency_code: "usd",
-            amount: 10,
+            amount: 8.95,
           },
           {
-            currency_code: "eur",
-            amount: 10,
-          },
-          {
-            region_id: region.id,
-            amount: 10,
+            region_id: regionNA.id,
+            amount: 8.95,
           },
         ],
         rules: [
@@ -282,28 +300,59 @@ export default async function seedDemoData({ container }: ExecArgs) {
         ],
       },
       {
-        name: "Express Shipping",
+        name: "Express Shipping (1-2 days)",
         price_type: "flat",
         provider_id: "manual_manual",
-        service_zone_id: fulfillmentSet.service_zones[0].id,
+        service_zone_id: fulfillmentSet.service_zones[0].id, // North America
         shipping_profile_id: shippingProfile.id,
         type: {
           label: "Express",
-          description: "Ship in 24 hours.",
+          description: "Delivery in 1-2 business days.",
           code: "express",
         },
         prices: [
           {
             currency_code: "usd",
-            amount: 10,
+            amount: 14.95,
           },
+          {
+            region_id: regionNA.id,
+            amount: 14.95,
+          },
+        ],
+        rules: [
+          {
+            attribute: "enabled_in_store",
+            value: "true",
+            operator: "eq",
+          },
+          {
+            attribute: "is_return",
+            value: "false",
+            operator: "eq",
+          },
+        ],
+      },
+      // Europe shipping options
+      {
+        name: "Standard Shipping (5-7 days)",
+        price_type: "flat",
+        provider_id: "manual_manual",
+        service_zone_id: fulfillmentSet.service_zones[1].id, // Europe
+        shipping_profile_id: shippingProfile.id,
+        type: {
+          label: "Standard",
+          description: "Delivery in 5-7 business days.",
+          code: "standard-eu",
+        },
+        prices: [
           {
             currency_code: "eur",
-            amount: 10,
+            amount: 12.95,
           },
           {
-            region_id: region.id,
-            amount: 10,
+            region_id: regionEU.id,
+            amount: 12.95,
           },
         ],
         rules: [
@@ -363,19 +412,19 @@ export default async function seedDemoData({ container }: ExecArgs) {
     input: {
       product_categories: [
         {
-          name: "Shirts",
+          name: "Bath Towels",
           is_active: true,
         },
         {
-          name: "Sweatshirts",
+          name: "Hand Towels",
           is_active: true,
         },
         {
-          name: "Pants",
+          name: "Washcloths",
           is_active: true,
         },
         {
-          name: "Merch",
+          name: "Accessories",
           is_active: true,
         },
       ],
@@ -385,495 +434,256 @@ export default async function seedDemoData({ container }: ExecArgs) {
   await createProductsWorkflow(container).run({
     input: {
       products: [
+        // The Nuzzle - Washcloth
         {
-          title: "Medusa T-Shirt",
+          title: "The Nuzzle",
           category_ids: [
-            categoryResult.find((cat) => cat.name === "Shirts")!.id,
+            categoryResult.find((cat) => cat.name === "Washcloths")!.id,
           ],
           description:
-            "Reimagine the feeling of a classic T-shirt. With our cotton T-shirts, everyday essentials no longer have to be ordinary.",
-          handle: "t-shirt",
-          weight: 400,
+            "Our signature washcloth. Gentle enough for a baby, durable enough for daily use. The Nuzzle is woven from 100% long-staple cotton for superior absorbency and softness.",
+          handle: "the-nuzzle",
+          weight: 100,
           status: ProductStatus.PUBLISHED,
           shipping_profile_id: shippingProfile.id,
           images: [
-            {
-              url: "https://medusa-public-images.s3.eu-west-1.amazonaws.com/tee-black-front.png",
-            },
-            {
-              url: "https://medusa-public-images.s3.eu-west-1.amazonaws.com/tee-black-back.png",
-            },
-            {
-              url: "https://medusa-public-images.s3.eu-west-1.amazonaws.com/tee-white-front.png",
-            },
-            {
-              url: "https://medusa-public-images.s3.eu-west-1.amazonaws.com/tee-white-back.png",
-            },
+            { url: "/washcloth-nuzzle.jpg" },
           ],
+          metadata: {
+            dimensions: '13" x 13"',
+            features: JSON.stringify([
+              "100% Long-Staple Cotton",
+              "Perfect Face Cloth Size",
+              "Oeko-Tex Certified",
+              "Made in Portugal"
+            ]),
+            care_instructions: JSON.stringify([
+              "Machine wash warm",
+              "Tumble dry low",
+              "Do not bleach",
+              "Avoid fabric softeners"
+            ]),
+          },
           options: [
-            {
-              title: "Size",
-              values: ["S", "M", "L", "XL"],
-            },
             {
               title: "Color",
-              values: ["Black", "White"],
+              values: ["Cloud White", "Sage", "Terra Cotta"],
             },
           ],
           variants: [
             {
-              title: "S / Black",
-              sku: "SHIRT-S-BLACK",
-              options: {
-                Size: "S",
-                Color: "Black",
-              },
+              title: "Cloud White",
+              sku: "NUZZLE-WHITE",
+              options: { Color: "Cloud White" },
               prices: [
-                {
-                  amount: 10,
-                  currency_code: "eur",
-                },
-                {
-                  amount: 15,
-                  currency_code: "usd",
-                },
+                { amount: 16, currency_code: "eur" },
+                { amount: 18, currency_code: "usd" },
               ],
             },
             {
-              title: "S / White",
-              sku: "SHIRT-S-WHITE",
-              options: {
-                Size: "S",
-                Color: "White",
-              },
+              title: "Sage",
+              sku: "NUZZLE-SAGE",
+              options: { Color: "Sage" },
               prices: [
-                {
-                  amount: 10,
-                  currency_code: "eur",
-                },
-                {
-                  amount: 15,
-                  currency_code: "usd",
-                },
+                { amount: 16, currency_code: "eur" },
+                { amount: 18, currency_code: "usd" },
               ],
             },
             {
-              title: "M / Black",
-              sku: "SHIRT-M-BLACK",
-              options: {
-                Size: "M",
-                Color: "Black",
-              },
+              title: "Terra Cotta",
+              sku: "NUZZLE-TERRACOTTA",
+              options: { Color: "Terra Cotta" },
               prices: [
-                {
-                  amount: 10,
-                  currency_code: "eur",
-                },
-                {
-                  amount: 15,
-                  currency_code: "usd",
-                },
-              ],
-            },
-            {
-              title: "M / White",
-              sku: "SHIRT-M-WHITE",
-              options: {
-                Size: "M",
-                Color: "White",
-              },
-              prices: [
-                {
-                  amount: 10,
-                  currency_code: "eur",
-                },
-                {
-                  amount: 15,
-                  currency_code: "usd",
-                },
-              ],
-            },
-            {
-              title: "L / Black",
-              sku: "SHIRT-L-BLACK",
-              options: {
-                Size: "L",
-                Color: "Black",
-              },
-              prices: [
-                {
-                  amount: 10,
-                  currency_code: "eur",
-                },
-                {
-                  amount: 15,
-                  currency_code: "usd",
-                },
-              ],
-            },
-            {
-              title: "L / White",
-              sku: "SHIRT-L-WHITE",
-              options: {
-                Size: "L",
-                Color: "White",
-              },
-              prices: [
-                {
-                  amount: 10,
-                  currency_code: "eur",
-                },
-                {
-                  amount: 15,
-                  currency_code: "usd",
-                },
-              ],
-            },
-            {
-              title: "XL / Black",
-              sku: "SHIRT-XL-BLACK",
-              options: {
-                Size: "XL",
-                Color: "Black",
-              },
-              prices: [
-                {
-                  amount: 10,
-                  currency_code: "eur",
-                },
-                {
-                  amount: 15,
-                  currency_code: "usd",
-                },
-              ],
-            },
-            {
-              title: "XL / White",
-              sku: "SHIRT-XL-WHITE",
-              options: {
-                Size: "XL",
-                Color: "White",
-              },
-              prices: [
-                {
-                  amount: 10,
-                  currency_code: "eur",
-                },
-                {
-                  amount: 15,
-                  currency_code: "usd",
-                },
+                { amount: 16, currency_code: "eur" },
+                { amount: 18, currency_code: "usd" },
               ],
             },
           ],
-          sales_channels: [
-            {
-              id: defaultSalesChannel[0].id,
-            },
-          ],
+          sales_channels: [{ id: defaultSalesChannel[0].id }],
         },
+        // The Cradle - Hand Towel
         {
-          title: "Medusa Sweatshirt",
+          title: "The Cradle",
           category_ids: [
-            categoryResult.find((cat) => cat.name === "Sweatshirts")!.id,
+            categoryResult.find((cat) => cat.name === "Hand Towels")!.id,
           ],
           description:
-            "Reimagine the feeling of a classic sweatshirt. With our cotton sweatshirt, everyday essentials no longer have to be ordinary.",
-          handle: "sweatshirt",
-          weight: 400,
+            "The perfect hand towel. Soft, absorbent, and ready to comfort your hands after every wash. Designed to add a touch of luxury to your powder room.",
+          handle: "the-cradle",
+          weight: 200,
           status: ProductStatus.PUBLISHED,
           shipping_profile_id: shippingProfile.id,
           images: [
-            {
-              url: "https://medusa-public-images.s3.eu-west-1.amazonaws.com/sweatshirt-vintage-front.png",
-            },
-            {
-              url: "https://medusa-public-images.s3.eu-west-1.amazonaws.com/sweatshirt-vintage-back.png",
-            },
+            { url: "/hand-towel-cradle.jpg" },
           ],
+          metadata: {
+            dimensions: '20" x 30"',
+            features: JSON.stringify([
+              "High Absorbency",
+              "Quick Drying",
+              "Double-Stitched Hems",
+              "Sustainably Sourced"
+            ]),
+            care_instructions: JSON.stringify([
+              "Machine wash warm",
+              "Tumble dry low",
+              "Do not bleach",
+              "Avoid fabric softeners"
+            ]),
+          },
           options: [
             {
-              title: "Size",
-              values: ["S", "M", "L", "XL"],
+              title: "Color",
+              values: ["Cloud White", "Charcoal", "Navy"],
             },
           ],
           variants: [
             {
-              title: "S",
-              sku: "SWEATSHIRT-S",
-              options: {
-                Size: "S",
-              },
+              title: "Cloud White",
+              sku: "CRADLE-WHITE",
+              options: { Color: "Cloud White" },
               prices: [
-                {
-                  amount: 10,
-                  currency_code: "eur",
-                },
-                {
-                  amount: 15,
-                  currency_code: "usd",
-                },
+                { amount: 22, currency_code: "eur" },
+                { amount: 25, currency_code: "usd" },
               ],
             },
             {
-              title: "M",
-              sku: "SWEATSHIRT-M",
-              options: {
-                Size: "M",
-              },
+              title: "Charcoal",
+              sku: "CRADLE-CHARCOAL",
+              options: { Color: "Charcoal" },
               prices: [
-                {
-                  amount: 10,
-                  currency_code: "eur",
-                },
-                {
-                  amount: 15,
-                  currency_code: "usd",
-                },
+                { amount: 22, currency_code: "eur" },
+                { amount: 25, currency_code: "usd" },
               ],
             },
             {
-              title: "L",
-              sku: "SWEATSHIRT-L",
-              options: {
-                Size: "L",
-              },
+              title: "Navy",
+              sku: "CRADLE-NAVY",
+              options: { Color: "Navy" },
               prices: [
-                {
-                  amount: 10,
-                  currency_code: "eur",
-                },
-                {
-                  amount: 15,
-                  currency_code: "usd",
-                },
-              ],
-            },
-            {
-              title: "XL",
-              sku: "SWEATSHIRT-XL",
-              options: {
-                Size: "XL",
-              },
-              prices: [
-                {
-                  amount: 10,
-                  currency_code: "eur",
-                },
-                {
-                  amount: 15,
-                  currency_code: "usd",
-                },
+                { amount: 22, currency_code: "eur" },
+                { amount: 25, currency_code: "usd" },
               ],
             },
           ],
-          sales_channels: [
-            {
-              id: defaultSalesChannel[0].id,
-            },
-          ],
+          sales_channels: [{ id: defaultSalesChannel[0].id }],
         },
+        // The Bear Hug - Bath Towel
         {
-          title: "Medusa Sweatpants",
+          title: "The Bear Hug",
           category_ids: [
-            categoryResult.find((cat) => cat.name === "Pants")!.id,
+            categoryResult.find((cat) => cat.name === "Bath Towels")!.id,
           ],
           description:
-            "Reimagine the feeling of classic sweatpants. With our cotton sweatpants, everyday essentials no longer have to be ordinary.",
-          handle: "sweatpants",
-          weight: 400,
+            "Wrap yourself in a warm embrace with our oversized, ultra-plush bath towel. The Bear Hug provides maximum coverage and maximum comfort for your post-bath ritual.",
+          handle: "the-bearhug",
+          weight: 700,
           status: ProductStatus.PUBLISHED,
           shipping_profile_id: shippingProfile.id,
           images: [
-            {
-              url: "https://medusa-public-images.s3.eu-west-1.amazonaws.com/sweatpants-gray-front.png",
-            },
-            {
-              url: "https://medusa-public-images.s3.eu-west-1.amazonaws.com/sweatpants-gray-back.png",
-            },
+            { url: "/bath-towel-bearhug.jpg" },
+            { url: "/white_bathtowel_laidout_product.png" },
+            { url: "/white_bathtowel_folded_product.png" },
           ],
+          metadata: {
+            dimensions: '30" x 58"',
+            features: JSON.stringify([
+              "Oversized for Comfort",
+              "700 GSM Weight",
+              "Cloud-like Softness",
+              "Fade Resistant"
+            ]),
+            care_instructions: JSON.stringify([
+              "Machine wash warm",
+              "Tumble dry low",
+              "Do not bleach",
+              "Avoid fabric softeners"
+            ]),
+          },
           options: [
             {
-              title: "Size",
-              values: ["S", "M", "L", "XL"],
+              title: "Color",
+              values: ["Cloud White", "Sand", "Stone"],
             },
           ],
           variants: [
             {
-              title: "S",
-              sku: "SWEATPANTS-S",
-              options: {
-                Size: "S",
-              },
+              title: "Cloud White",
+              sku: "BEARHUG-WHITE",
+              options: { Color: "Cloud White" },
               prices: [
-                {
-                  amount: 10,
-                  currency_code: "eur",
-                },
-                {
-                  amount: 15,
-                  currency_code: "usd",
-                },
+                { amount: 30, currency_code: "eur" },
+                { amount: 35, currency_code: "usd" },
               ],
             },
             {
-              title: "M",
-              sku: "SWEATPANTS-M",
-              options: {
-                Size: "M",
-              },
+              title: "Sand",
+              sku: "BEARHUG-SAND",
+              options: { Color: "Sand" },
               prices: [
-                {
-                  amount: 10,
-                  currency_code: "eur",
-                },
-                {
-                  amount: 15,
-                  currency_code: "usd",
-                },
+                { amount: 30, currency_code: "eur" },
+                { amount: 35, currency_code: "usd" },
               ],
             },
             {
-              title: "L",
-              sku: "SWEATPANTS-L",
-              options: {
-                Size: "L",
-              },
+              title: "Stone",
+              sku: "BEARHUG-STONE",
+              options: { Color: "Stone" },
               prices: [
-                {
-                  amount: 10,
-                  currency_code: "eur",
-                },
-                {
-                  amount: 15,
-                  currency_code: "usd",
-                },
-              ],
-            },
-            {
-              title: "XL",
-              sku: "SWEATPANTS-XL",
-              options: {
-                Size: "XL",
-              },
-              prices: [
-                {
-                  amount: 10,
-                  currency_code: "eur",
-                },
-                {
-                  amount: 15,
-                  currency_code: "usd",
-                },
+                { amount: 30, currency_code: "eur" },
+                { amount: 35, currency_code: "usd" },
               ],
             },
           ],
-          sales_channels: [
-            {
-              id: defaultSalesChannel[0].id,
-            },
-          ],
+          sales_channels: [{ id: defaultSalesChannel[0].id }],
         },
+        // Wool Dryer Balls - Accessory
         {
-          title: "Medusa Shorts",
+          title: "3 Wool Dryer Balls",
           category_ids: [
-            categoryResult.find((cat) => cat.name === "Merch")!.id,
+            categoryResult.find((cat) => cat.name === "Accessories")!.id,
           ],
           description:
-            "Reimagine the feeling of classic shorts. With our cotton shorts, everyday essentials no longer have to be ordinary.",
-          handle: "shorts",
-          weight: 400,
+            "Reduce drying time and soften fabrics naturally. Comes with 3 balls. Our 100% New Zealand wool dryer balls are the eco-friendly alternative to dryer sheets.",
+          handle: "the-wool-dryer-ball",
+          weight: 150,
           status: ProductStatus.PUBLISHED,
           shipping_profile_id: shippingProfile.id,
           images: [
-            {
-              url: "https://medusa-public-images.s3.eu-west-1.amazonaws.com/shorts-vintage-front.png",
-            },
-            {
-              url: "https://medusa-public-images.s3.eu-west-1.amazonaws.com/shorts-vintage-back.png",
-            },
+            { url: "/wood_dryer_balls.png" },
           ],
+          metadata: {
+            dimensions: '3" Diameter',
+            features: JSON.stringify([
+              "100% New Zealand Wool",
+              "Reduces Drying Time",
+              "Hypoallergenic",
+              "Lasts for 1000+ Loads"
+            ]),
+            care_instructions: JSON.stringify([
+              "Store in a dry place",
+              "Recharge in sun monthly"
+            ]),
+            disable_embroidery: "true",
+          },
           options: [
             {
-              title: "Size",
-              values: ["S", "M", "L", "XL"],
+              title: "Type",
+              values: ["Natural"],
             },
           ],
           variants: [
             {
-              title: "S",
-              sku: "SHORTS-S",
-              options: {
-                Size: "S",
-              },
+              title: "Natural",
+              sku: "DRYER-BALLS-3",
+              options: { Type: "Natural" },
               prices: [
-                {
-                  amount: 10,
-                  currency_code: "eur",
-                },
-                {
-                  amount: 15,
-                  currency_code: "usd",
-                },
-              ],
-            },
-            {
-              title: "M",
-              sku: "SHORTS-M",
-              options: {
-                Size: "M",
-              },
-              prices: [
-                {
-                  amount: 10,
-                  currency_code: "eur",
-                },
-                {
-                  amount: 15,
-                  currency_code: "usd",
-                },
-              ],
-            },
-            {
-              title: "L",
-              sku: "SHORTS-L",
-              options: {
-                Size: "L",
-              },
-              prices: [
-                {
-                  amount: 10,
-                  currency_code: "eur",
-                },
-                {
-                  amount: 15,
-                  currency_code: "usd",
-                },
-              ],
-            },
-            {
-              title: "XL",
-              sku: "SHORTS-XL",
-              options: {
-                Size: "XL",
-              },
-              prices: [
-                {
-                  amount: 10,
-                  currency_code: "eur",
-                },
-                {
-                  amount: 15,
-                  currency_code: "usd",
-                },
+                { amount: 16, currency_code: "eur" },
+                { amount: 18, currency_code: "usd" },
               ],
             },
           ],
-          sales_channels: [
-            {
-              id: defaultSalesChannel[0].id,
-            },
-          ],
+          sales_channels: [{ id: defaultSalesChannel[0].id }],
         },
       ],
     },
@@ -891,7 +701,7 @@ export default async function seedDemoData({ container }: ExecArgs) {
   for (const inventoryItem of inventoryItems) {
     const inventoryLevel = {
       location_id: stockLocation.id,
-      stocked_quantity: 1000000,
+      stocked_quantity: 100, // Start with 100 units per variant
       inventory_item_id: inventoryItem.id,
     };
     inventoryLevels.push(inventoryLevel);

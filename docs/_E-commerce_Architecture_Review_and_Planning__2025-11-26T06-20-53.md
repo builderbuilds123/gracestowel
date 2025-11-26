@@ -1,0 +1,18 @@
+[ ] NAME:Current Task List DESCRIPTION:Root task for conversation __NEW_AGENT__
+-[ ] NAME:Phase 1: Critical Foundation for Launch DESCRIPTION:Essential e-commerce infrastructure to enable a functional online store for Grace Stowel towels
+--[ ] NAME:1. Connect Products to Medusa Backend DESCRIPTION:Replace hardcoded products.ts with dynamic product fetching from Medusa API
+---[ ] NAME:1.1 Seed Medusa with product data DESCRIPTION:Create seed script to populate Medusa database with 4 products (The Nuzzle, The Cradle, The Bear Hug, Wool Dryer Balls) with variants for colors
+---[ ] NAME:1.2 Create Medusa API client in storefront DESCRIPTION:Add lib/medusa.ts with typed client for fetching products, collections, and product details from Medusa v2 Store API
+---[ ] NAME:1.3 Update product routes to fetch from Medusa DESCRIPTION:Modify towels.tsx, products.$handle.tsx, and collections.$handle.tsx to use Medusa API instead of static products.ts
+---[ ] NAME:1.4 Update CartContext to use Medusa variant IDs DESCRIPTION:Ensure cart items reference Medusa product variant IDs for proper order creation later
+--[ ] NAME:2. Order Sync (Stripe → Medusa) DESCRIPTION:Ensure completed Stripe payments create order records in Medusa for fulfillment tracking
+---[ ] NAME:2.1 Create Stripe webhook endpoint in Medusa DESCRIPTION:Add apps/backend/src/api/webhooks/stripe/route.ts to handle payment_intent.succeeded events
+---[ ] NAME:2.2 Implement order creation workflow DESCRIPTION:Create apps/backend/src/workflows/create-order-from-stripe.ts to transform Stripe payment data into Medusa order
+---[ ] NAME:2.3 Store cart data in Stripe PaymentIntent metadata DESCRIPTION:Update api.payment-intent.ts to attach cart items, customer info, and shipping to PaymentIntent metadata
+---[ ] NAME:2.4 Configure Stripe webhook in production DESCRIPTION:Add STRIPE_WEBHOOK_SECRET to Railway environment and register webhook URL in Stripe Dashboard
+--[ ] NAME:3. Inventory Management DESCRIPTION:Add stock tracking to prevent overselling of towel products
+---[ ] NAME:3.1 Enable inventory module in Medusa config DESCRIPTION:Configure Medusa v2 inventory module in medusa-config.ts and run migrations
+---[ ] NAME:3.2 Add stock quantities in seed script DESCRIPTION:Update product seed to include inventory_quantity for each variant (e.g., 100 units per color)
+---[ ] NAME:3.3 Display stock status on product pages DESCRIPTION:Show 'In Stock', 'Low Stock', or 'Out of Stock' badges based on inventory levels
+---[ ] NAME:3.4 Prevent checkout for out-of-stock items DESCRIPTION:Add validation in checkout flow to verify stock before creating PaymentIntent
+---[ ] NAME:3.5 Decrement inventory on order completion DESCRIPTION:Add subscriber to reduce stock when order is placed via Stripe webhook

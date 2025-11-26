@@ -1,0 +1,226 @@
+import {
+    createStep,
+    createWorkflow,
+    StepResponse,
+    WorkflowResponse,
+    transform,
+} from "@medusajs/framework/workflows-sdk";
+import { createOrderWorkflow, adjustInventoryLevelsStep } from "@medusajs/medusa/core-flows";
+import type { InventoryTypes } from "@medusajs/framework/types";
+
+/**
+ * Input for the create-order-from-stripe workflow
+ */
+export interface CreateOrderFromStripeInput {
+    paymentIntentId: string;
+    cartData: {
+        items: Array<{
+            variantId?: string;
+            sku?: string;
+            title: string;
+            price: string;
+            quantity: number;
+            color?: string;
+        }>;
+    };
+    customerEmail?: string;
+    shippingAddress?: {
+        firstName: string;
+        lastName: string;
+        address1: string;
+        address2?: string;
+        city: string;
+        state?: string;
+        postalCode: string;
+        countryCode: string;
+        phone?: string;
+    };
+    amount: number;
+    currency: string;
+}
+
+/**
+ * Step to validate and prepare order data from Stripe payment
+ */
+const prepareOrderDataStep = createStep(
+    "prepare-order-data-from-stripe",
+    async (input: CreateOrderFromStripeInput, { container }) => {
+        const { cartData, customerEmail, shippingAddress, amount, currency, paymentIntentId } = input;
+
+        // Get region based on currency
+        const regionService = container.resolve("region");
+        const regions = await regionService.listRegions({
+            currency_code: currency.toLowerCase(),
+        });
+
+        if (!regions.length) {
+            throw new Error(`No region found for currency: ${currency}`);
+        }
+
+        const region = regions[0];
+
+        // Transform cart items to order line items
+        const items = cartData.items.map((item) => ({
+            variant_id: item.variantId || undefined,
+            title: item.title,
+            quantity: item.quantity,
+            unit_price: parseFloat(item.price.replace("$", "")) * 100, // Convert to cents
+            metadata: {
+                color: item.color,
+                sku: item.sku,
+            },
+        }));
+
+        // Prepare shipping address
+        const shipping_address = shippingAddress
+            ? {
+                  first_name: shippingAddress.firstName,
+                  last_name: shippingAddress.lastName,
+                  address_1: shippingAddress.address1,
+                  address_2: shippingAddress.address2 || "",
+                  city: shippingAddress.city,
+                  province: shippingAddress.state || "",
+                  postal_code: shippingAddress.postalCode,
+                  country_code: shippingAddress.countryCode.toLowerCase(),
+                  phone: shippingAddress.phone || "",
+              }
+            : undefined;
+
+        const orderData = {
+            region_id: region.id,
+            email: customerEmail,
+            items,
+            shipping_address,
+            status: "pending" as const,
+            metadata: {
+                stripe_payment_intent_id: paymentIntentId,
+            },
+        };
+
+        return new StepResponse(orderData);
+    }
+);
+
+/**
+ * Step to prepare inventory adjustments from cart items
+ */
+const prepareInventoryAdjustmentsStep = createStep(
+    "prepare-inventory-adjustments",
+    async (input: { cartItems: CreateOrderFromStripeInput["cartData"]["items"] }, { container }) => {
+        const query = container.resolve("query");
+        const adjustments: InventoryTypes.BulkAdjustInventoryLevelInput[] = [];
+
+        for (const item of input.cartItems) {
+            if (!item.variantId) continue;
+
+            try {
+                // Get the inventory item linked to this variant
+                const { data: variants } = await query.graph({
+                    entity: "product_variant",
+                    fields: ["id", "inventory_items.inventory_item_id"],
+                    filters: { id: item.variantId },
+                });
+
+                if (!variants.length) continue;
+
+                const variant = variants[0];
+                const inventoryItemId = variant.inventory_items?.[0]?.inventory_item_id;
+
+                if (!inventoryItemId) continue;
+
+                // Get the stock location for this inventory item
+                const { data: inventoryLevels } = await query.graph({
+                    entity: "inventory_level",
+                    fields: ["id", "location_id", "inventory_item_id"],
+                    filters: { inventory_item_id: inventoryItemId },
+                });
+
+                if (!inventoryLevels.length) continue;
+
+                const locationId = inventoryLevels[0].location_id;
+
+                // Add adjustment (negative to decrement)
+                adjustments.push({
+                    inventory_item_id: inventoryItemId,
+                    location_id: locationId,
+                    adjustment: -item.quantity, // Negative to reduce stock
+                });
+            } catch (error) {
+                console.error(`Error preparing inventory adjustment for variant ${item.variantId}:`, error);
+            }
+        }
+
+        return new StepResponse(adjustments);
+    }
+);
+
+/**
+ * Step to log order creation for debugging
+ */
+const logOrderCreatedStep = createStep(
+    "log-order-created",
+    async (input: { orderId: string; paymentIntentId: string; inventoryAdjusted: boolean }) => {
+        console.log(`Order ${input.orderId} created from Stripe PaymentIntent ${input.paymentIntentId}`);
+        if (input.inventoryAdjusted) {
+            console.log(`Inventory levels adjusted for order ${input.orderId}`);
+        }
+        return new StepResponse({ success: true });
+    }
+);
+
+/**
+ * Workflow to create an order from a Stripe payment
+ *
+ * This workflow:
+ * 1. Validates and prepares order data from Stripe payment metadata
+ * 2. Creates the order using Medusa's createOrderWorkflow
+ * 3. Adjusts inventory levels (decrements stock)
+ * 4. Logs the order creation
+ */
+export const createOrderFromStripeWorkflow = createWorkflow(
+    "create-order-from-stripe",
+    (input: CreateOrderFromStripeInput) => {
+        // Step 1: Prepare order data from Stripe payment
+        const orderData = prepareOrderDataStep(input);
+
+        // Step 2: Create the order using Medusa's built-in workflow
+        const order = createOrderWorkflow.runAsStep({
+            input: orderData,
+        });
+
+        // Step 3: Prepare inventory adjustments from cart items
+        const cartItemsInput = transform({ input }, (data) => ({
+            cartItems: data.input.cartData.items,
+        }));
+        const inventoryAdjustments = prepareInventoryAdjustmentsStep(cartItemsInput);
+
+        // Step 4: Adjust inventory levels (decrement stock)
+        const shouldAdjustInventory = transform({ inventoryAdjustments }, (data) =>
+            data.inventoryAdjustments.length > 0
+        );
+
+        // Only adjust if there are adjustments to make
+        const adjustedInventory = transform({ inventoryAdjustments, shouldAdjustInventory }, (data) => {
+            if (data.shouldAdjustInventory) {
+                return data.inventoryAdjustments;
+            }
+            return [];
+        });
+
+        // Call the inventory adjustment step
+        adjustInventoryLevelsStep(adjustedInventory);
+
+        // Step 5: Log the order creation
+        const logInput = transform({ order, input, shouldAdjustInventory }, (data) => ({
+            orderId: data.order.id,
+            paymentIntentId: data.input.paymentIntentId,
+            inventoryAdjusted: data.shouldAdjustInventory,
+        }));
+        logOrderCreatedStep(logInput);
+
+        return new WorkflowResponse(order);
+    }
+);
+
+export default createOrderFromStripeWorkflow;
+

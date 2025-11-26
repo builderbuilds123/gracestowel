@@ -27,7 +27,9 @@
     "@medusajs/cli": "2.11.3",
     "@medusajs/dashboard": "^2.11.3",
     "@medusajs/file-local": "^2.11.3",
-    "@medusajs/medusa": "^2.11.3"
+    "@medusajs/framework": "^2.11.3",
+    "@medusajs/medusa": "^2.11.3",
+    "stripe": "^19.1.0"
   },
   "devDependencies": {
     "@medusajs/test-utils": "2.11.3",
