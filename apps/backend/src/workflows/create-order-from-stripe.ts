@@ -5,7 +5,7 @@ import {
     WorkflowResponse,
     transform,
 } from "@medusajs/framework/workflows-sdk";
-import { createOrderWorkflow, adjustInventoryLevelsStep } from "@medusajs/medusa/core-flows";
+import { createOrderWorkflow, adjustInventoryLevelsStep, emitEventStep } from "@medusajs/medusa/core-flows";
 import type { InventoryTypes } from "@medusajs/framework/types";
 
 /**
@@ -217,6 +217,13 @@ export const createOrderFromStripeWorkflow = createWorkflow(
             inventoryAdjusted: data.shouldAdjustInventory,
         }));
         logOrderCreatedStep(logInput);
+
+        // Step 6: Emit order.placed event to trigger email notification
+        const eventData = transform({ order }, (data) => ({
+            eventName: "order.placed" as const,
+            data: { id: data.order.id },
+        }));
+        emitEventStep(eventData);
 
         return new WorkflowResponse(order);
     }

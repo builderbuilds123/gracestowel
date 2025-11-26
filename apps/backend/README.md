@@ -96,3 +96,82 @@ STORE_CORS=https://gracestowel.com,https://www.gracestowel.com
 ADMIN_CORS=https://admin.gracestowel.com
 AUTH_CORS=https://gracestowel.com,https://www.gracestowel.com
 ```
+
+## Admin Dashboard
+
+The Medusa Admin Dashboard is enabled and accessible at `/app` when the backend is running.
+
+### Accessing the Admin Dashboard
+
+- **Local Development:** http://localhost:9000/app
+- **Production:** https://your-backend-url.railway.app/app
+
+### Admin Features
+
+- **Products:** Create, edit, and manage products and variants
+- **Orders:** View and manage customer orders
+- **Customers:** View customer accounts and order history
+- **Inventory:** Track stock levels across locations
+- **Settings:** Configure regions, currencies, and shipping options
+
+### Creating an Admin User
+
+```bash
+# Local development
+npx medusa user create
+
+# Railway production
+railway run npx medusa user create
+```
+
+## Email Notifications (Resend)
+
+Order confirmation emails are sent automatically when orders are placed.
+
+### Configuration
+
+Add these environment variables:
+
+```bash
+RESEND_API_KEY=re_xxxxxxxxxxxx  # Your Resend API key
+RESEND_FROM_EMAIL=orders@yourdomain.com  # Sender email address
+```
+
+### Getting a Resend API Key
+
+1. Create an account at [resend.com](https://resend.com)
+2. Go to **API Keys** in the sidebar
+3. Click **Create API Key**
+4. Copy the key and add it to your environment variables
+
+### Email Templates
+
+Email templates are located in `src/modules/resend/emails/`:
+- `order-placed.tsx` - Order confirmation email
+
+### Testing Emails
+
+For development, you can use Resend's test mode:
+- Use `onboarding@resend.dev` as the sender
+- Emails will only be sent to your Resend account email
+
+## Stripe Webhooks
+
+Stripe webhooks are used to create orders when payments succeed.
+
+### Configuration
+
+```bash
+STRIPE_SECRET_KEY=sk_xxxx  # Your Stripe secret key
+STRIPE_WEBHOOK_SECRET=whsec_xxxx  # Webhook signing secret
+```
+
+### Setting Up Webhooks in Stripe Dashboard
+
+1. Go to **Developers → Webhooks** in Stripe Dashboard
+2. Click **Add endpoint**
+3. Enter your webhook URL: `https://your-backend-url/webhooks/stripe`
+4. Select events:
+   - `payment_intent.succeeded`
+   - `payment_intent.payment_failed`
+5. Copy the signing secret and add it to `STRIPE_WEBHOOK_SECRET`

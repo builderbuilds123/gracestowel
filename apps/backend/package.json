@@ -29,6 +29,8 @@
     "@medusajs/file-local": "^2.11.3",
     "@medusajs/framework": "^2.11.3",
     "@medusajs/medusa": "^2.11.3",
+    "@react-email/components": "^1.0.1",
+    "resend": "^6.5.2",
     "stripe": "^19.1.0"
   },
   "devDependencies": {
