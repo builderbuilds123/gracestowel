@@ -151,9 +151,9 @@ User enters address → AddressElement onChange
 ## Related Documentation
 
 ### Setup & Infrastructure
-- [Environment Setup](./ENVIRONMENT_SETUP.md) - How to configure environment variables
-- [Railway Infrastructure](./RAILWAY_INFRASTRUCTURE.md) - Database and hosting setup
-- [Development Workflow](./DEV_WORKFLOW.md) - Local development guide
+- [Environment Setup](./docs/ENVIRONMENT_SETUP.md) - How to configure environment variables
+- [Railway Infrastructure](./docs/RAILWAY_INFRASTRUCTURE.md) - Database and hosting setup
+- [Development Workflow](./docs/DEV_WORKFLOW.md) - Local development guide
 
 ### API & Backend
 - [Backend API Reference](./docs/BACKEND_API.md) - Medusa API endpoints documentation
@@ -167,5 +167,5 @@ User enters address → AddressElement onChange
 - [Integrations Guide](./docs/INTEGRATIONS.md) - Stripe, Medusa, and Cloudflare integrations
 
 ### Troubleshooting
-- [Medusa Auth Module Issue](./MEDUSA_AUTH_MODULE_ISSUE.md) - Known v2.11 bug and workarounds
+- [Medusa Auth Module Issue](./docs/MEDUSA_AUTH_MODULE_ISSUE.md) - Known v2.11 bug and workarounds
 
