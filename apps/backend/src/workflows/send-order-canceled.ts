@@ -1,0 +1,80 @@
+import {
+  createWorkflow,
+  WorkflowResponse,
+  transform,
+} from "@medusajs/framework/workflows-sdk"
+import { useQueryGraphStep } from "@medusajs/medusa/core-flows"
+import { sendNotificationStep } from "./steps/send-notification"
+
+type SendOrderCanceledInput = {
+  id: string
+  reason?: string
+}
+
+export const sendOrderCanceledWorkflow = createWorkflow(
+  "send-order-canceled",
+  (input: SendOrderCanceledInput) => {
+    // Retrieve the order details
+    const { data: orders } = useQueryGraphStep({
+      entity: "order",
+      fields: [
+        "id",
+        "display_id",
+        "email",
+        "currency_code",
+        "total",
+        "items.*",
+        "items.variant.*",
+        "items.variant.product.*",
+        "canceled_at",
+      ],
+      filters: {
+        id: input.id,
+      },
+    })
+
+    // Transform data for the notification
+    const notificationData = transform({ orders, input }, (data) => {
+      const order = data.orders[0]
+
+      if (!order?.email) {
+        return []
+      }
+
+      return [
+        {
+          to: order.email,
+          channel: "email",
+          template: "order-canceled",
+          data: {
+            order: {
+              id: order.id,
+              display_id: order.display_id,
+              email: order.email,
+              total: order.total,
+              currency_code: order.currency_code,
+              canceled_at: order.canceled_at,
+              items: order.items?.map((item: { 
+                variant?: { product?: { title?: string }; title?: string }; 
+                quantity: number; 
+                unit_price: number 
+              }) => ({
+                title: item.variant?.product?.title || "Unknown Product",
+                variant_title: item.variant?.title,
+                quantity: item.quantity,
+                unit_price: item.unit_price,
+              })),
+            },
+            reason: data.input.reason,
+          },
+        },
+      ]
+    })
+
+    // Send the notification
+    const notification = sendNotificationStep(notificationData)
+
+    return new WorkflowResponse(notification)
+  }
+)
+

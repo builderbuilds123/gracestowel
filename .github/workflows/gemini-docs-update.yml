@@ -1,0 +1,37 @@
+name: Scheduled Documentation Update
+
+on:
+  schedule:
+    - cron: "0 10 * * *" # 2am PST (10am UTC)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-docs:
+    name: Update Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Gemini CLI
+        uses: google-github-actions/run-gemini-cli@v0.1.15
+        with:
+          gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
+          args: --prompt "Scan through the repo and update all the documentation"
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "docs: update documentation via Gemini CLI"
+          title: "docs: update documentation via Gemini CLI"
+          body: |
+            This PR was automatically created by the Gemini CLI scheduled workflow.
+
+            It runs the prompt: "Scan through the repo and update all the documentation".
+          branch: gemini-docs-update
+          delete-branch: true

@@ -3,15 +3,24 @@ import { ProviderSendNotificationDTO, ProviderSendNotificationResultsDTO } from 
 import { Resend } from "resend"
 import { render } from "@react-email/components"
 import { orderPlacedEmail } from "./emails/order-placed"
+import { welcomeEmail } from "./emails/welcome"
+import { shippingConfirmationEmail } from "./emails/shipping-confirmation"
+import { orderCanceledEmail } from "./emails/order-canceled"
 
 // Template types enum
 export enum Templates {
   ORDER_PLACED = "order-placed",
+  WELCOME = "welcome",
+  SHIPPING_CONFIRMATION = "shipping-confirmation",
+  ORDER_CANCELED = "order-canceled",
 }
 
 // Template mapping
 const templates: { [key in Templates]?: (props: unknown) => React.ReactElement } = {
   [Templates.ORDER_PLACED]: orderPlacedEmail,
+  [Templates.WELCOME]: welcomeEmail,
+  [Templates.SHIPPING_CONFIRMATION]: shippingConfirmationEmail,
+  [Templates.ORDER_CANCELED]: orderCanceledEmail,
 }
 
 // Module options interface
@@ -76,6 +85,12 @@ class ResendNotificationProviderService extends AbstractNotificationProviderServ
     switch (template) {
       case Templates.ORDER_PLACED:
         return `Order Confirmation - Grace Stowel #${(data as { order?: { display_id?: string } }).order?.display_id || ""}`
+      case Templates.WELCOME:
+        return `Welcome to Grace Stowel!`
+      case Templates.SHIPPING_CONFIRMATION:
+        return `Your Order Has Shipped - Grace Stowel #${(data as { order?: { display_id?: string } }).order?.display_id || ""}`
+      case Templates.ORDER_CANCELED:
+        return `Order Canceled - Grace Stowel #${(data as { order?: { display_id?: string } }).order?.display_id || ""}`
       default:
         return "Grace Stowel Notification"
     }

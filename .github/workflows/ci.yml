@@ -1,0 +1,237 @@
+# Grace Stowel CI/CD Pipeline
+# Implements the test automation strategy from docs/testing/test_automation_strategy.md
+
+name: CI
+
+on:
+  push:
+    branches: [main, staging]
+  pull_request:
+    branches: [main, staging]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "20"
+  PNPM_VERSION: "8"
+
+jobs:
+  # ============================================
+  # Stage 1: Validation (Lint, Typecheck, Audit)
+  # ============================================
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint --if-present
+
+      - name: Type check (Backend)
+        working-directory: apps/backend
+        run: npx tsc --noEmit
+
+      - name: Type check (Storefront)
+        working-directory: apps/storefront
+        run: npx tsc --noEmit
+
+      - name: Security audit
+        run: npm audit --audit-level=high
+        continue-on-error: true
+
+  # ============================================
+  # Stage 2: Build & Unit Tests (Parallel)
+  # ============================================
+  test-backend:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    needs: validate
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: medusa_test
+          POSTGRES_PASSWORD: medusa_test
+          POSTGRES_DB: medusa_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run backend tests
+        working-directory: apps/backend
+        env:
+          DATABASE_URL: postgresql://medusa_test:medusa_test@localhost:5432/medusa_test
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET: test-secret
+          COOKIE_SECRET: test-secret
+        run: npm test -- --coverage
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: apps/backend/coverage/lcov.info
+          flags: backend
+          fail_ci_if_error: false
+
+  test-storefront:
+    name: Storefront Tests
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run storefront tests
+        working-directory: apps/storefront
+        run: npm test -- --coverage
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: apps/storefront/coverage/lcov.info
+          flags: storefront
+          fail_ci_if_error: false
+
+  # ============================================
+  # Stage 3: E2E Tests
+  # ============================================
+  e2e:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    needs: [test-backend, test-storefront]
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: apps/e2e
+        run: npx playwright install --with-deps chromium
+
+      - name: Start test environment
+        run: docker compose -f docker-compose.test.yml up -d --wait
+        continue-on-error: true
+
+      - name: Run E2E tests
+        working-directory: apps/e2e
+        run: npx playwright test --project=chromium
+        env:
+          CI: true
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: apps/e2e/playwright-report/
+          retention-days: 7
+
+      - name: Stop test environment
+        if: always()
+        run: docker compose -f docker-compose.test.yml down -v
+
+  # ============================================
+  # Stage 4: Resilience / Chaos Tests (Optional)
+  # ============================================
+  resilience:
+    name: Resilience Tests
+    runs-on: ubuntu-latest
+    needs: e2e
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging'
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: apps/e2e
+        run: npx playwright install --with-deps chromium
+
+      - name: Start chaos environment
+        run: docker compose -f docker-compose.chaos.yml up -d --wait
+        continue-on-error: true
+
+      - name: Run resilience tests
+        working-directory: apps/e2e
+        run: npx playwright test --project=resilience
+        env:
+          CI: true
+        continue-on-error: true
+
+      - name: Upload resilience report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: resilience-report
+          path: apps/e2e/playwright-report/
+          retention-days: 7
+
+      - name: Stop chaos environment
+        if: always()
+        run: docker compose -f docker-compose.chaos.yml down -v
+

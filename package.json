@@ -11,7 +11,14 @@
     "dev:api": "npm run dev --workspace=apps/api",
     "deploy:api": "npm run deploy --workspace=apps/api",
     "dev:background": "npm run dev --workspace=apps/background",
-    "deploy:background": "npm run deploy --workspace=apps/background"
+    "deploy:background": "npm run deploy --workspace=apps/background",
+    "test": "npm run test --workspaces --if-present",
+    "test:storefront": "npm run test --workspace=apps/storefront",
+    "test:backend": "npm run test:integration --workspace=apps/backend",
+    "test:e2e": "npm run test --workspace=apps/e2e",
+    "test:e2e:ui": "npm run test:ui --workspace=apps/e2e",
+    "test:e2e:headed": "npm run test:headed --workspace=apps/e2e",
+    "test:resilience": "npm run test:resilience --workspace=apps/e2e"
   },
   "dependencies": {
     "@railway/cli": "^4.11.1"

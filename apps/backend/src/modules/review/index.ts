@@ -7,3 +7,6 @@ export default Module(REVIEW_MODULE, {
   service: ReviewModuleService,
 })
 
+// Re-export types for convenience
+export type { ReviewModuleService }
+
