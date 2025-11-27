@@ -6,32 +6,57 @@ Grace Stowel is an e-commerce platform for premium Turkish cotton towels, built 
 
 - **Backend**: Medusa v2 (Node.js headless commerce engine)
 - **Storefront**: React Router v7 + Cloudflare Workers
-- **Infrastructure**: Railway (databases, backend hosting) + Cloudflare (frontend CDN)
+- **Infrastructure**: Railway (databases, backend hosting) + Cloudflare (frontend CDN, Hyperdrive)
 - **Payments**: Stripe (checkout, payment intents, shipping rates)
+- **Database Acceleration**: Cloudflare Hyperdrive (connection pooling for edge)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                           PRODUCTION ARCHITECTURE                            │
+│                      HYBRID PRODUCTION ARCHITECTURE                          │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
-│    ┌──────────────────────┐           ┌──────────────────────┐             │
-│    │   Cloudflare Workers │           │       Railway        │             │
-│    │   (Edge Network)     │           │   (Container Host)   │             │
-│    ├──────────────────────┤           ├──────────────────────┤             │
+│    ┌──────────────────────┐                                                 │
+│    │   Cloudflare Workers │                                                 │
+│    │   (Edge Network)     │                                                 │
+│    ├──────────────────────┤           ┌──────────────────────┐             │
 │    │                      │   REST    │                      │             │
-│    │   React Storefront   │ ───────▶  │   Medusa Backend     │             │
-│    │   (SSR + Hydration)  │           │   (API Server)       │             │
-│    │                      │           │                      │             │
-│    └──────────────────────┘           └─────────┬────────────┘             │
-│             │                                    │                          │
-│             │                                    │                          │
-│    ┌────────▼──────────────┐         ┌──────────▼───────────┐              │
-│    │       Stripe          │         │     PostgreSQL       │              │
-│    │   (Payments API)      │         │   + Redis (Cache)    │              │
+│    │   READ-WRITE OPS     │ ───────▶  │   Medusa Backend     │             │
+│    │   (cart, checkout,   │           │   (Railway)          │             │
+│    │    orders, reviews)  │           │                      │             │
+│    │                      │           └──────────────────────┘             │
+│    ├──────────────────────┤                                                 │
+│    │                      │           ┌──────────────────────┐             │
+│    │   READ-ONLY OPS      │ ───────▶  │   Hyperdrive         │──────┐      │
+│    │   (products, search) │           │   (Connection Pool)  │      │      │
+│    │                      │           └──────────────────────┘      │      │
+│    └──────────────────────┘                                         │      │
+│             │                                                       │      │
+│             │                         ┌──────────────────────┐      │      │
+│    ┌────────▼──────────────┐         │     PostgreSQL       │◀─────┘      │
+│    │       Stripe          │         │   + Redis (Cache)    │              │
+│    │   (Payments API)      │         │   (Railway)          │              │
 │    └───────────────────────┘         └──────────────────────┘              │
 │                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
+
+### Hybrid Architecture Rationale
+
+The storefront uses a **hybrid data access pattern**:
+
+1. **Hyperdrive (Direct PostgreSQL)** - For read-only, high-frequency operations:
+   - Product listings and detail pages
+   - Product search
+   - Category browsing
+   - Benefits: Eliminates Medusa cold starts, edge connection pooling, ~50-100ms faster
+
+2. **Medusa REST API** - For operations requiring business logic:
+   - Cart management
+   - Checkout flow
+   - Order processing
+   - Customer authentication
+   - Reviews (writes)
+   - Benefits: Maintains business logic, data integrity, proper validation
 
 ## Repository Structure
 
@@ -99,15 +124,21 @@ gracestowel/
 | Redis | Cache | Railway |
 | Backend hosting | API server | Railway |
 | CDN + Edge | Storefront | Cloudflare |
+| Hyperdrive | DB connection pooling | Cloudflare |
 | Payments | Transactions | Stripe |
 
 ## Data Flow
 
-### 1. Product Display Flow
+### 1. Product Display Flow (Hyperdrive - Fast Path)
+```
+User → Cloudflare Edge → React Storefront → Hyperdrive → PostgreSQL
+                                   ↓
+                            Products rendered (~50-100ms faster)
+```
+
+**Fallback Path** (if Hyperdrive unavailable):
 ```
 User → Cloudflare Edge → React Storefront → Medusa API → PostgreSQL
-                                   ↓
-                            Products rendered
 ```
 
 ### 2. Checkout Flow
@@ -151,21 +182,21 @@ User enters address → AddressElement onChange
 ## Related Documentation
 
 ### Setup & Infrastructure
-- [Environment Setup](./ENVIRONMENT_SETUP.md) - How to configure environment variables
+- [Environment Setup](../development/ENVIRONMENT_SETUP.md) - How to configure environment variables
 - [Railway Infrastructure](./RAILWAY_INFRASTRUCTURE.md) - Database and hosting setup
-- [Development Workflow](./DEV_WORKFLOW.md) - Local development guide
+- [Development Workflow](../development/DEV_WORKFLOW.md) - Local development guide
 
 ### API & Backend
-- [Backend API Reference](./docs/BACKEND_API.md) - Medusa API endpoints documentation
-- [Storefront API Reference](./docs/STOREFRONT_API.md) - Cloudflare Workers API routes
+- [Backend API Reference](../api/BACKEND_API.md) - Medusa API endpoints documentation
+- [Storefront API Reference](../api/STOREFRONT_API.md) - Cloudflare Workers API routes
 
 ### Frontend
-- [Storefront Components](./docs/STOREFRONT_COMPONENTS.md) - React component library
-- [Data Layer](./docs/DATA_LAYER.md) - Product data, cart state, and configuration
+- [Storefront Components](../components/STOREFRONT_COMPONENTS.md) - React component library
+- [Data Layer](./DATA_LAYER.md) - Product data, cart state, and configuration
 
 ### Integrations
-- [Integrations Guide](./docs/INTEGRATIONS.md) - Stripe, Medusa, and Cloudflare integrations
+- [Integrations Guide](./INTEGRATIONS.md) - Stripe, Medusa, and Cloudflare integrations
 
 ### Troubleshooting
-- [Medusa Auth Module Issue](./MEDUSA_AUTH_MODULE_ISSUE.md) - Known v2.11 bug and workarounds
+- [Medusa Auth Module Issue](../issues/MEDUSA_AUTH_MODULE_ISSUE.md) - Known v2.11 bug and workarounds
 
