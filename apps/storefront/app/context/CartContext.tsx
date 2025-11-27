@@ -1,30 +1,18 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { productList } from '../data/products';
+import { parsePrice, calculateTotal } from '../lib/price';
+import type { ProductId, CartItem, EmbroideryData } from '../types/product';
+import { productIdsEqual } from '../types/product';
 
-export interface CartItem {
-    id: string | number;           // Product ID (Medusa string or legacy number)
-    variantId?: string;            // Medusa variant ID for order creation
-    title: string;
-    price: string;
-    originalPrice?: string;
-    image: string;
-    quantity: number;
-    color?: string;
-    sku?: string;                  // SKU for inventory tracking
-    embroidery?: {
-        type: 'text' | 'drawing';
-        data: string;
-        font?: string;
-        color: string;
-    };
-}
+// Re-export CartItem for backwards compatibility
+export type { CartItem, EmbroideryData } from '../types/product';
 
 interface CartContextType {
     items: CartItem[];
     isOpen: boolean;
     addToCart: (item: Omit<CartItem, 'quantity'> & { quantity?: number }) => void;
-    removeFromCart: (id: string | number, color?: string) => void;
-    updateQuantity: (id: string | number, quantity: number) => void;
+    removeFromCart: (id: ProductId, color?: string) => void;
+    updateQuantity: (id: ProductId, quantity: number) => void;
     toggleCart: () => void;
     clearCart: () => void;
     cartTotal: number;
@@ -49,33 +37,40 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem('cart', JSON.stringify(items));
     }, [items]);
 
+    // Free gift configuration - could be moved to site config later
+    const FREE_GIFT_CONFIG = {
+        legacyId: 4 as ProductId,
+        handle: "the-wool-dryer-ball" as ProductId,
+        threshold: 35,
+        giftColor: "Free Gift",
+    };
+
+    // Helper to check if an item is the free gift
+    const isFreeGiftItem = useCallback((item: CartItem): boolean => {
+        return (
+            (productIdsEqual(item.id, FREE_GIFT_CONFIG.legacyId) ||
+             productIdsEqual(item.id, FREE_GIFT_CONFIG.handle)) &&
+            item.color === FREE_GIFT_CONFIG.giftColor
+        );
+    }, []);
+
     // Auto-add Free Wool Dryer Ball
     useEffect(() => {
-        const giftLegacyId = 4;
-        const giftHandle = "the-wool-dryer-ball";
-        const giftThreshold = 35;
-        const giftColor = "Free Gift";
+        const { legacyId, threshold, giftColor } = FREE_GIFT_CONFIG;
 
         // Get product info from centralized data (fallback for static products)
-        const giftProduct = productList.find(p => p.id === giftLegacyId);
+        const giftProduct = productList.find(p => p.id === legacyId);
         if (!giftProduct) return;
 
-        // Calculate total excluding the free gift
-        // Check both legacy numeric ID and handle-based matching
-        const qualifyingTotal = items.reduce((total, item) => {
-            const isGift = (item.id === giftLegacyId || item.id === giftHandle) && item.color === giftColor;
-            if (isGift) return total;
-            const price = parseFloat(item.price.replace('$', ''));
-            return total + price * item.quantity;
-        }, 0);
+        // Calculate total excluding the free gift using the new price utility
+        const qualifyingItems = items.filter(item => !isFreeGiftItem(item));
+        const qualifyingTotal = calculateTotal(qualifyingItems);
 
-        const hasFreeGift = items.some(item =>
-            (item.id === giftLegacyId || item.id === giftHandle) && item.color === giftColor
-        );
+        const hasFreeGift = items.some(isFreeGiftItem);
 
-        if (qualifyingTotal >= giftThreshold && !hasFreeGift) {
+        if (qualifyingTotal >= threshold && !hasFreeGift) {
             addToCart({
-                id: giftLegacyId,
+                id: legacyId,
                 title: giftProduct.title,
                 price: "$0.00",
                 originalPrice: giftProduct.formattedPrice,
@@ -84,18 +79,20 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
                 color: giftColor,
                 embroidery: undefined
             });
-        } else if (qualifyingTotal < giftThreshold && hasFreeGift) {
-            removeFromCart(giftLegacyId, giftColor);
+        } else if (qualifyingTotal < threshold && hasFreeGift) {
+            removeFromCart(legacyId, giftColor);
         }
-    }, [items]);
+    }, [items, isFreeGiftItem]);
 
     const addToCart = (newItem: Omit<CartItem, 'quantity'> & { quantity?: number }) => {
         setItems(prevItems => {
             const quantityToAdd = newItem.quantity || 1;
-            const existingItem = prevItems.find(item => item.id === newItem.id && item.color === newItem.color);
+            const existingItem = prevItems.find(item =>
+                productIdsEqual(item.id, newItem.id) && item.color === newItem.color
+            );
             if (existingItem) {
                 return prevItems.map(item =>
-                    item.id === newItem.id && item.color === newItem.color
+                    productIdsEqual(item.id, newItem.id) && item.color === newItem.color
                         ? { ...item, quantity: item.quantity + quantityToAdd }
                         : item
                 );
@@ -105,23 +102,23 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         setIsOpen(true);
     };
 
-    const removeFromCart = (id: number, color?: string) => {
+    const removeFromCart = (id: ProductId, color?: string) => {
         setItems(prevItems => prevItems.filter(item => {
             if (color !== undefined) {
-                return !(item.id === id && item.color === color);
+                return !(productIdsEqual(item.id, id) && item.color === color);
             }
-            return item.id !== id;
+            return !productIdsEqual(item.id, id);
         }));
     };
 
-    const updateQuantity = (id: number, quantity: number) => {
+    const updateQuantity = (id: ProductId, quantity: number) => {
         if (quantity < 1) {
             removeFromCart(id);
             return;
         }
         setItems(prevItems =>
             prevItems.map(item =>
-                item.id === id ? { ...item, quantity } : item
+                productIdsEqual(item.id, id) ? { ...item, quantity } : item
             )
         );
     };
@@ -133,10 +130,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         setIsOpen(false);
     };
 
-    const cartTotal = items.reduce((total, item) => {
-        const price = parseFloat(item.price.replace('$', ''));
-        return total + price * item.quantity;
-    }, 0);
+    // Use the centralized price calculation utility
+    const cartTotal = calculateTotal(items);
 
     return (
         <CartContext.Provider value={{ items, isOpen, addToCart, removeFromCart, updateQuantity, toggleCart, clearCart, cartTotal }}>
