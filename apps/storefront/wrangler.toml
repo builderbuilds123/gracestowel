@@ -8,13 +8,8 @@ main = "./workers/app.ts"
 
 [vars]
 # MEDUSA_BACKEND_URL is set via `wrangler secret put MEDUSA_BACKEND_URL`
-# Direct DB URL for local development (populated via .dev.vars)
+# Example: https://gracestowel-backend.up.railway.app
 
-# Hyperdrive binding for accelerated PostgreSQL connections
-# Create the Hyperdrive config first with:
-# npx wrangler hyperdrive create gracestowel-db --connection-string="postgres://..."
-[[hyperdrive]]
-binding = "HYPERDRIVE"
-id = "8a38a37da95c411ab0df1f1a5336d1a1"
-# For local development, uncomment and add your local DB:
-# localConnectionString = "postgresql://localhost:5432/railway"
+# NOTE: Hyperdrive is NOT used here.
+# Per ARCHITECTURE.md, the storefront talks to Medusa via REST API,
+# not directly to PostgreSQL.

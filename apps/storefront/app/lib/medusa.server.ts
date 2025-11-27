@@ -98,9 +98,10 @@ export function createMedusaClient(config: MedusaClientConfig) {
 
 /**
  * Get Medusa client with URL from environment/context
+ * Supports both Cloudflare Workers context and Node.js environment
  */
-export function getMedusaClient(context?: { env?: { MEDUSA_BACKEND_URL?: string } }) {
-    const baseUrl = context?.env?.MEDUSA_BACKEND_URL ||
+export function getMedusaClient(context?: { cloudflare?: { env?: { MEDUSA_BACKEND_URL?: string } } }) {
+    const baseUrl = context?.cloudflare?.env?.MEDUSA_BACKEND_URL ||
                     process.env.MEDUSA_BACKEND_URL ||
                     "http://localhost:9000";
 

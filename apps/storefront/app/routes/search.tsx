@@ -2,49 +2,66 @@ import type { Route } from "./+types/search";
 import { ProductCard } from "../components/ProductCard";
 import { getMedusaClient } from "../lib/medusa.server";
 import { getProductPrice, type MedusaProduct } from "../lib/medusa";
+import { getProductsFromDB, isHyperdriveAvailable } from "../lib/products.server";
 import { Search } from "lucide-react";
 import { useSearchParams, Form } from "react-router";
 
 export async function loader({ context, request }: Route.LoaderArgs) {
     const url = new URL(request.url);
     const query = url.searchParams.get("q")?.trim() || "";
-    
+
     if (!query) {
         return { products: [], query: "", count: 0 };
     }
 
-    try {
-        const medusa = getMedusaClient(context);
-        const response = await medusa.getProducts({ limit: 50 });
+    let response: { products: MedusaProduct[] } = { products: [] };
 
-        // Filter products by search query (title, description, or handle)
-        const searchLower = query.toLowerCase();
-        const filteredProducts = response.products.filter((product: MedusaProduct) => {
-            return (
-                product.title.toLowerCase().includes(searchLower) ||
-                product.handle.toLowerCase().includes(searchLower) ||
-                (product.description?.toLowerCase().includes(searchLower) ?? false)
-            );
-        });
-
-        // Transform to ProductCard format
-        const products = filteredProducts.map((product: MedusaProduct) => {
-            const priceData = getProductPrice(product, "usd");
-            return {
-                id: product.id,
-                handle: product.handle,
-                title: product.title,
-                price: priceData?.formatted || "$0.00",
-                image: product.images?.[0]?.url || product.thumbnail || "/placeholder.jpg",
-                description: product.description || "",
-            };
-        });
-
-        return { products, query, count: products.length };
-    } catch (error) {
-        console.error("Search failed:", error);
-        return { products: [], query, count: 0, error: "Search failed" };
+    // Try Hyperdrive first for faster search
+    if (isHyperdriveAvailable(context)) {
+        try {
+            const startTime = Date.now();
+            response = await getProductsFromDB(context, { limit: 50, search: query });
+            console.log(`✅ Hyperdrive search: Found ${response.products.length} products in ${Date.now() - startTime}ms`);
+        } catch (error) {
+            console.warn("⚠️ Hyperdrive search failed, falling back to Medusa:", error);
+        }
     }
+
+    // Fallback to Medusa API
+    if (response.products.length === 0) {
+        try {
+            const medusa = getMedusaClient(context);
+            const medusaResponse = await medusa.getProducts({ limit: 50 });
+
+            // Filter products by search query (title, description, or handle)
+            const searchLower = query.toLowerCase();
+            response.products = medusaResponse.products.filter((product: MedusaProduct) => {
+                return (
+                    product.title.toLowerCase().includes(searchLower) ||
+                    product.handle.toLowerCase().includes(searchLower) ||
+                    (product.description?.toLowerCase().includes(searchLower) ?? false)
+                );
+            });
+        } catch (error) {
+            console.error("Search failed:", error);
+            return { products: [], query, count: 0, error: "Search failed" };
+        }
+    }
+
+    // Transform to ProductCard format
+    const products = response.products.map((product: MedusaProduct) => {
+        const priceData = getProductPrice(product, "usd");
+        return {
+            id: product.id,
+            handle: product.handle,
+            title: product.title,
+            price: priceData?.formatted || "$0.00",
+            image: product.images?.[0]?.url || product.thumbnail || "/placeholder.jpg",
+            description: product.description || "",
+        };
+    });
+
+    return { products, query, count: products.length };
 }
 
 export default function SearchPage({ loaderData }: Route.ComponentProps) {

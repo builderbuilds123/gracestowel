@@ -224,13 +224,20 @@ healthcheckTimeout = 100
 
 The storefront runs on Cloudflare's edge network:
 
-```toml
-# wrangler.toml
-name = "gracestowel-storefront"
-compatibility_date = "2024-01-01"
-
-[vars]
-MEDUSA_BACKEND_URL = "https://medusa-backend.up.railway.app"
+```jsonc
+// wrangler.jsonc
+{
+  "name": "gracestowelstorefront",
+  "compatibility_date": "2025-04-04",
+  "compatibility_flags": ["nodejs_compat"],
+  "main": "./workers/app.ts",
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "<YOUR_HYPERDRIVE_ID>"
+    }
+  ]
+}
 ```
 
 ### Environment Variables
@@ -238,22 +245,188 @@ MEDUSA_BACKEND_URL = "https://medusa-backend.up.railway.app"
 Set via Cloudflare Dashboard or `wrangler secret`:
 ```bash
 wrangler secret put STRIPE_SECRET_KEY
-wrangler secret put DATABASE_URL
+wrangler secret put MEDUSA_BACKEND_URL
 ```
 
-### Future: Hyperdrive
+For local development, create `.dev.vars`:
+```bash
+DATABASE_URL=postgresql://user:pass@host:port/db
+MEDUSA_BACKEND_URL=http://localhost:9000
+STRIPE_SECRET_KEY=sk_test_...
+```
 
-For direct database access from Workers:
+---
+
+## Hyperdrive Integration
+
+### Overview
+
+Hyperdrive provides connection pooling for PostgreSQL at Cloudflare's edge, enabling direct database access without the latency of going through the Medusa backend.
+
+**Benefits:**
+- Eliminates Medusa cold start time (~500-2000ms saved)
+- Connection pooling at regional edge locations
+- Optional query caching at the edge
+- Automatic failover to Medusa API if Hyperdrive fails
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                     HYPERDRIVE DATA FLOW                                 │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  ┌─────────────┐     ┌──────────────┐     ┌─────────────────────────┐  │
+│  │  Customer   │────▶│  Storefront  │────▶│      Hyperdrive         │  │
+│  │   Browser   │     │  (CF Worker) │     │  (Edge Connection Pool) │  │
+│  └─────────────┘     └──────────────┘     └───────────┬─────────────┘  │
+│                                                        │                 │
+│                                            ┌───────────▼─────────────┐  │
+│                                            │      PostgreSQL         │  │
+│                                            │       (Railway)         │  │
+│                                            └─────────────────────────┘  │
+│                                                                          │
+│  Typical latency: 50-150ms (vs 200-500ms+ through Medusa)               │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Setup Instructions
+
+#### 1. Create Hyperdrive Configuration
+
+```bash
+# In Cloudflare Dashboard or via Wrangler CLI
+wrangler hyperdrive create gracestowel-db \
+  --connection-string="postgresql://user:pass@host:port/railway"
+```
+
+#### 2. Update wrangler.jsonc
+
+```jsonc
+{
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "your-hyperdrive-config-id"
+    }
+  ]
+}
+```
+
+#### 3. Deploy
+
+```bash
+cd apps/storefront
+pnpm run deploy
+```
+
+### Usage in Code
+
 ```typescript
-// lib/db.server.ts (future)
-const client = new Client({
-  connectionString: context.env.HYPERDRIVE?.connectionString || process.env.DATABASE_URL
-});
+// lib/products.server.ts
+import { getProductByHandleFromDB, isHyperdriveAvailable } from "../lib/products.server";
+
+// In route loader
+export async function loader({ context, params }) {
+  // Check if Hyperdrive is available
+  if (isHyperdriveAvailable(context)) {
+    try {
+      const product = await getProductByHandleFromDB(context, params.handle);
+      if (product) return { product };
+    } catch (error) {
+      console.warn("Hyperdrive failed, falling back to Medusa");
+    }
+  }
+
+  // Fallback to Medusa API
+  const medusa = getMedusaClient(context);
+  const product = await medusa.getProductByHandle(params.handle);
+  return { product };
+}
+```
+
+### Operations via Hyperdrive
+
+| Operation | Via Hyperdrive | Via Medusa API |
+|-----------|----------------|----------------|
+| Product listing | ✅ | Fallback |
+| Product detail | ✅ | Fallback |
+| Product search | ✅ | Fallback |
+| Category browsing | ✅ | Fallback |
+| Cart operations | ❌ | ✅ Required |
+| Checkout | ❌ | ✅ Required |
+| Order management | ❌ | ✅ Required |
+| Customer auth | ❌ | ✅ Required |
+| Review submission | ❌ | ✅ Required |
+
+### Security Considerations
+
+1. **Read-only access**: Hyperdrive connection should use a read-only PostgreSQL user
+2. **Query safety**: All queries use parameterized statements to prevent SQL injection
+3. **Fallback**: If Hyperdrive fails, system gracefully falls back to Medusa API
+
+### Local Development
+
+For local development without Hyperdrive:
+
+1. Set `DATABASE_URL` in `.dev.vars` pointing to your development database
+2. The code automatically detects and uses direct connection instead of Hyperdrive
+
+```bash
+# .dev.vars
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/medusa
 ```
 
 ---
 
 ## Data Flow Diagrams
+
+### Product Data Flow (Hyperdrive - Fast Path)
+
+```
+┌─────────────┐     ┌──────────────┐     ┌─────────────┐     ┌──────────┐
+│  Customer   │────▶│  Storefront  │────▶│  Hyperdrive │────▶│ PostgreSQL│
+│   Browser   │     │  (CF Worker) │     │  (CF Edge)  │     │ (Railway) │
+└─────────────┘     └──────────────┘     └─────────────┘     └──────────┘
+      │                    │                    │                  │
+      │  Request page      │                    │                  │
+      │ ─────────────────▶ │                    │                  │
+      │                    │  SQL via pooled    │                  │
+      │                    │  connection        │                  │
+      │                    │ ──────────────────▶│                  │
+      │                    │                    │  Query products  │
+      │                    │                    │ ────────────────▶│
+      │                    │                    │                  │
+      │                    │                    │  Product data    │
+      │                    │                    │ ◀────────────────│
+      │                    │  Result set        │                  │
+      │                    │ ◀──────────────────│                  │
+      │  Rendered page     │                    │                  │
+      │ ◀───────────────── │  (~50-150ms total) │                  │
+```
+
+### Product Data Flow (Medusa Fallback)
+
+```
+┌─────────────┐     ┌──────────────┐     ┌─────────────┐     ┌──────────┐
+│  Customer   │────▶│  Storefront  │────▶│   Medusa    │────▶│ PostgreSQL│
+│   Browser   │     │  (CF Worker) │     │   Backend   │     │ (Railway) │
+└─────────────┘     └──────────────┘     └─────────────┘     └──────────┘
+      │                    │                    │                  │
+      │  Request page      │                    │                  │
+      │ ─────────────────▶ │                    │                  │
+      │                    │  REST API call     │                  │
+      │                    │ ──────────────────▶│                  │
+      │                    │                    │  Query products  │
+      │                    │                    │ ────────────────▶│
+      │                    │                    │                  │
+      │                    │                    │  Product data    │
+      │                    │                    │ ◀────────────────│
+      │                    │  JSON response     │                  │
+      │                    │ ◀──────────────────│                  │
+      │  Rendered page     │                    │                  │
+      │ ◀───────────────── │ (~200-500ms total) │                  │
+```
 
 ### Complete Checkout Flow
 
@@ -281,28 +454,5 @@ const client = new Client({
       │  8. Success        │  9. Confirmation   │
       │ ◀───────────────── │ ◀──────────────────│
       │                    │                    │
-```
-
-### Product Data Flow
-
-```
-┌─────────────┐     ┌──────────────┐     ┌─────────────┐     ┌──────────┐
-│  Customer   │────▶│  Storefront  │────▶│   Medusa    │────▶│ PostgreSQL│
-│   Browser   │     │  (CF Worker) │     │   Backend   │     │          │
-└─────────────┘     └──────────────┘     └─────────────┘     └──────────┘
-      │                    │                    │                  │
-      │  Request page      │                    │                  │
-      │ ─────────────────▶ │                    │                  │
-      │                    │  Fetch products    │                  │
-      │                    │ ──────────────────▶│                  │
-      │                    │                    │  Query products  │
-      │                    │                    │ ────────────────▶│
-      │                    │                    │                  │
-      │                    │                    │  Product data    │
-      │                    │                    │ ◀────────────────│
-      │                    │  JSON response     │                  │
-      │                    │ ◀──────────────────│                  │
-      │  Rendered page     │                    │                  │
-      │ ◀───────────────── │                    │                  │
 ```
 

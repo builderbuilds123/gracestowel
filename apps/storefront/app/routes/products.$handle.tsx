@@ -12,6 +12,7 @@ import { ReviewForm } from "../components/ReviewForm";
 import { getMedusaClient } from "../lib/medusa.server";
 import { getProductPrice, getStockStatus, getStockStatusDisplay, type MedusaProduct } from "../lib/medusa";
 import { products as staticProducts } from "../data/products";
+import { getProductByHandleFromDB, getProductsFromDB, isHyperdriveAvailable } from "../lib/products.server";
 
 // SEO Meta tags for product pages
 export function meta({ data }: Route.MetaArgs) {
@@ -115,31 +116,73 @@ export async function loader({ params, context }: Route.LoaderArgs) {
 
     const backendUrl = (context as { cloudflare?: { env?: { MEDUSA_BACKEND_URL?: string } } })?.cloudflare?.env?.MEDUSA_BACKEND_URL || "http://localhost:9000";
 
-    try {
-        const medusa = getMedusaClient(context);
-        const medusaProduct = await medusa.getProductByHandle(handle);
+    // Strategy: Try Hyperdrive (direct DB) first for fastest response,
+    // then fall back to Medusa API, then to static products
+    let medusaProduct: MedusaProduct | null = null;
+    let allProducts: { products: MedusaProduct[] } = { products: [] };
+    let dataSource: "hyperdrive" | "medusa" | "static" = "static";
 
-        if (medusaProduct) {
-            const product = transformMedusaProduct(medusaProduct);
-
-            // Fetch related products and reviews in parallel
-            const [allProducts, reviewData] = await Promise.all([
-                medusa.getProducts({ limit: 10 }),
-                fetchReviews(medusaProduct.id, backendUrl)
+    // 1. Try Hyperdrive (direct PostgreSQL via connection pooling)
+    if (isHyperdriveAvailable(context)) {
+        try {
+            const startTime = Date.now();
+            const [productResult, productsResult] = await Promise.all([
+                getProductByHandleFromDB(context, handle),
+                getProductsFromDB(context, { limit: 10 }),
             ]);
 
-            const relatedProducts = allProducts.products
-                .filter(p => p.handle !== handle)
-                .slice(0, 3)
-                .map(transformMedusaProduct);
-
-            return { product, relatedProducts, reviews: reviewData.reviews, reviewStats: reviewData.stats, backendUrl, error: null };
+            if (productResult) {
+                medusaProduct = productResult;
+                allProducts = productsResult;
+                dataSource = "hyperdrive";
+                console.log(`✅ Hyperdrive: Fetched product in ${Date.now() - startTime}ms`);
+            }
+        } catch (error) {
+            console.warn("⚠️ Hyperdrive failed, falling back to Medusa API:", error);
         }
-    } catch (error) {
-        console.error("Failed to fetch product from Medusa:", error);
     }
 
-    // Fallback to static products
+    // 2. Fall back to Medusa API if Hyperdrive didn't work
+    if (!medusaProduct) {
+        try {
+            const startTime = Date.now();
+            const medusa = getMedusaClient(context);
+            medusaProduct = await medusa.getProductByHandle(handle);
+
+            if (medusaProduct) {
+                allProducts = await medusa.getProducts({ limit: 10 });
+                dataSource = "medusa";
+                console.log(`✅ Medusa API: Fetched product in ${Date.now() - startTime}ms`);
+            }
+        } catch (error) {
+            console.error("Failed to fetch product from Medusa:", error);
+        }
+    }
+
+    // 3. Return Medusa/Hyperdrive product if found
+    if (medusaProduct) {
+        const product = transformMedusaProduct(medusaProduct);
+
+        // Fetch reviews from Medusa backend (reviews require API, not direct DB)
+        const reviewData = await fetchReviews(medusaProduct.id, backendUrl);
+
+        const relatedProducts = allProducts.products
+            .filter(p => p.handle !== handle)
+            .slice(0, 3)
+            .map(transformMedusaProduct);
+
+        return {
+            product,
+            relatedProducts,
+            reviews: reviewData.reviews,
+            reviewStats: reviewData.stats,
+            backendUrl,
+            error: null,
+            _dataSource: dataSource, // For debugging
+        };
+    }
+
+    // 4. Final fallback to static products
     const staticProduct = staticProducts[handle];
     if (!staticProduct) {
         throw new Response("Product not found", { status: 404 });
@@ -155,7 +198,8 @@ export async function loader({ params, context }: Route.LoaderArgs) {
         reviews: [] as Review[],
         reviewStats: { average: 0, count: 0, distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 } } as ReviewStats,
         backendUrl,
-        error: "Using cached product"
+        error: "Using cached product",
+        _dataSource: "static" as const,
     };
 }
 
