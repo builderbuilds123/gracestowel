@@ -1,32 +1,49 @@
 /**
  * Vitest Test Setup
- * Configures global test utilities, MSW server, and accessibility matchers
+ * Configures global test utilities and accessibility matchers
+ * MSW server is NOT automatically started - tests that need it should import and start it themselves
  */
+import "@testing-library/jest-dom/vitest";
+import "vitest-axe/extend-expect";
 import { cleanup } from "@testing-library/react";
-import { afterAll, afterEach, beforeAll } from "vitest";
+import { afterEach, beforeEach } from "vitest";
 
-// Import server dynamically to avoid initialization issues
-let server: any;
+// Mock localStorage for tests
+const localStorageMock = (() => {
+  let store: Record<string, string> = {};
 
-beforeAll(async () => {
-  // Dynamically import MSW server to ensure localStorage is available
-  const { server: mswServer } = await import("./mocks/server");
-  server = mswServer;
-  server.listen({ onUnhandledRequest: "warn" });
+  return {
+    getItem: (key: string) => store[key] || null,
+    setItem: (key: string, value: string) => {
+      store[key] = value.toString();
+    },
+    removeItem: (key: string) => {
+      delete store[key];
+    },
+    clear: () => {
+      store = {};
+    },
+    get length() {
+      return Object.keys(store).length;
+    },
+    key: (index: number) => {
+      const keys = Object.keys(store);
+      return keys[index] || null;
+    },
+  };
+})();
+
+// Set up localStorage mock before each test
+beforeEach(() => {
+  Object.defineProperty(window, "localStorage", {
+    value: localStorageMock,
+    writable: true,
+  });
 });
 
-// Reset handlers after each test
+// Reset after each test
 afterEach(() => {
   cleanup();
-  if (server) {
-    server.resetHandlers();
-  }
-});
-
-// Close MSW server after all tests
-afterAll(() => {
-  if (server) {
-    server.close();
-  }
+  localStorageMock.clear();
 });
 
