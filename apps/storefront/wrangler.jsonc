@@ -16,16 +16,16 @@
   // To configure:
   // 1. Create a Hyperdrive config in Cloudflare Dashboard
   // 2. Point it to your Railway PostgreSQL database
-  // 3. Replace <YOUR_HYPERDRIVE_ID> with the actual ID
+  // 3. Set the hyperdrive ID below (currently configured)
   //
-  // For local development, set DATABASE_URL in .dev.vars instead
+  // For local development:
+  // - Connection string is stored in .dev.vars (DATABASE_URL)
+  // - DO NOT commit .dev.vars to version control
+  // - In production, Hyperdrive uses the connection configured in Cloudflare Dashboard
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE",
-      "id": "1dffb86ef8b64f5197bd875b8e1cc026",
-      // For local development, this uses the DATABASE_URL from .dev.vars
-      // In production, Hyperdrive will use the connection configured in Cloudflare Dashboard
-      "localConnectionString": "postgresql://postgres:zRXiSJfuUUmLDcdvoqTFprHeqpNzfLOQ@ballast.proxy.rlwy.net:59508/railway"
+      "id": "1dffb86ef8b64f5197bd875b8e1cc026"
     }
   ]
 }
