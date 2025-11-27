@@ -35,5 +35,8 @@ module.exports = defineConfig({
         ],
       },
     },
+    {
+      resolve: "./src/modules/review",
+    },
   ],
 })

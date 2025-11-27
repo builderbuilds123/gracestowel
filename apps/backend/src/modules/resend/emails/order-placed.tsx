@@ -1,3 +1,4 @@
+// @ts-nocheck - React types version mismatch with @react-email/components
 import * as React from "react"
 import {
   Body,

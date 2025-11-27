@@ -18,7 +18,7 @@ const getStripeClient = () => {
         throw new Error("STRIPE_SECRET_KEY is not configured");
     }
     return new Stripe(secretKey, {
-        apiVersion: "2025-04-30.basil",
+        apiVersion: "2025-09-30.clover",
     });
 };
 
@@ -132,7 +132,7 @@ async function handlePaymentIntentSucceeded(
             input: {
                 paymentIntentId: paymentIntent.id,
                 cartData,
-                customerEmail,
+                customerEmail: customerEmail || undefined,
                 shippingAddress,
                 amount: paymentIntent.amount,
                 currency: paymentIntent.currency,
