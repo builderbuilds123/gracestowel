@@ -63,8 +63,10 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
+          # Using unique credentials to avoid GitHub Actions secret masking
+          # When user/password match service container secrets, GHA masks them in env vars
+          POSTGRES_USER: medusa_test_user
+          POSTGRES_PASSWORD: medusa_test_password_123
           POSTGRES_DB: medusa_integration
         ports:
           - 5432:5432
@@ -98,7 +100,7 @@ jobs:
       - name: Run backend tests
         working-directory: apps/backend
         env:
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/medusa_integration
+          DATABASE_URL: postgres://medusa_test_user:medusa_test_password_123@localhost:5432/medusa_integration
           REDIS_URL: redis://localhost:6379
           JWT_SECRET: test-jwt-secret-for-ci
           COOKIE_SECRET: test-cookie-secret-for-ci
