@@ -2,10 +2,10 @@ import { AbstractNotificationProviderService } from "@medusajs/framework/utils"
 import { ProviderSendNotificationDTO, ProviderSendNotificationResultsDTO } from "@medusajs/framework/types"
 import { Resend } from "resend"
 import { render } from "@react-email/components"
-import { orderPlacedEmail } from "./emails/order-placed"
-import { welcomeEmail } from "./emails/welcome"
-import { shippingConfirmationEmail } from "./emails/shipping-confirmation"
-import { orderCanceledEmail } from "./emails/order-canceled"
+import { orderPlacedEmail } from "./emails/order-placed.tsx"
+import { welcomeEmail } from "./emails/welcome.tsx"
+import { shippingConfirmationEmail } from "./emails/shipping-confirmation.tsx"
+import { orderCanceledEmail } from "./emails/order-canceled.tsx"
 
 // Template types enum
 export enum Templates {

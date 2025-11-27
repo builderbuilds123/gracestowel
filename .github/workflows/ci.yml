@@ -53,37 +53,13 @@ jobs:
         continue-on-error: true
 
   # ============================================
-  # Stage 2: Build & Unit Tests (Parallel)
+  # Stage 2: Unit Tests (Parallel, No External Services)
   # ============================================
   test-backend:
-    name: Backend Tests
+    name: Backend Unit Tests
     runs-on: ubuntu-latest
     needs: validate
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          # Use trust authentication to avoid GHA secret masking issues
-          # GHA masks any env var value that appears in service container env blocks
-          POSTGRES_HOST_AUTH_METHOD: trust
-          POSTGRES_USER: postgres
-          POSTGRES_DB: medusa_integration
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+    # No services needed - unit tests use mocks
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -97,23 +73,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Create PostgreSQL runner role
-        # Medusa test framework may connect without explicit user, falling back to system user "runner"
-        # Create the role with superuser privileges so tests can create/drop databases
-        run: |
-          PGPASSWORD= psql -h localhost -U postgres -c "CREATE ROLE runner WITH LOGIN SUPERUSER CREATEDB;"
-
-      - name: Run backend tests
+      - name: Run backend unit tests
         working-directory: apps/backend
         env:
-          # Using trust auth - no password needed
-          DATABASE_URL: postgres://postgres@localhost:5432/medusa_integration
-          REDIS_URL: redis://localhost:6379
-          JWT_SECRET: test-jwt-secret-for-ci
-          COOKIE_SECRET: test-cookie-secret-for-ci
-          # Resend test API key (re_test_ prefix indicates test mode)
+          # Test mode env vars (no real services needed)
+          NODE_ENV: test
           RESEND_API_KEY: re_test_ci_placeholder_key
-          RESEND_FROM_EMAIL: test@example.com
         run: npm test -- --coverage
 
       - name: Upload coverage
