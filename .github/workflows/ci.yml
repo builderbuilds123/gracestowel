@@ -63,9 +63,9 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_USER: medusa_test
-          POSTGRES_PASSWORD: medusa_test
-          POSTGRES_DB: medusa_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: medusa_integration
         ports:
           - 5432:5432
         options: >-
@@ -98,10 +98,10 @@ jobs:
       - name: Run backend tests
         working-directory: apps/backend
         env:
-          DATABASE_URL: postgresql://medusa_test:medusa_test@localhost:5432/medusa_test
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/medusa_integration
           REDIS_URL: redis://localhost:6379
-          JWT_SECRET: test-secret
-          COOKIE_SECRET: test-secret
+          JWT_SECRET: test-jwt-secret-for-ci
+          COOKIE_SECRET: test-cookie-secret-for-ci
         run: npm test -- --coverage
 
       - name: Upload coverage

@@ -66,7 +66,14 @@ export async function POST(
     // Handle the event
     switch (event.type) {
         case "payment_intent.succeeded":
+            // This fires when payment is captured (after 1-hour window)
             await handlePaymentIntentSucceeded(event.data.object as Stripe.PaymentIntent, req);
+            break;
+
+        case "payment_intent.amount_capturable_updated":
+            // This fires when payment is authorized (manual capture mode)
+            // Create the order when payment is authorized
+            await handlePaymentIntentAuthorized(event.data.object as Stripe.PaymentIntent, req);
             break;
 
         case "payment_intent.payment_failed":
@@ -86,7 +93,29 @@ export async function POST(
 }
 
 /**
- * Handle successful payment intent
+ * Handle authorized payment intent (manual capture mode)
+ * This is called when the payment is authorized but not yet captured.
+ * We create the order here to start the 1-hour modification window.
+ */
+async function handlePaymentIntentAuthorized(
+    paymentIntent: Stripe.PaymentIntent,
+    req: MedusaRequest
+): Promise<void> {
+    console.log(`PaymentIntent authorized: ${paymentIntent.id}`);
+    console.log(`Amount capturable: ${paymentIntent.amount_capturable / 100} ${paymentIntent.currency.toUpperCase()}`);
+
+    // Only process if status is requires_capture (authorized)
+    if (paymentIntent.status !== "requires_capture") {
+        console.log(`Skipping - status is ${paymentIntent.status}, not requires_capture`);
+        return;
+    }
+
+    await createOrderFromPaymentIntent(paymentIntent, req);
+}
+
+/**
+ * Handle successful payment intent (captured)
+ * This is called when the payment is captured (after 1-hour window or immediate capture).
  */
 async function handlePaymentIntentSucceeded(
     paymentIntent: Stripe.PaymentIntent,
@@ -95,7 +124,35 @@ async function handlePaymentIntentSucceeded(
     console.log(`PaymentIntent succeeded: ${paymentIntent.id}`);
     console.log(`Amount: ${paymentIntent.amount / 100} ${paymentIntent.currency.toUpperCase()}`);
 
-    // Extract cart data from metadata (added in Task 2.3)
+    // Check if order already exists (created during authorization)
+    const query = req.scope.resolve("query");
+    const { data: existingOrders } = await query.graph({
+        entity: "order",
+        fields: ["id"],
+        filters: {
+            metadata: {
+                stripe_payment_intent_id: paymentIntent.id
+            }
+        }
+    });
+
+    if (existingOrders.length > 0) {
+        console.log(`Order already exists for PaymentIntent ${paymentIntent.id} - skipping creation`);
+        return;
+    }
+
+    // If no order exists (e.g., immediate capture mode), create one
+    await createOrderFromPaymentIntent(paymentIntent, req);
+}
+
+/**
+ * Helper function to create order from PaymentIntent
+ */
+async function createOrderFromPaymentIntent(
+    paymentIntent: Stripe.PaymentIntent,
+    req: MedusaRequest
+): Promise<void> {
+    // Extract cart data from metadata
     const metadata = paymentIntent.metadata || {};
     const cartData = metadata.cart_data ? JSON.parse(metadata.cart_data) : null;
 
@@ -140,6 +197,9 @@ async function handlePaymentIntentSucceeded(
         });
 
         console.log(`Order created successfully: ${order.id}`);
+        if (order.modification_token) {
+            console.log(`Modification token generated for order ${order.id}`);
+        }
     } catch (error) {
         console.error("Failed to create order:", error);
         // Don't throw - we still want to return 200 to Stripe

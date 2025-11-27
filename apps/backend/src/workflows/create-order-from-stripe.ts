@@ -7,6 +7,7 @@ import {
 } from "@medusajs/framework/workflows-sdk";
 import { createOrderWorkflow, adjustInventoryLevelsStep, emitEventStep } from "@medusajs/medusa/core-flows";
 import type { InventoryTypes } from "@medusajs/framework/types";
+import { modificationTokenService } from "../services/modification-token";
 
 /**
  * Input for the create-order-from-stripe workflow
@@ -155,16 +156,33 @@ const prepareInventoryAdjustmentsStep = createStep(
 );
 
 /**
+ * Step to generate modification token for the order
+ * This token allows customers to modify their order within a 1-hour window
+ */
+const generateModificationTokenStep = createStep(
+    "generate-modification-token",
+    async (input: { orderId: string; paymentIntentId: string }) => {
+        const token = modificationTokenService.generateToken(
+            input.orderId,
+            input.paymentIntentId
+        );
+        console.log(`Generated modification token for order ${input.orderId}`);
+        return new StepResponse({ token });
+    }
+);
+
+/**
  * Step to log order creation for debugging
  */
 const logOrderCreatedStep = createStep(
     "log-order-created",
-    async (input: { orderId: string; paymentIntentId: string; inventoryAdjusted: boolean }) => {
+    async (input: { orderId: string; paymentIntentId: string; inventoryAdjusted: boolean; modificationToken: string }) => {
         console.log(`Order ${input.orderId} created from Stripe PaymentIntent ${input.paymentIntentId}`);
         if (input.inventoryAdjusted) {
             console.log(`Inventory levels adjusted for order ${input.orderId}`);
         }
-        return new StepResponse({ success: true });
+        console.log(`Modification token generated (valid for 1 hour)`);
+        return new StepResponse({ success: true, modificationToken: input.modificationToken });
     }
 );
 
@@ -175,7 +193,9 @@ const logOrderCreatedStep = createStep(
  * 1. Validates and prepares order data from Stripe payment metadata
  * 2. Creates the order using Medusa's createOrderWorkflow
  * 3. Adjusts inventory levels (decrements stock)
- * 4. Logs the order creation
+ * 4. Generates a modification token for the 1-hour modification window
+ * 5. Logs the order creation
+ * 6. Emits order.placed event (triggers email + payment capture scheduling)
  */
 export const createOrderFromStripeWorkflow = createWorkflow(
     "create-order-from-stripe",
@@ -210,22 +230,39 @@ export const createOrderFromStripeWorkflow = createWorkflow(
         // Call the inventory adjustment step
         adjustInventoryLevelsStep(adjustedInventory);
 
-        // Step 5: Log the order creation
-        const logInput = transform({ order, input, shouldAdjustInventory }, (data) => ({
+        // Step 5: Generate modification token for 1-hour window
+        const tokenInput = transform({ order, input }, (data) => ({
+            orderId: data.order.id,
+            paymentIntentId: data.input.paymentIntentId,
+        }));
+        const tokenResult = generateModificationTokenStep(tokenInput);
+
+        // Step 6: Log the order creation
+        const logInput = transform({ order, input, shouldAdjustInventory, tokenResult }, (data) => ({
             orderId: data.order.id,
             paymentIntentId: data.input.paymentIntentId,
             inventoryAdjusted: data.shouldAdjustInventory,
+            modificationToken: data.tokenResult.token,
         }));
         logOrderCreatedStep(logInput);
 
-        // Step 6: Emit order.placed event to trigger email notification
-        const eventData = transform({ order }, (data) => ({
+        // Step 7: Emit order.placed event to trigger email notification and payment capture scheduling
+        const eventData = transform({ order, tokenResult }, (data) => ({
             eventName: "order.placed" as const,
-            data: { id: data.order.id },
+            data: {
+                id: data.order.id,
+                modification_token: data.tokenResult.token,
+            },
         }));
         emitEventStep(eventData);
 
-        return new WorkflowResponse(order);
+        // Return order with modification token
+        const result = transform({ order, tokenResult }, (data) => ({
+            ...data.order,
+            modification_token: data.tokenResult.token,
+        }));
+
+        return new WorkflowResponse(result);
     }
 );
 

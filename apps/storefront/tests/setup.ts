@@ -46,4 +46,3 @@ afterEach(() => {
   cleanup();
   localStorageMock.clear();
 });
-
