@@ -29,8 +29,13 @@ interface ResendModuleOptions {
   from?: string
 }
 
-// Check if we're in test mode (no API key provided)
-const isTestMode = () => !process.env.RESEND_API_KEY
+// Check if we're in test mode (no API key or test/placeholder key)
+const isTestMode = () => {
+  const apiKey = process.env.RESEND_API_KEY
+  if (!apiKey) return true
+  // Keys starting with re_test_ are Resend test keys, or ci_placeholder for CI
+  return apiKey.startsWith("re_test_") || apiKey.includes("placeholder")
+}
 
 class ResendNotificationProviderService extends AbstractNotificationProviderService {
   static identifier = "resend"

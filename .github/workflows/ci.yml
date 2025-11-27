@@ -111,6 +111,9 @@ jobs:
           REDIS_URL: redis://localhost:6379
           JWT_SECRET: test-jwt-secret-for-ci
           COOKIE_SECRET: test-cookie-secret-for-ci
+          # Resend test API key (re_test_ prefix indicates test mode)
+          RESEND_API_KEY: re_test_ci_placeholder_key
+          RESEND_FROM_EMAIL: test@example.com
         run: npm test -- --coverage
 
       - name: Upload coverage
