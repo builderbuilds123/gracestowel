@@ -3,6 +3,7 @@ import { productList } from '../data/products';
 import { parsePrice, calculateTotal } from '../lib/price';
 import type { ProductId, CartItem, EmbroideryData } from '../types/product';
 import { productIdsEqual } from '../types/product';
+import { SITE_CONFIG } from '../config/site';
 
 // Re-export CartItem for backwards compatibility
 export type { CartItem, EmbroideryData } from '../types/product';
@@ -37,12 +38,13 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem('cart', JSON.stringify(items));
     }, [items]);
 
-    // Free gift configuration - could be moved to site config later
+    // Free gift configuration from centralized site config
+    const { freeGift } = SITE_CONFIG.cart;
     const FREE_GIFT_CONFIG = {
-        legacyId: 4 as ProductId,
-        handle: "the-wool-dryer-ball" as ProductId,
-        threshold: 35,
-        giftColor: "Free Gift",
+        legacyId: freeGift.legacyId as ProductId,
+        handle: freeGift.handle as ProductId,
+        threshold: freeGift.threshold,
+        giftColor: freeGift.label,
     };
 
     // Helper to check if an item is the free gift

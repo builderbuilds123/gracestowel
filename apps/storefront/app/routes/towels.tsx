@@ -3,9 +3,9 @@ import { useState, useMemo } from "react";
 import { ProductCard } from "../components/ProductCard";
 import { ProductFilters } from "../components/ProductFilters";
 import { getMedusaClient } from "../lib/medusa.server";
-import { getProductPrice, type MedusaProduct } from "../lib/medusa";
 import { productList } from "../data/products";
 import { SlidersHorizontal, X } from "lucide-react";
+import { transformToListItems, type ProductListItem } from "../lib/product-transformer";
 
 // SEO Meta tags
 export function meta() {
@@ -24,41 +24,14 @@ export function meta() {
     ];
 }
 
-interface ProductWithFilters {
-    id: string;
-    handle: string;
-    title: string;
-    price: string;
-    priceAmount: number;
-    image: string;
-    description: string;
-    colors: string[];
-}
-
 // Loader to fetch products from Medusa
 export async function loader({ context }: Route.LoaderArgs) {
     try {
         const medusa = getMedusaClient(context);
         const response = await medusa.getProducts({ limit: 50 });
 
-        // Transform Medusa products with color options
-        const products: ProductWithFilters[] = response.products.map((product: MedusaProduct) => {
-            const priceData = getProductPrice(product, "usd");
-            // Extract color options from product variants
-            const colorOption = product.options?.find(o => o.title.toLowerCase() === 'color');
-            const colors = colorOption?.values?.map(v => v.value) || [];
-
-            return {
-                id: product.id,
-                handle: product.handle,
-                title: product.title,
-                price: priceData?.formatted || "$0.00",
-                priceAmount: priceData?.amount || 0,
-                image: product.images?.[0]?.url || product.thumbnail || "/placeholder.jpg",
-                description: product.description || "",
-                colors,
-            };
-        });
+        // Transform Medusa products using centralized transformer
+        const products = transformToListItems(response.products);
 
         // Extract all unique colors
         const allColors = [...new Set(products.flatMap(p => p.colors))].sort();
@@ -74,7 +47,7 @@ export async function loader({ context }: Route.LoaderArgs) {
     } catch (error) {
         console.error("Failed to fetch products from Medusa:", error);
         // Fallback to static products
-        const products: ProductWithFilters[] = productList.map((product) => ({
+        const products: ProductListItem[] = productList.map((product) => ({
             id: String(product.id),
             handle: product.handle,
             title: product.title,
