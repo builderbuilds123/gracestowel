@@ -22,7 +22,10 @@
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE",
-      "id": "1dffb86ef8b64f5197bd875b8e1cc026"
+      "id": "1dffb86ef8b64f5197bd875b8e1cc026",
+      // For local development, this uses the DATABASE_URL from .dev.vars
+      // In production, Hyperdrive will use the connection configured in Cloudflare Dashboard
+      "localConnectionString": "postgresql://postgres:zRXiSJfuUUmLDcdvoqTFprHeqpNzfLOQ@ballast.proxy.rlwy.net:59508/railway"
     }
   ]
 }
