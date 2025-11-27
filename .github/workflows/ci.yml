@@ -97,6 +97,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Create PostgreSQL runner role
+        # Medusa test framework may connect without explicit user, falling back to system user "runner"
+        # Create the role with superuser privileges so tests can create/drop databases
+        run: |
+          PGPASSWORD= psql -h localhost -U postgres -c "CREATE ROLE runner WITH LOGIN SUPERUSER CREATEDB;"
+
       - name: Run backend tests
         working-directory: apps/backend
         env:
