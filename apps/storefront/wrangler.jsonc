@@ -1,0 +1,22 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "gracestowelstorefront",
+  "compatibility_date": "2025-04-04",
+  "compatibility_flags": ["nodejs_compat"],
+  "main": "./workers/app.ts",
+  "vars": {
+    "VALUE_FROM_CLOUDFLARE": "Hello from Cloudflare"
+    // MEDUSA_BACKEND_URL is set via `wrangler secret put MEDUSA_BACKEND_URL`
+  },
+  // Hyperdrive binding for accelerated PostgreSQL connections
+  // Create the Hyperdrive config first with:
+  // npx wrangler hyperdrive create gracestowel-db --connection-string="postgres://..."
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "<YOUR_HYPERDRIVE_CONFIG_ID>"
+      // For local development, uncomment and add your local DB:
+      // "localConnectionString": "postgresql://localhost:5432/railway"
+    }
+  ]
+}

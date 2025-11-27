@@ -1,0 +1,20 @@
+# wrangler.toml for Remix storefront
+# NOTE: wrangler.jsonc is the primary config file. This file is kept for reference.
+
+name = "remix-storefront"
+compatibility_date = "2024-04-01"
+compatibility_flags = ["nodejs_compat"]
+main = "./workers/app.ts"
+
+[vars]
+# MEDUSA_BACKEND_URL is set via `wrangler secret put MEDUSA_BACKEND_URL`
+# Direct DB URL for local development (populated via .dev.vars)
+
+# Hyperdrive binding for accelerated PostgreSQL connections
+# Create the Hyperdrive config first with:
+# npx wrangler hyperdrive create gracestowel-db --connection-string="postgres://..."
+[[hyperdrive]]
+binding = "HYPERDRIVE"
+id = "<YOUR_HYPERDRIVE_CONFIG_ID>"
+# For local development, uncomment and add your local DB:
+# localConnectionString = "postgresql://localhost:5432/railway"

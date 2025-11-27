@@ -1,0 +1,159 @@
+import { X, Minus, Plus, Sparkles } from 'lucide-react';
+import { Towel } from '@phosphor-icons/react';
+import { useCart } from '../context/CartContext';
+import { useLocale } from '../context/LocaleContext';
+import { Link } from 'react-router';
+import { CartProgressBar } from './CartProgressBar';
+import { ProductPrice } from './ProductPrice';
+
+export function CartDrawer() {
+    const { items, isOpen, toggleCart, removeFromCart, updateQuantity, cartTotal } = useCart();
+    const { formatPrice, t } = useLocale();
+
+    const isFreeGift = (item: any) => item.color === "Free Gift";
+
+    return (
+        <>
+            {/* Backdrop */}
+            <div
+                onClick={toggleCart}
+                className={`fixed inset-0 bg-black/20 backdrop-blur-sm z-40 transition-opacity duration-300 ${isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+                    }`}
+                aria-hidden={!isOpen}
+            />
+
+            {/* Drawer */}
+            <div
+                className={`fixed right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl z-50 flex flex-col transition-transform duration-300 ease-out transform ${isOpen ? 'translate-x-0' : 'translate-x-full'
+                    }`}
+                aria-hidden={!isOpen}
+            >
+                <div className="p-6 border-b border-gray-100 flex justify-between items-center">
+                    <h2 className="text-2xl font-serif text-text-earthy flex items-center gap-2">
+                        <Towel size={24} weight="regular" />
+                        {t('cart.title')}
+                    </h2>
+                    <button onClick={toggleCart} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+                        <X className="w-6 h-6 text-text-earthy" />
+                    </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-6">
+                    {items.length > 0 && <CartProgressBar />}
+                    {items.length === 0 ? (
+                        <div className="h-full flex flex-col items-center justify-center text-text-earthy/60">
+                            <Towel size={64} weight="thin" className="mb-4 opacity-20" />
+                            <p className="text-lg">{t('cart.empty')}</p>
+                            <button
+                                onClick={toggleCart}
+                                className="mt-4 text-accent-earthy hover:underline"
+                            >
+                                {t('nav.shop')}
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="space-y-6">
+                            {items.map((item) => (
+                                <div key={`${item.id}-${item.color || 'default'}`} className="flex gap-4">
+                                    <div className="w-24 h-24 bg-card-earthy/30 rounded-md overflow-hidden flex-shrink-0">
+                                        <img src={item.image} alt={item.title} className="w-full h-full object-cover" />
+                                    </div>
+                                    <div className="flex-1">
+                                        <div className="flex justify-between items-start mb-2">
+                                            <div>
+                                                <h3 className="font-medium text-text-earthy">{item.title}</h3>
+                                                {item.embroidery && (
+                                                    <div className="flex items-center gap-1 mt-1">
+                                                        <Sparkles className="w-3 h-3 text-accent-earthy" />
+                                                        <span className="text-xs text-accent-earthy">Custom Embroidery</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            {!isFreeGift(item) && (
+                                                <button
+                                                    onClick={() => removeFromCart(item.id, item.color)}
+                                                    className="text-text-earthy/40 hover:text-red-500 transition-colors"
+                                                >
+                                                    <X className="w-4 h-4" />
+                                                </button>
+                                            )}
+                                        </div>
+                                        {item.color && item.id !== 4 && (
+                                            <p className="text-xs text-text-earthy/60 mb-2">Color: {item.color}</p>
+                                        )}
+                                        {item.embroidery && (
+                                            <div className="mb-3 p-2 bg-accent-earthy/5 rounded border border-accent-earthy/20">
+                                                {item.embroidery.type === 'text' ? (
+                                                    <div
+                                                        className="text-sm text-center"
+                                                        style={{
+                                                            fontFamily: item.embroidery.font,
+                                                            color: item.embroidery.color,
+                                                            textShadow: '1px 1px 0 rgba(0,0,0,0.1)'
+                                                        }}
+                                                    >
+                                                        {item.embroidery.data}
+                                                    </div>
+                                                ) : (
+                                                    <img
+                                                        src={item.embroidery.data}
+                                                        alt="Custom embroidery"
+                                                        className="w-full h-16 object-contain rounded"
+                                                    />
+                                                )}
+                                            </div>
+                                        )}
+                                        <ProductPrice
+                                            price={item.price}
+                                            originalPrice={item.originalPrice}
+                                            className="mb-4"
+                                            showFreeLabel={isFreeGift(item)}
+                                        />
+                                        <div className="flex items-center gap-3">
+                                            {item.id === 4 && item.price === "$0.00" ? (
+                                                <span className="text-sm text-text-earthy/60">Qty: {item.quantity}</span>
+                                            ) : (
+                                                <>
+                                                    <button
+                                                        onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                                                        className="p-1 rounded-full hover:bg-gray-100 border border-gray-200"
+                                                    >
+                                                        <Minus className="w-4 h-4" />
+                                                    </button>
+                                                    <span className="w-8 text-center">{item.quantity}</span>
+                                                    <button
+                                                        onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                                                        className="p-1 rounded-full hover:bg-gray-100 border border-gray-200"
+                                                    >
+                                                        <Plus className="w-4 h-4" />
+                                                    </button>
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                {items.length > 0 && (
+                    <div className="p-6 border-t border-gray-100 bg-gray-50">
+                        <div className="flex justify-between items-center mb-4">
+                            <span className="text-text-earthy/60">{t('cart.subtotal')}</span>
+                            <span className="text-xl font-bold text-text-earthy">{formatPrice(cartTotal)}</span>
+                        </div>
+                        <p className="text-xs text-text-earthy/40 mb-6 text-center">Shipping and taxes calculated at checkout.</p>
+                        <Link
+                            to="/checkout"
+                            onClick={toggleCart}
+                            className="block w-full py-4 bg-accent-earthy text-white text-center font-semibold rounded hover:bg-accent-earthy/90 transition-colors shadow-lg"
+                        >
+                            {t('cart.checkout')}
+                        </Link>
+                    </div>
+                )}
+            </div>
+        </>
+    );
+}

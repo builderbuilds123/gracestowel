@@ -1,0 +1,22 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Alegreya", serif;
+  --font-serif: "Alegreya", serif;
+  --font-aboreto: "Alegreya", serif;
+  --font-sigmar: "Sigmar One", cursive;
+  /* Mapping old var to new font for compatibility */
+
+  --color-bg-earthy: #FCFAF8;
+  --color-card-earthy: #D4D8C4;
+  --color-accent-earthy: #8A6E59;
+  --color-text-earthy: #3C3632;
+  --color-accent-text: #FFFFFF;
+}
+
+html,
+body {
+  background-color: var(--color-bg-earthy);
+  color: var(--color-text-earthy);
+  font-family: var(--font-sans);
+}
