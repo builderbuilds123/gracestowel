@@ -1,6 +1,6 @@
 # Base stage
 FROM node:20-alpine AS base
-RUN apk add --no-cache libc6-compat python3 make g++
+RUN apk add --no-cache libc6-compat python3 make g++ curl
 WORKDIR /app
 
 # Dependencies stage - install only backend dependencies
@@ -35,7 +35,7 @@ ENV NODE_ENV=test
 ENV PORT=9000
 
 EXPOSE 9000
-CMD ["sh", "-c", "npx medusa db:migrate && npm run start"]
+CMD ["sh", "-c", "echo 'Starting backend...' && npx medusa db:migrate && echo 'Migrations complete!' && npm run start"]
 
 # Production image
 FROM base AS runner
