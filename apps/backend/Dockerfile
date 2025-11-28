@@ -31,7 +31,7 @@ RUN test -d .medusa/server || (echo "Backend build failed - .medusa/server not f
 FROM builder AS test
 WORKDIR /app
 
-ENV NODE_ENV=development
+ENV NODE_ENV=production
 ENV PORT=9000
 
 EXPOSE 9000
