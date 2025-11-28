@@ -10,6 +10,7 @@ import type { MedusaProduct, MedusaProductsResponse, MedusaProductResponse } fro
 
 interface MedusaClientConfig {
     baseUrl: string;
+    publishableKey?: string;
 }
 
 /**
@@ -28,7 +29,7 @@ export function createMedusaClient(config: MedusaClientConfig) {
             ...options,
             headers: {
                 "Content-Type": "application/json",
-                "x-publishable-api-key": "", // Add if using publishable API keys
+                "x-publishable-api-key": process.env.MEDUSA_PUBLISHABLE_KEY || config.publishableKey || "",
                 ...options.headers,
             },
         });

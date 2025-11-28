@@ -78,6 +78,7 @@ services:
         condition: service_healthy
     environment:
       MEDUSA_BACKEND_URL: http://backend:9000
+      MEDUSA_PUBLISHABLE_KEY: pk_4cc1cc37285c660264befb5cec0f50cdfded4a4371158da578d17cd24eeb8377
       NODE_ENV: test
     ports:
       - "5174:5173"

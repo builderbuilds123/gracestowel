@@ -3,7 +3,7 @@ import type {
   SubscriberConfig,
 } from "@medusajs/framework"
 import { sendOrderCanceledWorkflow } from "../workflows/send-order-canceled"
-import { cancelPaymentCaptureJob } from "../jobs/payment-capture-queue"
+import { cancelPaymentCaptureJob } from "../lib/payment-capture-queue"
 
 interface OrderCanceledEventData {
   id: string;
