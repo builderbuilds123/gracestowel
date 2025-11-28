@@ -3,7 +3,7 @@ import {
   WorkflowResponse,
   transform,
 } from "@medusajs/framework/workflows-sdk"
-import { useQueryGraphStep } from "@medusajs/medusa/core-flows"
+import { useRemoteQueryStep } from "@medusajs/core-flows"
 import { sendNotificationStep } from "./steps/send-notification"
 
 type SendOrderCanceledInput = {
@@ -15,8 +15,8 @@ export const sendOrderCanceledWorkflow = createWorkflow(
   "send-order-canceled",
   (input: SendOrderCanceledInput) => {
     // Retrieve the order details
-    const { data: orders } = useQueryGraphStep({
-      entity: "order",
+    const orders = useRemoteQueryStep({
+      entry_point: "order",
       fields: [
         "id",
         "email",
@@ -27,9 +27,12 @@ export const sendOrderCanceledWorkflow = createWorkflow(
         "items.variant.product.*",
         "canceled_at",
       ],
-      filters: {
-        id: input.id,
+      variables: {
+        filters: {
+          id: input.id,
+        },
       },
+      list: true,
     })
 
     // Transform data for the notification

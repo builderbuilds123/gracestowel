@@ -5,8 +5,8 @@ import {
     WorkflowResponse,
     transform,
 } from "@medusajs/framework/workflows-sdk";
-import { cancelOrderWorkflow, adjustInventoryLevelsStep, emitEventStep } from "@medusajs/medusa/core-flows";
-import type { InventoryTypes } from "@medusajs/framework/types";
+import { updateInventoryLevelsStep } from "@medusajs/core-flows";
+import type { UpdateInventoryLevelInput } from "@medusajs/types";
 import Stripe from "stripe";
 
 /**
@@ -98,13 +98,26 @@ const handlePaymentCancellationStep = createStep(
 );
 
 /**
+ * Step to emit an event
+ */
+const emitEventStep = createStep(
+    "emit-event",
+    async (input: { eventName: string; data: any }, { container }) => {
+        const eventBusModuleService = container.resolve("eventBus") as any;
+        await eventBusModuleService.emit(input.eventName, input.data);
+        console.log(`Event ${input.eventName} emitted with data:`, input.data);
+        return new StepResponse({ success: true });
+    }
+);
+
+/**
  * Step to prepare inventory restocking adjustments
  */
 const prepareRestockingAdjustmentsStep = createStep(
     "prepare-restocking-adjustments",
     async (input: { orderId: string }, { container }) => {
         const query = container.resolve("query");
-        const adjustments: InventoryTypes.BulkAdjustInventoryLevelInput[] = [];
+        const adjustments: UpdateInventoryLevelInput[] = [];
 
         try {
             // Get order items
@@ -144,17 +157,20 @@ const prepareRestockingAdjustmentsStep = createStep(
                 // Get the stock location
                 const { data: inventoryLevels } = await query.graph({
                     entity: "inventory_level",
-                    fields: ["id", "location_id", "inventory_item_id"],
+                    fields: ["id", "location_id", "inventory_item_id", "stocked_quantity"],
                     filters: { inventory_item_id: inventoryItemId },
                 });
 
                 if (!inventoryLevels.length) continue;
 
-                // Add adjustment (positive to increment/restock)
+                // Get current stocked quantity
+                const currentStockedQuantity = inventoryLevels[0].stocked_quantity || 0;
+
+                // Add update to increase stock (restock)
                 adjustments.push({
                     inventory_item_id: inventoryItemId,
                     location_id: inventoryLevels[0].location_id,
-                    adjustment: item.quantity, // Positive to restock
+                    stocked_quantity: currentStockedQuantity + item.quantity, // Add back to stock
                 });
             }
         } catch (error) {
@@ -214,7 +230,7 @@ export const cancelOrderWithRefundWorkflow = createWorkflow(
         }));
         const restockAdjustments = prepareRestockingAdjustmentsStep(restockInput);
 
-        // Step 3: Apply inventory adjustments (restock items)
+        // Step 3: Update inventory levels (restock items)
         const shouldRestock = transform({ restockAdjustments }, (data) =>
             data.restockAdjustments.length > 0
         );
@@ -226,7 +242,7 @@ export const cancelOrderWithRefundWorkflow = createWorkflow(
             return [];
         });
 
-        adjustInventoryLevelsStep(adjustedInventory);
+        updateInventoryLevelsStep(adjustedInventory);
 
         // Step 4: Cancel the order in Medusa
         const cancelInput = transform({ input }, (data) => ({

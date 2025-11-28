@@ -5,8 +5,8 @@ import {
     WorkflowResponse,
     transform,
 } from "@medusajs/framework/workflows-sdk";
-import { createOrderWorkflow, adjustInventoryLevelsStep, emitEventStep } from "@medusajs/medusa/core-flows";
-import type { InventoryTypes } from "@medusajs/framework/types";
+import { createOrdersWorkflow, updateInventoryLevelsStep } from "@medusajs/core-flows";
+import type { UpdateInventoryLevelInput } from "@medusajs/types";
 import { modificationTokenService } from "../services/modification-token";
 
 /**
@@ -103,13 +103,26 @@ const prepareOrderDataStep = createStep(
 );
 
 /**
+ * Step to emit an event
+ */
+const emitEventStep = createStep(
+    "emit-event",
+    async (input: { eventName: string; data: any }, { container }) => {
+        const eventBusModuleService = container.resolve("eventBus") as any;
+        await eventBusModuleService.emit(input.eventName, input.data);
+        console.log(`Event ${input.eventName} emitted with data:`, input.data);
+        return new StepResponse({ success: true });
+    }
+);
+
+/**
  * Step to prepare inventory adjustments from cart items
  */
 const prepareInventoryAdjustmentsStep = createStep(
     "prepare-inventory-adjustments",
     async (input: { cartItems: CreateOrderFromStripeInput["cartData"]["items"] }, { container }) => {
         const query = container.resolve("query");
-        const adjustments: InventoryTypes.BulkAdjustInventoryLevelInput[] = [];
+        const adjustments: UpdateInventoryLevelInput[] = [];
 
         for (const item of input.cartItems) {
             if (!item.variantId) continue;
@@ -132,7 +145,7 @@ const prepareInventoryAdjustmentsStep = createStep(
                 // Get the stock location for this inventory item
                 const { data: inventoryLevels } = await query.graph({
                     entity: "inventory_level",
-                    fields: ["id", "location_id", "inventory_item_id"],
+                    fields: ["id", "location_id", "inventory_item_id", "stocked_quantity"],
                     filters: { inventory_item_id: inventoryItemId },
                 });
 
@@ -140,11 +153,14 @@ const prepareInventoryAdjustmentsStep = createStep(
 
                 const locationId = inventoryLevels[0].location_id;
 
-                // Add adjustment (negative to decrement)
+                // Get current stocked quantity
+                const currentStockedQuantity = inventoryLevels[0].stocked_quantity || 0;
+
+                // Add update to reduce stock
                 adjustments.push({
                     inventory_item_id: inventoryItemId,
                     location_id: locationId,
-                    adjustment: -item.quantity, // Negative to reduce stock
+                    stocked_quantity: currentStockedQuantity - item.quantity, // Reduce stock
                 });
             } catch (error) {
                 console.error(`Error preparing inventory adjustment for variant ${item.variantId}:`, error);
@@ -204,7 +220,7 @@ export const createOrderFromStripeWorkflow = createWorkflow(
         const orderData = prepareOrderDataStep(input);
 
         // Step 2: Create the order using Medusa's built-in workflow
-        const order = createOrderWorkflow.runAsStep({
+        const order = createOrdersWorkflow.runAsStep({
             input: orderData,
         });
 
@@ -214,7 +230,7 @@ export const createOrderFromStripeWorkflow = createWorkflow(
         }));
         const inventoryAdjustments = prepareInventoryAdjustmentsStep(cartItemsInput);
 
-        // Step 4: Adjust inventory levels (decrement stock)
+        // Step 4: Update inventory levels (decrement stock)
         const shouldAdjustInventory = transform({ inventoryAdjustments }, (data) =>
             data.inventoryAdjustments.length > 0
         );
@@ -227,8 +243,8 @@ export const createOrderFromStripeWorkflow = createWorkflow(
             return [];
         });
 
-        // Call the inventory adjustment step
-        adjustInventoryLevelsStep(adjustedInventory);
+        // Call the inventory update step
+        updateInventoryLevelsStep(adjustedInventory);
 
         // Step 5: Generate modification token for 1-hour window
         const tokenInput = transform({ order, input }, (data) => ({
