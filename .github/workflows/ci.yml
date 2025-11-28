@@ -143,7 +143,7 @@ jobs:
         run: docker compose -f docker-compose.test.yml up -d --wait
 
       - name: Run E2E tests
-        run: docker compose -f docker-compose.test.yml run --rm -e STOREFRONT_URL=http://storefront:5173 playwright npx playwright test --project=chromium
+        run: docker compose -f docker-compose.test.yml run --rm playwright npx playwright test --project=chromium
 
       - name: Upload Playwright report
         uses: actions/upload-artifact@v4
@@ -205,4 +205,3 @@ jobs:
       - name: Stop chaos environment
         if: always()
         run: docker compose -f docker-compose.chaos.yml down -v
-
