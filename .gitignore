@@ -39,6 +39,8 @@ apps/e2e/tests/*
 apps/e2e/test-results/*
 
 # Claude
-.claude/
-.agents/
-.bmad/
+.claude/*
+.agents/*
+.bmad/*
+.agent/*
+.gemini/*
