@@ -2,7 +2,7 @@
  * Unit tests for send-shipping-confirmation workflow
  */
 
-import { sendShippingConfirmationWorkflow } from "../send-shipping-confirmation"
+import { sendShippingConfirmationWorkflow } from "../../src/workflows/send-shipping-confirmation"
 
 describe("sendShippingConfirmationWorkflow", () => {
   describe("workflow definition", () => {

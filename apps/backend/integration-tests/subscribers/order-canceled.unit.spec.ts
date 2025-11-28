@@ -2,10 +2,10 @@
  * Unit tests for order-canceled subscriber
  */
 
-import orderCanceledHandler, { config } from "../order-canceled"
+import orderCanceledHandler, { config } from "../../src/subscribers/order-canceled"
 
 // Mock the workflow
-jest.mock("../../workflows/send-order-canceled", () => ({
+jest.mock("../../src/workflows/send-order-canceled", () => ({
   sendOrderCanceledWorkflow: jest.fn(() => ({
     run: jest.fn().mockResolvedValue({ result: "success" }),
   })),
@@ -44,7 +44,7 @@ describe("orderCanceledHandler", () => {
     })
 
     it("should call sendOrderCanceledWorkflow with order id", async () => {
-      const { sendOrderCanceledWorkflow } = require("../../workflows/send-order-canceled")
+      const { sendOrderCanceledWorkflow } = require("../../src/workflows/send-order-canceled")
       
       const mockEvent = {
         data: { id: "ord_test_123" },
@@ -77,7 +77,7 @@ describe("orderCanceledHandler", () => {
     })
 
     it("should handle workflow errors gracefully", async () => {
-      const { sendOrderCanceledWorkflow } = require("../../workflows/send-order-canceled")
+      const { sendOrderCanceledWorkflow } = require("../../src/workflows/send-order-canceled")
       
       sendOrderCanceledWorkflow.mockImplementationOnce(() => ({
         run: jest.fn().mockRejectedValue(new Error("Workflow failed")),

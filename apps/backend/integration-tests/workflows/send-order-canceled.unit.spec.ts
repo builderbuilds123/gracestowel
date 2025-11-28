@@ -2,7 +2,7 @@
  * Unit tests for send-order-canceled workflow
  */
 
-import { sendOrderCanceledWorkflow } from "../send-order-canceled"
+import { sendOrderCanceledWorkflow } from "../../src/workflows/send-order-canceled"
 
 describe("sendOrderCanceledWorkflow", () => {
   describe("workflow definition", () => {

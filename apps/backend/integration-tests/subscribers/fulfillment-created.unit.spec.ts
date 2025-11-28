@@ -2,10 +2,10 @@
  * Unit tests for fulfillment-created subscriber
  */
 
-import fulfillmentCreatedHandler, { config } from "../fulfillment-created"
+import fulfillmentCreatedHandler, { config } from "../../src/subscribers/fulfillment-created"
 
 // Mock the workflow
-jest.mock("../../workflows/send-shipping-confirmation", () => ({
+jest.mock("../../src/workflows/send-shipping-confirmation", () => ({
   sendShippingConfirmationWorkflow: jest.fn(() => ({
     run: jest.fn().mockResolvedValue({ result: "success" }),
   })),
@@ -44,7 +44,7 @@ describe("fulfillmentCreatedHandler", () => {
     })
 
     it("should call sendShippingConfirmationWorkflow with fulfillment id", async () => {
-      const { sendShippingConfirmationWorkflow } = require("../../workflows/send-shipping-confirmation")
+      const { sendShippingConfirmationWorkflow } = require("../../src/workflows/send-shipping-confirmation")
       
       const mockEvent = {
         data: { id: "ful_test_123" },
@@ -77,7 +77,7 @@ describe("fulfillmentCreatedHandler", () => {
     })
 
     it("should handle workflow errors gracefully", async () => {
-      const { sendShippingConfirmationWorkflow } = require("../../workflows/send-shipping-confirmation")
+      const { sendShippingConfirmationWorkflow } = require("../../src/workflows/send-shipping-confirmation")
       
       sendShippingConfirmationWorkflow.mockImplementationOnce(() => ({
         run: jest.fn().mockRejectedValue(new Error("Workflow failed")),

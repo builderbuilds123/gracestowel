@@ -2,10 +2,10 @@
  * Unit tests for customer-created subscriber
  */
 
-import customerCreatedHandler, { config } from "../customer-created"
+import customerCreatedHandler, { config } from "../../src/subscribers/customer-created"
 
 // Mock the workflow
-jest.mock("../../workflows/send-welcome-email", () => ({
+jest.mock("../../src/workflows/send-welcome-email", () => ({
   sendWelcomeEmailWorkflow: jest.fn(() => ({
     run: jest.fn().mockResolvedValue({ result: "success" }),
   })),
@@ -44,7 +44,7 @@ describe("customerCreatedHandler", () => {
     })
 
     it("should call sendWelcomeEmailWorkflow with customer id", async () => {
-      const { sendWelcomeEmailWorkflow } = require("../../workflows/send-welcome-email")
+      const { sendWelcomeEmailWorkflow } = require("../../src/workflows/send-welcome-email")
       
       const mockEvent = {
         data: { id: "cus_test_123" },
@@ -77,7 +77,7 @@ describe("customerCreatedHandler", () => {
     })
 
     it("should handle workflow errors gracefully", async () => {
-      const { sendWelcomeEmailWorkflow } = require("../../workflows/send-welcome-email")
+      const { sendWelcomeEmailWorkflow } = require("../../src/workflows/send-welcome-email")
       
       sendWelcomeEmailWorkflow.mockImplementationOnce(() => ({
         run: jest.fn().mockRejectedValue(new Error("Workflow failed")),

@@ -2,7 +2,7 @@
  * Unit tests for sync-to-resend-audience workflow step
  */
 
-import { syncToResendAudienceStep } from "../steps/sync-to-resend-audience"
+import { syncToResendAudienceStep } from "../../src/workflows/steps/sync-to-resend-audience"
 
 // Mock the Resend SDK
 jest.mock("resend", () => {

@@ -22,7 +22,7 @@ module.exports = {
 
 if (process.env.TEST_TYPE === "unit") {
   // Unit tests: no external dependencies, no setup file needed
-  module.exports.testMatch = ["**/src/**/__tests__/**/*.unit.spec.[jt]s"];
+  module.exports.testMatch = ["**/integration-tests/**/*.unit.spec.[jt]s"];
 } else if (process.env.TEST_TYPE === "integration:http") {
   // Integration tests: require PostgreSQL/Redis, use Medusa test runner
   module.exports.setupFiles = ["./integration-tests/setup.js"];

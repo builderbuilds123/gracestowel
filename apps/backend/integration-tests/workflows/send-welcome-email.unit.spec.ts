@@ -2,7 +2,7 @@
  * Unit tests for send-welcome-email workflow
  */
 
-import { sendWelcomeEmailWorkflow } from "../send-welcome-email"
+import { sendWelcomeEmailWorkflow } from "../../src/workflows/send-welcome-email"
 
 describe("sendWelcomeEmailWorkflow", () => {
   describe("workflow definition", () => {
