@@ -53,7 +53,6 @@ export async function GET(
             entity: "order",
             fields: [
                 "id",
-                "display_id",
                 "email",
                 "status",
                 "currency_code",
@@ -86,7 +85,6 @@ export async function GET(
         res.status(200).json({
             order: {
                 id: order.id,
-                display_id: order.display_id,
                 email: order.email,
                 status: order.status,
                 currency_code: order.currency_code,

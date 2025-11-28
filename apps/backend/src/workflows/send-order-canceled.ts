@@ -19,7 +19,6 @@ export const sendOrderCanceledWorkflow = createWorkflow(
       entity: "order",
       fields: [
         "id",
-        "display_id",
         "email",
         "currency_code",
         "total",
@@ -49,21 +48,18 @@ export const sendOrderCanceledWorkflow = createWorkflow(
           data: {
             order: {
               id: order.id,
-              display_id: order.display_id,
               email: order.email,
               total: order.total,
               currency_code: order.currency_code,
               canceled_at: order.canceled_at,
-              items: order.items?.map((item: { 
-                variant?: { product?: { title?: string }; title?: string }; 
-                quantity: number; 
-                unit_price: number 
-              }) => ({
-                title: item.variant?.product?.title || "Unknown Product",
-                variant_title: item.variant?.title,
-                quantity: item.quantity,
-                unit_price: item.unit_price,
-              })),
+              items: order.items
+                ?.filter((item: any) => item != null)
+                .map((item: any) => ({
+                  title: item.variant?.product?.title || "Unknown Product",
+                  variant_title: item.variant?.title,
+                  quantity: item.quantity,
+                  unit_price: item.unit_price,
+                })),
             },
             reason: data.input.reason,
           },

@@ -28,11 +28,11 @@ export async function GET(
 
     try {
         // Find order by payment intent ID in metadata
-        const { data: orders } = await query.graph({
+        // Note: We need to fetch all orders and filter manually since metadata filtering isn't directly supported
+        const { data: allOrders } = await query.graph({
             entity: "order",
             fields: [
                 "id",
-                "display_id",
                 "status",
                 "created_at",
                 "total",
@@ -41,12 +41,12 @@ export async function GET(
                 "items.*",
                 "shipping_address.*",
             ],
-            filters: {
-                metadata: {
-                    stripe_payment_intent_id: paymentIntentId
-                }
-            },
         });
+
+        // Filter orders by payment intent ID in metadata
+        const orders = allOrders.filter((order: any) =>
+            order.metadata?.stripe_payment_intent_id === paymentIntentId
+        );
 
         if (!orders.length) {
             // Order might not be created yet (webhook still processing)
@@ -73,7 +73,6 @@ export async function GET(
         res.status(200).json({
             order: {
                 id: order.id,
-                display_id: order.display_id,
                 status: order.status,
                 created_at: order.created_at,
                 total: order.total,

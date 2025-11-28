@@ -18,10 +18,9 @@ export const sendShippingConfirmationWorkflow = createWorkflow(
       entity: "fulfillment",
       fields: [
         "id",
-        "tracking_numbers",
-        "tracking_links.*",
+        "data",
+        "metadata",
         "order.id",
-        "order.display_id",
         "order.email",
         "order.shipping_address.*",
       ],
@@ -46,14 +45,12 @@ export const sendShippingConfirmationWorkflow = createWorkflow(
           data: {
             order: {
               id: fulfillment.order.id,
-              display_id: fulfillment.order.display_id,
               email: fulfillment.order.email,
               shipping_address: fulfillment.order.shipping_address,
             },
             fulfillment: {
               id: fulfillment.id,
-              tracking_numbers: fulfillment.tracking_numbers,
-              tracking_links: fulfillment.tracking_links,
+              tracking_info: fulfillment.data || fulfillment.metadata,
             },
           },
         },

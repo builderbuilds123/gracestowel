@@ -126,15 +126,15 @@ async function handlePaymentIntentSucceeded(
 
     // Check if order already exists (created during authorization)
     const query = req.scope.resolve("query");
-    const { data: existingOrders } = await query.graph({
+    const { data: allOrders } = await query.graph({
         entity: "order",
-        fields: ["id"],
-        filters: {
-            metadata: {
-                stripe_payment_intent_id: paymentIntent.id
-            }
-        }
+        fields: ["id", "metadata"],
     });
+
+    // Filter orders by payment intent ID in metadata
+    const existingOrders = allOrders.filter((order: any) =>
+        order.metadata?.stripe_payment_intent_id === paymentIntent.id
+    );
 
     if (existingOrders.length > 0) {
         console.log(`Order already exists for PaymentIntent ${paymentIntent.id} - skipping creation`);

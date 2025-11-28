@@ -37,13 +37,13 @@ export const sendOrderConfirmationWorkflow = createWorkflow(
 
     // Send email only if order has an email
     when({ orders }, ({ orders }) => {
-      return orders && orders.length > 0 && !!orders[0].email
+      return orders && orders.length > 0 && !!orders[0]?.email
     }).then(() => {
       const order = orders[0]
-      
+
       sendNotificationStep([
         {
-          to: order.email,
+          to: order.email || "",
           channel: "email",
           template: "order-placed",
           data: { order },

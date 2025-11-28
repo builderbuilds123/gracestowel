@@ -58,8 +58,8 @@ export const sendWelcomeEmailWorkflow = createWorkflow(
       const customer = data.customers[0]
       return {
         email: customer?.email || "",
-        first_name: customer?.first_name,
-        last_name: customer?.last_name,
+        first_name: customer?.first_name || undefined,
+        last_name: customer?.last_name || undefined,
         unsubscribed: false,
       }
     })

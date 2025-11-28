@@ -40,7 +40,7 @@ export default async function orderPlacedHandler({
 
     if (orders.length > 0) {
       const order = orders[0]
-      const paymentIntentId = order.metadata?.stripe_payment_intent_id
+      const paymentIntentId = order.metadata?.stripe_payment_intent_id as string | undefined
 
       if (paymentIntentId) {
         await schedulePaymentCapture(data.id, paymentIntentId)

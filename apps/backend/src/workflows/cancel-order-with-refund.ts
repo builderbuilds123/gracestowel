@@ -125,7 +125,7 @@ const prepareRestockingAdjustmentsStep = createStep(
             const order = orders[0];
 
             for (const item of order.items || []) {
-                if (!item.variant_id) continue;
+                if (!item || !item.variant_id) continue;
 
                 // Get the inventory item linked to this variant
                 const { data: variants } = await query.graph({

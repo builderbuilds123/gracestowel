@@ -136,7 +136,7 @@ export async function POST(
         for (const item of items) {
             const { data: variants } = await query.graph({
                 entity: "product_variant",
-                fields: ["id", "title", "prices.*", "product.title"],
+                fields: ["id", "title", "calculated_price.*", "product.title"],
                 filters: { id: item.variant_id },
             });
 
@@ -148,12 +148,10 @@ export async function POST(
                 return;
             }
 
-            const variant = variants[0];
-            const price = variant.prices?.find(
-                (p: any) => p.currency_code === order.currency_code
-            );
+            const variant = variants[0] as any;
+            const price = variant.calculated_price;
 
-            if (!price) {
+            if (!price || !price.calculated_amount) {
                 res.status(400).json({
                     error: `No price found for variant ${item.variant_id} in ${order.currency_code}`,
                     code: "PRICE_NOT_FOUND",
@@ -161,27 +159,27 @@ export async function POST(
                 return;
             }
 
-            const itemTotal = price.amount * item.quantity;
+            const itemTotal = price.calculated_amount * item.quantity;
             additionalAmount += itemTotal;
 
             newLineItems.push({
                 variant_id: item.variant_id,
                 title: `${variant.product?.title || ''} - ${variant.title || ''}`.trim(),
                 quantity: item.quantity,
-                unit_price: price.amount,
+                unit_price: price.calculated_amount,
             });
         }
 
         // Get current payment intent to check amount
         const stripe = getStripeClient();
-        const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+        const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId as string);
 
         // Calculate new total
         const currentAmount = paymentIntent.amount;
         const newTotalAmount = currentAmount + additionalAmount;
 
         // Update payment intent with new amount (incremental authorization)
-        await stripe.paymentIntents.update(paymentIntentId, {
+        await stripe.paymentIntents.update(paymentIntentId as string, {
             amount: newTotalAmount,
         });
 
