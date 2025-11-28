@@ -9,6 +9,8 @@ WORKDIR /app
 
 # Copy package files and wrangler config (required for postinstall typegen)
 COPY package.json wrangler.toml wrangler.jsonc ./
+# Set CI=true to skip wrangler types in postinstall (workerd binary incompatible with Alpine)
+ENV CI=true
 RUN npm install
 
 # Builder stage
