@@ -20,7 +20,7 @@ module.exports = defineConfig({
   },
   modules: [
     {
-      resolve: "@medusajs/medusa/notification",
+      resolve: "@medusajs/notification",
       options: {
         providers: [
           {

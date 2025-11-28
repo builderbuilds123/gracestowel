@@ -7,7 +7,7 @@ import {
 import {
   createApiKeysWorkflow,
   createInventoryLevelsWorkflow,
-  createProductCategoryWorkflow,
+  createProductCategoriesWorkflow,
   createProductsWorkflow,
   createRegionsWorkflow,
   createSalesChannelsWorkflow,
@@ -417,13 +417,11 @@ export default async function seedDemoData({ container }: ExecArgs) {
     { name: "Accessories", is_active: true },
   ];
 
-  const categoryResult: any[] = [];
-  for (const category of categories) {
-    const { result } = await createProductCategoryWorkflow(container).run({
-      input: category,
-    });
-    categoryResult.push(result);
-  }
+  const { result: categoryResult } = await createProductCategoriesWorkflow(container).run({
+    input: {
+      product_categories: categories,
+    },
+  });
 
   await createProductsWorkflow(container).run({
     input: {
