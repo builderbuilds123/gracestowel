@@ -27,6 +27,16 @@ RUN npx medusa build || echo "Build completed with warnings"
 # Verify build succeeded
 RUN test -d .medusa/server || (echo "Backend build failed - .medusa/server not found" && exit 1)
 
+# Test stage
+FROM builder AS test
+WORKDIR /app
+
+ENV NODE_ENV=test
+ENV PORT=9000
+
+EXPOSE 9000
+CMD ["sh", "-c", "npx medusa db:migrate && npm run start"]
+
 # Production image
 FROM base AS runner
 WORKDIR /app
