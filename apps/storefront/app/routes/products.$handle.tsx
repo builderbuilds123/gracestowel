@@ -11,7 +11,6 @@ import { RelatedProducts } from "../components/RelatedProducts";
 import { getMedusaClient } from "../lib/medusa.server";
 import { getStockStatus, type MedusaProduct } from "../lib/medusa";
 import { products as staticProducts } from "../data/products";
-import { getProductByHandleFromDB, getProductsFromDB, isHyperdriveAvailable } from "../lib/products.server";
 import { transformToDetail, type ProductDetail } from "../lib/product-transformer";
 
 // SEO Meta tags for product pages
@@ -80,23 +79,12 @@ export async function loader({ params, context }: Route.LoaderArgs) {
     let dataSource: "hyperdrive" | "medusa" | "static" = "static";
 
     // 1. Try Hyperdrive (direct PostgreSQL via connection pooling)
-    if (isHyperdriveAvailable(context)) {
-        try {
-            const startTime = Date.now();
-            const [productResult, productsResult] = await Promise.all([
-                getProductByHandleFromDB(context, handle),
-                getProductsFromDB(context, { limit: 10 }),
-            ]);
-
-            if (productResult) {
-                medusaProduct = productResult;
-                allProducts = productsResult;
-                dataSource = "hyperdrive";
-                console.log(`✅ Hyperdrive: Fetched product in ${Date.now() - startTime}ms`);
-            }
-        } catch (error) {
-            console.warn("⚠️ Hyperdrive failed, falling back to Medusa API:", error);
-        }
+    // TEMPORARILY DISABLED: Database schema needs updating for Medusa v2 price tables
+    // TODO: Update price query to use price_set and price tables instead of product_variant_price
+    // Hyperdrive code removed - need to import getProductByHandleFromDB, getProductsFromDB, isHyperdriveAvailable when re-enabling
+    if (false) {
+        // Hyperdrive functionality temporarily disabled
+        dataSource = "static";
     }
 
     // 2. Fall back to Medusa API if Hyperdrive didn't work

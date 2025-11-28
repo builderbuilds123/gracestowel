@@ -69,7 +69,7 @@ export default defineConfig({
   webServer: process.env.CI
     ? undefined
     : {
-        command: "MEDUSA_PUBLISHABLE_KEY='pk_4cc1cc37285c660264befb5cec0f50cdfded4a4371158da578d17cd24eeb8377' CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE='postgresql://postgres:zRXiSJfuUUmLDcdvoqTFprHeqpNzfLOQ@ballast.proxy.rlwy.net:59508/railway' npm run dev -w apps-storefront",
+        command: "cd ../.. && MEDUSA_PUBLISHABLE_KEY='pk_4cc1cc37285c660264befb5cec0f50cdfded4a4371158da578d17cd24eeb8377' CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE='postgresql://postgres:zRXiSJfuUUmLDcdvoqTFprHeqpNzfLOQ@ballast.proxy.rlwy.net:59508/railway' npm run dev --workspace=apps/storefront",
         url: "https://localhost:5173",
         reuseExistingServer: !process.env.CI,
         ignoreHTTPSErrors: true,
