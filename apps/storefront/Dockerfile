@@ -7,8 +7,8 @@ WORKDIR /app
 FROM base AS deps
 WORKDIR /app
 
-# Copy package files
-COPY package.json ./
+# Copy package files and wrangler config (required for postinstall typegen)
+COPY package.json wrangler.toml wrangler.jsonc ./
 RUN npm install
 
 # Builder stage
