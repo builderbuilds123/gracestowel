@@ -27,7 +27,8 @@
     "react-dom": "^19.1.1",
     "react-leaflet": "^5.0.0",
     "react-router": "^7.9.2",
-    "stripe": "^20.0.0"
+    "stripe": "^20.0.0",
+    "web-vitals": "^5.1.0"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.15.2",

@@ -31,11 +31,11 @@ RUN test -d .medusa/server || (echo "Backend build failed - .medusa/server not f
 FROM builder AS test
 WORKDIR /app
 
-ENV NODE_ENV=test
+ENV NODE_ENV=development
 ENV PORT=9000
 
 EXPOSE 9000
-CMD ["sh", "-c", "echo 'Starting backend...' && npx medusa db:migrate && echo 'Migrations complete!' && npm run start"]
+CMD ["sh", "-c", "echo 'Starting backend...' && echo 'Checking build artifacts...' && ls -la .medusa/server && echo 'Running migrations...' && npx medusa db:migrate && echo 'Migrations complete!' && echo 'Starting server...' && npm run start"]
 
 # Production image
 FROM base AS runner

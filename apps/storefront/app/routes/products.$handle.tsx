@@ -163,6 +163,21 @@ export default function ProductDetail({ loaderData }: Route.ComponentProps) {
     const stockStatus = getStockStatus(selectedVariant?.inventory_quantity);
     const isOutOfStock = stockStatus === "out_of_stock";
 
+    // Track product view in PostHog
+    useState(() => {
+        if (typeof window !== 'undefined') {
+            import('../utils/posthog').then(({ default: posthog }) => {
+                posthog.capture('product_viewed', {
+                    product_id: product.id,
+                    product_name: product.title,
+                    product_price: product.price,
+                    product_handle: product.handle,
+                    stock_status: stockStatus,
+                });
+            });
+        }
+    });
+
     const handleSortChange = useCallback(async (sort: string) => {
         setReviewSort(sort);
         try {

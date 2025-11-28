@@ -30,7 +30,7 @@ RUN npm run build
 FROM base AS test
 WORKDIR /app
 
-ENV NODE_ENV=test
+ENV NODE_ENV=development
 ENV PORT=5173
 
 # Copy dependencies and source

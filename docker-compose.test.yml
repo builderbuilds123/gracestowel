@@ -56,7 +56,7 @@ services:
       STORE_CORS: http://localhost:5174,https://localhost:5174
       ADMIN_CORS: http://localhost:7002
       AUTH_CORS: http://localhost:5174,https://localhost:5174
-      NODE_ENV: test
+      NODE_ENV: development
     ports:
       - "9001:9000"
     healthcheck:
@@ -79,7 +79,7 @@ services:
     environment:
       MEDUSA_BACKEND_URL: http://backend:9000
       MEDUSA_PUBLISHABLE_KEY: pk_4cc1cc37285c660264befb5cec0f50cdfded4a4371158da578d17cd24eeb8377
-      NODE_ENV: test
+      NODE_ENV: development
     ports:
       - "5174:5173"
     healthcheck:
