@@ -66,15 +66,13 @@ export default defineConfig({
   ],
 
   /* Run your local dev server before starting the tests */
-  webServer: process.env.CI
-    ? undefined
-    : {
-        command: `cd ../.. && MEDUSA_PUBLISHABLE_KEY='${process.env.MEDUSA_PUBLISHABLE_KEY}' CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE='${process.env.CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE}' npm run dev --workspace=apps/storefront`,
-        url: "https://localhost:5173",
-        reuseExistingServer: !process.env.CI,
-        ignoreHTTPSErrors: true,
-        timeout: 120 * 1000,
-      },
+  webServer: {
+    command: `cd ../.. && MEDUSA_PUBLISHABLE_KEY='${process.env.MEDUSA_PUBLISHABLE_KEY}' CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE='${process.env.CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE}' npm run dev --workspace=apps/storefront`,
+    url: "https://localhost:5173",
+    reuseExistingServer: !process.env.CI,
+    ignoreHTTPSErrors: true,
+    timeout: 120 * 1000,
+  },
 
   /* Global timeout for each test */
   timeout: 30 * 1000,
