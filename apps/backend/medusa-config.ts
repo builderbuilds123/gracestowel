@@ -13,7 +13,12 @@ module.exports = defineConfig({
         },
       },
       clientUrl: process.env.DATABASE_URL,
-    } : undefined,
+    } : {
+      connection: {
+        ssl: false,
+      },
+      clientUrl: process.env.DATABASE_URL,
+    },
     http: {
       storeCors: process.env.STORE_CORS!,
       adminCors: process.env.ADMIN_CORS!,
