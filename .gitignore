@@ -44,3 +44,5 @@ apps/e2e/test-results/*
 .bmad/*
 .agent/*
 .gemini/*
+
+./repomix-output.xml

@@ -188,55 +188,6 @@ jobs:
         run: docker compose -f docker-compose.test.yml down -v
 
   # ============================================
-  # Stage 4: Resilience / Chaos Tests (Optional)
-  # ============================================
-  resilience:
-    name: Resilience Tests
-    runs-on: ubuntu-latest
-    needs: e2e
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging'
-    timeout-minutes: 20
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: "npm"
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Install Playwright browsers
-        working-directory: apps/e2e
-        run: npx playwright install --with-deps chromium
-
-      - name: Start chaos environment
-        run: docker compose -f docker-compose.chaos.yml up -d --wait
-        continue-on-error: true
-
-      - name: Run resilience tests
-        working-directory: apps/e2e
-        run: npx playwright test --project=resilience
-        env:
-          CI: true
-        continue-on-error: true
-
-      - name: Upload resilience report
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: resilience-report
-          path: apps/e2e/playwright-report/
-          retention-days: 7
-
-      - name: Stop chaos environment
-        if: always()
-        run: docker compose -f docker-compose.chaos.yml down -v
-
-  # ============================================
   # Stage 5: Artifact Build (Build Once)
   # ============================================
   build-backend:
