@@ -109,7 +109,7 @@ services:
       CI: "true"
     volumes:
       - ./apps/e2e:/app
-      - ./node_modules:/app/node_modules:ro
+      - ./apps/e2e/node_modules:/app/node_modules:ro
       - ./apps/e2e/test-results:/app/test-results
       - ./apps/e2e/playwright-report:/app/playwright-report
     working_dir: /app
