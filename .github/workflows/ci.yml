@@ -146,6 +146,10 @@ jobs:
         if: always()
         run: docker compose -f docker-compose.test.yml logs backend
 
+      - name: Show storefront container logs
+        if: always()
+        run: docker compose -f docker-compose.test.yml logs storefront
+
       - name: Run E2E tests
         run: docker compose -f docker-compose.test.yml run --rm playwright npx playwright test --project=chromium
 
