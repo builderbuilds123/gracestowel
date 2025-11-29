@@ -35,7 +35,8 @@ ENV NODE_ENV=production
 ENV PORT=9000
 
 EXPOSE 9000
-CMD ["sh", "-c", "echo 'Starting backend...' && echo 'Checking build artifacts...' && ls -la .medusa/server && echo 'Running migrations...' && npx medusa db:migrate && echo 'Migrations complete!' && echo 'Starting server...' && npm run start"]
+# Test with explicit error handling and output
+CMD ["sh", "-c", "set -e; echo 'Container started'; ls -la; echo 'Running migrations...'; npx medusa db:migrate 2>&1 || (echo 'Migration failed with exit code:' $?; exit 1); echo 'Migrations complete, starting server...'; npm run start"]
 
 # Production image
 FROM base AS runner
