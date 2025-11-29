@@ -142,6 +142,10 @@ jobs:
       - name: Start test environment
         run: docker compose -f docker-compose.test.yml up -d --wait
 
+      - name: Show backend container logs
+        if: always()
+        run: docker compose -f docker-compose.test.yml logs backend
+
       - name: Run E2E tests
         run: docker compose -f docker-compose.test.yml run --rm playwright npx playwright test --project=chromium
 

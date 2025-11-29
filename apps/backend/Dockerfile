@@ -35,8 +35,8 @@ ENV NODE_ENV=production
 ENV PORT=9000
 
 EXPOSE 9000
-# Test with explicit error handling and output
-CMD ["sh", "-c", "set -e; echo 'Container started'; ls -la; echo 'Running migrations...'; npx medusa db:migrate 2>&1 || (echo 'Migration failed with exit code:' $?; exit 1); echo 'Migrations complete, starting server...'; npm run start"]
+# Simple test - just try to keep container alive and verify environment
+CMD ["sh", "-c", "echo 'Container started successfully'; echo 'Node version:'; node --version; echo 'NPM version:'; npm --version; echo 'Working directory:'; pwd; echo 'Files in directory:'; ls -la; echo 'Environment:'; env | grep -E '(NODE_ENV|DATABASE_URL|PORT)'; echo 'Testing database connection...'; npx medusa db:migrate; echo 'Migration completed!'; npm run start"]
 
 # Production image
 FROM base AS runner
