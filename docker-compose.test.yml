@@ -57,6 +57,7 @@ services:
       ADMIN_CORS: http://localhost:7002
       AUTH_CORS: http://localhost:5174,https://localhost:5174
       NODE_ENV: production
+      DATABASE_SSL: "false"
     ports:
       - "9001:9000"
     healthcheck:
@@ -110,4 +111,3 @@ services:
 networks:
   default:
     name: gracestowel-test-network
-
