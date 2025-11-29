@@ -7,9 +7,17 @@ build/
 .cache/
 
 # Environment files
+
 .env
+
 .env.local
+
 .env.*.local
+
+apps/storefront/.env.test
+
+
+
 .dev.vars
 
 # IDE

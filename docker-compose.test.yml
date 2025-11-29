@@ -80,16 +80,8 @@ services:
     depends_on:
       backend:
         condition: service_healthy
-    environment:
-      MEDUSA_BACKEND_URL: http://backend:9000
-      MEDUSA_PUBLISHABLE_KEY: pk_4cc1cc37285c660264befb5cec0f50cdfded4a4371158da578d17cd24eeb8377
-      # NODE_ENV must be development when running the dev server (npm run dev)
-      # Using production causes jsxDEV is not a function error due to React JSX transform mismatch
-      NODE_ENV: development
-      # CI=true disables mkcert SSL plugin so dev server runs on HTTP (not HTTPS)
-      CI: "true"
-      # Required by Cloudflare Vite plugin when running in dev mode (which we do in tests)
-      CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE: postgresql://medusa_test:medusa_test@postgres:5432/medusa_test
+    env_file:
+      - ./apps/storefront/.env.test
     ports:
       - "5174:5173"
     command: npm run test:server
