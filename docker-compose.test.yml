@@ -87,11 +87,11 @@ services:
     ports:
       - "5174:5173"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5173"]
+      test: ["CMD-SHELL", "curl -f http://localhost:5173 || curl -f http://127.0.0.1:5173 || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 10
-      start_period: 30s
+      retries: 12
+      start_period: 45s
 
   # Playwright Test Runner
   playwright:
