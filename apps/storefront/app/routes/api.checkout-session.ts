@@ -11,7 +11,7 @@ export async function action({ request }: ActionFunctionArgs) {
         items: Array<{ title: string; price: string; quantity: number; image: string }>;
     };
 
-    const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || "sk_test_51SUzHePAvLfNBsYSrPxY31co9kPMPB7tftZqE1KAibqnnqxVp5extgVzXcIY3zDppGQR640JofL2Wj92WDYd51jV002hrp1mK7";
+    const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
 
     try {
         // Construct form-urlencoded body for Stripe API
