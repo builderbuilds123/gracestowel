@@ -58,6 +58,7 @@ services:
       AUTH_CORS: http://localhost:5174,https://localhost:5174
       NODE_ENV: production
       DATABASE_SSL: "false"
+      DISABLE_MEDUSA_ADMIN: "true"
     ports:
       - "9001:9000"
     healthcheck:
