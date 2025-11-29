@@ -14,6 +14,8 @@ services:
       POSTGRES_DB: medusa_test
     ports:
       - "5433:5432"
+    volumes:
+      - ./docker/postgres/init/golden_state.sql:/docker-entrypoint-initdb.d/init.sql
     # No volumes - ephemeral for tests
     tmpfs:
       - /var/lib/postgresql/data
@@ -90,6 +92,7 @@ services:
       CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE: postgresql://medusa_test:medusa_test@postgres:5432/medusa_test
     ports:
       - "5174:5173"
+    command: npm run test:server
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:5173 || curl -f http://127.0.0.1:5173 || exit 1"]
       interval: 10s

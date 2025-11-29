@@ -12,7 +12,8 @@
     "typecheck": "npm run cf-typegen && react-router typegen && tsc -b",
     "test": "vitest",
     "test:ui": "vitest --ui",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "test:server": "wrangler dev --port 5173 --host 0.0.0.0"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
