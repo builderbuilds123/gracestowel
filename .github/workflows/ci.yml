@@ -176,7 +176,7 @@ jobs:
           echo "Backend is ready"
 
           echo "Waiting for storefront..."
-          timeout 120 bash -c 'until docker compose -f docker-compose.test.yml exec -T storefront curl -sf http://localhost:5173/api/health; do sleep 5; done'
+          timeout 120 bash -c 'until docker compose -f docker-compose.test.yml exec -T storefront curl -sf http://localhost:5173/ -o /dev/null; do sleep 5; done'
           echo "Storefront is ready"
 
       - name: Debug - Check container status
@@ -184,7 +184,7 @@ jobs:
         run: |
           docker compose -f docker-compose.test.yml ps -a
           echo "--- Testing storefront from inside container ---"
-          docker compose -f docker-compose.test.yml exec -T storefront curl -v http://localhost:5173/api/health || true
+          docker compose -f docker-compose.test.yml exec -T storefront curl -sf http://localhost:5173/ -o /dev/null && echo "Storefront responding" || echo "Storefront not responding"
 
       - name: Show backend container logs
         if: always()

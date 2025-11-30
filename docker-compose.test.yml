@@ -86,7 +86,7 @@ services:
       - "5174:5173"
     command: npm run test:server
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:5173/api/health || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:5173/ -o /dev/null || exit 1"]
       interval: 5s
       timeout: 10s
       retries: 20
