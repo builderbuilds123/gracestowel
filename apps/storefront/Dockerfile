@@ -30,7 +30,7 @@ COPY . .
 # Build the application
 RUN npm run build
 
-# Test stage
+# Test stage - uses builder output since wrangler dev needs the server build
 FROM base AS test
 WORKDIR /app
 
@@ -38,12 +38,16 @@ ENV NODE_ENV=development
 ENV PORT=5173
 ENV HOST=0.0.0.0
 
-# Copy dependencies and source
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
+# Copy built app and dependencies from builder
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/build ./build
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/wrangler.toml ./wrangler.toml
+COPY --from=builder /app/wrangler.jsonc ./wrangler.jsonc
 
 EXPOSE 5173
-CMD ["sh", "-c", "npm run dev -- --host $HOST --port $PORT"]
+CMD ["npm", "run", "test:server"]
 
 # Production image
 FROM base AS runner
