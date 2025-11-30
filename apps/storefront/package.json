@@ -13,7 +13,7 @@
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
-    "test:server": "cd build/server && wrangler dev --port 5173 --host 0.0.0.0"
+    "test:server": "cd build/server && wrangler dev --port 5173 --ip 0.0.0.0"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
