@@ -1,5 +1,5 @@
 # Base stage
-FROM node:20-slim AS base
+FROM node:24-slim AS base
 # RUN apk add --no-cache libc6-compat # Not needed for Debian-based slim image
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
 ENV PNPM_HOME="/pnpm"
