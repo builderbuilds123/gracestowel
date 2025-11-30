@@ -162,7 +162,14 @@ jobs:
       - name: Generate Golden Database
         run: ./scripts/generate-golden-db.sh
 
+      - name: Create test env files
+        run: |
+          touch apps/storefront/.env.test
+          echo "# Test environment - vars set in docker-compose" > apps/storefront/.env.test
+
       - name: Start test environment
+        env:
+          MEDUSA_PUBLISHABLE_KEY: ${{ secrets.MEDUSA_PUBLISHABLE_KEY }}
         run: docker compose -f docker-compose.test.yml up -d --wait
 
       - name: Show backend container logs
