@@ -3,31 +3,22 @@ FROM node:24-alpine AS base
 RUN apk add --no-cache libc6-compat python3 make g++ curl
 WORKDIR /app
 
-# Dependencies stage - install only backend dependencies
-FROM base AS deps
-WORKDIR /app
-
-# Copy only backend package files (no monorepo dependency)
-COPY package.json ./
-# Install all dependencies (including devDependencies needed for build)
-# --ignore-scripts prevents postinstall scripts that may fail without full source
-RUN npm install --include=dev --ignore-scripts
-
-# Builder stage
+# Builder stage - single stage for dependencies and build
 FROM base AS builder
 WORKDIR /app
 
-# Copy dependencies
-COPY --from=deps /app/node_modules ./node_modules
+# Copy package.json first for layer caching
+COPY package.json ./
+
+# Install ALL dependencies (production + dev) for the build
+# Legacy peer deps needed for some Medusa packages
+RUN npm install --legacy-peer-deps
 
 # Copy source code
 COPY . .
 
-# Run npm rebuild to ensure native modules are properly built for Alpine
-RUN npm rebuild 2>/dev/null || true
-
-# Build Medusa backend
-RUN npm run build
+# Build Medusa backend using npx to ensure CLI is found
+RUN npx medusa build
 
 # Verify build succeeded
 RUN test -d .medusa/server || (echo "Backend build failed - .medusa/server not found" && exit 1)
