@@ -231,7 +231,7 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: ./apps/backend
           file: apps/backend/Dockerfile
           push: true
           tags: |
