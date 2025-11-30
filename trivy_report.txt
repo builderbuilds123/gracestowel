@@ -1,0 +1,72 @@
+
+Report Summary
+
+┌───────────────────────────────────────┬────────────┬─────────────────┬───────────────────┐
+│                Target                 │    Type    │ Vulnerabilities │ Misconfigurations │
+├───────────────────────────────────────┼────────────┼─────────────────┼───────────────────┤
+│ .claude/hooks/package-lock.json       │    npm     │        0        │         -         │
+├───────────────────────────────────────┼────────────┼─────────────────┼───────────────────┤
+│ apps/backend/.medusa/server/yarn.lock │    yarn    │        1        │         -         │
+├───────────────────────────────────────┼────────────┼─────────────────┼───────────────────┤
+│ package-lock.json                     │    npm     │        0        │         -         │
+├───────────────────────────────────────┼────────────┼─────────────────┼───────────────────┤
+│ apps/backend/Dockerfile               │ dockerfile │        -        │         1         │
+├───────────────────────────────────────┼────────────┼─────────────────┼───────────────────┤
+│ apps/storefront/Dockerfile            │ dockerfile │        -        │         2         │
+└───────────────────────────────────────┴────────────┴─────────────────┴───────────────────┘
+Legend:
+- '-': Not scanned
+- '0': Clean (no security findings detected)
+
+
+apps/backend/.medusa/server/yarn.lock (yarn)
+============================================
+Total: 1 (HIGH: 1, CRITICAL: 0)
+
+┌─────────┬────────────────┬──────────┬────────┬───────────────────┬────────────────┬───────────────────────────────────────────────────────────┐
+│ Library │ Vulnerability  │ Severity │ Status │ Installed Version │ Fixed Version  │                           Title                           │
+├─────────┼────────────────┼──────────┼────────┼───────────────────┼────────────────┼───────────────────────────────────────────────────────────┤
+│ glob    │ CVE-2025-64756 │ HIGH     │ fixed  │ 10.4.5            │ 11.1.0, 10.5.0 │ glob CLI: Command injection via -c/--cmd executes matches │
+│         │                │          │        │                   │                │ with shell:true                                           │
+│         │                │          │        │                   │                │ https://avd.aquasec.com/nvd/cve-2025-64756                │
+└─────────┴────────────────┴──────────┴────────┴───────────────────┴────────────────┴───────────────────────────────────────────────────────────┘
+
+apps/backend/Dockerfile (dockerfile)
+====================================
+Tests: 20 (SUCCESSES: 19, FAILURES: 1)
+Failures: 1 (HIGH: 1, CRITICAL: 0)
+
+AVD-DS-0002 (HIGH): Specify at least 1 USER command in Dockerfile with non-root user as argument
+═════════════════════════════════════════════════════════════════════════
+Running containers with 'root' user can lead to a container escape situation. It is a best practice to run containers as non-root users, which can be done by adding a 'USER' statement to the Dockerfile.
+
+See https://avd.aquasec.com/misconfig/ds002
+─────────────────────────────────────────────────────────────────────────
+
+
+
+apps/storefront/Dockerfile (dockerfile)
+=======================================
+Tests: 20 (SUCCESSES: 18, FAILURES: 2)
+Failures: 2 (HIGH: 2, CRITICAL: 0)
+
+AVD-DS-0002 (HIGH): Specify at least 1 USER command in Dockerfile with non-root user as argument
+═════════════════════════════════════════════════════════════════════════
+Running containers with 'root' user can lead to a container escape situation. It is a best practice to run containers as non-root users, which can be done by adding a 'USER' statement to the Dockerfile.
+
+See https://avd.aquasec.com/misconfig/ds002
+─────────────────────────────────────────────────────────────────────────
+
+
+AVD-DS-0029 (HIGH): '--no-install-recommends' flag is missed: 'apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*'
+═════════════════════════════════════════════════════════════════════════
+'apt-get' install should use '--no-install-recommends' to minimize image size.
+
+See https://avd.aquasec.com/misconfig/ds029
+─────────────────────────────────────────────────────────────────────────
+ apps/storefront/Dockerfile:4
+─────────────────────────────────────────────────────────────────────────
+   4 [ RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+─────────────────────────────────────────────────────────────────────────
+
+

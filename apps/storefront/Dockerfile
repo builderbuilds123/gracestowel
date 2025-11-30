@@ -1,7 +1,7 @@
 # Base stage
 FROM node:20-slim AS base
 # RUN apk add --no-cache libc6-compat # Not needed for Debian-based slim image
-RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable
@@ -53,10 +53,12 @@ ENV NODE_ENV=production
 ENV PORT=5173
 
 # Copy built app and dependencies
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/build ./build
-COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/public ./public
+COPY --from=builder --chown=node:node /app/node_modules ./node_modules
+COPY --from=builder --chown=node:node /app/build ./build
+COPY --from=builder --chown=node:node /app/package.json ./package.json
+COPY --from=builder --chown=node:node /app/public ./public
+
+USER node
 
 EXPOSE 5173
 CMD ["npm", "run", "preview", "--", "--host", "0.0.0.0", "--port", "5173"]

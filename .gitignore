@@ -54,3 +54,6 @@ apps/e2e/test-results/*
 .gemini/*
 
 ./repomix-output.xml
+
+# Medusa
+.medusa/

@@ -46,12 +46,14 @@ ENV NODE_ENV=production
 ENV PORT=9000
 
 # Copy built app and dependencies
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/.medusa ./.medusa
-COPY --from=builder /app/medusa-config.ts ./medusa-config.ts
-COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/tsconfig.json ./tsconfig.json
-COPY --from=builder /app/src ./src
+COPY --from=builder --chown=node:node /app/node_modules ./node_modules
+COPY --from=builder --chown=node:node /app/.medusa ./.medusa
+COPY --from=builder --chown=node:node /app/medusa-config.ts ./medusa-config.ts
+COPY --from=builder --chown=node:node /app/package.json ./package.json
+COPY --from=builder --chown=node:node /app/tsconfig.json ./tsconfig.json
+COPY --from=builder --chown=node:node /app/src ./src
+
+USER node
 
 EXPOSE 9000
 CMD ["sh", "-c", "npx medusa db:migrate && npm run start"]
