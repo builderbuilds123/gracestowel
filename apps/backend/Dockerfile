@@ -8,8 +8,10 @@ FROM base AS deps
 WORKDIR /app
 
 # Copy only backend package files (no monorepo dependency)
-COPY package.json yarn.lock* ./
-RUN npm install
+COPY package.json ./
+# Install all dependencies (including devDependencies needed for build)
+# --ignore-scripts prevents postinstall scripts that may fail without full source
+RUN npm install --include=dev --ignore-scripts
 
 # Builder stage
 FROM base AS builder
@@ -21,8 +23,11 @@ COPY --from=deps /app/node_modules ./node_modules
 # Copy source code
 COPY . .
 
+# Run npm rebuild to ensure native modules are properly built for Alpine
+RUN npm rebuild 2>/dev/null || true
+
 # Build Medusa backend
-RUN npx medusa build || echo "Build completed with warnings"
+RUN npm run build
 
 # Verify build succeeded
 RUN test -d .medusa/server || (echo "Backend build failed - .medusa/server not found" && exit 1)
