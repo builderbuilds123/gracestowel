@@ -12,8 +12,8 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   /* Retry on CI only */
   retries: process.env.CI ? 2 : 0,
-  /* Opt out of parallel tests on CI */
-  workers: process.env.CI ? 1 : undefined,
+  /* Use single worker to avoid overwhelming the dev server */
+  workers: 1,
   /* Reporter to use */
   reporter: [
     ["html", { open: "never" }],
@@ -66,12 +66,13 @@ export default defineConfig({
   ],
 
   /* Run your local dev server before starting the tests */
+  /* In CI, storefront is already running via Docker Compose, so we skip webServer */
   webServer: process.env.CI
     ? undefined
     : {
-        command: "npm run dev -w apps/storefront",
+        command: `cd ../.. && MEDUSA_PUBLISHABLE_KEY=${process.env.MEDUSA_PUBLISHABLE_KEY} CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE='${process.env.CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE}' npm run dev --workspace=apps/storefront`,
         url: "https://localhost:5173",
-        reuseExistingServer: !process.env.CI,
+        reuseExistingServer: true,
         ignoreHTTPSErrors: true,
         timeout: 120 * 1000,
       },

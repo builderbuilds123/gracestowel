@@ -135,6 +135,9 @@ export async function action({ request }: ActionFunctionArgs) {
         body.append("amount", Math.round(totalAmount * 100).toString());
         body.append("currency", currency || "usd");
         body.append("automatic_payment_methods[enabled]", "true");
+        // Use manual capture to enable 1-hour modification window
+        // Payment will be captured after the modification window expires
+        body.append("capture_method", "manual");
 
         // Options for US Bank Account (ACH) - Financial Connections
         body.append("payment_method_options[us_bank_account][financial_connections][permissions][0]", "payment_method");

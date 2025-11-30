@@ -3,7 +3,7 @@ import {
   WorkflowResponse,
   transform,
 } from "@medusajs/framework/workflows-sdk"
-import { useQueryGraphStep } from "@medusajs/medusa/core-flows"
+import { useRemoteQueryStep } from "@medusajs/core-flows"
 import { sendNotificationStep } from "./steps/send-notification"
 
 type SendOrderCanceledInput = {
@@ -15,11 +15,10 @@ export const sendOrderCanceledWorkflow = createWorkflow(
   "send-order-canceled",
   (input: SendOrderCanceledInput) => {
     // Retrieve the order details
-    const { data: orders } = useQueryGraphStep({
-      entity: "order",
+    const orders = useRemoteQueryStep({
+      entry_point: "order",
       fields: [
         "id",
-        "display_id",
         "email",
         "currency_code",
         "total",
@@ -28,9 +27,12 @@ export const sendOrderCanceledWorkflow = createWorkflow(
         "items.variant.product.*",
         "canceled_at",
       ],
-      filters: {
-        id: input.id,
+      variables: {
+        filters: {
+          id: input.id,
+        },
       },
+      list: true,
     })
 
     // Transform data for the notification
@@ -49,21 +51,18 @@ export const sendOrderCanceledWorkflow = createWorkflow(
           data: {
             order: {
               id: order.id,
-              display_id: order.display_id,
               email: order.email,
               total: order.total,
               currency_code: order.currency_code,
               canceled_at: order.canceled_at,
-              items: order.items?.map((item: { 
-                variant?: { product?: { title?: string }; title?: string }; 
-                quantity: number; 
-                unit_price: number 
-              }) => ({
-                title: item.variant?.product?.title || "Unknown Product",
-                variant_title: item.variant?.title,
-                quantity: item.quantity,
-                unit_price: item.unit_price,
-              })),
+              items: order.items
+                ?.filter((item: any) => item != null)
+                .map((item: any) => ({
+                  title: item.variant?.product?.title || "Unknown Product",
+                  variant_title: item.variant?.title,
+                  quantity: item.quantity,
+                  unit_price: item.unit_price,
+                })),
             },
             reason: data.input.reason,
           },

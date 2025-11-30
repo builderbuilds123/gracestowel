@@ -18,9 +18,22 @@
     "test:e2e": "npm run test --workspace=apps/e2e",
     "test:e2e:ui": "npm run test:ui --workspace=apps/e2e",
     "test:e2e:headed": "npm run test:headed --workspace=apps/e2e",
-    "test:resilience": "npm run test:resilience --workspace=apps/e2e"
+    "test:resilience": "npm run test:resilience --workspace=apps/e2e",
+    "test:e2e:ci": "docker compose -f docker-compose.test.yml up --build --abort-on-container-exit --exit-code-from playwright 2>&1 | tee e2e-ci.log",
+    "test:e2e:ci:logs": "docker compose -f docker-compose.test.yml logs -f",
+    "test:e2e:ci:logs:backend": "docker compose -f docker-compose.test.yml logs -f backend",
+    "test:e2e:ci:logs:storefront": "docker compose -f docker-compose.test.yml logs -f storefront",
+    "test:e2e:ci:logs:playwright": "docker compose -f docker-compose.test.yml logs -f playwright",
+    "test:e2e:ci:down": "docker compose -f docker-compose.test.yml down -v"
   },
   "dependencies": {
-    "@railway/cli": "^4.11.1"
+    "@railway/cli": "^4.12.0"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^4.0.14",
+    "vitest": "^4.0.14"
   }
 }

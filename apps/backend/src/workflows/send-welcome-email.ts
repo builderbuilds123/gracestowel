@@ -3,7 +3,7 @@ import {
   WorkflowResponse,
   transform,
 } from "@medusajs/framework/workflows-sdk"
-import { useQueryGraphStep } from "@medusajs/medusa/core-flows"
+import { useRemoteQueryStep } from "@medusajs/core-flows"
 import { sendNotificationStep } from "./steps/send-notification"
 import { syncToResendAudienceStep } from "./steps/sync-to-resend-audience"
 
@@ -15,17 +15,20 @@ export const sendWelcomeEmailWorkflow = createWorkflow(
   "send-welcome-email",
   (input: SendWelcomeEmailInput) => {
     // Retrieve the customer details using Query
-    const { data: customers } = useQueryGraphStep({
-      entity: "customer",
+    const customers = useRemoteQueryStep({
+      entry_point: "customer",
       fields: [
         "id",
         "email",
         "first_name",
         "last_name",
       ],
-      filters: {
-        id: input.id,
+      variables: {
+        filters: {
+          id: input.id,
+        },
       },
+      list: true,
     })
 
     // Transform data for the notification
@@ -58,8 +61,8 @@ export const sendWelcomeEmailWorkflow = createWorkflow(
       const customer = data.customers[0]
       return {
         email: customer?.email || "",
-        first_name: customer?.first_name,
-        last_name: customer?.last_name,
+        first_name: customer?.first_name || undefined,
+        last_name: customer?.last_name || undefined,
         unsubscribed: false,
       }
     })

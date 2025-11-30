@@ -7,12 +7,13 @@
     "cf-typegen": "wrangler types",
     "deploy": "npm run build && wrangler deploy",
     "dev": "react-router dev",
-    "postinstall": "npm run cf-typegen",
+    "postinstall": "node -e \"process.env.CI || require('child_process').execSync('npm run cf-typegen', {stdio: 'inherit'})\"",
     "preview": "npm run build && vite preview",
     "typecheck": "npm run cf-typegen && react-router typegen && tsc -b",
     "test": "vitest",
     "test:ui": "vitest --ui",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "test:server": "cd build/server && wrangler dev --port 5173 --ip 0.0.0.0"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
@@ -22,11 +23,13 @@
     "isbot": "^5.1.31",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.554.0",
+    "posthog-js": "^1.298.1",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-leaflet": "^5.0.0",
     "react-router": "^7.9.2",
-    "stripe": "^20.0.0"
+    "stripe": "^20.0.0",
+    "web-vitals": "^5.1.0"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.15.2",
@@ -40,7 +43,7 @@
     "@types/react": "^19.1.15",
     "@types/react-dom": "^19.1.9",
     "@vitest/coverage-v8": "^3.2.4",
-    "happy-dom": "^18.0.1",
+    "happy-dom": "^20.0.11",
     "jsdom": "^26.1.0",
     "msw": "^2.10.0",
     "pg": "^8.12.0",

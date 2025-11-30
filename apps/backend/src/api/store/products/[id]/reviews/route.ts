@@ -180,7 +180,7 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
   }
 
   const customer = customers[0]
-  const customerEmail = customer.email
+  const customerEmail = customer.email || ""
   const customerName = [customer.first_name, customer.last_name]
     .filter(Boolean)
     .join(" ") || "Anonymous"
@@ -245,7 +245,7 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     customer_id: customerId,
     customer_name: customerName,
     customer_email: customerEmail,
-    order_id: matchingOrder.id, // Audit trail
+    order_id: matchingOrder.id ? String(matchingOrder.id) : undefined, // Audit trail
     rating: Math.round(rating),
     title: sanitizedTitle,
     content: sanitizedContent,

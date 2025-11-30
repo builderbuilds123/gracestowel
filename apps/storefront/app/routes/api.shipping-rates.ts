@@ -1,7 +1,7 @@
 import { type ActionFunctionArgs, data } from "react-router";
 import { SITE_CONFIG } from "../config/site";
 
-const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || "sk_test_51SUzHePAvLfNBsYSrPxY31co9kPMPB7tftZqE1KAibqnnqxVp5extgVzXcIY3zDppGQR640JofL2Wj92WDYd51jV002hrp1mK7";
+const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
 
 // Get shipping configuration from centralized config
 const { rateIds: SHIPPING_RATES, groundShippingId: GROUND_SHIPPING_ID, freeThreshold: FREE_SHIPPING_THRESHOLD } = SITE_CONFIG.shipping;

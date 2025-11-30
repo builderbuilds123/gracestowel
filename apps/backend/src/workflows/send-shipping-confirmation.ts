@@ -3,7 +3,7 @@ import {
   WorkflowResponse,
   transform,
 } from "@medusajs/framework/workflows-sdk"
-import { useQueryGraphStep } from "@medusajs/medusa/core-flows"
+import { useRemoteQueryStep } from "@medusajs/core-flows"
 import { sendNotificationStep } from "./steps/send-notification"
 
 type SendShippingConfirmationInput = {
@@ -14,20 +14,22 @@ export const sendShippingConfirmationWorkflow = createWorkflow(
   "send-shipping-confirmation",
   (input: SendShippingConfirmationInput) => {
     // Retrieve the fulfillment details with order info
-    const { data: fulfillments } = useQueryGraphStep({
-      entity: "fulfillment",
+    const fulfillments = useRemoteQueryStep({
+      entry_point: "fulfillment",
       fields: [
         "id",
-        "tracking_numbers",
-        "tracking_links.*",
+        "data",
+        "metadata",
         "order.id",
-        "order.display_id",
         "order.email",
         "order.shipping_address.*",
       ],
-      filters: {
-        id: input.fulfillment_id,
+      variables: {
+        filters: {
+          id: input.fulfillment_id,
+        },
       },
+      list: true,
     })
 
     // Transform data for the notification
@@ -46,14 +48,12 @@ export const sendShippingConfirmationWorkflow = createWorkflow(
           data: {
             order: {
               id: fulfillment.order.id,
-              display_id: fulfillment.order.display_id,
               email: fulfillment.order.email,
               shipping_address: fulfillment.order.shipping_address,
             },
             fulfillment: {
               id: fulfillment.id,
-              tracking_numbers: fulfillment.tracking_numbers,
-              tracking_links: fulfillment.tracking_links,
+              tracking_info: fulfillment.data || fulfillment.metadata,
             },
           },
         },

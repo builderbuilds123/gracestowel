@@ -19,7 +19,7 @@ import {
   linkSalesChannelsToStockLocationWorkflow,
   updateStoresStep,
   updateStoresWorkflow,
-} from "@medusajs/medusa/core-flows";
+} from "@medusajs/core-flows";
 import {
   createWorkflow,
   transform,
@@ -197,7 +197,11 @@ export default async function seedDemoData({ container }: ExecArgs) {
           ],
         },
       });
-    shippingProfile = shippingProfileResult[0];
+    shippingProfile = (shippingProfileResult as any[])[0];
+  }
+
+  if (!shippingProfile) {
+    throw new Error("Failed to create or find default shipping profile");
   }
 
   const fulfillmentSet = await fulfillmentModuleService.createFulfillmentSets({
@@ -406,28 +410,16 @@ export default async function seedDemoData({ container }: ExecArgs) {
 
   logger.info("Seeding product data...");
 
-  const { result: categoryResult } = await createProductCategoriesWorkflow(
-    container
-  ).run({
+  const categories = [
+    { name: "Bath Towels", is_active: true },
+    { name: "Hand Towels", is_active: true },
+    { name: "Washcloths", is_active: true },
+    { name: "Accessories", is_active: true },
+  ];
+
+  const { result: categoryResult } = await createProductCategoriesWorkflow(container).run({
     input: {
-      product_categories: [
-        {
-          name: "Bath Towels",
-          is_active: true,
-        },
-        {
-          name: "Hand Towels",
-          is_active: true,
-        },
-        {
-          name: "Washcloths",
-          is_active: true,
-        },
-        {
-          name: "Accessories",
-          is_active: true,
-        },
-      ],
+      product_categories: categories,
     },
   });
 

@@ -28,6 +28,25 @@ export default function Checkout() {
     const shippingCost = selectedShipping?.amount || 0;
     const finalTotal = cartTotal + shippingCost;
 
+    // Track checkout started event in PostHog
+    useEffect(() => {
+        if (cartTotal > 0 && typeof window !== 'undefined') {
+            import('../utils/posthog').then(({ default: posthog }) => {
+                posthog.capture('checkout_started', {
+                    cart_total: cartTotal,
+                    item_count: items.length,
+                    currency,
+                    items: items.map(item => ({
+                        product_id: item.id,
+                        product_name: item.title,
+                        quantity: item.quantity,
+                        price: item.price,
+                    })),
+                });
+            });
+        }
+    }, []); // Only run once on mount
+
     useEffect(() => {
         if (cartTotal <= 0) return;
 

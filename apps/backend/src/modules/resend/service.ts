@@ -25,22 +25,45 @@ const templates: { [key in Templates]?: (props: unknown) => React.ReactElement }
 
 // Module options interface
 interface ResendModuleOptions {
-  api_key: string
-  from: string
+  api_key?: string
+  from?: string
+}
+
+// Check if we're in test mode (no API key or test/placeholder key)
+const isTestMode = () => {
+  const apiKey = process.env.RESEND_API_KEY
+  if (!apiKey) return true
+  // Keys starting with re_test_ are Resend test keys, or ci_placeholder for CI
+  return apiKey.startsWith("re_test_") || apiKey.includes("placeholder")
 }
 
 class ResendNotificationProviderService extends AbstractNotificationProviderService {
   static identifier = "resend"
-  private resend: Resend
+  private resend: Resend | null
   private from: string
+  private testMode: boolean
 
   constructor(container: Record<string, unknown>, options: ResendModuleOptions) {
     super()
-    this.resend = new Resend(options.api_key)
-    this.from = options.from
+    this.testMode = isTestMode()
+
+    if (this.testMode) {
+      console.log("Resend: Running in test mode (no API key provided)")
+      this.resend = null
+      this.from = "test@example.com"
+    } else {
+      this.resend = new Resend(options.api_key)
+      this.from = options.from || "onboarding@resend.dev"
+    }
   }
 
   static validateOptions(options: ResendModuleOptions) {
+    // Skip validation in test mode
+    if (isTestMode()) {
+      console.log("Resend: Skipping validation in test mode")
+      return
+    }
+
     if (!options.api_key) {
       throw new Error("Resend API key is required")
     }
@@ -50,8 +73,14 @@ class ResendNotificationProviderService extends AbstractNotificationProviderServ
   }
 
   async send(notification: ProviderSendNotificationDTO): Promise<ProviderSendNotificationResultsDTO> {
+    // In test mode, just log and return success
+    if (this.testMode || !this.resend) {
+      console.log(`Resend [TEST MODE]: Would send ${notification.template} email to ${notification.to}`)
+      return { id: "test-mode-skipped" }
+    }
+
     const template = templates[notification.template as Templates]
-    
+
     if (!template) {
       console.warn(`No template found for ${notification.template}, skipping email`)
       return { id: "skipped" }

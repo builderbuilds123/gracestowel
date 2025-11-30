@@ -1,22 +1,65 @@
-import { useEffect, useState, lazy, Suspense, useRef } from "react";
-import { Link, useSearchParams } from "react-router";
-import { CheckCircle2, Package, Truck, ArrowRight, MapPin } from "lucide-react";
+import { useEffect, useState, lazy, Suspense, useRef, useCallback } from "react";
+import { Link, useSearchParams, useNavigate } from "react-router";
+import { CheckCircle2, Package, Truck, ArrowRight, MapPin, XCircle, Pencil, Plus } from "lucide-react";
 import { useCart } from "../context/CartContext";
-import { loadStripe } from "@stripe/stripe-js";
 import { posts } from "../data/blogPosts";
 import { getStripe } from "../lib/stripe";
+import { CountdownTimer } from "../components/CountdownTimer";
+import { CancelOrderDialog } from "../components/CancelOrderDialog";
+import { EditAddressDialog } from "../components/EditAddressDialog";
+import { AddItemsDialog } from "../components/AddItemsDialog";
 
 // Lazy load Map component to avoid SSR issues with Leaflet
 const Map = lazy(() => import("../components/Map.client"));
 
+interface OrderApiResponse {
+    order: {
+        id: string;
+        display_id: number;
+        status: string;
+        created_at: string;
+        total: number;
+        currency_code: string;
+        items: Array<{
+            id: string;
+            title: string;
+            quantity: number;
+            unit_price: number;
+            thumbnail?: string;
+        }>;
+        shipping_address?: {
+            first_name: string;
+            last_name: string;
+            address_1: string;
+            address_2?: string;
+            city: string;
+            province?: string;
+            postal_code: string;
+            country_code: string;
+        };
+    };
+    modification_allowed: boolean;
+    remaining_seconds: number;
+}
+
 export default function CheckoutSuccess() {
     const [searchParams] = useSearchParams();
+    const navigate = useNavigate();
     const { clearCart, items } = useCart();
-    const [paymentStatus, setPaymentStatus] = useState<'loading' | 'success' | 'error'>('loading');
+    const [paymentStatus, setPaymentStatus] = useState<'loading' | 'success' | 'error' | 'canceled'>('loading');
     const [message, setMessage] = useState<string | null>(null);
     const [orderDetails, setOrderDetails] = useState<any>(null);
     const [shippingAddress, setShippingAddress] = useState<any>(null);
     const [mapCoordinates, setMapCoordinates] = useState<[number, number] | null>(null);
+
+    // Modification window state
+    const [modificationToken, setModificationToken] = useState<string | null>(null);
+    const [orderId, setOrderId] = useState<string | null>(null);
+    const [remainingSeconds, setRemainingSeconds] = useState<number>(0);
+    const [modificationAllowed, setModificationAllowed] = useState<boolean>(false);
+    const [showCancelDialog, setShowCancelDialog] = useState(false);
+    const [showEditAddressDialog, setShowEditAddressDialog] = useState(false);
+    const [showAddItemsDialog, setShowAddItemsDialog] = useState(false);
 
     // Ref to track processed payment intent to prevent double-firing
     const processedRef = useRef<string | null>(null);
@@ -70,7 +113,10 @@ export default function CheckoutSuccess() {
                         return;
                     }
 
-                    if (paymentIntent && paymentIntent.status === 'succeeded') {
+                    // With manual capture mode, status will be 'requires_capture' (authorized but not captured)
+                    // or 'succeeded' (already captured after 1-hour window)
+                    const validStatuses = ['succeeded', 'requires_capture'];
+                    if (paymentIntent && validStatuses.includes(paymentIntent.status)) {
                         // Extract shipping details
                         if (paymentIntent.shipping) {
                             console.log("Shipping details found:", paymentIntent.shipping);
@@ -145,12 +191,66 @@ export default function CheckoutSuccess() {
                         setOrderDetails(orderData);
                         setPaymentStatus('success');
 
+                        // Fetch order from API to get modification token
+                        // Poll until order is created (webhook may still be processing)
+                        const medusaUrl = import.meta.env.VITE_MEDUSA_BACKEND_URL || 'http://localhost:9000';
+                        let retries = 0;
+                        const maxRetries = 10;
+                        const retryDelay = 1000; // 1 second
+
+                        const fetchOrderWithToken = async (): Promise<void> => {
+                            try {
+                                const response = await fetch(
+                                    `${medusaUrl}/store/orders/by-payment-intent?payment_intent_id=${encodeURIComponent(paymentIntentId)}`
+                                );
+
+                                if (response.ok) {
+                                    const data = await response.json() as {
+                                        order: { id: string };
+                                        modification_token: string;
+                                        remaining_seconds: number;
+                                        modification_allowed: boolean;
+                                    };
+                                    setOrderId(data.order.id);
+                                    setModificationToken(data.modification_token);
+                                    setRemainingSeconds(data.remaining_seconds);
+                                    setModificationAllowed(data.modification_allowed);
+
+                                    // Store in localStorage for persistence
+                                    localStorage.setItem('orderId', data.order.id);
+                                    localStorage.setItem('modificationToken', data.modification_token);
+
+                                    console.log("Order fetched with modification token:", {
+                                        orderId: data.order.id,
+                                        allowed: data.modification_allowed,
+                                        remainingSeconds: data.remaining_seconds
+                                    });
+                                } else if (response.status === 404 && retries < maxRetries) {
+                                    // Order not yet created, retry
+                                    retries++;
+                                    console.log(`Order not found, retrying (${retries}/${maxRetries})...`);
+                                    setTimeout(fetchOrderWithToken, retryDelay);
+                                } else {
+                                    console.error("Failed to fetch order:", await response.text());
+                                }
+                            } catch (err) {
+                                console.error("Error fetching order:", err);
+                                if (retries < maxRetries) {
+                                    retries++;
+                                    setTimeout(fetchOrderWithToken, retryDelay);
+                                }
+                            }
+                        };
+
+                        // Start fetching order
+                        fetchOrderWithToken();
+
                         // Clear cart after a delay to ensure UI updates
                         setTimeout(() => {
                             clearCart();
                         }, 500);
                     } else {
-                        console.error("Payment status not succeeded:", paymentIntent?.status);
+                        console.error("Payment status not valid:", paymentIntent?.status);
                         setMessage(`Payment status: ${paymentIntent?.status}`);
                         setPaymentStatus('error');
                     }
@@ -168,6 +268,124 @@ export default function CheckoutSuccess() {
         fetchPaymentDetails();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [searchParams]);
+
+    // Handle timer expiration
+    const handleTimerExpire = useCallback(() => {
+        setModificationAllowed(false);
+        setRemainingSeconds(0);
+    }, []);
+
+    // Handle order cancellation
+    const handleCancelOrder = useCallback(async () => {
+        if (!orderId || !modificationToken) {
+            throw new Error("Missing order information");
+        }
+
+        const medusaUrl = import.meta.env.VITE_MEDUSA_BACKEND_URL || 'http://localhost:9000';
+        const response = await fetch(`${medusaUrl}/store/orders/${orderId}/cancel`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                token: modificationToken,
+                reason: 'Customer requested cancellation',
+            }),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json() as { message?: string };
+            throw new Error(errorData.message || 'Failed to cancel order');
+        }
+
+        // Clear stored tokens
+        localStorage.removeItem('modificationToken');
+        localStorage.removeItem('orderId');
+
+        // Update UI to show canceled state
+        setPaymentStatus('canceled');
+    }, [orderId, modificationToken]);
+
+    // Handle address update
+    const handleUpdateAddress = useCallback(async (address: {
+        first_name: string;
+        last_name: string;
+        address_1: string;
+        address_2?: string;
+        city: string;
+        province?: string;
+        postal_code: string;
+        country_code: string;
+        phone?: string;
+    }) => {
+        if (!orderId || !modificationToken) {
+            throw new Error("Missing order information");
+        }
+
+        const medusaUrl = import.meta.env.VITE_MEDUSA_BACKEND_URL || 'http://localhost:9000';
+        const response = await fetch(`${medusaUrl}/store/orders/${orderId}/address`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                token: modificationToken,
+                address,
+            }),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json() as { message?: string };
+            throw new Error(errorData.message || 'Failed to update address');
+        }
+
+        // Update local state with new address
+        setShippingAddress({
+            firstName: address.first_name,
+            lastName: address.last_name,
+            address1: address.address_1,
+            address2: address.address_2,
+            city: address.city,
+            state: address.province,
+            postalCode: address.postal_code,
+            countryCode: address.country_code,
+            phone: address.phone,
+        });
+    }, [orderId, modificationToken]);
+
+    // Handle adding items to order
+    const handleAddItems = useCallback(async (items: Array<{ variant_id: string; quantity: number }>) => {
+        if (!orderId || !modificationToken) {
+            throw new Error("Missing order information");
+        }
+
+        const medusaUrl = import.meta.env.VITE_MEDUSA_BACKEND_URL || 'http://localhost:9000';
+        const response = await fetch(`${medusaUrl}/store/orders/${orderId}/line-items`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                token: modificationToken,
+                items,
+            }),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json() as { message?: string };
+            throw new Error(errorData.message || 'Failed to add items');
+        }
+
+        const result = await response.json() as { new_total: number };
+
+        // Update order details with new total
+        if (orderDetails) {
+            setOrderDetails({
+                ...orderDetails,
+                total: `$${(result.new_total / 100).toFixed(2)}`,
+            });
+        }
+    }, [orderId, modificationToken, orderDetails]);
 
     if (paymentStatus === 'loading') {
         return (
@@ -211,17 +429,74 @@ export default function CheckoutSuccess() {
         );
     }
 
+    if (paymentStatus === 'canceled') {
+        return (
+            <div className="min-h-screen bg-background-earthy flex items-center justify-center px-4">
+                <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8 text-center">
+                    <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <XCircle className="w-10 h-10 text-gray-500" />
+                    </div>
+                    <h1 className="text-2xl font-serif text-text-earthy mb-2">Order Canceled</h1>
+                    <p className="text-text-earthy/70 mb-6">
+                        Your order has been canceled and your payment will be refunded within 5-10 business days.
+                    </p>
+                    <Link
+                        to="/shop"
+                        className="inline-block bg-accent-earthy text-white px-6 py-3 rounded-lg hover:bg-accent-earthy/90 transition-colors cursor-pointer"
+                    >
+                        Continue Shopping
+                    </Link>
+                </div>
+            </div>
+        );
+    }
+
+
     return (
         <div className="min-h-screen bg-background-earthy py-12 px-4">
             <div className="max-w-3xl mx-auto">
                 {/* Success Header */}
-                <div className="text-center mb-12">
+                <div className="text-center mb-8">
                     <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
                         <CheckCircle2 className="w-12 h-12 text-green-600" />
                     </div>
                     <h1 className="text-4xl font-serif text-text-earthy mb-2">Order Confirmed!</h1>
                     <p className="text-text-earthy/70 text-lg">Thank you for your purchase</p>
                 </div>
+
+                {/* Modification Window Banner */}
+                {modificationAllowed && remainingSeconds > 0 && (
+                    <div className="bg-white rounded-lg shadow-lg p-4 mb-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                            <CountdownTimer
+                                remainingSeconds={remainingSeconds}
+                                onExpire={handleTimerExpire}
+                            />
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            <button
+                                onClick={() => setShowAddItemsDialog(true)}
+                                className="px-4 py-2 text-accent-earthy border border-accent-earthy rounded-lg hover:bg-accent-earthy/10 transition-colors text-sm font-medium flex items-center gap-2"
+                            >
+                                <Plus className="w-4 h-4" />
+                                Add Items
+                            </button>
+                            <button
+                                onClick={() => setShowEditAddressDialog(true)}
+                                className="px-4 py-2 text-accent-earthy border border-accent-earthy rounded-lg hover:bg-accent-earthy/10 transition-colors text-sm font-medium flex items-center gap-2"
+                            >
+                                <Pencil className="w-4 h-4" />
+                                Edit Address
+                            </button>
+                            <button
+                                onClick={() => setShowCancelDialog(true)}
+                                className="px-4 py-2 text-red-600 border border-red-300 rounded-lg hover:bg-red-50 transition-colors text-sm font-medium"
+                            >
+                                Cancel Order
+                            </button>
+                        </div>
+                    </div>
+                )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                     {/* Order Details Card */}
@@ -371,6 +646,40 @@ export default function CheckoutSuccess() {
                     </div>
                 </div>
             </div>
+
+            {/* Cancel Order Dialog */}
+            <CancelOrderDialog
+                isOpen={showCancelDialog}
+                onClose={() => setShowCancelDialog(false)}
+                onConfirm={handleCancelOrder}
+                orderNumber={orderDetails?.orderNumber || ''}
+            />
+
+            {/* Edit Address Dialog */}
+            <EditAddressDialog
+                isOpen={showEditAddressDialog}
+                onClose={() => setShowEditAddressDialog(false)}
+                onSave={handleUpdateAddress}
+                currentAddress={shippingAddress ? {
+                    first_name: shippingAddress.firstName || '',
+                    last_name: shippingAddress.lastName || '',
+                    address_1: shippingAddress.address1 || '',
+                    address_2: shippingAddress.address2 || '',
+                    city: shippingAddress.city || '',
+                    province: shippingAddress.state || '',
+                    postal_code: shippingAddress.postalCode || '',
+                    country_code: shippingAddress.countryCode || 'US',
+                    phone: shippingAddress.phone || '',
+                } : undefined}
+            />
+
+            {/* Add Items Dialog */}
+            <AddItemsDialog
+                isOpen={showAddItemsDialog}
+                onClose={() => setShowAddItemsDialog(false)}
+                onAdd={handleAddItems}
+                currencyCode={orderDetails?.currency || 'USD'}
+            />
         </div>
     );
 }

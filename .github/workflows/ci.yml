@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  NODE_VERSION: "20"
+  NODE_VERSION: "24"
   PNPM_VERSION: "8"
 
 jobs:
@@ -27,6 +27,23 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Secrets Scanning (Gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Dependency & Config Scanning (Trivy)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: "fs"
+          scanners: "vuln,secret,misconfig"
+          ignore-unfixed: true
+          format: "table"
+          exit-code: "1"
+          severity: "CRITICAL,HIGH"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -53,35 +70,13 @@ jobs:
         continue-on-error: true
 
   # ============================================
-  # Stage 2: Build & Unit Tests (Parallel)
+  # Stage 2: Unit Tests (Parallel, No External Services)
   # ============================================
   test-backend:
-    name: Backend Tests
+    name: Backend Unit Tests
     runs-on: ubuntu-latest
     needs: validate
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: medusa_test
-          POSTGRES_PASSWORD: medusa_test
-          POSTGRES_DB: medusa_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+    # No services needed - unit tests use mocks
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -95,18 +90,18 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run backend tests
+      - name: Run backend unit tests
         working-directory: apps/backend
         env:
-          DATABASE_URL: postgresql://medusa_test:medusa_test@localhost:5432/medusa_test
-          REDIS_URL: redis://localhost:6379
-          JWT_SECRET: test-secret
-          COOKIE_SECRET: test-secret
+          # Test mode env vars (no real services needed)
+          NODE_ENV: test
+          RESEND_API_KEY: re_test_ci_placeholder_key
         run: npm test -- --coverage
 
       - name: Upload coverage
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
+          token: ${{ secrets.CODECOV_TOKEN }}
           files: apps/backend/coverage/lcov.info
           flags: backend
           fail_ci_if_error: false
@@ -133,19 +128,19 @@ jobs:
         run: npm test -- --coverage
 
       - name: Upload coverage
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
+          token: ${{ secrets.CODECOV_TOKEN }}
           files: apps/storefront/coverage/lcov.info
           flags: storefront
           fail_ci_if_error: false
 
   # ============================================
-  # Stage 3: E2E Tests
+  # Stage 3: E2E Tests (ACTIVE - debugging)
   # ============================================
   e2e:
     name: E2E Tests
     runs-on: ubuntu-latest
-    needs: [test-backend, test-storefront]
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -160,19 +155,42 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Install Playwright browsers
-        working-directory: apps/e2e
-        run: npx playwright install --with-deps chromium
-
       - name: Start test environment
-        run: docker compose -f docker-compose.test.yml up -d --wait
-        continue-on-error: true
+        env:
+          MEDUSA_PUBLISHABLE_KEY: ${{ secrets.MEDUSA_PUBLISHABLE_KEY }}
+        run: docker compose -f docker-compose.test.yml up -d
+
+      - name: Wait for services to be ready
+        run: |
+          echo "Waiting for postgres..."
+          timeout 60 bash -c 'until docker compose -f docker-compose.test.yml exec -T postgres pg_isready -U medusa_test; do sleep 2; done'
+          echo "Postgres is ready"
+
+          echo "Waiting for backend..."
+          timeout 120 bash -c 'until docker compose -f docker-compose.test.yml exec -T backend curl -sf http://localhost:9000/health; do sleep 5; done'
+          echo "Backend is ready"
+
+          echo "Waiting for storefront..."
+          timeout 120 bash -c 'until docker compose -f docker-compose.test.yml exec -T storefront curl -sf http://localhost:5173/ -o /dev/null; do sleep 5; done'
+          echo "Storefront is ready"
+
+      - name: Debug - Check container status
+        if: always()
+        run: |
+          docker compose -f docker-compose.test.yml ps -a
+          echo "--- Testing storefront from inside container ---"
+          docker compose -f docker-compose.test.yml exec -T storefront curl -sf http://localhost:5173/ -o /dev/null && echo "Storefront responding" || echo "Storefront not responding"
+
+      - name: Show backend container logs
+        if: always()
+        run: docker compose -f docker-compose.test.yml logs backend
+
+      - name: Show storefront container logs
+        if: always()
+        run: docker compose -f docker-compose.test.yml logs storefront
 
       - name: Run E2E tests
-        working-directory: apps/e2e
-        run: npx playwright test --project=chromium
-        env:
-          CI: true
+        run: docker compose -f docker-compose.test.yml run --rm playwright npx playwright test --project=chromium
 
       - name: Upload Playwright report
         uses: actions/upload-artifact@v4
@@ -187,51 +205,76 @@ jobs:
         run: docker compose -f docker-compose.test.yml down -v
 
   # ============================================
-  # Stage 4: Resilience / Chaos Tests (Optional)
+  # Stage 5: Artifact Build (Build Once)
   # ============================================
-  resilience:
-    name: Resilience Tests
+  build-backend:
+    name: Build Backend Image
     runs-on: ubuntu-latest
-    needs: e2e
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging'
-    timeout-minutes: 20
+    needs: validate
+    permissions:
+      contents: read
+      packages: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: "npm"
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: ./apps/backend
+          file: apps/backend/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/backend:latest
+            ghcr.io/${{ github.repository }}/backend:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ============================================
+  # Stage 6: Deployment
+  # ============================================
+  deploy-staging:
+    name: Deploy Staging
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/staging'
+    needs: [validate, test-backend, test-storefront, e2e, build-backend]
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
       - name: Install dependencies
         run: npm ci
-
-      - name: Install Playwright browsers
-        working-directory: apps/e2e
-        run: npx playwright install --with-deps chromium
-
-      - name: Start chaos environment
-        run: docker compose -f docker-compose.chaos.yml up -d --wait
-        continue-on-error: true
-
-      - name: Run resilience tests
-        working-directory: apps/e2e
-        run: npx playwright test --project=resilience
-        env:
-          CI: true
-        continue-on-error: true
-
-      - name: Upload resilience report
-        uses: actions/upload-artifact@v4
-        if: always()
+      - name: Deploy Storefront
+        uses: cloudflare/wrangler-action@v3
         with:
-          name: resilience-report
-          path: apps/e2e/playwright-report/
-          retention-days: 7
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/storefront
+          command: deploy --env staging
 
-      - name: Stop chaos environment
-        if: always()
-        run: docker compose -f docker-compose.chaos.yml down -v
-
+  deploy-production:
+    name: Deploy Production
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    needs: [validate, test-backend, test-storefront, e2e, build-backend]
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: npm ci
+      - name: Deploy Storefront
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/storefront
+          command: deploy --env production

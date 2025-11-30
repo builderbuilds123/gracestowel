@@ -114,6 +114,21 @@ export function ProductActions({ product, selectedVariant, isOutOfStock }: Produ
             color: selectedColor,
             embroidery: embroideryData || undefined
         });
+
+        // Track add to cart event in PostHog
+        if (typeof window !== 'undefined') {
+            import('../utils/posthog').then(({ default: posthog }) => {
+                posthog.capture('product_added_to_cart', {
+                    product_id: product.id,
+                    product_name: product.title,
+                    product_price: product.formattedPrice,
+                    quantity,
+                    color: selectedColor,
+                    has_embroidery: !!embroideryData,
+                    variant_id: selectedVariant?.id,
+                });
+            });
+        }
     };
 
     return (
