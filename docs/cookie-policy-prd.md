@@ -1,6 +1,6 @@
 # gracestowel - Cookie Policy PRD
 
-**Author:** Big Dick
+**Author:** Grace
 **Date:** Thursday, November 27, 2025
 **Version:** 1.0
 
@@ -70,4 +70,4 @@ This project involves implementing a new feature for the existing `gracestowel` 
 
 _This PRD captures the essence of the cookie policy popup feature for gracestowel - a legally compliant, user-friendly, and engaging way to inform users about the site's privacy-first approach to cookies._
 
-_Created through collaborative discovery between Big Dick and AI facilitator._
+_Created through collaborative discovery between Grace and AI facilitator._

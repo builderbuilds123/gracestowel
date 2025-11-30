@@ -1,6 +1,6 @@
 # gracestowel - Epic Breakdown
 
-**Author:** Big Dick
+**Author:** Grace
 **Date:** Thursday, November 27, 2025
 **Project Level:** (Not explicitly defined in PRD, defaulting to 'Medium')
 **Target Scale:** (Not explicitly defined in PRD, defaulting to 'Growth')

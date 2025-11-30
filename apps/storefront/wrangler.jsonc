@@ -4,28 +4,53 @@
   "compatibility_date": "2025-04-04",
   "compatibility_flags": ["nodejs_compat"],
   "main": "./workers/app.ts",
+
+  // Shared configuration (inherited by all environments)
   "vars": {
     "VALUE_FROM_CLOUDFLARE": "Hello from Cloudflare"
-    // MEDUSA_BACKEND_URL is set via `wrangler secret put MEDUSA_BACKEND_URL`
-    // Example: https://gracestowel-backend.up.railway.app
+    // Runtime secrets (set via `wrangler secret put` or Cloudflare Dashboard):
+    // - MEDUSA_BACKEND_URL: Backend API URL
+    // - MEDUSA_PUBLISHABLE_KEY: Medusa Store API key
   },
-  // Hyperdrive configuration for direct PostgreSQL access
-  // This enables connection pooling at the edge for read-only product queries,
-  // bypassing the Medusa backend for faster product page loads.
-  //
-  // To configure:
-  // 1. Create a Hyperdrive config in Cloudflare Dashboard
-  // 2. Point it to your Railway PostgreSQL database
-  // 3. Set the hyperdrive ID below (currently configured)
-  //
-  // For local development:
-  // - Connection string is stored in .dev.vars (DATABASE_URL)
-  // - DO NOT commit .dev.vars to version control
-  // - In production, Hyperdrive uses the connection configured in Cloudflare Dashboard
-  "hyperdrive": [
-    {
-      "binding": "HYPERDRIVE",
-      "id": "1dffb86ef8b64f5197bd875b8e1cc026"
+
+  // Observability configuration
+  "observability": {
+    "enabled": false,
+    "head_sampling_rate": 1,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "persist": true,
+      "invocation_logs": true
+    },
+    "traces": {
+      "enabled": false,
+      "persist": true,
+      "head_sampling_rate": 1
     }
-  ]
+  },
+
+  // Environment-specific configurations
+  // See docs/ENVIRONMENTS.md for setup instructions
+  "env": {
+    // Staging environment (deployed from `staging` branch)
+    "staging": {
+      "name": "gracestowelstorefront-staging",
+      "vars": {
+        "ENVIRONMENT": "staging"
+      }
+      // Hyperdrive is injected by CI from HYPERDRIVE_ID secret
+      // Secrets are set via: wrangler secret put <NAME> --env staging
+    },
+
+    // Production environment (deployed from `main` branch)
+    "production": {
+      "name": "gracestowelstorefront",
+      "vars": {
+        "ENVIRONMENT": "production"
+      }
+      // Hyperdrive is injected by CI from HYPERDRIVE_ID secret
+      // Secrets are set via: wrangler secret put <NAME> --env production
+    }
+  }
 }

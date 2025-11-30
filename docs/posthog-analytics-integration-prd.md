@@ -1,6 +1,6 @@
 # gracestowel - Product Requirements Document
 
-**Author:** Big Dick
+**Author:** Grace
 **Date:** Thursday, November 27, 2025
 **Version:** 1.0
 
@@ -98,4 +98,4 @@ To provide comprehensive, granular insights into all user interactions on the pl
 
 _This PRD captures the essence of gracestowel - This PostHog integration will provide administrators of the `gracestowel` platform with essential insights into user behavior, enabling data-driven decisions to optimize the e-commerce experience and drive business growth._
 
-_Created through collaborative discovery between Big Dick and AI facilitator._
+_Created through collaborative discovery between Grace and AI facilitator._
