@@ -14,9 +14,7 @@ services:
       POSTGRES_DB: medusa_test
     ports:
       - "5433:5432"
-    volumes:
-      - ./docker/postgres/init/golden_state.sql:/docker-entrypoint-initdb.d/init.sql
-    # No volumes - ephemeral for tests
+    # No volumes - ephemeral for tests, backend seeds data on startup
     tmpfs:
       - /var/lib/postgresql/data
     healthcheck:
@@ -80,8 +78,12 @@ services:
     depends_on:
       backend:
         condition: service_healthy
-    env_file:
-      - ./apps/storefront/.env.test
+    environment:
+      MEDUSA_BACKEND_URL: http://backend:9000
+      MEDUSA_PUBLISHABLE_KEY: ${MEDUSA_PUBLISHABLE_KEY:-test_placeholder_key}
+      NODE_ENV: development
+      CI: "true"
+      CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE: postgresql://medusa_test:medusa_test@postgres:5432/medusa_test
     ports:
       - "5174:5173"
     command: npm run test:server
