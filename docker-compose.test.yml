@@ -78,7 +78,7 @@ services:
         condition: service_healthy
     environment:
       MEDUSA_BACKEND_URL: http://backend:9000
-      MEDUSA_PUBLISHABLE_KEY: ${MEDUSA_PUBLISHABLE_KEY:-test_placeholder_key}
+      MEDUSA_PUBLISHABLE_KEY: ${MEDUSA_PUBLISHABLE_KEY}
       NODE_ENV: development
       CI: "true"
       CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE: postgresql://medusa_test:medusa_test@postgres:5432/medusa_test

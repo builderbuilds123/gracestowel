@@ -70,7 +70,7 @@ export default defineConfig({
   webServer: process.env.CI
     ? undefined
     : {
-        command: `cd ../.. && MEDUSA_PUBLISHABLE_KEY='${process.env.MEDUSA_PUBLISHABLE_KEY}' CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE='${process.env.CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE}' npm run dev --workspace=apps/storefront`,
+        command: `cd ../.. && MEDUSA_PUBLISHABLE_KEY=${process.env.MEDUSA_PUBLISHABLE_KEY} CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE='${process.env.CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE}' npm run dev --workspace=apps/storefront`,
         url: "https://localhost:5173",
         reuseExistingServer: true,
         ignoreHTTPSErrors: true,
