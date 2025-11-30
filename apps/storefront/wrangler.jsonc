@@ -9,23 +9,33 @@
     // MEDUSA_BACKEND_URL is set via `wrangler secret put MEDUSA_BACKEND_URL`
     // Example: https://gracestowel-backend.up.railway.app
   },
-  // Hyperdrive configuration for direct PostgreSQL access
-  // This enables connection pooling at the edge for read-only product queries,
-  // bypassing the Medusa backend for faster product page loads.
-  //
-  // To configure:
-  // 1. Create a Hyperdrive config in Cloudflare Dashboard
-  // 2. Point it to your Railway PostgreSQL database
-  // 3. Set the hyperdrive ID below (currently configured)
-  //
-  // For local development:
-  // - Connection string is stored in .dev.vars (DATABASE_URL)
-  // - DO NOT commit .dev.vars to version control
-  // - In production, Hyperdrive uses the connection configured in Cloudflare Dashboard
-  "hyperdrive": [
-    {
-      "binding": "HYPERDRIVE",
-      "id": "1dffb86ef8b64f5197bd875b8e1cc026"
+  "observability": {
+    "enabled": false,
+    "head_sampling_rate": 1,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "persist": true,
+      "invocation_logs": true
+    },
+    "traces": {
+      "enabled": false,
+      "persist": true,
+      "head_sampling_rate": 1
     }
-  ]
+  },
+  // Environment-specific configurations
+  // Hyperdrive IDs are stored in GitHub Secrets:
+  // - HYPERDRIVE_ID_STAGING for staging
+  // - HYPERDRIVE_ID_PRODUCTION for production
+  "env": {
+    "staging": {
+      "name": "gracestowelstorefront-staging"
+      // Hyperdrive binding is added dynamically via CI using wrangler.staging.jsonc
+    },
+    "production": {
+      "name": "gracestowelstorefront"
+      // Hyperdrive binding is added dynamically via CI using wrangler.production.jsonc
+    }
+  }
 }
