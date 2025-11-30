@@ -86,11 +86,11 @@ services:
       - "5174:5173"
     command: npm run test:server
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:5173 || curl -f http://127.0.0.1:5173 || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 45s
+      test: ["CMD-SHELL", "curl -sf http://localhost:5173/api/health || exit 1"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+      start_period: 30s
 
   # Playwright Test Runner
   playwright:
