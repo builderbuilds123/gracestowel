@@ -45,6 +45,7 @@ COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/wrangler.toml ./wrangler.toml
 COPY --from=builder /app/wrangler.jsonc ./wrangler.jsonc
+COPY --from=builder /app/workers ./workers
 
 EXPOSE 5173
 CMD ["npm", "run", "test:server"]
