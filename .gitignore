@@ -57,3 +57,7 @@ apps/e2e/test-results/*
 
 # Medusa
 .medusa/
+
+# Reports
+*-report.json
+trivy_report.txt
