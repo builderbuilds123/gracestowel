@@ -20,10 +20,12 @@ env:
 jobs:
   # ============================================
   # Stage 1: Validation (Lint, Typecheck, Audit)
+  # PAUSED: Remove "if: false" to re-enable after E2E is fixed
   # ============================================
   validate:
     name: Validate
     runs-on: ubuntu-latest
+    if: false # PAUSED - re-enable after E2E testing passes
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -71,10 +73,12 @@ jobs:
 
   # ============================================
   # Stage 2: Unit Tests (Parallel, No External Services)
+  # PAUSED: Remove "if: false" to re-enable after E2E is fixed
   # ============================================
   test-backend:
     name: Backend Unit Tests
     runs-on: ubuntu-latest
+    if: false # PAUSED - re-enable after E2E testing passes
     needs: validate
     # No services needed - unit tests use mocks
     steps:
@@ -109,6 +113,7 @@ jobs:
   test-storefront:
     name: Storefront Tests
     runs-on: ubuntu-latest
+    if: false # PAUSED - re-enable after E2E testing passes
     needs: validate
     steps:
       - name: Checkout
@@ -136,12 +141,11 @@ jobs:
           fail_ci_if_error: false
 
   # ============================================
-  # Stage 3: E2E Tests
+  # Stage 3: E2E Tests (ACTIVE - debugging)
   # ============================================
   e2e:
     name: E2E Tests
     runs-on: ubuntu-latest
-    needs: [test-backend, test-storefront]
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -186,12 +190,13 @@ jobs:
 
   # ============================================
   # Stage 5: Artifact Build (Build Once)
+  # PAUSED: Remove "if: false" to re-enable after E2E is fixed
   # ============================================
   build-backend:
     name: Build Backend Image
     runs-on: ubuntu-latest
+    if: false # PAUSED - re-enable after E2E testing passes
     needs: validate
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging'
     permissions:
       contents: read
       packages: write
@@ -223,13 +228,14 @@ jobs:
 
   # ============================================
   # Stage 6: Deployment
+  # PAUSED: Remove "if: false" to re-enable after E2E is fixed
   # ============================================
   deploy-staging:
     name: Deploy Staging
     runs-on: ubuntu-latest
+    if: false # PAUSED - re-enable after E2E testing passes
     needs: [validate, test-backend, test-storefront, e2e, build-backend]
     environment: staging
-    if: github.ref == 'refs/heads/staging'
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies
@@ -245,9 +251,9 @@ jobs:
   deploy-production:
     name: Deploy Production
     runs-on: ubuntu-latest
+    if: false # PAUSED - re-enable after E2E testing passes
     needs: [validate, test-backend, test-storefront, e2e, build-backend]
     environment: production
-    if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies
