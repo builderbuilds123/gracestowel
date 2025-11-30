@@ -252,21 +252,35 @@ jobs:
     environment: staging
     steps:
       - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
       - name: Install dependencies
         run: npm ci
+
       - name: Inject Hyperdrive config
         working-directory: apps/storefront
+        env:
+          HYPERDRIVE_ID: ${{ secrets.HYPERDRIVE_ID }}
         run: |
-          # Create a temporary wrangler override with Hyperdrive config
+          # Inject environment-specific Hyperdrive config
+          # HYPERDRIVE_ID comes from GitHub environment secrets (staging)
           node -e "
             const fs = require('fs');
-            const config = JSON.parse(fs.readFileSync('wrangler.jsonc', 'utf8').replace(/\/\/.*/g, '').replace(/,(\s*[}\]])/g, '\$1'));
+            const content = fs.readFileSync('wrangler.jsonc', 'utf8');
+            const cleanJson = content.replace(/\/\/.*/g, '').replace(/,(\s*[}\]])/g, '\$1');
+            const config = JSON.parse(cleanJson);
             config.env = config.env || {};
             config.env.staging = config.env.staging || {};
-            config.env.staging.hyperdrive = [{ binding: 'HYPERDRIVE', id: '${{ secrets.HYPERDRIVE_ID }}' }];
+            config.env.staging.hyperdrive = [{ binding: 'HYPERDRIVE', id: process.env.HYPERDRIVE_ID }];
             fs.writeFileSync('wrangler.jsonc', JSON.stringify(config, null, 2));
           "
-      - name: Deploy Storefront
+
+      - name: Deploy Storefront to Staging
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -282,21 +296,35 @@ jobs:
     environment: production
     steps:
       - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
       - name: Install dependencies
         run: npm ci
+
       - name: Inject Hyperdrive config
         working-directory: apps/storefront
+        env:
+          HYPERDRIVE_ID: ${{ secrets.HYPERDRIVE_ID }}
         run: |
-          # Create a temporary wrangler override with Hyperdrive config
+          # Inject environment-specific Hyperdrive config
+          # HYPERDRIVE_ID comes from GitHub environment secrets (production)
           node -e "
             const fs = require('fs');
-            const config = JSON.parse(fs.readFileSync('wrangler.jsonc', 'utf8').replace(/\/\/.*/g, '').replace(/,(\s*[}\]])/g, '\$1'));
+            const content = fs.readFileSync('wrangler.jsonc', 'utf8');
+            const cleanJson = content.replace(/\/\/.*/g, '').replace(/,(\s*[}\]])/g, '\$1');
+            const config = JSON.parse(cleanJson);
             config.env = config.env || {};
             config.env.production = config.env.production || {};
-            config.env.production.hyperdrive = [{ binding: 'HYPERDRIVE', id: '${{ secrets.HYPERDRIVE_ID }}' }];
+            config.env.production.hyperdrive = [{ binding: 'HYPERDRIVE', id: process.env.HYPERDRIVE_ID }];
             fs.writeFileSync('wrangler.jsonc', JSON.stringify(config, null, 2));
           "
-      - name: Deploy Storefront
+
+      - name: Deploy Storefront to Production
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}

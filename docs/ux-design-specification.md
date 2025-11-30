@@ -1,6 +1,6 @@
 # Gracestowel - Transparent Impact UX Design Specification
 
-_Created on 2025-11-30 by Big Dick_
+_Created on 2025-11-30 by Grace_
 _Generated using BMad Method - Create UX Design Workflow v1.0_
 
 ---
@@ -124,7 +124,7 @@ Users should feel:
 
 | Date     | Version | Changes                         | Author        |
 | -------- | ------- | ------------------------------- | ------------- |
-| 2025-11-30 | 1.0     | Initial UX Design Specification | Big Dick |
+| 2025-11-30 | 1.0     | Initial UX Design Specification | Grace |
 
 ---
 

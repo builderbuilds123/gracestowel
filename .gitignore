@@ -16,7 +16,7 @@ build/
 
 apps/storefront/.env.test
 
-
+repomix-output.xml
 
 .dev.vars
 

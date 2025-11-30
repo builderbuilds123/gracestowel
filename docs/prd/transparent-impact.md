@@ -1,6 +1,6 @@
 # Gracestowel - Transparent Impact PRD
 
-**Author:** Big Dick
+**Author:** Grace
 **Date:** 2025-11-30
 **Version:** 1.0
 
@@ -131,4 +131,4 @@ Leverages the existing Headless Commerce architecture (Medusa + React Router). R
 
 _This PRD captures the essence of Gracestowel - Transparent Impact - Radical Transparency & Social Impact_
 
-_Created through collaborative discovery between Big Dick and AI facilitator._
+_Created through collaborative discovery between Grace and AI facilitator._

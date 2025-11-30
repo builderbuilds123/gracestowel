@@ -4,11 +4,16 @@
   "compatibility_date": "2025-04-04",
   "compatibility_flags": ["nodejs_compat"],
   "main": "./workers/app.ts",
+
+  // Shared configuration (inherited by all environments)
   "vars": {
     "VALUE_FROM_CLOUDFLARE": "Hello from Cloudflare"
-    // MEDUSA_BACKEND_URL is set via `wrangler secret put MEDUSA_BACKEND_URL`
-    // Example: https://gracestowel-backend.up.railway.app
+    // Runtime secrets (set via `wrangler secret put` or Cloudflare Dashboard):
+    // - MEDUSA_BACKEND_URL: Backend API URL
+    // - MEDUSA_PUBLISHABLE_KEY: Medusa Store API key
   },
+
+  // Observability configuration
   "observability": {
     "enabled": false,
     "head_sampling_rate": 1,
@@ -24,18 +29,28 @@
       "head_sampling_rate": 1
     }
   },
+
   // Environment-specific configurations
-  // Hyperdrive IDs are stored in GitHub Secrets:
-  // - HYPERDRIVE_ID_STAGING for staging
-  // - HYPERDRIVE_ID_PRODUCTION for production
+  // See docs/ENVIRONMENTS.md for setup instructions
   "env": {
+    // Staging environment (deployed from `staging` branch)
     "staging": {
-      "name": "gracestowelstorefront-staging"
-      // Hyperdrive binding is added dynamically via CI using wrangler.staging.jsonc
+      "name": "gracestowelstorefront-staging",
+      "vars": {
+        "ENVIRONMENT": "staging"
+      }
+      // Hyperdrive is injected by CI from HYPERDRIVE_ID secret
+      // Secrets are set via: wrangler secret put <NAME> --env staging
     },
+
+    // Production environment (deployed from `main` branch)
     "production": {
-      "name": "gracestowelstorefront"
-      // Hyperdrive binding is added dynamically via CI using wrangler.production.jsonc
+      "name": "gracestowelstorefront",
+      "vars": {
+        "ENVIRONMENT": "production"
+      }
+      // Hyperdrive is injected by CI from HYPERDRIVE_ID secret
+      // Secrets are set via: wrangler secret put <NAME> --env production
     }
   }
 }
