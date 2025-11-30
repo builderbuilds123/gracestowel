@@ -1,0 +1,7 @@
+# Historical leaks that have been fixed in the codebase
+9cff9c134ecf17a09f909c879aa475d7b93f0a9a:apps/e2e/playwright.config.ts:generic-api-key:72
+9af987faa11c264349349c100a0ebae0ddc70a94:apps/e2e/playwright.config.ts:generic-api-key:72
+9af987faa11c264349349c100a0ebae0ddc70a94:apps/e2e/test-results/results.json:generic-api-key:145
+9af987faa11c264349349c100a0ebae0ddc70a94:docker-compose.test.yml:generic-api-key:81
+96b97f621d20a54055411118571471530a2a1b20:apps/storefront/app/routes/api.checkout-session.ts:stripe-access-token:14
+96b97f621d20a54055411118571471530a2a1b20:apps/storefront/app/routes/api.shipping-rates.ts:stripe-access-token:3
