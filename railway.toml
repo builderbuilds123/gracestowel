@@ -7,6 +7,7 @@ dockerfilePath = "apps/backend/Dockerfile"
 watchPatterns = ["apps/backend/**"]
 
 [deploy]
+startCommand = "npx medusa db:migrate && npm run start"
 healthcheckPath = "/health"
 healthcheckTimeout = 100
 restartPolicyType = "on_failure"

@@ -1,8 +1,16 @@
 import { MedusaService } from "@medusajs/framework/utils"
 import Review from "./models/review"
+import ReviewHelpfulVote from "./models/review-helpful-vote"
+
+export interface VerifiedPurchaseResult {
+  canReview: boolean
+  orderId?: string
+  reason?: string
+}
 
 class ReviewModuleService extends MedusaService({
   Review,
+  ReviewHelpfulVote,
 }) {
   /**
    * Get reviews for a product with optional filters
@@ -63,7 +71,7 @@ class ReviewModuleService extends MedusaService({
   /**
    * Check if a customer has already reviewed a product
    */
-  async hasCustomerReviewed(productId: string, customerId: string) {
+  async hasCustomerReviewed(productId: string, customerId: string): Promise<boolean> {
     const reviews = await this.listReviews({
       product_id: productId,
       customer_id: customerId,
@@ -72,12 +80,51 @@ class ReviewModuleService extends MedusaService({
   }
 
   /**
-   * Check if customer has purchased the product (for verified purchase badge)
+   * Determine the review status based on rating (smart approval)
+   * 4-5 star reviews from verified buyers auto-approve
+   * 1-3 star reviews require moderation
    */
-  async isVerifiedPurchase(productId: string, customerId: string): Promise<boolean> {
-    // TODO: Check order history to verify purchase
-    // For now, return false - this would query the order module
-    return false
+  getAutoApprovalStatus(rating: number, isVerifiedPurchase: boolean): "pending" | "approved" {
+    if (isVerifiedPurchase && rating >= 4) {
+      return "approved"
+    }
+    return "pending"
+  }
+
+  /**
+   * Check if a voter has already voted on a review
+   */
+  async hasVoted(reviewId: string, voterIdentifier: string): Promise<boolean> {
+    const votes = await this.listReviewHelpfulVotes({
+      review_id: reviewId,
+      voter_identifier: voterIdentifier,
+    })
+    return votes.length > 0
+  }
+
+  /**
+   * Record a helpful vote for a review
+   */
+  async recordHelpfulVote(
+    reviewId: string,
+    voterIdentifier: string,
+    voterType: "customer" | "anonymous"
+  ): Promise<void> {
+    await this.createReviewHelpfulVotes({
+      review_id: reviewId,
+      voter_identifier: voterIdentifier,
+      voter_type: voterType,
+    })
+  }
+
+  /**
+   * Increment the helpful count for a review
+   */
+  async incrementHelpfulCount(reviewId: string): Promise<number> {
+    const review = await this.retrieveReview(reviewId)
+    const newCount = (review.helpful_count || 0) + 1
+    await this.updateReviews({ id: reviewId, helpful_count: newCount })
+    return newCount
   }
 }
 

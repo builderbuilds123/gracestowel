@@ -1,0 +1,21 @@
+{
+  "name": "@gracestowel/e2e",
+  "version": "1.0.0",
+  "private": true,
+  "description": "End-to-end tests for Grace Stowel e-commerce platform",
+  "scripts": {
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug",
+    "test:report": "playwright show-report",
+    "test:resilience": "playwright test --project=resilience",
+    "test:ci": "docker compose -f ../../docker-compose.test.yml up --build --abort-on-container-exit --exit-code-from playwright",
+    "codegen": "playwright codegen"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.49.0",
+    "@types/node": "^22.10.0"
+  }
+}
+
