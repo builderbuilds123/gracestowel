@@ -264,7 +264,7 @@ jobs:
 
       - name: Deploy to Railway Staging
         working-directory: apps/backend
-        run: railway up --environment staging --detach
+        run: railway up --service ${{ vars.RAILWAY_SERVICE_NAME }} --environment staging --detach
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
@@ -282,7 +282,7 @@ jobs:
 
       - name: Deploy to Railway Production
         working-directory: apps/backend
-        run: railway up --environment production --detach
+        run: railway up --service ${{ vars.RAILWAY_SERVICE_NAME }} --environment production --detach
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
