@@ -123,8 +123,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Rebuild native bindings
-        run: npm rebuild
+      - name: Fix rollup optional dependencies
+        run: npm install --no-save @rollup/rollup-linux-x64-gnu
 
       - name: Run storefront tests
         working-directory: apps/storefront
@@ -304,6 +304,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Fix rollup optional dependencies
+        run: npm install --no-save @rollup/rollup-linux-x64-gnu
+
       - name: Build Storefront
         working-directory: apps/storefront
         run: npm run build
@@ -348,6 +351,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Fix rollup optional dependencies
+        run: npm install --no-save @rollup/rollup-linux-x64-gnu
 
       - name: Build Storefront
         working-directory: apps/storefront
