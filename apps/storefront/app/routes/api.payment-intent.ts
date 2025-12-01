@@ -40,8 +40,8 @@ interface StockValidationResult {
 /**
  * Validate stock availability for cart items
  */
-async function validateStock(cartItems: CartItem[]): Promise<StockValidationResult> {
-    const MEDUSA_BACKEND_URL = process.env.MEDUSA_BACKEND_URL || "http://localhost:9000";
+async function validateStock(cartItems: CartItem[], env: { MEDUSA_BACKEND_URL?: string }): Promise<StockValidationResult> {
+    const MEDUSA_BACKEND_URL = env.MEDUSA_BACKEND_URL || "http://localhost:9000";
     const outOfStockItems: StockValidationResult["outOfStockItems"] = [];
 
     for (const item of cartItems) {
@@ -58,7 +58,7 @@ async function validateStock(cartItems: CartItem[]): Promise<StockValidationResu
 
             if (!response.ok) continue;
 
-            const data = await response.json();
+            const data = await response.json() as { products?: any[] };
             const products = data.products || [];
 
             // Find the variant in any product
@@ -88,7 +88,7 @@ async function validateStock(cartItems: CartItem[]): Promise<StockValidationResu
     };
 }
 
-export async function action({ request }: ActionFunctionArgs) {
+export async function action({ request, context }: ActionFunctionArgs) {
     if (request.method !== "POST") {
         return data({ message: "Method not allowed" }, { status: 405 });
     }
@@ -103,7 +103,8 @@ export async function action({ request }: ActionFunctionArgs) {
         shippingAddress
     } = await request.json() as PaymentIntentRequest;
 
-    const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
+    const env = context.cloudflare.env as { STRIPE_SECRET_KEY: string; MEDUSA_BACKEND_URL?: string };
+    const STRIPE_SECRET_KEY = env.STRIPE_SECRET_KEY;
 
     if (!STRIPE_SECRET_KEY) {
         console.error("STRIPE_SECRET_KEY environment variable is not set");
@@ -113,7 +114,7 @@ export async function action({ request }: ActionFunctionArgs) {
     try {
         // Validate stock availability before creating PaymentIntent
         if (cartItems && cartItems.length > 0) {
-            const stockValidation = await validateStock(cartItems);
+            const stockValidation = await validateStock(cartItems, env);
             if (!stockValidation.valid) {
                 const itemMessages = stockValidation.outOfStockItems
                     .map(item => `${item.title}: only ${item.available} available (requested ${item.requested})`)
