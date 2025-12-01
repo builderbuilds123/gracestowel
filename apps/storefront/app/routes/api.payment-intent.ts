@@ -40,7 +40,7 @@ interface StockValidationResult {
 /**
  * Validate stock availability for cart items
  */
-async function validateStock(cartItems: CartItem[], env: any): Promise<StockValidationResult> {
+async function validateStock(cartItems: CartItem[], env: { MEDUSA_BACKEND_URL?: string }): Promise<StockValidationResult> {
     const MEDUSA_BACKEND_URL = env.MEDUSA_BACKEND_URL || "http://localhost:9000";
     const outOfStockItems: StockValidationResult["outOfStockItems"] = [];
 
