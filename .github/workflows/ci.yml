@@ -280,6 +280,10 @@ jobs:
             fs.writeFileSync('wrangler.jsonc', JSON.stringify(config, null, 2));
           "
 
+      - name: Build Storefront
+        working-directory: apps/storefront
+        run: npm run build
+
       - name: Deploy Storefront to Staging
         uses: cloudflare/wrangler-action@v3
         with:
@@ -323,6 +327,10 @@ jobs:
             config.env.production.hyperdrive = [{ binding: 'HYPERDRIVE', id: process.env.HYPERDRIVE_ID }];
             fs.writeFileSync('wrangler.jsonc', JSON.stringify(config, null, 2));
           "
+
+      - name: Build Storefront
+        working-directory: apps/storefront
+        run: npm run build
 
       - name: Deploy Storefront to Production
         uses: cloudflare/wrangler-action@v3
