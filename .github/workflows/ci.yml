@@ -156,21 +156,34 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Start test environment
-        env:
-          MEDUSA_PUBLISHABLE_KEY: ${{ secrets.MEDUSA_PUBLISHABLE_KEY }}
-        run: docker compose -f docker-compose.test.yml up -d
+      - name: Start backend and database
+        run: docker compose -f docker-compose.test.yml up -d postgres redis backend
 
-      - name: Wait for services to be ready
+      - name: Wait for backend to be ready
         run: |
           echo "Waiting for postgres..."
           timeout 60 bash -c 'until docker compose -f docker-compose.test.yml exec -T postgres pg_isready -U medusa_test; do sleep 2; done'
           echo "Postgres is ready"
 
           echo "Waiting for backend..."
-          timeout 120 bash -c 'until docker compose -f docker-compose.test.yml exec -T backend curl -sf http://localhost:9000/health; do sleep 5; done'
+          timeout 180 bash -c 'until docker compose -f docker-compose.test.yml exec -T backend curl -sf http://localhost:9000/health; do sleep 5; done'
           echo "Backend is ready"
 
+      - name: Get publishable API key from seeded database
+        id: get-api-key
+        run: |
+          # Query the publishable API key from the test database
+          API_KEY=$(docker compose -f docker-compose.test.yml exec -T postgres psql -U medusa_test -d medusa_test -t -c "SELECT token FROM api_key WHERE type = 'publishable' LIMIT 1;" | tr -d '[:space:]')
+          echo "MEDUSA_PUBLISHABLE_KEY=pk_${API_KEY}" >> $GITHUB_OUTPUT
+          echo "Retrieved API key: pk_${API_KEY:0:10}..."
+
+      - name: Start storefront with API key
+        env:
+          MEDUSA_PUBLISHABLE_KEY: ${{ steps.get-api-key.outputs.MEDUSA_PUBLISHABLE_KEY }}
+        run: docker compose -f docker-compose.test.yml up -d storefront
+
+      - name: Wait for storefront to be ready
+        run: |
           echo "Waiting for storefront..."
           timeout 120 bash -c 'until docker compose -f docker-compose.test.yml exec -T storefront curl -sf http://localhost:5173/ -o /dev/null; do sleep 5; done'
           echo "Storefront is ready"
