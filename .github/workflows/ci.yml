@@ -262,27 +262,23 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Inject Hyperdrive config
+      - name: Build Storefront
+        working-directory: apps/storefront
+        run: npm run build
+
+      - name: Patch wrangler config for staging
         working-directory: apps/storefront
         env:
           HYPERDRIVE_ID: ${{ secrets.HYPERDRIVE_ID }}
         run: |
-          # Inject environment-specific Hyperdrive config
-          # HYPERDRIVE_ID comes from GitHub environment secrets (staging)
+          # Patch the generated wrangler.json with staging worker name and Hyperdrive
           node -e "
             const fs = require('fs');
-            const content = fs.readFileSync('wrangler.jsonc', 'utf8');
-            const cleanJson = content.replace(/\/\/.*/g, '').replace(/,(\s*[}\]])/g, '\$1');
-            const config = JSON.parse(cleanJson);
-            config.env = config.env || {};
-            config.env.staging = config.env.staging || {};
-            config.env.staging.hyperdrive = [{ binding: 'HYPERDRIVE', id: process.env.HYPERDRIVE_ID }];
-            fs.writeFileSync('wrangler.jsonc', JSON.stringify(config, null, 2));
+            const config = JSON.parse(fs.readFileSync('build/server/wrangler.json', 'utf8'));
+            config.name = 'gracestowelstorefront-staging';
+            config.hyperdrive = [{ binding: 'HYPERDRIVE', id: process.env.HYPERDRIVE_ID }];
+            fs.writeFileSync('build/server/wrangler.json', JSON.stringify(config, null, 2));
           "
-
-      - name: Build Storefront
-        working-directory: apps/storefront
-        run: npm run build
 
       - name: Deploy Storefront to Staging
         uses: cloudflare/wrangler-action@v3
@@ -290,7 +286,7 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: apps/storefront
-          command: deploy --env staging
+          command: deploy
 
   deploy-production:
     name: Deploy Production
@@ -310,27 +306,23 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Inject Hyperdrive config
+      - name: Build Storefront
+        working-directory: apps/storefront
+        run: npm run build
+
+      - name: Patch wrangler config for production
         working-directory: apps/storefront
         env:
           HYPERDRIVE_ID: ${{ secrets.HYPERDRIVE_ID }}
         run: |
-          # Inject environment-specific Hyperdrive config
-          # HYPERDRIVE_ID comes from GitHub environment secrets (production)
+          # Patch the generated wrangler.json with production worker name and Hyperdrive
           node -e "
             const fs = require('fs');
-            const content = fs.readFileSync('wrangler.jsonc', 'utf8');
-            const cleanJson = content.replace(/\/\/.*/g, '').replace(/,(\s*[}\]])/g, '\$1');
-            const config = JSON.parse(cleanJson);
-            config.env = config.env || {};
-            config.env.production = config.env.production || {};
-            config.env.production.hyperdrive = [{ binding: 'HYPERDRIVE', id: process.env.HYPERDRIVE_ID }];
-            fs.writeFileSync('wrangler.jsonc', JSON.stringify(config, null, 2));
+            const config = JSON.parse(fs.readFileSync('build/server/wrangler.json', 'utf8'));
+            config.name = 'gracestowelstorefront';
+            config.hyperdrive = [{ binding: 'HYPERDRIVE', id: process.env.HYPERDRIVE_ID }];
+            fs.writeFileSync('build/server/wrangler.json', JSON.stringify(config, null, 2));
           "
-
-      - name: Build Storefront
-        working-directory: apps/storefront
-        run: npm run build
 
       - name: Deploy Storefront to Production
         uses: cloudflare/wrangler-action@v3
@@ -338,4 +330,4 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: apps/storefront
-          command: deploy --env production
+          command: deploy
