@@ -15,14 +15,7 @@ import { WishlistProvider } from "./context/WishlistContext";
 import { CartDrawer } from "./components/CartDrawer";
 import { Header } from "./components/Header";
 import { Footer } from "./components/Footer";
-import { initPostHog, reportWebVitals } from "./utils/posthog";
 import "./app.css";
-
-// Initialize PostHog on client-side only
-if (typeof window !== 'undefined') {
-  initPostHog();
-  reportWebVitals();
-}
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -86,22 +79,6 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   } else if (import.meta.env.DEV && error && error instanceof Error) {
     details = error.message;
     stack = error.stack;
-  }
-
-  // Capture error in PostHog
-  if (typeof window !== 'undefined' && error) {
-    import('./utils/posthog').then(({ default: posthog }) => {
-      posthog.capture('exception', {
-        properties: {
-          message: message,
-          details: details,
-          stack: stack,
-          is_route_error: isRouteErrorResponse(error),
-          status: isRouteErrorResponse(error) ? error.status : undefined,
-          url: window.location.href,
-        }
-      });
-    });
   }
 
   return (

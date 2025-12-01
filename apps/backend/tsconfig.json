@@ -41,9 +41,6 @@
     "node_modules",
     ".medusa/server",
     ".medusa/admin",
-    ".cache",
-    "**/__tests__",
-    "**/*.spec.ts",
-    "**/*.test.ts"
+    ".cache"
   ]
 }

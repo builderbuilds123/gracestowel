@@ -1,10 +1,15 @@
 import { type ActionFunctionArgs, data } from "react-router";
-import { SITE_CONFIG } from "../config/site";
 
-const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
+const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || "sk_test_51SUzHePAvLfNBsYSrPxY31co9kPMPB7tftZqE1KAibqnnqxVp5extgVzXcIY3zDppGQR640JofL2Wj92WDYd51jV002hrp1mK7";
 
-// Get shipping configuration from centralized config
-const { rateIds: SHIPPING_RATES, groundShippingId: GROUND_SHIPPING_ID, freeThreshold: FREE_SHIPPING_THRESHOLD } = SITE_CONFIG.shipping;
+// Shipping rate IDs from Stripe dashboard
+const SHIPPING_RATES = [
+    "shr_1SW9u3PAvLfNBsYSFIx10mCw",
+    "shr_1SW9vmPAvLfNBsYSBqUtUEk0" // Ground shipping - free for orders $99+
+];
+
+const GROUND_SHIPPING_ID = "shr_1SW9vmPAvLfNBsYSBqUtUEk0";
+const FREE_SHIPPING_THRESHOLD = 99;
 
 export async function action({ request }: ActionFunctionArgs) {
     if (request.method !== "POST") {
