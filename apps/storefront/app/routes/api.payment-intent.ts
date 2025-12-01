@@ -39,10 +39,9 @@ interface StockValidationResult {
 
 /**
  * Validate stock availability for cart items
- * @param cartItems - Items to validate
- * @param medusaBackendUrl - Medusa backend URL for API calls
  */
-async function validateStock(cartItems: CartItem[], medusaBackendUrl: string): Promise<StockValidationResult> {
+async function validateStock(cartItems: CartItem[]): Promise<StockValidationResult> {
+    const MEDUSA_BACKEND_URL = process.env.MEDUSA_BACKEND_URL || "http://localhost:9000";
     const outOfStockItems: StockValidationResult["outOfStockItems"] = [];
 
     for (const item of cartItems) {
@@ -51,7 +50,7 @@ async function validateStock(cartItems: CartItem[], medusaBackendUrl: string): P
         try {
             // Fetch product to get variant inventory
             const response = await fetch(
-                `${medusaBackendUrl}/store/products?fields=+variants,+variants.inventory_quantity`,
+                `${MEDUSA_BACKEND_URL}/store/products?fields=+variants,+variants.inventory_quantity`,
                 {
                     headers: { "Content-Type": "application/json" },
                 }
@@ -59,7 +58,7 @@ async function validateStock(cartItems: CartItem[], medusaBackendUrl: string): P
 
             if (!response.ok) continue;
 
-            const data = await response.json() as { products?: any[] };
+            const data = await response.json();
             const products = data.products || [];
 
             // Find the variant in any product
@@ -89,7 +88,7 @@ async function validateStock(cartItems: CartItem[], medusaBackendUrl: string): P
     };
 }
 
-export async function action({ request, context }: ActionFunctionArgs) {
+export async function action({ request }: ActionFunctionArgs) {
     if (request.method !== "POST") {
         return data({ message: "Method not allowed" }, { status: 405 });
     }
@@ -104,9 +103,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
         shippingAddress
     } = await request.json() as PaymentIntentRequest;
 
-    const env = context.cloudflare.env as { STRIPE_SECRET_KEY: string; MEDUSA_BACKEND_URL?: string };
-    const STRIPE_SECRET_KEY = env.STRIPE_SECRET_KEY;
-    const medusaBackendUrl = env.MEDUSA_BACKEND_URL || "http://localhost:9000";
+    const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
 
     if (!STRIPE_SECRET_KEY) {
         console.error("STRIPE_SECRET_KEY environment variable is not set");
@@ -116,7 +113,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
     try {
         // Validate stock availability before creating PaymentIntent
         if (cartItems && cartItems.length > 0) {
-            const stockValidation = await validateStock(cartItems, medusaBackendUrl);
+            const stockValidation = await validateStock(cartItems);
             if (!stockValidation.valid) {
                 const itemMessages = stockValidation.outOfStockItems
                     .map(item => `${item.title}: only ${item.available} available (requested ${item.requested})`)
@@ -138,9 +135,6 @@ export async function action({ request, context }: ActionFunctionArgs) {
         body.append("amount", Math.round(totalAmount * 100).toString());
         body.append("currency", currency || "usd");
         body.append("automatic_payment_methods[enabled]", "true");
-        // Use manual capture to enable 1-hour modification window
-        // Payment will be captured after the modification window expires
-        body.append("capture_method", "manual");
 
         // Options for US Bank Account (ACH) - Financial Connections
         body.append("payment_method_options[us_bank_account][financial_connections][permissions][0]", "payment_method");

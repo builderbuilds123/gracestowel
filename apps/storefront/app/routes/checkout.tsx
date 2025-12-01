@@ -8,7 +8,6 @@ import { useCustomer, getAuthToken } from '../context/CustomerContext';
 import { getStripe } from '../lib/stripe';
 import { CheckoutForm, type ShippingOption } from '../components/CheckoutForm';
 import { OrderSummary } from '../components/OrderSummary';
-import { parsePrice } from '../lib/price';
 
 export default function Checkout() {
     const { items, cartTotal, updateQuantity, removeFromCart } = useCart();
@@ -19,33 +18,16 @@ export default function Checkout() {
     const [selectedShipping, setSelectedShipping] = useState<ShippingOption | null>(null);
     const [isCalculatingShipping, setIsCalculatingShipping] = useState(false);
 
-    // Calculate original total (before discount) using price utility
+    // Calculate original total (before discount)
     const originalTotal = items.reduce((total, item) => {
-        const originalPrice = parsePrice(item.originalPrice || item.price);
+        const originalPrice = item.originalPrice
+            ? parseFloat(item.originalPrice.replace('$', ''))
+            : parseFloat(item.price.replace('$', ''));
         return total + originalPrice * item.quantity;
     }, 0);
 
     const shippingCost = selectedShipping?.amount || 0;
     const finalTotal = cartTotal + shippingCost;
-
-    // Track checkout started event in PostHog
-    useEffect(() => {
-        if (cartTotal > 0 && typeof window !== 'undefined') {
-            import('../utils/posthog').then(({ default: posthog }) => {
-                posthog.capture('checkout_started', {
-                    cart_total: cartTotal,
-                    item_count: items.length,
-                    currency,
-                    items: items.map(item => ({
-                        product_id: item.id,
-                        product_name: item.title,
-                        quantity: item.quantity,
-                        price: item.price,
-                    })),
-                });
-            });
-        }
-    }, []); // Only run once on mount
 
     useEffect(() => {
         if (cartTotal <= 0) return;

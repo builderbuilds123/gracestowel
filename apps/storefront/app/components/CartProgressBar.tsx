@@ -1,65 +1,31 @@
 import { useCart } from "../context/CartContext";
 import { useLocale } from "../context/LocaleContext";
 import { Truck, ShoppingBag, Sparkles, Circle } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
-import { SITE_CONFIG } from "../config/site";
-
-// Map milestone labels to icons
-const MILESTONE_ICONS: Record<string, LucideIcon> = {
-    "Free Wool Dryer Ball": Circle,
-    "Free Tote Bag": ShoppingBag,
-    "Free Embroidery": Sparkles,
-    "Free Delivery": Truck,
-};
 
 export function CartProgressBar() {
     const { cartTotal } = useCart();
     const { formatPrice } = useLocale();
 
-    // Get milestones from centralized config and add icons
-    const configMilestones = SITE_CONFIG.cart.milestones;
-    const milestones = configMilestones.map(m => ({
-        ...m,
-        icon: MILESTONE_ICONS[m.label] || Circle,
-    }));
+    const milestones = [
+        { price: 35, label: "Free Wool Dryer Ball", icon: Circle, position: 25 },
+        { price: 50, label: "Free Tote Bag", icon: ShoppingBag, position: 50 },
+        { price: 75, label: "Free Embroidery", icon: Sparkles, position: 75 },
+        { price: 99, label: "Free Delivery", icon: Truck, position: 100 },
+    ];
 
-    // Calculate progress based on segments dynamically
-    const calculateProgress = (): number => {
-        // Find which segment the cart total falls into
-        for (let i = configMilestones.length - 1; i >= 0; i--) {
-            if (cartTotal >= configMilestones[i].price) {
-                return configMilestones[i].position;
-            }
-        }
-
-        // Before first milestone - calculate proportional progress
-        if (configMilestones.length > 0) {
-            const firstMilestone = configMilestones[0];
-            return (cartTotal / firstMilestone.price) * firstMilestone.position;
-        }
-
-        return 0;
-    };
-
-    // Add interpolation between milestones for smoother progress
-    const calculateSmoothProgress = (): number => {
-        for (let i = 0; i < configMilestones.length; i++) {
-            const current = configMilestones[i];
-            if (cartTotal < current.price) {
-                const prev = configMilestones[i - 1];
-                if (prev) {
-                    const range = current.price - prev.price;
-                    const posRange = current.position - prev.position;
-                    return prev.position + ((cartTotal - prev.price) / range) * posRange;
-                } else {
-                    return (cartTotal / current.price) * current.position;
-                }
-            }
-        }
-        return 100;
-    };
-
-    const progress = calculateSmoothProgress();
+    // Calculate progress based on segments
+    let progress = 0;
+    if (cartTotal >= 99) {
+        progress = 100;
+    } else if (cartTotal >= 75) {
+        progress = 75 + ((cartTotal - 75) / (99 - 75)) * 25;
+    } else if (cartTotal >= 50) {
+        progress = 50 + ((cartTotal - 50) / (75 - 50)) * 25;
+    } else if (cartTotal >= 35) {
+        progress = 25 + ((cartTotal - 35) / (50 - 35)) * 25;
+    } else {
+        progress = (cartTotal / 35) * 25;
+    }
 
     const nextMilestone = milestones.find(m => m.price > cartTotal);
 

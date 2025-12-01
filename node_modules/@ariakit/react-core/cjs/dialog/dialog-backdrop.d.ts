@@ -1,0 +1,7 @@
+import type { DialogProps } from "./dialog.tsx";
+import type { DialogStore } from "./dialog-store.ts";
+interface DialogBackdropProps extends Pick<DialogProps, "backdrop" | "alwaysVisible" | "hidden"> {
+    store: DialogStore;
+}
+export declare function DialogBackdrop({ store, backdrop, alwaysVisible, hidden, }: DialogBackdropProps): import("react/jsx-runtime").JSX.Element | null;
+export {};

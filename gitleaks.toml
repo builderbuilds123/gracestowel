@@ -1,5 +1,0 @@
-[allowlist]
-  paths = [
-    '''repomix-output.xml''',
-    '''apps/e2e/test-results/'''
-  ]

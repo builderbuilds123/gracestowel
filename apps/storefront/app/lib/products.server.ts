@@ -68,6 +68,7 @@ interface VariantRow {
     product_id: string;
     title: string;
     sku: string | null;
+    inventory_quantity: number | null;
 }
 
 /**
@@ -231,6 +232,7 @@ export async function getProductsFromDB(
                     id: v.id,
                     title: v.title,
                     sku: v.sku,
+                    inventory_quantity: v.inventory_quantity ?? undefined,
                     prices: v.prices.map(p => ({
                         id: p.id,
                         amount: p.amount,
@@ -320,6 +322,7 @@ export async function getProductByIdFromDB(
                 id: v.id,
                 title: v.title,
                 sku: v.sku,
+                inventory_quantity: v.inventory_quantity ?? undefined,
                 prices: v.prices.map(p => ({ id: p.id, amount: p.amount, currency_code: p.currency_code })),
                 options: v.options.map(o => ({ id: o.id, value: o.value, option_id: o.option_id })),
             })),
@@ -355,7 +358,7 @@ async function fetchVariantsWithPrices(
     
     // Fetch variants
     const variantResult = await client.query<VariantRow>(
-        `SELECT id, product_id, title, sku
+        `SELECT id, product_id, title, sku, inventory_quantity
          FROM product_variant
          WHERE product_id IN (${placeholders}) AND deleted_at IS NULL`,
         productIds
@@ -394,16 +397,16 @@ async function fetchVariantsWithPrices(
 
 async function fetchImages(client: Client, productIds: string[]): Promise<ImageRow[]> {
     if (productIds.length === 0) return [];
-
+    
     const placeholders = productIds.map((_, i) => `$${i + 1}`).join(", ");
     const result = await client.query<ImageRow>(
-        `SELECT i.id, i.product_id, i.url, i.rank
-         FROM image i
-         WHERE i.product_id IN (${placeholders}) AND i.deleted_at IS NULL
-         ORDER BY i.rank ASC`,
+        `SELECT id, product_id, url, rank
+         FROM product_image
+         WHERE product_id IN (${placeholders}) AND deleted_at IS NULL
+         ORDER BY rank ASC`,
         productIds
     );
-
+    
     return result.rows;
 }
 
