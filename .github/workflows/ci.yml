@@ -123,6 +123,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Rebuild native bindings
+        run: npm rebuild
+
       - name: Run storefront tests
         working-directory: apps/storefront
         run: npm test -- --coverage
@@ -211,6 +214,7 @@ jobs:
   build-backend:
     name: Build Backend Image
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging'
     needs: validate
     outputs:
       image: ghcr.io/${{ github.repository }}/backend:${{ github.sha }}
@@ -250,7 +254,7 @@ jobs:
     name: Deploy Backend (Staging)
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/staging'
-    needs: [validate, test-backend, build-backend]
+    needs: [validate, test-backend]
     environment: staging
     steps:
       - uses: actions/checkout@v4
@@ -259,7 +263,8 @@ jobs:
         run: npm i -g @railway/cli
 
       - name: Deploy to Railway Staging
-        run: railway up --service backend --environment staging --image ${{ needs.build-backend.outputs.image }}
+        working-directory: apps/backend
+        run: railway up --service backend --environment staging --detach
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
@@ -267,7 +272,7 @@ jobs:
     name: Deploy Backend (Production)
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
-    needs: [validate, test-backend, build-backend]
+    needs: [validate, test-backend]
     environment: production
     steps:
       - uses: actions/checkout@v4
@@ -276,7 +281,8 @@ jobs:
         run: npm i -g @railway/cli
 
       - name: Deploy to Railway Production
-        run: railway up --service backend --environment production --image ${{ needs.build-backend.outputs.image }}
+        working-directory: apps/backend
+        run: railway up --service backend --environment production --detach
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
