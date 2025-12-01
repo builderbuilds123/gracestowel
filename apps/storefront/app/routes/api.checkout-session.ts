@@ -1,6 +1,6 @@
 import { type ActionFunctionArgs, data } from "react-router";
 
-export async function action({ request }: ActionFunctionArgs) {
+export async function action({ request, context }: ActionFunctionArgs) {
     if (request.method !== "POST") {
         return data({ message: "Method not allowed" }, { status: 405 });
     }
@@ -11,19 +11,22 @@ export async function action({ request }: ActionFunctionArgs) {
         items: Array<{ title: string; price: string; quantity: number; image: string }>;
     };
 
-    const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
+    const env = context.cloudflare.env as any;
+    const STRIPE_SECRET_KEY = env.STRIPE_SECRET_KEY;
 
     try {
         // Construct form-urlencoded body for Stripe API
         const body = new URLSearchParams();
         body.append("ui_mode", "embedded");
         body.append("mode", "payment");
-        body.append("return_url", `${process.env.PUBLIC_URL || 'http://localhost:5173'}/checkout/return?session_id={CHECKOUT_SESSION_ID}`);
+        
+        const origin = new URL(request.url).origin;
+        body.append("return_url", `${origin}/checkout/return?session_id={CHECKOUT_SESSION_ID}`);
 
         items.forEach((item, index) => {
             body.append(`line_items[${index}][price_data][currency]`, currency || "usd");
             body.append(`line_items[${index}][price_data][product_data][name]`, item.title);
-            const imageUrl = item.image.startsWith('http') ? item.image : `${process.env.PUBLIC_URL || 'http://localhost:5173'}${item.image}`;
+            const imageUrl = item.image.startsWith('http') ? item.image : `${origin}${item.image}`;
             body.append(`line_items[${index}][price_data][product_data][images][0]`, imageUrl);
             const unitAmount = Math.round(parseFloat(item.price.replace('$', '')) * 100);
             body.append(`line_items[${index}][price_data][unit_amount]`, unitAmount.toString());
