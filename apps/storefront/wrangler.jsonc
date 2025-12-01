@@ -7,7 +7,6 @@
 
   // Shared configuration (inherited by all environments)
   "vars": {
-    "VALUE_FROM_CLOUDFLARE": "Hello from Cloudflare"
     // Runtime secrets (set via `wrangler secret put` or Cloudflare Dashboard):
     // - MEDUSA_BACKEND_URL: Backend API URL
     // - MEDUSA_PUBLISHABLE_KEY: Medusa Store API key
