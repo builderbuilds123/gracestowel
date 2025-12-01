@@ -103,7 +103,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
         shippingAddress
     } = await request.json() as PaymentIntentRequest;
 
-    const env = context.cloudflare.env as any;
+    const env = context.cloudflare.env as { STRIPE_SECRET_KEY: string; MEDUSA_BACKEND_URL?: string };
     const STRIPE_SECRET_KEY = env.STRIPE_SECRET_KEY;
 
     if (!STRIPE_SECRET_KEY) {
