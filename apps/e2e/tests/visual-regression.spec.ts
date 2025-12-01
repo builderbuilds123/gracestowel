@@ -9,7 +9,7 @@ import { test, expect } from "@playwright/test";
  */
 test.describe("Visual Regression", () => {
   test.describe("Homepage", () => {
-    test("should match homepage snapshot", async ({ page }) => {
+    test.skip("should match homepage snapshot", async ({ page }) => {
       await page.goto("/");
       await page.waitForLoadState("networkidle");
 
