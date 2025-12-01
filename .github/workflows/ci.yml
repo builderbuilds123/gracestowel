@@ -244,11 +244,51 @@ jobs:
   # ============================================
   # Stage 6: Deployment
   # ============================================
+  deploy-backend-staging:
+    name: Deploy Backend (Staging)
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/staging'
+    needs: [validate, test-backend, build-backend]
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm i -g @railway/cli
+
+      - name: Deploy to Railway Staging
+        run: railway up --service backend --environment staging
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+  deploy-backend-production:
+    name: Deploy Backend (Production)
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    needs: [validate, test-backend, build-backend]
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm i -g @railway/cli
+
+      - name: Deploy to Railway Production
+        run: railway up --service backend --environment production
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
   deploy-staging:
     name: Deploy Staging
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/staging'
-    needs: [validate, test-backend, test-storefront, e2e, build-backend]
+    needs:
+      [
+        validate,
+        test-backend,
+        test-storefront,
+        e2e,
+      ]
     environment: staging
     steps:
       - uses: actions/checkout@v4
@@ -292,7 +332,15 @@ jobs:
     name: Deploy Production
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
-    needs: [validate, test-backend, test-storefront, e2e, build-backend]
+    needs:
+      [
+        validate,
+        test-backend,
+        test-storefront,
+        e2e,
+        build-backend,
+        deploy-backend-production,
+      ]
     environment: production
     steps:
       - uses: actions/checkout@v4
