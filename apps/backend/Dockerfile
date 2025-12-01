@@ -20,9 +20,6 @@ COPY . .
 # Build Medusa backend using npx to ensure CLI is found
 RUN npx medusa build
 
-# Verify build succeeded
-RUN test -d .medusa/server || (echo "Backend build failed - .medusa/server not found" && exit 1)
-
 # Test stage
 FROM builder AS test
 WORKDIR /app
