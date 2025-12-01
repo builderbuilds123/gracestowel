@@ -123,8 +123,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Fix rollup optional dependencies
-        run: npm install --no-save @rollup/rollup-linux-x64-gnu
+      - name: Fix native dependencies for Linux
+        run: npm install --no-save @rollup/rollup-linux-x64-gnu lightningcss-linux-x64-gnu
 
       - name: Run storefront tests
         working-directory: apps/storefront
@@ -304,8 +304,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Fix rollup optional dependencies
-        run: npm install --no-save @rollup/rollup-linux-x64-gnu
+      - name: Fix native dependencies for Linux
+        run: npm install --no-save @rollup/rollup-linux-x64-gnu lightningcss-linux-x64-gnu
 
       - name: Build Storefront
         working-directory: apps/storefront
@@ -352,8 +352,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Fix rollup optional dependencies
-        run: npm install --no-save @rollup/rollup-linux-x64-gnu
+      - name: Fix native dependencies for Linux
+        run: npm install --no-save @rollup/rollup-linux-x64-gnu lightningcss-linux-x64-gnu
 
       - name: Build Storefront
         working-directory: apps/storefront
