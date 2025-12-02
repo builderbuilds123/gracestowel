@@ -16,8 +16,6 @@ build/
 
 apps/storefront/.env.test
 
-repomix-output.xml
-
 .dev.vars
 
 # IDE
@@ -45,8 +43,6 @@ apps/e2e/playwright-report/data/*
 apps/e2e/test-results/*
 apps/e2e/tests/*
 apps/e2e/test-results/*
-
-./repomix-output.xml
 
 # Medusa
 .medusa/

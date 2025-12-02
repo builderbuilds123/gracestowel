@@ -50,7 +50,10 @@ test.describe("Guest Checkout Flow", () => {
     // The cart drawer shows "Your Towel Rack" heading
     await expect(
       page.getByRole("heading", { name: /towel rack/i })
-    ).toBeVisible({ timeout: 10000 });
+    ).toBeVisible();
+    
+    // Verify item is in cart
+    await expect(page.getByText("The Nuzzle")).toBeVisible();
   });
 
   test("should update cart quantity", async ({ page }) => {
@@ -62,18 +65,19 @@ test.describe("Guest Checkout Flow", () => {
     // Wait for cart drawer to open
     await expect(
       page.getByRole("heading", { name: /towel rack/i })
-    ).toBeVisible({ timeout: 10000 });
+    ).toBeVisible();
 
-    // Wait for animations and overlay to settle
-    await page.waitForTimeout(500);
-
-    // Find and click increase quantity button (+ button) - force click to bypass overlay
+    // Find and click increase quantity button (+ button)
+    // Use force: true only if necessary, but better to wait for overlay to disappear if possible.
+    // Here we assume the drawer is fully open.
     const increaseButton = page.locator('button[aria-label="Increase quantity"]').first();
-    if (await increaseButton.isVisible({ timeout: 2000 })) {
-      await increaseButton.click({ force: true });
-      // Wait for state update
-      await page.waitForTimeout(500);
-    }
+    await expect(increaseButton).toBeVisible();
+    await increaseButton.click();
+    
+    // Verify quantity updated (assuming it goes to 2)
+    // This might depend on the initial state, but checking for "2" or price change is better than explicit wait
+    // For now, just ensuring no error on click is a start, but ideally we check the quantity input or text
+    // await expect(page.getByText("Quantity: 2")).toBeVisible(); // Example if applicable
   });
 
   test("should remove item from cart", async ({ page }) => {
@@ -85,19 +89,18 @@ test.describe("Guest Checkout Flow", () => {
     // Wait for cart drawer to open
     await expect(
       page.getByRole("heading", { name: /towel rack/i })
-    ).toBeVisible({ timeout: 10000 });
+    ).toBeVisible();
 
     // Find and click remove button (trash icon or "Remove" text)
     const removeButton = page
       .getByRole("button", { name: /remove|delete/i })
       .first();
-    if (await removeButton.isVisible({ timeout: 2000 })) {
-      await removeButton.click();
-      // Verify cart shows empty state
-      await expect(page.getByText(/empty|no items/i)).toBeVisible({
-        timeout: 5000,
-      });
-    }
+    
+    await expect(removeButton).toBeVisible();
+    await removeButton.click();
+
+    // Verify cart shows empty state
+    await expect(page.getByText(/empty|no items/i)).toBeVisible();
   });
 
   test("should proceed to checkout", async ({ page }) => {
@@ -109,31 +112,31 @@ test.describe("Guest Checkout Flow", () => {
     // Wait for cart drawer
     await expect(
       page.getByRole("heading", { name: /towel rack/i })
-    ).toBeVisible({ timeout: 10000 });
+    ).toBeVisible();
 
     // Click checkout button/link
     const checkoutLink = page.getByRole("link", { name: /checkout|proceed/i });
-    if (await checkoutLink.isVisible({ timeout: 2000 })) {
-      await checkoutLink.click();
-      // Verify checkout page loads
-      await expect(page).toHaveURL(/\/checkout/);
-    }
+    await expect(checkoutLink).toBeVisible();
+    await checkoutLink.click();
+
+    // Verify checkout page loads
+    await expect(page).toHaveURL(/\/checkout/);
   });
 
   test("should fill shipping information", async ({ page }) => {
     // Navigate directly to checkout page
     await page.goto("/checkout");
 
-    // Fill shipping form if fields exist
+    // Fill shipping form
     const firstNameInput = page.getByLabel(/first name/i);
-    if (await firstNameInput.isVisible({ timeout: 2000 })) {
-      await firstNameInput.fill("Test");
-      await page.getByLabel(/last name/i).fill("User");
-      await page.getByLabel(/email/i).fill("test@example.com");
+    await expect(firstNameInput).toBeVisible();
+    
+    await firstNameInput.fill("Test");
+    await page.getByLabel(/last name/i).fill("User");
+    await page.getByLabel(/email/i).fill("test@example.com");
 
-      // Verify form is filled
-      await expect(firstNameInput).toHaveValue("Test");
-    }
+    // Verify form is filled
+    await expect(firstNameInput).toHaveValue("Test");
   });
 
   test("should display order summary on checkout", async ({ page }) => {
@@ -142,9 +145,7 @@ test.describe("Guest Checkout Flow", () => {
     await expect(page.getByRole("heading", { name: "The Nuzzle" })).toBeVisible();
     await page.getByRole("button", { name: /hang it up|add to cart/i }).click();
 
-    // Wait for cart to update
-    await page.waitForTimeout(1000);
-
+    // Wait for cart to update - implicit wait via next assertion is better
     // Navigate to checkout
     await page.goto("/checkout");
 

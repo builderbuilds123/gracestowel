@@ -56,8 +56,8 @@ test.describe("Visual Regression", () => {
         .getByRole("button", { name: /hang it up|add to cart/i })
         .click();
 
-      // Wait for cart drawer animation
-      await page.waitForTimeout(500);
+      // Wait for cart drawer to be visible
+      await expect(page.getByRole("heading", { name: /towel rack/i })).toBeVisible();
 
       // Screenshot the visible cart drawer area
       await expect(page).toHaveScreenshot("cart-drawer.png", {
@@ -69,14 +69,16 @@ test.describe("Visual Regression", () => {
       await page.goto("/");
       await page.waitForLoadState("networkidle");
 
-      // Try to open cart via button
+      // Open cart via button
       const cartButton = page
         .locator('button[aria-label*="cart" i], button:has(svg)')
         .first();
-      if (await cartButton.isVisible({ timeout: 2000 })) {
-        await cartButton.click();
-        await page.waitForTimeout(300);
-      }
+      
+      await expect(cartButton).toBeVisible();
+      await cartButton.click();
+      
+      // Wait for cart drawer to be visible before screenshot
+      await expect(page.getByRole("heading", { name: /towel rack/i })).toBeVisible();
 
       await expect(page).toHaveScreenshot("cart-empty.png", {
         maxDiffPixelRatio: 0.05,
