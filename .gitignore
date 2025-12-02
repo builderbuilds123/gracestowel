@@ -54,5 +54,3 @@ apps/e2e/test-results/*
 # Reports
 *-report.json
 trivy_report.txt
-
-/docs/
