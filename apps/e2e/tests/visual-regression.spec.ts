@@ -70,9 +70,7 @@ test.describe("Visual Regression", () => {
       await page.waitForLoadState("networkidle");
 
       // Open cart via button
-      const cartButton = page
-        .locator('button[aria-label*="cart" i], button:has(svg)')
-        .first();
+      const cartButton = page.getByRole("button", { name: /cart/i });
       
       await expect(cartButton).toBeVisible();
       await cartButton.click();
