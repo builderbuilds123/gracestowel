@@ -1,3 +1,9 @@
+---
+title: Environment Setup Guide
+description: Configuration guide for Staging and Production environments.
+last-updated: 2025-12-02
+---
+
 # Environment Setup Guide: Staging & Production
 
 This guide details how to configure strict separation between Staging and Production environments for Grace Stowel, covering Cloudflare Workers (Storefront) and GitHub Actions.

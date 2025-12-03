@@ -1,5 +1,8 @@
 ---
-stepsCompleted: [1, 2, 3]
+title: System Architecture & Decisions
+description: Comprehensive architectural overview and decision records for Grace Stowel.
+last-updated: 2025-12-02
+stepsCompleted: [1, 2, 3, 4, 5]
 inputDocuments:
   - docs/posthog-analytics-integration-prd.md
   - docs/cookie-policy-prd.md
@@ -14,7 +17,7 @@ inputDocuments:
   - docs/index.md
   - repomix-output.xml (comprehensive codebase analysis)
 workflowType: 'architecture'
-lastStep: 3
+lastStep: 5
 project_name: 'gracestowel'
 user_name: 'Big Dick'
 date: '2025-12-01'
@@ -22,9 +25,50 @@ hasProjectContext: false
 systemContext: 'Complete repository analysis completed via Explore agent - full understanding of Medusa v2 backend, React Router v7 storefront, modules, workflows, deployment infrastructure'
 ---
 
-# Architecture Decision Document
+# System Architecture & Decisions
 
-_This document builds collaboratively through step-by-step discovery. Sections are appended as we work through each architectural decision together._
+## System Overview
+
+```mermaid
+flowchart TD
+    subgraph Client ["Client Layer"]
+        Browser["User Browser"]
+    end
+
+    subgraph Edge ["Edge Layer (Cloudflare)"]
+        Storefront["Storefront App\n(React Router v7)"]
+    end
+
+    subgraph Backend ["Backend Layer (Railway)"]
+        Medusa["Medusa v2 Server\n(Node.js)"]
+        Worker["Background Worker\n(BullMQ)"]
+    end
+
+    subgraph Data ["Data Layer (Railway)"]
+        DB[(PostgreSQL)]
+        Cache[(Redis)]
+    end
+
+    subgraph External ["External Services"]
+        Stripe["Stripe\n(Payments)"]
+        Resend["Resend\n(Emails)"]
+        PostHog["PostHog\n(Analytics)"]
+    end
+
+    Browser <-->|HTTPS| Storefront
+    Storefront <-->|API/HTTPS| Medusa
+    Medusa <-->|TCP| DB
+    Medusa <-->|TCP| Cache
+    Worker <-->|TCP| Cache
+    Worker <-->|TCP| DB
+    
+    Medusa -->|API| Stripe
+    Medusa -->|API| Resend
+    Medusa -->|API| PostHog
+    Storefront -->|API| PostHog
+```
+
+_This document builds collaboratively through step-by-step discovery. Sections are appended as we work through eachher._
 
 ## Project Context Analysis
 
@@ -332,3 +376,597 @@ This project is a **brownfield integration** - we are extending an existing, pro
 ---
 
 **This base architecture provides the foundation for our three feature integrations. All new architectural decisions will build upon these established patterns.**
+
+## Core Architectural Decisions
+
+### Decision Priority Analysis
+
+**Critical Decisions (Block Implementation):**
+- PostHog event naming convention (simple_snake_case)
+- Transparent Pricing module structure (New Medusa Module)
+- External API client architecture (Individual Client Classes)
+- Price calculation timing (Pre-calculated with daily cron job)
+- Price locking mechanism (Cart-based locking)
+- Fail-safe defaults (Last known good + static fallback)
+
+**Important Decisions (Shape Architecture):**
+- PostHog user identification strategy (Login + Registration + First Order)
+- PostHog dashboard configuration (Pre-configured dashboards)
+- Cookie consent granularity (Information-only, no consent needed)
+- Charity integration pattern (Workflow-based integration)
+
+**Deferred Decisions (Post-MVP):**
+- Advanced PostHog features (session replay, feature flags)
+- Price monitoring alert thresholds (can be adjusted post-launch)
+- Additional charity integrations beyond Tree Nation/CanadaHelps
+
+### PostHog Analytics Integration
+
+**Decision 1.1: Event Naming Convention**
+- **Choice:** Simple snake_case (`product_viewed`, `checkout_started`)
+- **Rationale:** Clean, readable, industry standard, minimal cognitive overhead
+- **Pattern:** `{noun}_{past_tense_verb}` (e.g., `order_placed`, `cart_updated`)
+- **Affects:** All PostHog event capture across backend subscribers and storefront tracking
+
+**Decision 1.2: User Identification Strategy**
+- **Choice:** Login + Registration + First Order
+- **Rationale:** Progressive identification balances privacy with analytics value
+- **Implementation:**
+  - Anonymous until login/registration → `posthog.identify(customer.id)`
+  - Associate first purchase with customer identity
+  - Backend: Event subscribers call `posthog.identify()` on `customer.created` and `order.placed`
+  - Storefront: Client-side identify on auth state change
+- **Affects:** Customer analytics, cohort analysis, retention tracking
+
+**Decision 1.3: Dashboard Configuration**
+- **Choice:** Pre-configured dashboards (no code generation)
+- **Rationale:** PostHog UI provides sufficient flexibility, avoids maintenance burden
+- **Dashboards to create:**
+  - Overview: Traffic, conversions, revenue
+  - Product Analytics: Views, add-to-cart rate, purchase funnel
+  - Performance Monitoring: Web Vitals, API latency, error rates
+- **Affects:** Admin analytics epic, dashboard access stories
+
+**Decision 1.4: Error Capture Strategy**
+- **Choice:** All errors with filtering
+- **Rationale:** Comprehensive visibility with post-hoc filtering in PostHog UI
+- **Implementation:**
+  - Backend: Capture all exceptions via global error handler + PostHog
+  - Storefront: Error boundaries capture React errors, send to PostHog
+  - Filter noise in PostHog UI (e.g., known third-party errors)
+- **Affects:** Production monitoring epic, observability stories
+
+### Cookie Policy Integration
+
+**Decision 2.1: Consent Granularity**
+- **Choice:** Information-only (no consent required)
+- **Rationale:** PostHog tracks admin analytics, not end-user PII; no optional tracking exists
+- **Implementation:**
+  - Display informational popup on first visit
+  - Dismiss button stores `cookie_policy_seen=true` in localStorage
+  - No consent toggles, no granular choices
+  - Purely compliance notification, not consent mechanism
+- **Affects:** Cookie popup UI, PostHog initialization timing
+
+**Decision 2.2: PostHog Initialization Gating**
+- **Choice:** No gating (initialize PostHog immediately)
+- **Rationale:** Admin analytics for business metrics, not user behavior tracking; information-only popup
+- **Implementation:**
+  - PostHog initializes on app load (backend + storefront)
+  - Cookie popup displays independently, purely informational
+  - No blocking or consent checks before analytics
+- **Affects:** PostHog SDK initialization, analytics capture timing
+
+### Transparent Pricing & Impact Architecture
+
+**Decision 3.1: Pricing Module Structure**
+- **Choice:** New Medusa Module (`pricing-module`)
+- **Rationale:** Follows existing pattern (Review module), encapsulates domain logic, type-safe integration
+- **Module Structure:**
+  ```
+  apps/backend/src/modules/pricing/
+  ├── models/
+  │   ├── product-pricing.ts (cost data, breakdown, locked prices)
+  │   └── pricing-cache.ts (last known good values)
+  ├── services/
+  │   ├── pricing.ts (core calculation logic)
+  │   ├── external-api.ts (Cloudflare, Railway, Meta, Google, TikTok)
+  │   └── charity.ts (Tree Nation, CanadaHelps integration)
+  └── index.ts (module registration)
+  ```
+- **Affects:** All pricing-related stories, database migrations, API routes
+
+**Decision 3.2: External API Client Architecture**
+- **Choice:** Individual Client Classes
+- **Rationale:** Clean separation, easier testing, independent rate limit handling, clear error boundaries
+- **Implementation:**
+  ```typescript
+  // apps/backend/src/modules/pricing/services/clients/
+  CloudflareApiClient.ts
+  RailwayApiClient.ts
+  MetaAdsApiClient.ts
+  GoogleAdsApiClient.ts
+  TikTokAdsApiClient.ts
+  TreeNationApiClient.ts
+  CanadaHelpsApiClient.ts
+
+  // Each client handles:
+  // - Authentication
+  // - Rate limiting
+  // - Retry logic
+  // - Redis caching (15-60 min TTL)
+  ```
+- **Affects:** Dynamic cost integration epic, external API stories, caching strategy
+
+**Decision 3.3: Price Calculation Timing**
+- **Choice:** Pre-calculated with daily cron job
+- **Rationale:** Meets <100ms PDP load requirement, daily price updates sufficient, predictable API usage
+- **Implementation:**
+  - BullMQ scheduled job runs daily (configurable time, e.g., 2 AM)
+  - Calculates all product prices, stores in Redis + DB
+  - PDP loads from cache (instant, no API calls during user session)
+  - Prices remain stable for 24 hours
+- **Affects:** Performance NFRs, price calculation epic, background job architecture
+
+**Decision 3.4: Price Locking Mechanism**
+- **Choice:** Cart-based locking
+- **Rationale:** Balances freshness with stability, follows standard e-commerce pattern, leverages Medusa cart architecture
+- **Implementation:**
+  ```typescript
+  // When adding to cart:
+  cartItem.locked_price = {
+    total: calculatedPrice.total,
+    breakdown: calculatedPrice.breakdown,
+    locked_at: new Date(),
+    expires_at: addDays(new Date(), 1) // 24-hour lock
+  }
+  // Price locked from add-to-cart → checkout → payment
+  ```
+- **Affects:** Cart state management, session locking stories, checkout flow
+
+**Decision 3.5: Charity Integration Pattern**
+- **Choice:** Workflow-based integration
+- **Rationale:** Built-in retry logic, compensation support, fail-open requirement, better observability
+- **Implementation:**
+  ```typescript
+  // Workflow: apps/backend/src/workflows/trigger-charity-donation.ts
+  export const triggerCharityDonationWorkflow = createWorkflow(
+    "trigger-charity-donation",
+    (input: { order_id: string; charity: "tree_nation" | "canada_helps" }) => {
+      const donation = step("call-charity-api", async (input) => {
+        // API call with timeout, fail-open on error
+      })
+
+      step("record-donation-attempt", async (input) => {
+        // Store donation record in DB regardless of success
+      })
+    }
+  )
+
+  // Subscriber: apps/backend/src/subscribers/order-placed.ts
+  async subscribe(orderService) {
+    orderService.on("order.placed", async ({ id }) => {
+      await triggerCharityDonationWorkflow.run({ order_id: id })
+    })
+  }
+  ```
+- **Affects:** Charity integration epic, order-placed event handling, async job processing
+
+**Decision 3.6: Fail-Safe Defaults**
+- **Choice:** Last known good values + static fallback (hybrid approach)
+- **Rationale:** System always functional, accurate when possible, transparent about data staleness
+- **Implementation Hierarchy:**
+  1. **Primary:** Use current cached values (from daily cron job)
+  2. **Secondary:** If cache empty/expired + API fails → use last known good value (persisted in DB)
+  3. **Tertiary:** If no historical data → use static fallback estimates (hardcoded in config)
+  4. **UI Indicator:** Show staleness badge when using cached/old data
+  ```typescript
+  async getPricingData(productId: string): Promise<PricingData> {
+    try {
+      // 1. Try fresh calculation (daily cron already ran)
+      const cached = await redis.get(`pricing:${productId}`)
+      if (cached && !isExpired(cached)) return cached
+
+      // 2. Try last known good (DB persisted)
+      const lastKnown = await db.pricing.findOne({ product_id: productId })
+      if (lastKnown) {
+        logger.warn("Using last known good pricing", { age: lastKnown.updated_at })
+        return { ...lastKnown.data, stale: true }
+      }
+
+      // 3. Ultimate fallback: static estimates
+      logger.error("No pricing data, using static fallback")
+      return STATIC_PRICING_ESTIMATES
+    } catch (error) {
+      logger.error("Pricing system failure", error)
+      return STATIC_PRICING_ESTIMATES
+    }
+  }
+  ```
+- **Affects:** Error handling epic, external API resilience, UX during outages
+
+### Decision Impact Analysis
+
+**Implementation Sequence:**
+1. **Foundation:** Pricing module structure + database migrations
+2. **Data Layer:** External API clients with caching (individual classes, Redis TTL)
+3. **Calculation Engine:** Daily cron job for price pre-calculation
+4. **Integration:** Cart-based price locking in Medusa cart system
+5. **Business Logic:** Charity donation workflow triggered by order.placed
+6. **Resilience:** Fail-safe defaults with last known good + static fallback
+7. **Analytics Foundation:** PostHog event naming standards + identification strategy
+8. **UI Components:** Cookie policy popup (information-only), price breakdown components
+9. **Monitoring:** PostHog dashboards + error capture configuration
+
+**Cross-Component Dependencies:**
+- **Cookie Policy → PostHog:** Information-only popup, no gating (PostHog initializes immediately)
+- **Pricing Module → Cart:** Locked prices stored in cart items, coordinated state
+- **Pricing Module → Charity Workflow:** Order-placed event triggers donation workflow with pricing context
+- **External API Clients → Redis Cache:** All clients leverage shared Redis layer (15-60 min TTL)
+- **PostHog → Error Boundaries:** React error boundaries capture exceptions, send to PostHog
+- **Daily Cron → DB Persistence:** Calculated prices stored in DB as last known good fallback
+
+## Implementation Patterns & Consistency Rules
+
+### Pattern Categories Defined
+
+**Critical Conflict Points Identified:** 18 areas where AI agents could make different implementation choices
+
+### Naming Patterns
+
+#### Backend Naming Conventions
+
+**Module Naming:**
+- Module directory: `kebab-case` (e.g., `review/`, `pricing/`)
+- Module constant: `SCREAMING_SNAKE_CASE` (e.g., `REVIEW_MODULE`, `PRICING_MODULE`)
+- Service class: `PascalCase` + `Service` suffix (e.g., `ReviewModuleService`, `PricingService`)
+
+**Database Naming:**
+- Table names: `snake_case` plural (e.g., `reviews`, `product_pricing`)
+- Column names: `snake_case` (e.g., `product_id`, `locked_price`, `created_at`)
+- Foreign keys: `{table}_id` (e.g., `product_id`, `customer_id`)
+- Indexes: `idx_{table}_{column}` (e.g., `idx_reviews_product_id`)
+- Migration classes: `Migration{YYYYMMDDHHMMSS}` (e.g., `Migration20251127011208`)
+
+**Service & Client Naming:**
+- Service methods: `camelCase` with verb prefix (e.g., `getPricingData()`, `calculatePrice()`, `verifyPurchase()`)
+- Client classes: `PascalCase` + `ApiClient` suffix (e.g., `CloudflareApiClient`, `TreeNationApiClient`)
+- Workflow names: `kebab-case` (e.g., `"trigger-charity-donation"`, `"calculate-product-pricing"`)
+
+#### API Naming Conventions
+
+**REST Endpoints:**
+- Path segments: `kebab-case` (e.g., `/store/pricing`, `/admin/product-pricing`)
+- Resource names: Plural for collections (e.g., `/products`, `/reviews`)
+- Route file: Always `route.ts` in Medusa convention
+- Query parameters: `camelCase` (e.g., `?productId=123`, `?includeBreakdown=true`)
+
+**HTTP Headers:**
+- Custom headers: `X-{Service}-{Purpose}` (e.g., `X-PostHog-Event-Id`)
+
+#### Storefront Naming Conventions
+
+**Component Naming:**
+- Component file: `PascalCase.tsx` (e.g., `ProductCard.tsx`, `PriceBreakdown.tsx`, `CookieConsent.tsx`)
+- Component function: Matches filename (e.g., `export function ProductCard()`)
+- Props interface: `{ComponentName}Props` (e.g., `ProductCardProps`, `PriceBreakdownProps`)
+
+**JavaScript/TypeScript:**
+- Variables: `camelCase` (e.g., `lockedPrice`, `pricingData`)
+- Constants: `SCREAMING_SNAKE_CASE` for true constants (e.g., `MAX_RETRIES`, `CACHE_TTL`)
+- Functions: `camelCase` with verb prefix (e.g., `handleAddToCart`, `formatPrice`)
+- Event handlers: `handle{Action}` (e.g., `handleDismiss`, `handleSubmit`, `handleClick`)
+- Custom hooks: `use{Feature}` (e.g., `useCart`, `useLocale`, `usePricing`)
+
+**Event Naming:**
+- PostHog events: `snake_case` with `{noun}_{past_tense_verb}` pattern
+  - ✅ Good: `product_viewed`, `checkout_started`, `order_placed`, `cart_updated`
+  - ❌ Bad: `productViewed`, `ProductView`, `product-viewed`
+
+### Structure Patterns
+
+#### Backend Project Organization
+
+**Module Structure (Follow Review Module Pattern):**
+```
+apps/backend/src/modules/{module-name}/
+├── models/               # Data models (MikroORM entities)
+├── services/             # Business logic services
+│   ├── {module}.ts      # Main service
+│   └── clients/         # External API clients (if needed)
+├── migrations/           # Database migrations
+├── index.ts             # Module registration & exports
+└── types.ts             # TypeScript type definitions
+```
+
+**Test Location:**
+- Unit tests: Co-located with source (`*.unit.spec.ts`)
+- Integration tests: `apps/backend/integration-tests/http/{feature}/`
+
+**API Routes:**
+- Store API: `apps/backend/src/api/store/{resource}/route.ts`
+- Admin API: `apps/backend/src/api/admin/{resource}/route.ts`
+- Webhooks: `apps/backend/src/api/webhooks/{service}/route.ts`
+
+**Workflows:**
+- Location: `apps/backend/src/workflows/{workflow-name}.ts`
+- Naming: `{verb}WorkflowName` (e.g., `triggerCharityDonationWorkflow`, `calculateProductPricingWorkflow`)
+
+**Subscribers:**
+- Location: `apps/backend/src/subscribers/{event-name}.ts`
+- Naming: `{event}Subscriber` (e.g., `order-placed.ts`, `customer-created.ts`)
+
+#### Storefront Project Organization
+
+**Component Structure:**
+```
+apps/storefront/app/components/
+├── {FeatureName}.tsx        # Main feature components (PascalCase)
+├── {FeatureName}Button.tsx  # Sub-components (related components grouped)
+└── ui/                      # Reusable UI primitives (if needed)
+```
+
+**Utilities & Helpers:**
+- Utils: `apps/storefront/app/utils/{utility-name}.ts` (e.g., `posthog.ts`, `format.ts`)
+- Lib: `apps/storefront/app/lib/{library-name}.ts` (e.g., `medusa.ts`)
+- Hooks: Custom hooks co-located with components or in `app/hooks/` if shared
+
+**Context Providers:**
+- Location: `apps/storefront/app/context/{FeatureName}Context.tsx`
+- Export: `{FeatureName}Provider` and `use{FeatureName}` hook
+- Examples: `CartContext.tsx` → `CartProvider` + `useCart()`
+
+**Routes:**
+- Route structure follows React Router v7 file-based routing
+- Route files: `app/routes/{path}.tsx`
+
+### Format Patterns
+
+#### API Response Formats
+
+**Success Response (Medusa Standard):**
+```typescript
+// Direct resource response (no wrapper)
+{ id: "123", name: "Product", price: 1000 }
+
+// Collection response
+{ products: [...], count: 10, offset: 0, limit: 20 }
+```
+
+**Error Response (Medusa Standard):**
+```typescript
+{
+  type: "invalid_data",
+  message: "Product not found",
+  code: "PRODUCT_NOT_FOUND"  // Optional
+}
+```
+
+**Custom API Responses (for new endpoints):**
+- Follow Medusa convention: Direct resource response, no `{ data: {...} }` wrapper
+- Always include relevant metadata for collections (count, pagination)
+
+#### Data Exchange Formats
+
+**JSON Field Naming:**
+- API payloads: `snake_case` (matches database, Medusa convention)
+- Frontend props: `camelCase` (JavaScript convention)
+- Transform at API boundary using loaders/actions
+
+**Date/Time Format:**
+- API responses: ISO 8601 strings (e.g., `"2025-12-01T10:30:00.000Z"`)
+- Database storage: PostgreSQL `TIMESTAMP WITH TIME ZONE`
+- Display: Localized format via `Intl.DateTimeFormat`
+
+**Boolean Representation:**
+- Always `true`/`false` (never `1`/`0` or `"true"`/`"false"`)
+
+**Null Handling:**
+- Use `null` for absent optional values
+- Use `undefined` for uninitialized/missing data in frontend
+- Never use empty strings `""` to represent missing data
+
+### Communication Patterns
+
+#### Event System Patterns
+
+**PostHog Event Naming (Decided):**
+- Format: `snake_case` with `{noun}_{past_tense_verb}`
+- Examples: `product_viewed`, `cart_updated`, `checkout_started`, `order_placed`
+
+**PostHog Event Properties:**
+- Structure: Flat object with `snake_case` keys
+```typescript
+posthog.capture("product_viewed", {
+  product_id: "prod_123",
+  product_name: "Grace Towel",
+  product_price: 2999,
+  currency: "CAD",
+  timestamp: new Date().toISOString()
+})
+```
+
+**Medusa Event Naming:**
+- Format: `{resource}.{action}` (Medusa convention)
+- Examples: `order.placed`, `customer.created`, `product.updated`
+
+**Custom Workflow Events:**
+- Format: `kebab-case` workflow names
+- Input/output: Strongly typed TypeScript interfaces
+
+#### State Management Patterns
+
+**React Context Updates:**
+- Immutable updates using spread syntax
+- Example:
+```typescript
+setState(prev => ({ ...prev, locked_price: newPrice }))
+```
+
+**localStorage Sync:**
+- Key format: `snake_case` (e.g., `cookie_policy_seen`, `cart_items`)
+- Always JSON.stringify/parse for complex data
+- Sync on state change, not on every render
+
+**Cart State Coordination:**
+- Source of truth: Backend (Medusa cart)
+- Frontend: Optimistic updates with rollback on error
+- Price locking: Stored in cart items, immutable after lock
+
+### Process Patterns
+
+#### Error Handling Patterns
+
+**Backend Error Handling:**
+```typescript
+try {
+  // Operation
+} catch (error) {
+  logger.error("Operation failed", { error, context })
+  posthog.capture("error_occurred", { error_type: error.name })
+  throw new MedusaError(MedusaError.Types.INVALID_DATA, "User-friendly message")
+}
+```
+
+**Storefront Error Handling:**
+```typescript
+// Error boundaries for React errors
+<ErrorBoundary fallback={<ErrorFallback />}>
+  <Component />
+</ErrorBoundary>
+
+// Async operation error handling
+catch (error) {
+  console.error("Failed to load data", error)
+  posthog.capture("error_occurred", { error_type: error.message })
+  setError("Failed to load pricing data. Please try again.")
+}
+```
+
+**PostHog Error Capture:**
+- **Backend:** All exceptions via global error handler
+- **Storefront:** Error boundaries capture React errors
+- **Both:** Manual capture for critical operation failures
+- Filter noise in PostHog UI, don't filter at capture time
+
+**Fail-Safe Patterns:**
+- External API failures: Use fallback hierarchy (cache → last known good → static default)
+- Non-critical failures: Log + continue (don't block user flow)
+- Critical failures: Show error message + provide retry action
+
+#### Loading State Patterns
+
+**Loading State Naming:**
+- Boolean flags: `isLoading`, `isPending`, `isSubmitting`
+- Never use `loading: true` object notation
+
+**Loading UI Patterns:**
+- **Fast operations (<500ms):** No loading indicator
+- **Medium operations (500ms-2s):** Inline spinner or skeleton
+- **Long operations (>2s):** Full-page loading overlay or suspense boundary
+
+**Suspense Boundaries:**
+- Place at route level for data loading
+- Use React Router's built-in suspense support
+- Fallback: Skeleton UI matching expected layout
+
+### Enforcement Guidelines
+
+**All AI Agents MUST:**
+
+1. **Follow Existing Patterns:** Before creating new files/modules, examine existing examples (Review module, ProductCard component)
+2. **Use TypeScript Strict Mode:** All new code must pass `tsc --noEmit` with strict: true
+3. **Match Naming Conventions:** Database snake_case, API snake_case, Frontend camelCase, Components PascalCase
+4. **Preserve Module Structure:** New backend modules follow Review module organization exactly
+5. **Respect Architectural Decisions:** Use decided patterns (cart-based locking, workflow-based charity, pre-calculated pricing)
+6. **Test Co-location:** Unit tests go next to source files with `.unit.spec.ts` extension
+7. **Event Naming Consistency:** PostHog events are `snake_case {noun}_{verb}`, Medusa events are `{resource}.{action}`
+8. **Fail-Open Pattern:** Non-critical integrations (charity, pricing) must fail gracefully without blocking user flow
+9. **Type Safety:** Share types between frontend/backend for API contracts
+
+**Pattern Verification:**
+- Pre-commit hooks validate TypeScript compilation
+- ESLint enforces naming conventions (already configured)
+- Code review checks architectural decision adherence
+
+**Pattern Evolution:**
+- Document pattern violations in architecture.md
+- Propose pattern updates via architecture workflow
+- Never silently deviate from established patterns
+
+### Pattern Examples
+
+**Good Example: New Pricing API Endpoint**
+```typescript
+// apps/backend/src/api/store/pricing/route.ts
+import { MedusaRequest, MedusaResponse } from "@medusajs/medusa"
+import { PRICING_MODULE } from "../../../modules/pricing"
+import type { PricingService } from "../../../modules/pricing/services/pricing"
+
+export async function GET(req: MedusaRequest, res: MedusaResponse) {
+  const pricingService: PricingService = req.scope.resolve(PRICING_MODULE)
+
+  const { product_id } = req.query  // snake_case query param
+
+  try {
+    const pricing_data = await pricingService.getPricingData(product_id)
+
+    // Direct response (no wrapper)
+    res.json(pricing_data)
+  } catch (error) {
+    logger.error("Failed to get pricing data", { error, product_id })
+    throw new MedusaError(MedusaError.Types.NOT_FOUND, "Pricing data not available")
+  }
+}
+```
+
+**Good Example: New Storefront Component**
+```typescript
+// apps/storefront/app/components/PriceBreakdown.tsx
+interface PriceBreakdownProps {
+  productId: string
+  showDetails?: boolean
+}
+
+export function PriceBreakdown({ productId, showDetails = false }: PriceBreakdownProps) {
+  const [isLoading, setIsLoading] = useState(false)
+  const [pricingData, setPricingData] = useState<PricingData | null>(null)
+
+  const handleToggleDetails = () => {
+    // Event handler naming: handle{Action}
+    posthog.capture("price_breakdown_toggled", { product_id: productId })
+  }
+
+  // Component logic...
+}
+```
+
+**Anti-Pattern Examples:**
+
+❌ **Bad: Inconsistent naming**
+```typescript
+// DON'T: Mixed naming conventions
+export class pricing_service {}  // Should be PricingService
+const ProductID = "123"          // Should be productId
+```
+
+❌ **Bad: Wrapped API response**
+```typescript
+// DON'T: Add unnecessary wrappers
+res.json({ data: pricingData, success: true })  // Should be direct: res.json(pricingData)
+```
+
+❌ **Bad: Fail-closed integration**
+```typescript
+// DON'T: Block checkout on non-critical failure
+if (!charityApiResponse) {
+  throw new Error("Cannot complete order")  // Should fail-open
+}
+```
+
+❌ **Bad: Inconsistent event naming**
+```typescript
+// DON'T: Mix event naming styles
+posthog.capture("productViewed")     // Should be product_viewed
+posthog.capture("checkout-started")  // Should be checkout_started
+```

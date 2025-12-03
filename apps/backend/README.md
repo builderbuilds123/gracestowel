@@ -1,3 +1,9 @@
+---
+title: Medusa Backend Configuration
+description: Configuration guide for Medusa V2 backend on Railway.
+last-updated: 2025-12-02
+---
+
 # Medusa Backend Configuration
 
 This document explains how the Medusa V2 backend is configured for both local development and Railway deployment.

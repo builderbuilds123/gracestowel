@@ -1,0 +1,31 @@
+{
+  "repository_type": "monorepo",
+  "parts": [
+    {
+      "id": "backend",
+      "type": "backend",
+      "root_path": "apps/backend",
+      "tech_stack": "Medusa v2, Node.js, PostgreSQL"
+    },
+    {
+      "id": "storefront",
+      "type": "web",
+      "root_path": "apps/storefront",
+      "tech_stack": "React Router v7, Cloudflare Workers"
+    }
+  ],
+  "integration_points": [
+    {
+      "from": "storefront",
+      "to": "backend",
+      "type": "REST API",
+      "details": "Storefront consumes Backend Store API"
+    },
+    {
+      "from": "stripe",
+      "to": "backend",
+      "type": "Webhook",
+      "details": "Stripe sends events to Backend Webhooks"
+    }
+  ]
+}

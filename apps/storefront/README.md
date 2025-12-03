@@ -1,4 +1,10 @@
-# Welcome to React Router!
+---
+title: Grace Stowel Storefront
+description: React Router v7 storefront application documentation.
+last-updated: 2025-12-02
+---
+
+# Grace Stowel Storefront
 
 A modern, production-ready template for building full-stack React applications using React Router.
 

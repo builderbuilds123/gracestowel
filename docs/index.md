@@ -1,39 +1,53 @@
 # Grace Stowel - Project Documentation
 
-## Project Overview
+## Project Documentation Index
+
+### Project Overview
 
 - **Type:** Monorepo with 2 parts
 - **Primary Language:** TypeScript
 - **Architecture:** Headless Commerce (Medusa v2 + React Router v7)
 
-## Quick Reference
+### Quick Reference
 
-### Backend (`apps/backend`)
-- **Type:** Headless Commerce Engine
-- **Tech Stack:** Medusa v2, Node.js, PostgreSQL, Redis
+#### Backend (backend)
+
+- **Type:** Backend API
+- **Tech Stack:** Medusa v2, Node.js, PostgreSQL
 - **Root:** `apps/backend`
 
-### Storefront (`apps/storefront`)
-- **Type:** Edge-rendered Web App
-- **Tech Stack:** React Router v7, Cloudflare Workers, TailwindCSS
+#### Storefront (storefront)
+
+- **Type:** Storefront Web App
+- **Tech Stack:** React Router v7, Cloudflare Workers
 - **Root:** `apps/storefront`
 
-## Generated Documentation
+### Generated Documentation
 
 - [Project Overview](./project-overview.md)
-- [Architecture](./architecture/architecture.md)
 - [Source Tree Analysis](./source-tree-analysis.md)
+- [Integration Architecture](./integration-architecture.md)
+- [Deployment Guide](./deployment-guide.md)
+
+#### Backend
+- [Architecture](./architecture-backend.md)
+- [API Contracts](./api-contracts-backend.md)
+- [Data Models](./data-models-backend.md)
+
+#### Storefront
+- [Architecture](./architecture-storefront.md)
+- [Component Inventory](./component-inventory-storefront.md)
+
+### Existing Documentation
+
 - [Development Guide](./development-guide.md)
+- [Environment Registry](./env-registry.md)
+- [Epics](./epics.md)
+- [UX Design Specification](./ux-design-specification.md)
+- [PRD - Cookie Policy](./cookie-policy-prd.md)
+- [PRD - PostHog Integration](./posthog-analytics-integration-prd.md)
 
-## Existing Documentation
-
-- [Backend API Reference](./api/BACKEND_API.md)
-- [Storefront API Reference](./api/STOREFRONT_API.md)
-- [Storefront Components](./components/STOREFRONT_COMPONENTS.md)
-- [Environment Setup](./development/ENVIRONMENT_SETUP.md)
-- [Product Requirements](./prd/2025-11-25_ecommerce_v1_prd.md)
-
-## Getting Started
+### Getting Started
 
 To get the project running locally:
 

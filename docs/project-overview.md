@@ -2,39 +2,36 @@
 
 ## Executive Summary
 
-Grace Stowel is a modern e-commerce platform specializing in premium Turkish cotton towels. The system is built on a **headless architecture** separating the frontend storefront from the backend commerce engine.
+**Grace Stowel** is a modern e-commerce platform built on a Headless Commerce architecture. It combines a robust, extensible backend engine (Medusa v2) with a high-performance, edge-rendered storefront (React Router v7). The system is designed for scalability, flexibility, and a premium user experience.
 
-- **Storefront:** A high-performance **React Router v7** application deployed to **Cloudflare Workers** for edge delivery.
-- **Backend:** A **Medusa v2** headless commerce engine hosted on **Railway**, handling products, orders, and business logic.
-- **Infrastructure:** Utilizes **PostgreSQL** and **Redis** for data persistence and caching, with **Stripe** for payments.
+## Repository Structure
 
-## Technology Stack Summary
+This project is a **Monorepo** containing:
 
-| Component | Technology | Version | Description |
-| :--- | :--- | :--- | :--- |
-| **Storefront** | React Router | v7.9.2 | SSR framework for edge deployment |
-| | React | v19.1.1 | UI library |
-| | TailwindCSS | v4.1.13 | Utility-first styling |
-| | Cloudflare Workers | - | Edge runtime environment |
-| **Backend** | Medusa | v2.11.3 | Headless commerce framework |
-| | Node.js | >=20 | Server runtime |
-| | PostgreSQL | - | Primary database |
-| | Redis | - | Cache and event queue |
-| **Integrations** | Stripe | v20 | Payment processing |
-| | Resend | - | Email notifications |
+- **Backend**: `apps/backend` (Medusa v2)
+- **Storefront**: `apps/storefront` (React Router v7)
 
-## Architecture Classification
+## Technology Stack
 
-- **Type:** **Monorepo** (Multi-part)
-- **Pattern:** **Headless Commerce** (Decoupled Frontend/Backend)
-- **Repository Structure:**
-    - `apps/storefront`: Frontend application
-    - `apps/backend`: Backend API and Admin
+| Component | Technology | Description |
+| :--- | :--- | :--- |
+| **Backend** | Medusa v2 | Headless Commerce Engine |
+| **Database** | PostgreSQL | Relational Database |
+| **Queue** | Redis | Event Bus & Cache |
+| **Storefront** | React Router v7 | Edge-rendered Web App |
+| **Styling** | TailwindCSS | Utility-first CSS |
+| **Deployment** | Railway / Cloudflare | Infrastructure |
 
-## Documentation Status
+## Architecture Type
 
-This documentation was generated via a **Quick Scan** of the repository.
+**Headless Commerce / Modular Monolith**
 
+The backend serves as the central source of truth for data and business logic, exposing APIs consumed by the decoupled storefront.
+
+## Documentation Index
+
+- [Architecture - Backend](./architecture-backend.md)
+- [Architecture - Storefront](./architecture-storefront.md)
 - [Source Tree Analysis](./source-tree-analysis.md)
-- [Architecture](./architecture.md) _(To be generated)_
-- [Development Guide](./development-guide.md) _(To be generated)_
+- [Integration Architecture](./integration-architecture.md)
+- [Deployment Guide](./deployment-guide.md)

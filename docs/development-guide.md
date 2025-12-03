@@ -1,3 +1,9 @@
+---
+title: Development Guide
+description: Setup instructions and workflows for local development.
+last-updated: 2025-12-02
+---
+
 # Development Guide
 
 ## Prerequisites
@@ -16,7 +22,7 @@
     ```bash
     cp apps/backend/.env.template apps/backend/.env
     ```
-2.  Update `DATABASE_URL` and `REDIS_URL` with your local or dev database credentials.
+2.  Update `DATABASE_URL` and `REDIS_URL` with your local or dev database credentials. See [Environment Setup](./devops/environment-setup.md) for details.
 
 ### Storefront (`apps/storefront`)
 
