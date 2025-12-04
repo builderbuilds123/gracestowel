@@ -42,6 +42,7 @@ ENV HOST=0.0.0.0
 # Copy built app and dependencies
 COPY --from=builder --chown=node:node /app/node_modules ./node_modules
 COPY --from=builder --chown=node:node /app/.medusa ./.medusa
+COPY --from=builder --chown=node:node /app/.medusa/server/public ./.medusa/server/public
 COPY --from=builder --chown=node:node /app/medusa-config.ts ./medusa-config.ts
 COPY --from=builder --chown=node:node /app/package.json ./package.json
 COPY --from=builder --chown=node:node /app/tsconfig.json ./tsconfig.json
