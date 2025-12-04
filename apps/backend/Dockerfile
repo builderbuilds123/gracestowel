@@ -51,4 +51,4 @@ COPY --from=builder --chown=node:node /app/src ./src
 USER node
 
 EXPOSE 9000
-CMD ["sh", "-c", "npx medusa db:migrate && npm run start"]
+CMD ["sh", "-c", "echo 'Listing .medusa directory:' && ls -R .medusa && npx medusa db:migrate && npm run start"]
