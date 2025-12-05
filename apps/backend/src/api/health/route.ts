@@ -27,6 +27,7 @@ export async function GET(
     console.error('[PostHog] Failed to track health check:', error)
   }
 
+  console.log('[Health Check] Endpoint hit')
   res.status(200).json({
     status: "ok",
     timestamp: new Date().toISOString(),

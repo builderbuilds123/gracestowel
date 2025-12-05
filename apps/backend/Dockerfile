@@ -36,7 +36,7 @@ FROM base AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
-ENV PORT=9000
+
 ENV HOST=0.0.0.0
 
 # Copy built app and dependencies
