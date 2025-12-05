@@ -42,7 +42,7 @@ ENV HOST=0.0.0.0
 # Copy built app and dependencies
 COPY --from=builder --chown=node:node /app/node_modules ./node_modules
 COPY --from=builder --chown=node:node /app/.medusa ./.medusa
-COPY --from=builder --chown=node:node /app/.medusa/server/public ./.medusa/server/public
+COPY --from=builder --chown=node:node /app/.medusa/server/public ./public
 COPY --from=builder --chown=node:node /app/medusa-config.ts ./medusa-config.ts
 COPY --from=builder --chown=node:node /app/package.json ./package.json
 COPY --from=builder --chown=node:node /app/tsconfig.json ./tsconfig.json
@@ -51,4 +51,4 @@ COPY --from=builder --chown=node:node /app/src ./src
 USER node
 
 EXPOSE 9000
-CMD ["sh", "-c", "echo 'Current NODE_ENV: $NODE_ENV'; if [ -f .medusa/server/public/admin/index.html ]; then echo 'FOUND index.html'; else echo 'MISSING index.html at .medusa/server/public/admin/index.html'; echo 'Listing .medusa directory:'; ls -R .medusa; exit 1; fi; npx medusa db:migrate && npm run start"]
+CMD ["sh", "-c", "echo 'Current NODE_ENV: $NODE_ENV'; if [ -f public/admin/index.html ]; then echo 'FOUND index.html'; else echo 'MISSING index.html at public/admin/index.html'; echo 'Listing directories:'; ls -R public; exit 1; fi; npx medusa db:migrate && npm run start"]
