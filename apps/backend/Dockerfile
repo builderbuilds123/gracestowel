@@ -51,4 +51,4 @@ COPY --from=builder --chown=node:node /app/src ./src
 USER node
 
 EXPOSE 9000
-CMD ["sh", "-c", "echo 'Listing .medusa directory:' && ls -R .medusa && npx medusa db:migrate && npm run start"]
+CMD ["sh", "-c", "echo 'Current NODE_ENV: $NODE_ENV'; if [ -f .medusa/server/public/admin/index.html ]; then echo 'FOUND index.html'; else echo 'MISSING index.html at .medusa/server/public/admin/index.html'; echo 'Listing .medusa directory:'; ls -R .medusa; exit 1; fi; npx medusa db:migrate && npm run start"]
