@@ -35,8 +35,8 @@ development_status:
   0-2-refactor-pdp-to-dynamic-data: done
   epic-0-retrospective: optional
 
-  epic-1: backlog
-  1-1-initialize-posthog-sdk-client-side: backlog
+  epic-1: in-progress
+  1-1-initialize-posthog-sdk-client-side: review
   1-2-track-key-user-events: backlog
   1-3-associate-events-anonymous-id: backlog
   epic-1-retrospective: optional
