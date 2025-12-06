@@ -14,7 +14,7 @@
   {
     "name": "backend",
     "listen": "0.0.0.0:9002",
-    "upstream": "backend:9000",
+    "upstream": "backend:8080",
     "enabled": true
   }
 ]

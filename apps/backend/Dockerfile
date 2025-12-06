@@ -25,9 +25,9 @@ FROM builder AS test
 WORKDIR /app
 
 ENV NODE_ENV=production
-ENV PORT=9000
+ENV PORT=8080
 
-EXPOSE 9000
+EXPOSE 8080
 # Run migrations, seed test data, then start server
 CMD ["sh", "-c", "echo 'Running database migrations...'; npm run migrate; echo 'Seeding test data...'; npm run seed; echo 'Starting server...'; npm run start"]
 
@@ -49,6 +49,6 @@ COPY --from=builder --chown=node:node /app/src ./src
 
 USER node
 
-# Railway will set PORT dynamically, so we don't EXPOSE a specific port
-# The app will use ${PORT:-9000} from package.json start script
+# Railway sets PORT=8080 by default, which the app uses via ${PORT:-8080}
+# No EXPOSE needed as Railway handles port mapping
 CMD ["sh", "-c", "echo 'Current NODE_ENV: $NODE_ENV'; if [ -f public/admin/index.html ]; then echo 'FOUND index.html'; else echo 'MISSING index.html at public/admin/index.html'; echo 'Listing directories:'; ls -R public; exit 1; fi; npm run migrate && npm run start"]

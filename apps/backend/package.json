@@ -16,7 +16,7 @@
     "build": "medusa build",
     "migrate": "medusa db:migrate",
     "seed": "medusa exec ./src/scripts/seed.ts",
-    "start": "medusa start --host 0.0.0.0 --port ${PORT:-9000}",
+    "start": "medusa start --host 0.0.0.0 --port ${PORT:-8080}",
     "dev": "medusa develop",
     "test": "TEST_TYPE=unit NODE_OPTIONS=--experimental-vm-modules jest --silent --runInBand --forceExit",
     "test:unit": "TEST_TYPE=unit NODE_OPTIONS=--experimental-vm-modules jest --silent --runInBand --forceExit",

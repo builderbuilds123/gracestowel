@@ -68,9 +68,9 @@ services:
       AUTH_CORS: http://localhost:5175,https://localhost:5175
       NODE_ENV: test
     ports:
-      - "9003:9000"
+      - "9003:8080"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 10s
       timeout: 5s
       retries: 10

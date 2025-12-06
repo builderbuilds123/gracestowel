@@ -53,7 +53,7 @@ services:
     env_file:
       - ./apps/backend/.env
     ports:
-      - "9000:9000"
+      - "9000:8080"
     volumes:
       - ./apps/backend:/app
       - /app/node_modules
@@ -69,7 +69,7 @@ services:
     depends_on:
       - backend
     environment:
-      MEDUSA_BACKEND_URL: http://backend:9000
+      MEDUSA_BACKEND_URL: http://backend:8080
       NODE_ENV: development
     ports:
       - "5173:5173"
