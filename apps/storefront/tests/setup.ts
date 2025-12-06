@@ -33,12 +33,16 @@ const localStorageMock = (() => {
   };
 })();
 
-// Set up localStorage mock before each test
+// Set up localStorage mock globally
+Object.defineProperty(window, "localStorage", {
+  value: localStorageMock,
+  writable: true,
+});
+
+// Setup before each test (optional, but good for reset)
 beforeEach(() => {
-  Object.defineProperty(window, "localStorage", {
-    value: localStorageMock,
-    writable: true,
-  });
+   // Ensuring it's still there or resetting if needed can be done here, 
+   // but primarily we need it defined early.
 });
 
 // Reset after each test

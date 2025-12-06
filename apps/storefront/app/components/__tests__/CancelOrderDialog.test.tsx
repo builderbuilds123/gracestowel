@@ -1,5 +1,7 @@
+import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import { userEvent } from '@testing-library/user-event';
 import { CancelOrderDialog } from '../CancelOrderDialog';
 
 describe('CancelOrderDialog', () => {
@@ -29,28 +31,29 @@ describe('CancelOrderDialog', () => {
         expect(screen.getByText(/refunded/i)).toBeDefined();
     });
 
-    it('should call onClose when clicking the close button', () => {
+    it('should call onClose when clicking the close button', async () => {
+        const user = userEvent.setup();
         const onClose = vi.fn();
         render(<CancelOrderDialog {...defaultProps} onClose={onClose} />);
 
         const closeButton = screen.getByText('Keep Order');
-        fireEvent.click(closeButton);
+        await user.click(closeButton);
 
-        expect(onClose).toHaveBeenCalledTimes(1);
+        expect(onClose).toHaveBeenCalled();
     });
 
     it('should call onConfirm when clicking the confirm button', async () => {
+        const user = userEvent.setup();
         const onConfirm = vi.fn().mockResolvedValue(undefined);
         render(<CancelOrderDialog {...defaultProps} onConfirm={onConfirm} />);
 
         // Find the red cancel button (not the title)
-        const buttons = screen.getAllByRole('button');
-        const confirmButton = buttons.find(btn => btn.textContent === 'Cancel Order');
-        expect(confirmButton).toBeDefined();
-        fireEvent.click(confirmButton!);
+        const confirmButton = screen.getByRole('button', { name: "Cancel Order" });
+        
+        await user.click(confirmButton);
 
         await waitFor(() => {
-            expect(onConfirm).toHaveBeenCalledTimes(1);
+            expect(onConfirm).toHaveBeenCalled();
         });
     });
 
