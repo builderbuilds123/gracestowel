@@ -79,6 +79,18 @@ export function validateMedusaProduct(item: unknown): MedusaProduct | null {
 }
 
 /**
+ * Safely casts a generic item to MedusaProduct, ensuring types match.
+ * Useful for mapping lists from the SDK.
+ */
+export function castToMedusaProduct(item: unknown): MedusaProduct {
+    const validated = validateMedusaProduct(item);
+    if (!validated) {
+        throw new Error(`Invalid product data encountered: ${JSON.stringify(item)}`);
+    }
+    return validated;
+}
+
+/**
  * Helper to format price from Medusa (prices are in cents)
  */
 export function formatPrice(amount: number, currencyCode: string = "usd"): string {

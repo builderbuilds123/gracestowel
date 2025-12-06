@@ -2,7 +2,7 @@ import type { Route } from "./+types/towels";
 import { useState, useMemo } from "react";
 import { ProductCard } from "../components/ProductCard";
 import { ProductFilters } from "../components/ProductFilters";
-import { getMedusaClient, type MedusaProduct } from "../lib/medusa";
+import { getMedusaClient, castToMedusaProduct, type MedusaProduct } from "../lib/medusa";
 import { productList } from "../data/products";
 import { SlidersHorizontal, X } from "lucide-react";
 import { transformToListItems, type ProductListItem } from "../lib/product-transformer";
@@ -31,9 +31,9 @@ export async function loader({ context }: Route.LoaderArgs) {
         const { products } = await medusa.store.product.list({ limit: 50, fields: "+variants,+variants.prices,+variants.inventory_quantity,+options,+options.values,+images,+categories,+metadata" });
 
         // Transform Medusa products using centralized transformer
-        // Cast to MedusaProduct[] because SDK method returns HttpTypes.StoreProduct which might differ slightly in strictness
-        // but our transformer expects our MedusaProduct interface.
-        const transformedProducts = transformToListItems(products as unknown as MedusaProduct[]);
+        // Use safe casting to ensure type safety matching our MedusaProduct interface
+        const safeProducts = products.map(castToMedusaProduct);
+        const transformedProducts = transformToListItems(safeProducts);
 
         // Extract all unique colors
         const allColors = [...new Set(transformedProducts.flatMap(p => p.colors))].sort();

@@ -76,8 +76,13 @@ Verified codebase via `npm run typecheck` (fixed blocking errors in critical pat
   - `implementation_plan.md`: Final plan execution details.
 
 ## Change Log
-- **2025-12-05:** Refactored PDP loader to use `medusa.store.product.list` via SDK.
-- **2025-12-05:** Refactored `search.tsx`, `towels.tsx`, `api.health.ts`, `sitemap.xml.tsx` to use shared `getMedusaClient`.
-- **2025-12-05:** Deleted `medusa.server.ts`.
+- **2025-12-05**: Updated PDP, Search, and Sitemap to use Medusa JS SDK v2.
+- **2025-12-05**: Removed legacy `medusa.server.ts`.
+- **2025-12-05**: Fixed type safety issues and stabilized `checkout.tsx`.
+- **2025-12-05 - Dev Agent Record**:
+  - Implemented `castToMedusaProduct` helper in `medusa.ts` to ensuring type safety when mapping SDK results to `MedusaProduct`.
+  - Refactored `products.$handle.tsx` to use `defer` (via promise streaming) for `relatedProducts` to improve perceived performance.
+  - Fixed safe casting in `search.tsx`, `towels.tsx`, and `sitemap[.]xml.tsx`.
+  - Verified `medusa.server.ts` deletion.
 - **2025-12-05:** Fixed type errors in `checkout.tsx`, `ProductActions.tsx`, `useMedusaProducts.ts`.
 - **2025-12-05:** Applied code review fixes (Type Safety, Performance, Stability).
