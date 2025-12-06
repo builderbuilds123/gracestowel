@@ -8,7 +8,7 @@
      - **Root Cause:** The actual underlying issue
      - **Solution:** How it was fixed
      - **Prevention:** How to avoid similar bugs -->
-### 2025-12-06 - Docker Build Failure in Medusa Backend
+### 2025-12-06 - Docker Build Failure in Medusa Backend [RESOLVED]
 - **Symptom:** Docker build fails with `npm error could not determine executable to run` (npx issue) or `npm error Missing script: "build"`.
 - **Root Cause:** 
     1. `npx` resolution failure in Alpine.

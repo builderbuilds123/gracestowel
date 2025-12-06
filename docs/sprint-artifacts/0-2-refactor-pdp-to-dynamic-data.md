@@ -1,7 +1,7 @@
 # Story 0.2: Refactor PDP to Dynamic Data
 
 **Epic:** [Epic 0: Architecture & Data Foundation](../epics.md#epic-0-architecture-data-foundation)
-**Status:** ready-for-dev
+**Status:** done
 **Sprint:** Phase 4 Implementation
 **Feature:** Dynamic Content Pivot
 
@@ -86,3 +86,9 @@ Verified codebase via `npm run typecheck` (fixed blocking errors in critical pat
   - Verified `medusa.server.ts` deletion.
 - **2025-12-05:** Fixed type errors in `checkout.tsx`, `ProductActions.tsx`, `useMedusaProducts.ts`.
 - **2025-12-05:** Applied code review fixes (Type Safety, Performance, Stability).
+
+## Completion Notes
+- **2025-12-05:** applied fixes from code review.
+    - Optimized `search.tsx` fallback logic to prevent redundant API calls.
+    - Removed static fallback from `towels.tsx` to strictly adhere to AC.
+    - Retained `data/products.ts` for legacy `CartContext` usage (to be refactored later).

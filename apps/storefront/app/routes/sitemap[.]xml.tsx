@@ -19,7 +19,7 @@ export async function loader({ context }: Route.LoaderArgs) {
         const medusa = getMedusaClient(context);
         const { products } = await medusa.store.product.list({ limit: 100, fields: "+handle" });
         
-        productUrls = products.map(castToMedusaProduct).map((product) => ({
+        productUrls = products.map(castToMedusaProduct).map((product: MedusaProduct) => ({
             url: `/products/${product.handle}`,
             priority: "0.8",
             changefreq: "weekly",
