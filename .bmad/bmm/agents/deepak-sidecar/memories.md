@@ -8,6 +8,11 @@
      - **Root Cause:** The actual underlying issue
      - **Solution:** How it was fixed
      - **Prevention:** How to avoid similar bugs -->
+### 2025-12-06 - Docker Build Failure in Medusa Backend
+- **Symptom:** Docker build fails with `npm error could not determine executable to run` at `RUN npx medusa build`.
+- **Root Cause:** `npx` in node:alpine container failing to resolve the `medusa` binary correctly or attempting to fetch it when it should utilize the local `@medusajs/cli` dependency.
+- **Solution:** Replaced `npx medusa ...` commands with `npm run ...` scripts. Added `"migrate": "medusa db:migrate"` to `package.json` and updated Dockerfile to use `npm run build` and `npm run migrate`.
+- **Prevention:** Always prefer `npm run <script>` over `npx <package>` in Dockerfiles when the package is already a dependency.
 
 ## Solutions That Worked
 
