@@ -37,7 +37,9 @@ development_status:
 
   epic-1: in-progress
   1-1-initialize-posthog-sdk-client-side: review
-  1-2-track-key-user-events: backlog
+  1-2-track-key-user-events:
+    path: docs/sprint-artifacts/1-2-track-key-user-events.md
+    status: review
   1-3-associate-events-anonymous-id: backlog
   epic-1-retrospective: optional
 

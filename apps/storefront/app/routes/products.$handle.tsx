@@ -1,5 +1,5 @@
 import type { Route } from "./+types/products.$handle";
-import { useState, useCallback, Suspense } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
 import { MessageSquarePlus } from "lucide-react";
 import { Await, useLoaderData } from "react-router";
 import { ReviewSection, type Review, type ReviewStats } from "../components/ReviewSection";
@@ -130,7 +130,8 @@ export default function ProductDetail({ loaderData }: Route.ComponentProps) {
     const isOutOfStock = stockStatus === "out_of_stock";
 
     // Track product view in PostHog
-    useState(() => {
+    // Track product view in PostHog
+    useEffect(() => {
         if (typeof window !== 'undefined') {
             import('../utils/posthog').then(({ default: posthog }) => {
                 posthog.capture('product_viewed', {
@@ -142,7 +143,7 @@ export default function ProductDetail({ loaderData }: Route.ComponentProps) {
                 });
             });
         }
-    });
+    }, [product.id, product.handle, product.title, product.price, stockStatus]);
 
     const handleSortChange = useCallback(async (sort: string) => {
         setReviewSort(sort);
