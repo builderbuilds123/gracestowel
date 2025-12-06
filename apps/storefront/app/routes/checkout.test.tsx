@@ -84,7 +84,8 @@ describe('Checkout Route', () => {
         const { rerender } = render(<Checkout />);
         
         // Should NOT fire yet
-        await waitFor(() => {}, { timeout: 100 }); 
+        // Should NOT fire yet
+        expect(mockPostHog.capture).not.toHaveBeenCalled();
         expect(mockPostHog.capture).not.toHaveBeenCalled();
 
         // Second render: Cart loaded
