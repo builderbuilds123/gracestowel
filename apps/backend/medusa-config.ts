@@ -40,13 +40,15 @@ module.exports = defineConfig({
             resolve: "@medusajs/file-s3",
             id: "s3",
             options: {
-              s3_url: process.env.S3_URL,
+              // s3_url: process.env.S3_URL, // Use endpoint instead for R2
               bucket: process.env.S3_BUCKET,
               region: process.env.S3_REGION,
               access_key_id: process.env.S3_ACCESS_KEY_ID,
               secret_access_key: process.env.S3_SECRET_ACCESS_KEY,
               cache_control: process.env.S3_CACHE_CONTROL || "public, max-age=31536000",
               download_file_duration: 60 * 60, // 1 hour
+              s3_force_path_style: true,
+              endpoint: process.env.S3_URL,
             },
           },
         ],
