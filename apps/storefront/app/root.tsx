@@ -27,13 +27,15 @@ if (typeof window !== 'undefined') {
 
 export async function loader({ context }: Route.LoaderArgs) {
   // Ensure we have access to Cloudflare env
-  if (!context.cloudflare?.env) {
+  const env = context.cloudflare?.env;
+
+  if (!env) {
     // In dev mode or non-CF env, this might happen if not properly mocked/proxied.
-    // But for this story we just want to ensure code can theoretically reach it.
-    // console.warn("No Cloudflare env found in loader context");
+    // Throwing an error makes the dependency explicit and prevents runtime errors.
+    throw new Error("Cloudflare environment context is not available.");
   }
 
-  const { MEDUSA_BACKEND_URL, MEDUSA_PUBLISHABLE_KEY } = context.cloudflare.env;
+  const { MEDUSA_BACKEND_URL, MEDUSA_PUBLISHABLE_KEY } = env;
 
   if (!MEDUSA_BACKEND_URL) {
     throw new Error("Missing MEDUSA_BACKEND_URL environment variable");
