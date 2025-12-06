@@ -11,6 +11,7 @@ describe('CancelOrderDialog', () => {
         isOpen: true,
         onClose: vi.fn(),
         onConfirm: vi.fn(),
+        orderNumber: '1001',
     };
 
     it('should not render when isOpen is false', () => {

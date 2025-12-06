@@ -8,7 +8,7 @@ import { userEvent } from "@testing-library/user-event";
 import { axe } from "vitest-axe";
 import { BrowserRouter } from "react-router";
 import { ProductCard } from "./ProductCard";
-import { renderWithProviders } from "../../tests/test-utils";
+import { renderWithProviders } from "../../../tests/test-utils";
 
 // Mock props for testing
 const mockProduct = {
