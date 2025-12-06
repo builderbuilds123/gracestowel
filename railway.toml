@@ -9,5 +9,5 @@ watchPatterns = ["apps/backend/**"]
 [deploy]
 # startCommand = "echo 'Current NODE_ENV: $NODE_ENV' && echo 'Listing .medusa directory:' && ls -R .medusa && npx medusa db:migrate && npm run start"
 healthcheckPath = "/health"
-healthcheckTimeout = 100
+healthcheckTimeout = 300
 restartPolicyType = "on_failure"

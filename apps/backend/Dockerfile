@@ -36,7 +36,6 @@ FROM base AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
-
 ENV HOST=0.0.0.0
 
 # Copy built app and dependencies
@@ -50,5 +49,6 @@ COPY --from=builder --chown=node:node /app/src ./src
 
 USER node
 
-EXPOSE 9000
+# Railway will set PORT dynamically, so we don't EXPOSE a specific port
+# The app will use ${PORT:-9000} from package.json start script
 CMD ["sh", "-c", "echo 'Current NODE_ENV: $NODE_ENV'; if [ -f public/admin/index.html ]; then echo 'FOUND index.html'; else echo 'MISSING index.html at public/admin/index.html'; echo 'Listing directories:'; ls -R public; exit 1; fi; npm run migrate && npm run start"]
