@@ -5,7 +5,7 @@ import {
 import { Modules } from "@medusajs/framework/utils"
 
 export default async function ({ container }: ExecArgs) {
-  const fileService: IFileModuleService = container.resolve(Modules.FILE)
+  const fileService: any = container.resolve(Modules.FILE)
 
   console.log("Resolving File Service...")
   
