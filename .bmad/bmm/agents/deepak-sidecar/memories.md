@@ -18,6 +18,13 @@
     2. Updated Dockerfile to copy from `apps/backend/package.json` and `apps/backend` specifically, handling the root build context correctly.
 - **Prevention:** When Dockerfiles are in subdirectories of a monorepo, verify the build context (Root Directory) in CI/Deployment settings. Explicit paths in Dockerfile are safer if context is Root.
 
+### 2025-12-06 - CI Build Context Mismatch (Docker) [RESOLVED]
+
+- **Symptom:** `failed to calculate checksum of ref ...: "/apps/backend": not found` during `COPY apps/backend .`.
+- **Root Cause:** GitHub Actions workflow was running `railway up` from `working-directory: apps/backend`, effectively setting the build context to that subdirectory. The Dockerfile, however, expected a Root context (trying to copy `apps/backend` from its source).
+- **Solution:** Updated `.github/workflows/ci.yml` `deploy-backend-*` jobs to use `working-directory: .` (Root). This ensures Railway uploads the full repo content as context, matching the Dockerfile structure.
+- **Prevention:** Always align CI `working-directory` with the `COPY` paths in your Dockerfile. If Dockerfile uses `COPY apps/service ...`, CI **must** run from root.
+
 ## Solutions That Worked
 
 <!-- Successful fixes and their contexts -->
