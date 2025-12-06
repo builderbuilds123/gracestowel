@@ -80,7 +80,7 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
             });
 
             if (response.ok) {
-                const data = await response.json();
+                const data = (await response.json()) as { customer: Customer };
                 setCustomer(data.customer);
                 
                 // Identify user in PostHog
@@ -118,11 +118,11 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
             });
 
             if (!authResponse.ok) {
-                const error = await authResponse.json();
+                const error = (await authResponse.json()) as { message?: string };
                 return { success: false, error: error.message || 'Invalid email or password' };
             }
 
-            const { token: newToken } = await authResponse.json();
+            const { token: newToken } = (await authResponse.json()) as { token: string };
             
             // Store token and update state
             localStorage.setItem(TOKEN_KEY, newToken);
@@ -150,11 +150,11 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
             });
 
             if (!authResponse.ok) {
-                const error = await authResponse.json();
+                const error = (await authResponse.json()) as { message?: string };
                 return { success: false, error: error.message || 'Registration failed' };
             }
 
-            const { token: regToken } = await authResponse.json();
+            const { token: regToken } = (await authResponse.json()) as { token: string };
 
             // Step 2: Create customer profile
             const customerResponse = await fetch(`${MEDUSA_BACKEND_URL}/store/customers`, {
@@ -171,7 +171,7 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
             });
 
             if (!customerResponse.ok) {
-                const error = await customerResponse.json();
+                const error = (await customerResponse.json()) as { message?: string };
                 return { success: false, error: error.message || 'Failed to create customer profile' };
             }
 

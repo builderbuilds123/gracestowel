@@ -2,7 +2,7 @@
 title: System Architecture & Decisions
 description: Comprehensive architectural overview and decision records for Grace Stowel.
 last-updated: 2025-12-02
-stepsCompleted: [1, 2, 3, 4, 5]
+stepsCompleted: [1, 2, 3, 4, 5, 6, 7, 8]
 inputDocuments:
   - docs/posthog-analytics-integration-prd.md
   - docs/cookie-policy-prd.md
@@ -17,7 +17,9 @@ inputDocuments:
   - docs/index.md
   - repomix-output.xml (comprehensive codebase analysis)
 workflowType: 'architecture'
-lastStep: 5
+lastStep: 8
+status: 'complete'
+completedAt: '2025-12-05'
 project_name: 'gracestowel'
 user_name: 'Big Dick'
 date: '2025-12-01'
@@ -970,3 +972,171 @@ if (!charityApiResponse) {
 posthog.capture("productViewed")     // Should be product_viewed
 posthog.capture("checkout-started")  // Should be checkout_started
 ```
+
+## Project Structure & Boundaries
+
+### Complete Project Directory Structure
+
+```
+gracestowel/
+├── apps/
+│   ├── backend/ (Medusa v2)
+│   │   ├── src/
+│   │   │   ├── api/
+│   │   │   │   ├── store/
+│   │   │   │   │   └── pricing/
+│   │   │   │   │       └── route.ts        # [NEW] Pricing API endpoints
+│   │   │   │   └── webhooks/
+│   │   │   │       └── stripe/
+│   │   │   │           └── route.ts        # Existing Stripe webhook
+│   │   │   ├── modules/
+│   │   │   │   ├── pricing/                # [NEW] Transparent Pricing Module
+│   │   │   │   │   ├── models/
+│   │   │   │   │   │   ├── product-pricing.ts
+│   │   │   │   │   │   └── pricing-cache.ts
+│   │   │   │   │   ├── services/
+│   │   │   │   │   │   ├── pricing.ts      # Core logic
+│   │   │   │   │   │   ├── charity.ts      # Charity logic
+│   │   │   │   │   │   └── clients/        # External API Clients
+│   │   │   │   │   │       ├── CloudflareApiClient.ts
+│   │   │   │   │   │       ├── RailwayApiClient.ts
+│   │   │   │   │   │       ├── MetaAdsApiClient.ts
+│   │   │   │   │   │       ├── TreeNationApiClient.ts
+│   │   │   │   │   │       └── ...
+│   │   │   │   │   ├── migrations/
+│   │   │   │   │   ├── index.ts
+│   │   │   │   │   └── types.ts
+│   │   │   │   └── review/                 # Existing Review Module
+│   │   │   ├── subscribers/
+│   │   │   │   ├── order-placed.ts         # [MOD] Trigger charity workflow
+│   │   │   │   └── customer-created.ts
+│   │   │   ├── workflows/
+│   │   │   │   ├── trigger-charity-donation.ts # [NEW]
+│   │   │   │   └── calculate-product-pricing.ts # [NEW]
+│   │   │   └── medusa-config.ts
+│   │   └── package.json
+│   │
+│   └── storefront/ (React Router v7)
+│       ├── app/
+│       │   ├── components/
+│       │   │   ├── CookieConsent.tsx       # [NEW] Compliance popup
+│       │   │   ├── PriceBreakdown.tsx      # [NEW] Visualization
+│       │   │   ├── ImpactBadge.tsx         # [NEW] Charity impact
+│       │   │   └── ...
+│       │   ├── context/
+│       │   │   └── CartContext.tsx         # [MOD] Handle locked prices
+│       │   ├── lib/
+│       │   │   └── medusa.ts               # [MOD] Updated types
+│       │   ├── routes/                     # Existing file-based routes
+│       │   ├── utils/
+│       │   │   └── posthog.ts              # [MOD] Enhanced tracking
+│       │   └── root.tsx                    # [MOD] Add CookieConsent
+│       └── package.json
+└── docs/                                   # Documentation
+```
+
+### Architectural Boundaries
+
+**API Boundaries:**
+- **Storefront ↔ Backend:** Strictly via Medusa API (`/store/*`). Authentication via JWT/Session.
+- **Backend ↔ External Services:** Encapsulated in `services/clients/` within the Pricing Module. No direct API calls from workflows or other services.
+- **Analytics:** PostHog SDKs initialized at application root. Storefront sends UI events; Backend sends domain events.
+
+**Component Boundaries:**
+- **Pricing Logic:** Strictly contained in `pricing-module`. Storefront only displays calculated data.
+- **Cookie Consent:** Manages its own local state (`localStorage`). Does NOT control PostHog initialization (information-only policy).
+
+### Requirements to Structure Mapping
+
+**Epic: PostHog Analytics Integration**
+- **Configuration:** `apps/backend/src/utils/posthog.ts`, `apps/storefront/app/utils/posthog.ts`
+- **Events:** `apps/backend/src/subscribers/`, `apps/storefront/app/routes/`
+
+**Epic: Cookie Policy Popup**
+- **UI:** `apps/storefront/app/components/CookieConsent.tsx`
+- **Integration:** `apps/storefront/app/root.tsx`
+
+**Epic: Transparent Pricing & Impact**
+- **Core Logic:** `apps/backend/src/modules/pricing/`
+- **Tasks:** `apps/backend/src/workflows/`
+- **UI:** `apps/storefront/app/components/PriceBreakdown.tsx`, `ImpactBadge.tsx`
+
+**Data Boundaries:**
+- **Storefront ↔ Database:** **[MOD]** Connected via **Cloudflare Hyperdrive** to reduce latency for global edge requests. 
+  - *Configuration:* `wrangler.jsonc` (bindings injected via CI)
+  - *Constraint:* Direct TCP connections avoided from Edge; Hyperdrive leverages connection pooling.
+- **Backend ↔ Database:** Direct TCP connection (within Railway internal network).
+
+### Infrastructure
+
+**Storefront Deployment:**
+- **Platform:** Cloudflare Workers
+- **Database Access:** Hyperdrive (required for performance)
+- **Environment:** `wrangler.jsonc` configured for Staging/Production
+
+## Architecture Validation Results
+
+### Coherence Validation ✅
+
+**Decision Compatibility:**
+All technology choices are compatible. Medusa v2's module system isolates complex pricing logic, while React Router v7 handling the storefront benefits from Cloudflare Hyperdrive for low-latency database access. Redis correctly handles caching for both the backend (BullMQ) and pricing API responses.
+
+**Pattern Consistency:**
+Naming conventions (snake_case for DB/events, camelCase for JS/TS) are consistently applied. The custom module pattern for Pricing mirrors the existing Review module, ensuring maintainability.
+
+**Structure Alignment:**
+The project structure explicitly allocates space for all new features (`modules/pricing`, `components/CookieConsent`, `workflows/trigger-charity-donation`). Integration points are clearly defined in the `services/clients` directory.
+
+### Requirements Coverage Validation ✅
+
+**Epic/Feature Coverage:**
+- **PostHog:** Covered via SDK initialization in `utils/posthog.ts` and event subscribers.
+- **Cookie Policy:** Covered via `CookieConsent` component and localStorage state management.
+- **Transparent Pricing:** Covered via `pricing-module`, daily cron jobs, and frontend breakdown components.
+
+**Functional Requirements Coverage:**
+All functional requirements, including dynamic pricing calculation, charity integration, and analytics tracking, are architecturally supported.
+
+**Non-Functional Requirements Coverage:**
+- **Performance:** Address via Hyperdrive (Storefront) and Pricing Cache (Backend).
+- **Reliability:** Fail-open strategies for charity and pricing APIs are codified.
+- **Privacy:** Cookie info-only policy and PostHog identification strategy are defined.
+
+### Implementation Readiness Validation ✅
+
+**Decision Completeness:** All critical decisions (locking mechanism, external API pattern, event naming) are documented.
+**Structure Completeness:** Complete file tree with new files marked is provided.
+**Pattern Completeness:** Integration patterns for all external services are defined.
+
+### Architecture Completeness Checklist
+
+**✅ Requirements Analysis**
+- [x] Project context thoroughly analyzed
+- [x] Scale and complexity assessed
+- [x] Technical constraints identified
+- [x] Cross-cutting concerns mapped
+
+**✅ Architectural Decisions**
+- [x] Critical decisions documented with versions
+- [x] Technology stack fully specified
+- [x] Integration patterns defined
+- [x] Performance considerations addressed
+
+**✅ Implementation Patterns**
+- [x] Naming conventions established
+- [x] Structure patterns defined
+- [x] Communication patterns specified
+- [x] Process patterns documented
+
+**✅ Project Structure**
+- [x] Complete directory structure defined
+- [x] Component boundaries established
+- [x] Integration points mapped
+- [x] Requirements to structure mapping complete
+
+### Architecture Readiness Assessment
+
+**Overall Status:** READY FOR IMPLEMENTATION
+**Confidence Level:** High
+
+

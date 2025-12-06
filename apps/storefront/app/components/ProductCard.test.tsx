@@ -2,6 +2,7 @@
  * ProductCard Component Tests
  * Tests user interactions, accessibility, and integration with cart context
  */
+import React from 'react';
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
@@ -11,13 +12,17 @@ import { ProductCard } from "./ProductCard";
 import { renderWithProviders } from "../../tests/test-utils";
 
 // Mock props for testing
+import { createMockProduct } from "../../tests/factories/product";
+
+// Adapter to transform factory Medusa product to component props
+const factoryProduct = createMockProduct();
 const mockProduct = {
-  id: "prod_01",
-  image: "/images/test-towel.jpg",
-  title: "Classic White Towel",
-  description: "A luxurious white cotton towel",
-  price: "29.99",
-  handle: "classic-white-towel",
+  id: factoryProduct.id,
+  image: factoryProduct.thumbnail,
+  title: factoryProduct.title,
+  description: factoryProduct.description,
+  price: (factoryProduct.variants[0].prices[0].amount / 100).toFixed(2), // Convert cents to dollars string
+  handle: factoryProduct.handle,
 };
 
 // Helper function to render component with all providers including BrowserRouter
@@ -39,7 +44,7 @@ describe("ProductCard", () => {
       expect(image).toHaveAttribute("src", mockProduct.image);
 
       // Check price is displayed
-      expect(screen.getByText(/29\.99/)).toBeInTheDocument();
+      expect(screen.getByText(new RegExp(mockProduct.price))).toBeInTheDocument();
     });
 
     it("should have correct link to product page", () => {
@@ -201,7 +206,7 @@ describe("ProductCard", () => {
       renderProductCard(<ProductCard {...mockProduct} />);
 
       // Price should be formatted and displayed
-      expect(screen.getByText(/29\.99/)).toBeInTheDocument();
+      expect(screen.getByText(new RegExp(mockProduct.price))).toBeInTheDocument();
     });
 
     it("should handle long product titles", () => {

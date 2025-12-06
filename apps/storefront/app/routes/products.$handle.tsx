@@ -1,6 +1,7 @@
 import type { Route } from "./+types/products.$handle";
-import { useState, useCallback } from "react";
+import { useState, useCallback, Suspense } from "react";
 import { MessageSquarePlus } from "lucide-react";
+import { Await, useLoaderData } from "react-router";
 import { ReviewSection, type Review, type ReviewStats } from "../components/ReviewSection";
 import { ReviewForm } from "../components/ReviewForm";
 import { ProductImageGallery } from "../components/ProductImageGallery";
@@ -8,10 +9,8 @@ import { ProductInfo } from "../components/ProductInfo";
 import { ProductActions } from "../components/ProductActions";
 import { ProductDetails } from "../components/ProductDetails";
 import { RelatedProducts } from "../components/RelatedProducts";
-import { getMedusaClient } from "../lib/medusa.server";
-import { getStockStatus, type MedusaProduct } from "../lib/medusa";
-import { products as staticProducts } from "../data/products";
-import { transformToDetail, type ProductDetail } from "../lib/product-transformer";
+import { getMedusaClient, castToMedusaProduct, type MedusaProduct, getBackendUrl, getStockStatus, validateMedusaProduct } from "../lib/medusa";
+import { transformToDetail, transformToListItem, type ProductDetail, type ProductListItem } from "../lib/product-transformer";
 
 // SEO Meta tags for product pages
 export function meta({ data }: Route.MetaArgs) {
@@ -47,9 +46,6 @@ export function meta({ data }: Route.MetaArgs) {
     ];
 }
 
-// Transform Medusa product using centralized transformer
-// (transformToDetail is imported from ../lib/product-transformer)
-
 // Fetch reviews from the backend
 async function fetchReviews(productId: string, backendUrl: string, sort = "newest") {
     try {
@@ -70,88 +66,58 @@ export async function loader({ params, context }: Route.LoaderArgs) {
         throw new Response("Product not found", { status: 404 });
     }
 
-    const backendUrl = (context as { cloudflare?: { env?: { MEDUSA_BACKEND_URL?: string } } })?.cloudflare?.env?.MEDUSA_BACKEND_URL || "http://localhost:9000";
+    const medusa = getMedusaClient(context);
+    const backendUrl = getBackendUrl(context);
 
-    // Strategy: Try Hyperdrive (direct DB) first for fastest response,
-    // then fall back to Medusa API, then to static products
     let medusaProduct: MedusaProduct | null = null;
-    let allProducts: { products: MedusaProduct[] } = { products: [] };
-    let dataSource: "hyperdrive" | "medusa" | "static" = "static";
+    let dataSource: "hyperdrive" | "medusa" = "medusa";
 
-    // 1. Try Hyperdrive (direct PostgreSQL via connection pooling)
-    // TEMPORARILY DISABLED: Database schema needs updating for Medusa v2 price tables
-    // TODO: Update price query to use price_set and price tables instead of product_variant_price
-    // Hyperdrive code removed - need to import getProductByHandleFromDB, getProductsFromDB, isHyperdriveAvailable when re-enabling
-    if (false) {
-        // Hyperdrive functionality temporarily disabled
-        dataSource = "static";
+    try {
+        // Fetch product (Blocking)
+        const { products } = await medusa.store.product.list({ handle, limit: 1, fields: "+variants,+variants.prices,+variants.inventory_quantity,+options,+options.values,+images,+categories,+metadata" });
+        medusaProduct = validateMedusaProduct(products[0]);
+    } catch (error: any) {
+        console.error("Failed to fetch product from Medusa:", error);
     }
 
-    // 2. Fall back to Medusa API if Hyperdrive didn't work
     if (!medusaProduct) {
-        try {
-            const startTime = Date.now();
-            const medusa = getMedusaClient(context);
-            medusaProduct = await medusa.getProductByHandle(handle);
-
-            if (medusaProduct) {
-                allProducts = await medusa.getProducts({ limit: 10 });
-                dataSource = "medusa";
-                console.log(`✅ Medusa API: Fetched product in ${Date.now() - startTime}ms`);
-            }
-        } catch (error) {
-            console.error("Failed to fetch product from Medusa:", error);
-        }
-    }
-
-    // 3. Return Medusa/Hyperdrive product if found
-    if (medusaProduct) {
-        const product = transformToDetail(medusaProduct);
-
-        // Fetch reviews from Medusa backend (reviews require API, not direct DB)
-        const reviewData = await fetchReviews(medusaProduct.id, backendUrl);
-
-        const relatedProducts = allProducts.products
-            .filter(p => p.handle !== handle)
-            .slice(0, 3)
-            .map(p => transformToDetail(p));
-
-        return {
-            product,
-            relatedProducts,
-            reviews: reviewData.reviews,
-            reviewStats: reviewData.stats,
-            backendUrl,
-            error: null,
-            _dataSource: dataSource, // For debugging
-        };
-    }
-
-    // 4. Final fallback to static products
-    const staticProduct = staticProducts[handle];
-    if (!staticProduct) {
         throw new Response("Product not found", { status: 404 });
     }
 
-    const relatedProducts = Object.values(staticProducts)
-        .filter(p => p.handle !== handle)
-        .slice(0, 3);
+    const product = transformToDetail(medusaProduct);
+
+    // Fetch related products (Deferred)
+    // We start the promise but don't await it
+    const relatedProductsPromise = (async () => {
+        try {
+            const res = await medusa.store.product.list({ limit: 4, fields: "+variants.prices,+images" });
+            return (res.products as unknown[]).map(castToMedusaProduct)
+                .filter(p => p.id !== medusaProduct!.id)
+                .slice(0, 3)
+                .map(p => transformToDetail(p)); // Use transformToDetail to satisfy RelatedProducts props
+        } catch (e) {
+            console.error("Failed to fetch related products", e);
+            return [] as ProductDetail[];
+        }
+    })();
+
+    // Fetch reviews (Blocking, to allow simpler state management in component)
+    const reviewsData = (await fetchReviews(medusaProduct.id, backendUrl)) as { reviews: Review[]; stats: ReviewStats };
 
     return {
-        product: { ...staticProduct, variants: [] },
-        relatedProducts: relatedProducts.map(p => ({ ...p, variants: [] })),
-        reviews: [] as Review[],
-        reviewStats: { average: 0, count: 0, distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 } } as ReviewStats,
+        product,
+        relatedProducts: relatedProductsPromise,
+        reviews: reviewsData.reviews,
+        reviewStats: reviewsData.stats,
         backendUrl,
-        error: "Using cached product",
-        _dataSource: "static" as const,
+        _dataSource: dataSource,
     };
 }
 
 export default function ProductDetail({ loaderData }: Route.ComponentProps) {
     const { product, relatedProducts, reviews: initialReviews, reviewStats: initialStats, backendUrl } = loaderData;
 
-    // Review state
+    // Review state initialized with blocking data
     const [isReviewFormOpen, setIsReviewFormOpen] = useState(false);
     const [reviews, setReviews] = useState<Review[]>(initialReviews || []);
     const [reviewStats, setReviewStats] = useState<ReviewStats>(initialStats || { average: 0, count: 0, distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 } });
@@ -183,7 +149,7 @@ export default function ProductDetail({ loaderData }: Route.ComponentProps) {
         try {
             const response = await fetch(`${backendUrl}/store/products/${product.id}/reviews?sort=${sort}&limit=10`);
             if (response.ok) {
-                const data = await response.json();
+                const data = (await response.json()) as { reviews: Review[] };
                 setReviews(data.reviews);
             }
         } catch (error) {
@@ -200,7 +166,7 @@ export default function ProductDetail({ loaderData }: Route.ComponentProps) {
                 body: JSON.stringify(reviewData),
             });
             if (!response.ok) {
-                const error = await response.json();
+                const error = (await response.json()) as { message?: string };
                 throw new Error(error.message || "Failed to submit review");
             }
             setIsReviewFormOpen(false);
@@ -306,8 +272,23 @@ export default function ProductDetail({ loaderData }: Route.ComponentProps) {
                     />
                 </div>
 
-                {/* Related Products */}
-                <RelatedProducts products={relatedProducts} />
+                {/* Related Products - Deferred/Suspended */}
+                <Suspense fallback={
+                    <div className="mt-16 pt-16 border-t border-gray-200">
+                         <h2 className="text-2xl font-serif text-text-earthy mb-8">You May Also Like</h2>
+                         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                            {[1, 2, 3].map(i => (
+                                <div key={i} className="aspect-[3/4] bg-gray-100 rounded-lg animate-pulse" />
+                            ))}
+                         </div>
+                    </div>
+                }>
+                    <Await resolve={relatedProducts} errorElement={null}>
+                         {(resolvedRelated) => (
+                             <RelatedProducts products={resolvedRelated} />
+                         )}
+                    </Await>
+                </Suspense>
             </main>
 
             {/* Review Form Modal */}

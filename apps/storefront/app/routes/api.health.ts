@@ -1,5 +1,5 @@
 import type { LoaderFunctionArgs } from "react-router";
-import { getMedusaClient } from "~/lib/medusa.server";
+import { getMedusaClient } from "~/lib/medusa";
 
 /**
  * Health check endpoint that verifies:
@@ -20,13 +20,13 @@ export async function loader({ context }: LoaderFunctionArgs) {
     try {
         const medusa = getMedusaClient(context as any);
         const startTime = Date.now();
-        const products = await medusa.getProducts({ limit: 1 });
+        const { products, count, limit, offset } = await medusa.store.product.list({ limit: 1 });
         const latency = Date.now() - startTime;
 
         health.medusa = {
             connected: true,
             latency: `${latency}ms`,
-            productCount: products.count || products.products?.length || 0,
+            productCount: count || products?.length || 0,
         };
     } catch (error) {
         health.medusa = {

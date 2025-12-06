@@ -9,7 +9,20 @@ import { getProductsFromDB, isHyperdriveAvailable } from "~/lib/products.server"
 export async function loader({ context }: LoaderFunctionArgs) {
     const env = (context as any)?.cloudflare?.env;
     
-    const result: Record<string, unknown> = {
+    interface TestResult {
+        success: boolean;
+        error?: string;
+        [key: string]: unknown;
+    }
+
+    const result: {
+        timestamp: string;
+        hyperdrive: { available: boolean; connectionString: string | null };
+        directConnection: { available: boolean; connectionString?: string };
+        isHyperdriveAvailable?: boolean;
+        status?: string;
+        tests: Record<string, TestResult>;
+    } = {
         timestamp: new Date().toISOString(),
         hyperdrive: {
             available: false,

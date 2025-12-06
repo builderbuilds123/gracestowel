@@ -8,6 +8,8 @@ import {
 } from "react-router";
 
 import type { Route } from "./+types/root";
+import { getMedusaClient } from "./lib/medusa";
+import { useLoaderData } from "react-router";
 import { CartProvider } from "./context/CartContext";
 import { LocaleProvider } from "./context/LocaleContext";
 import { CustomerProvider } from "./context/CustomerContext";
@@ -22,6 +24,39 @@ import "./app.css";
 if (typeof window !== 'undefined') {
   initPostHog();
   reportWebVitals();
+}
+
+export async function loader({ context }: Route.LoaderArgs) {
+  // Ensure we have access to Cloudflare env
+  const env = context.cloudflare?.env;
+
+  if (!env) {
+    // In dev mode or non-CF env, this might happen if not properly mocked/proxied.
+    // Throwing an error makes the dependency explicit and prevents runtime errors.
+    throw new Error("Cloudflare environment context is not available.");
+  }
+
+  const { MEDUSA_BACKEND_URL, MEDUSA_PUBLISHABLE_KEY } = env;
+
+  if (!MEDUSA_BACKEND_URL) {
+    throw new Error("Missing MEDUSA_BACKEND_URL environment variable");
+  }
+
+  // Initialize client server-side to verify config and connection (AC requirement)
+  try {
+      const client = getMedusaClient({ cloudflare: { env } });
+      await client.store.product.list({ limit: 1 });
+      console.log("✅ Medusa connection verified via loader");
+  } catch (err) {
+      console.error("❌ Failed to verify Medusa connection:", err);
+  }
+  
+  return { 
+    env: { 
+      MEDUSA_BACKEND_URL, 
+      MEDUSA_PUBLISHABLE_KEY 
+    } 
+  };
 }
 
 export const links: Route.LinksFunction = () => [
@@ -58,6 +93,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 <Footer />
                 <CartDrawer />
                 <ScrollRestoration />
+                <EnvScript />
                 <Scripts />
               </body>
             </html>
@@ -65,6 +101,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </CartProvider>
       </CustomerProvider>
     </LocaleProvider>
+  );
+}
+
+function EnvScript() {
+  const data = useLoaderData<typeof loader>();
+  return (
+    <script
+      dangerouslySetInnerHTML={{
+        __html: `window.ENV = ${JSON.stringify(data?.env || {})}`,
+      }}
+    />
   );
 }
 

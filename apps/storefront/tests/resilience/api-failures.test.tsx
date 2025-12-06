@@ -16,15 +16,15 @@ import React from "react";
 import { describe, it, expect, beforeAll, afterEach, afterAll } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
-// TEMPORARILY DISABLED: MSW imports cause localStorage initialization issues
-// import { http, HttpResponse, delay } from "msw";
-// import { setupServer } from "msw/node";
-// import { handlers } from "../mocks/handlers";
+import { http, HttpResponse, delay } from "msw";
+import { setupServer } from "msw/node";
+// Mock handlers if they don't exist yet, or import them. 
+// The file mentioned importing from "../mocks/handlers". Let's assume we might need to create them or they exist.
+// Checking previous file content, it imported from "../mocks/handlers". 
+import { handlers } from "../mocks/handlers";
 
 // Create MSW server for this test file
-// TEMPORARILY DISABLED: MSW localStorage initialization issue
-// const server = setupServer(...handlers);
-const server = null as any;
+const server = setupServer(...handlers);
 
 // Mock a simple component that fetches products
 // In a real scenario, you'd test your actual product listing component
@@ -55,7 +55,7 @@ const ProductList = () => {
   return (
     <div>
       <h1>Products</h1>
-      {products.map((product: any) => (
+      {products?.map((product: any) => (
         <div key={product.id} data-testid="product-item">
           {product.title}
         </div>
@@ -79,7 +79,7 @@ afterAll(() => {
   server.close();
 });
 
-describe.skip("API Failure Resilience", () => {
+describe("API Failure Resilience", () => {
   describe("500 Internal Server Error", () => {
     it("should display error state when backend returns 500", async () => {
       // Override the default handler to return 500
@@ -305,24 +305,33 @@ describe.skip("API Failure Resilience", () => {
   });
 });
 
-describe.skip("Browser/Client Chaos", () => {
+describe("Browser/Client Chaos", () => {
   describe("JavaScript Errors", () => {
     it("should display error boundary fallback on component error", () => {
       // Mock error boundary component
-      const ErrorBoundary = ({ children }: { children: React.ReactNode }) => {
-        const [hasError, setHasError] = React.useState(false);
-
-        if (hasError) {
-          return (
-            <div role="alert">
-              <h1>Something went wrong</h1>
-              <button onClick={() => setHasError(false)}>Try again</button>
-            </div>
-          );
+      // Mock error boundary component (must be a class component)
+      class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
+        constructor(props: { children: React.ReactNode }) {
+          super(props);
+          this.state = { hasError: false };
         }
 
-        return <>{children}</>;
-      };
+        static getDerivedStateFromError(error: any) {
+          return { hasError: true };
+        }
+
+        render() {
+          if (this.state.hasError) {
+            return (
+              <div role="alert">
+                <h1>Something went wrong</h1>
+                <button onClick={() => this.setState({ hasError: false })}>Try again</button>
+              </div>
+            );
+          }
+          return this.props.children;
+        }
+      }
 
       const BuggyComponent = () => {
         throw new Error("Test error");

@@ -73,8 +73,8 @@ export default function Checkout() {
             }),
         })
             .then((res) => res.json())
-            .then((data: { clientSecret: string }) => setClientSecret(data.clientSecret));
-    }, [cartTotal, currency, items, isAuthenticated, customer]); // Include customer in dependencies
+            .then((data) => setClientSecret((data as { clientSecret: string }).clientSecret));
+    }, [cartTotal, currency, items, isAuthenticated, customer?.id]); // Depend on ID, not object reference
 
     // Separate effect to update PaymentIntent when shipping changes
     useEffect(() => {
@@ -103,11 +103,11 @@ export default function Checkout() {
             }),
         })
             .then((res) => res.json())
-            .then((data: { clientSecret: string }) => {
+            .then((data) => {
                 // Update client secret with new PaymentIntent
-                setClientSecret(data.clientSecret);
+                setClientSecret((data as { clientSecret: string }).clientSecret);
             });
-    }, [selectedShipping, items, isAuthenticated, customer]); // Include customer in dependencies
+    }, [selectedShipping, items, isAuthenticated, customer?.id]); // Depend on ID, not object reference
 
     // Re-fetch shipping rates when cart total changes (for dynamic free shipping)
     useEffect(() => {

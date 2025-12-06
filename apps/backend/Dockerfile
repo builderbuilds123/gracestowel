@@ -7,18 +7,18 @@ WORKDIR /app
 FROM base AS builder
 WORKDIR /app
 
-# Copy package.json first for layer caching
-COPY package.json ./
+# Copy package.json from apps/backend assuming root build context
+COPY apps/backend/package.json ./
 
 # Install ALL dependencies (production + dev) for the build
 # Legacy peer deps needed for some Medusa packages
 RUN npm install --legacy-peer-deps
 
-# Copy source code
-COPY . .
+# Copy source code from apps/backend
+COPY apps/backend .
 
-# Build Medusa backend using npx to ensure CLI is found
-RUN npx medusa build
+# Build Medusa backend using npm run build to reliably use local CLI
+RUN npm run build
 
 # Test stage
 FROM builder AS test
@@ -29,7 +29,7 @@ ENV PORT=9000
 
 EXPOSE 9000
 # Run migrations, seed test data, then start server
-CMD ["sh", "-c", "echo 'Running database migrations...'; npx medusa db:migrate; echo 'Seeding test data...'; npm run seed; echo 'Starting server...'; npm run start"]
+CMD ["sh", "-c", "echo 'Running database migrations...'; npm run migrate; echo 'Seeding test data...'; npm run seed; echo 'Starting server...'; npm run start"]
 
 # Production image
 FROM base AS runner
@@ -51,4 +51,4 @@ COPY --from=builder --chown=node:node /app/src ./src
 USER node
 
 EXPOSE 9000
-CMD ["sh", "-c", "echo 'Current NODE_ENV: $NODE_ENV'; if [ -f public/admin/index.html ]; then echo 'FOUND index.html'; else echo 'MISSING index.html at public/admin/index.html'; echo 'Listing directories:'; ls -R public; exit 1; fi; npx medusa db:migrate && npm run start"]
+CMD ["sh", "-c", "echo 'Current NODE_ENV: $NODE_ENV'; if [ -f public/admin/index.html ]; then echo 'FOUND index.html'; else echo 'MISSING index.html at public/admin/index.html'; echo 'Listing directories:'; ls -R public; exit 1; fi; npm run migrate && npm run start"]

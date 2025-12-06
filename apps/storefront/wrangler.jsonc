@@ -12,6 +12,14 @@
     // - MEDUSA_PUBLISHABLE_KEY: Medusa Store API key
   },
 
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "43cb3470f0b5446c881a7b30aa87eb3e",
+      "localConnectionString": "postgresql://postgres:password@localhost:5432/medusa-db"
+    }
+  ],
+
   // Observability configuration
   "observability": {
     "enabled": true,

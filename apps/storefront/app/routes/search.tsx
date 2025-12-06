@@ -1,6 +1,6 @@
 import type { Route } from "./+types/search";
 import { ProductCard } from "../components/ProductCard";
-import { getMedusaClient } from "../lib/medusa.server";
+import { getMedusaClient, castToMedusaProduct } from "../lib/medusa";
 import { getProductPrice, type MedusaProduct } from "../lib/medusa";
 import { getProductsFromDB, isHyperdriveAvailable } from "../lib/products.server";
 import { Search } from "lucide-react";
@@ -31,11 +31,11 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     if (response.products.length === 0) {
         try {
             const medusa = getMedusaClient(context);
-            const medusaResponse = await medusa.getProducts({ limit: 50 });
+            const { products } = await medusa.store.product.list({ limit: 50, fields: "+variants,+variants.prices,+variants.inventory_quantity,+options,+options.values,+images,+categories,+metadata" });
 
             // Filter products by search query (title, description, or handle)
             const searchLower = query.toLowerCase();
-            response.products = medusaResponse.products.filter((product: MedusaProduct) => {
+            response.products = products.map(castToMedusaProduct).filter((product) => {
                 return (
                     product.title.toLowerCase().includes(searchLower) ||
                     product.handle.toLowerCase().includes(searchLower) ||

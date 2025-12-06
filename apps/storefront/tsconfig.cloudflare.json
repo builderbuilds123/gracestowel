@@ -8,6 +8,11 @@
     "workers/**/*",
     "worker-configuration.d.ts"
   ],
+  "exclude": [
+    "app/**/*.test.ts",
+    "app/**/*.test.tsx",
+    "app/**/__tests__/**/*"
+  ],
   "compilerOptions": {
     "composite": true,
     "strict": true,
