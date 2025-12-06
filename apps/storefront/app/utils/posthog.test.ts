@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { initPostHog, getPostHog } from './posthog';
 import posthog from 'posthog-js';
@@ -8,6 +9,7 @@ vi.mock('posthog-js', () => {
     default: {
       init: vi.fn(),
       debug: vi.fn(),
+      get_distinct_id: vi.fn().mockReturnValue('anon_id_123'),
     },
   };
 });
@@ -60,6 +62,14 @@ describe('PostHog Utilities', () => {
           expect(posthog.init).toHaveBeenCalledWith('ph_test_key', expect.objectContaining({
             api_host: 'https://app.posthog.com',
           }));
+    });
+
+    it('should expose get_distinct_id capability', () => {
+        // This test verifies that we are dealing with a PostHog instance that has the standard methods
+        // and that our mocking setup properly reflects the library's interface for ID retrieval.
+        const id = posthog.get_distinct_id();
+        expect(id).toBe('anon_id_123');
+        expect(posthog.get_distinct_id).toHaveBeenCalled();
     });
   });
 

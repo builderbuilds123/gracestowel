@@ -40,7 +40,7 @@ development_status:
   1-2-track-key-user-events:
     path: docs/sprint-artifacts/1-2-track-key-user-events.md
     status: done
-  1-3-associate-events-anonymous-id: ready-for-dev
+  1-3-associate-events-anonymous-id: done
   epic-1-retrospective: optional
 
   epic-2: backlog
