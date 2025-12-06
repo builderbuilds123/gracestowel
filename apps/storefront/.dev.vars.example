@@ -1,0 +1,39 @@
+# =============================================================================
+# Storefront Local Development Environment Variables
+# =============================================================================
+# Copy this file to .dev.vars and fill in your actual values
+# NEVER commit .dev.vars to version control!
+#
+# For full environment setup guide, see: docs/ENVIRONMENTS.md
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Database Connection (for Hyperdrive in local dev)
+# -----------------------------------------------------------------------------
+# Direct connection to PostgreSQL database
+# In production, this is handled by Cloudflare Hyperdrive
+# For local development, you can connect to:
+#   - Local PostgreSQL: postgresql://user:password@localhost:5432/medusa
+#   - Railway staging DB (for testing with real data)
+DATABASE_URL="postgresql://user:password@localhost:5432/medusa"
+
+# -----------------------------------------------------------------------------
+# Medusa Backend Configuration
+# -----------------------------------------------------------------------------
+# Backend API URL
+# Local: http://localhost:9000
+# Staging: https://gracestowel-staging.up.railway.app
+# Production: https://gracestowel-backend.up.railway.app
+MEDUSA_BACKEND_URL="http://localhost:9000"
+
+# Medusa Publishable API Key (required for Store API access)
+# Get this from Medusa Admin > Settings > API Keys
+# Each environment should have its own key
+MEDUSA_PUBLISHABLE_KEY="pk_your_publishable_key_here"
+
+# -----------------------------------------------------------------------------
+# Optional: Analytics & Monitoring
+# -----------------------------------------------------------------------------
+# PostHog (if used)
+# VITE_POSTHOG_API_KEY="phc_xxx..."
+# VITE_POSTHOG_HOST="https://app.posthog.com"

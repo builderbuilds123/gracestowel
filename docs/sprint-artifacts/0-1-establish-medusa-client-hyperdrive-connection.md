@@ -52,3 +52,4 @@
 
 ## Change Log
 - 2025-12-05: Initial implementation of Story 0.1 (Medusa Client & Hyperdrive)
+- 2025-12-05: Code Review passed. Fixed missing `jsdom` in tests, removed dead code in `root.tsx`, and secured `MEDUSA_PUBLISHABLE_KEY` in `.dev.vars`.

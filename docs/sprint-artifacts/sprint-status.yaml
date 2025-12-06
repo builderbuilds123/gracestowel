@@ -31,7 +31,7 @@ story_location: docs/sprint-artifacts
 development_status:
   # --- Core Epics (from docs/epics.md) ---
   epic-0: backlog
-  0-1-establish-medusa-client-hyperdrive-connection: review
+  0-1-establish-medusa-client-hyperdrive-connection: done
   0-2-refactor-pdp-to-dynamic-data: done
   epic-0-retrospective: optional
 

@@ -8,9 +8,8 @@
 /build/
 
 # Cloudflare
-.mf
 .wrangler
-.dev.vars*
+.dev.vars
 worker-configuration.d.ts
 
 coverage/
