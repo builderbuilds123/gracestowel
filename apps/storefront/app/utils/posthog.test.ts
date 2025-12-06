@@ -70,31 +70,27 @@ describe('PostHog Utilities', () => {
         expect(getPostHog()).toBe(posthog);
     });
 
-    it('should expose get_distinct_id capability', () => {
-        // Verify that getPostHog returns an instance with the standard PostHog methods
-        const ph = getPostHog();
+    describe('returned instance', () => {
+        let ph: ReturnType<typeof getPostHog>;
 
-        // In jsdom test environment, window exists so ph should not be null
-        expect(ph).not.toBeNull();
+        beforeEach(() => {
+            ph = getPostHog();
+            // In jsdom test environment, window exists so ph should not be null
+            expect(ph).not.toBeNull();
+        });
 
-        const id = ph!.get_distinct_id();
-        expect(id).toBe('anon_id_123');
-        expect(ph!.get_distinct_id).toHaveBeenCalled();
-    });
+        it('should have standard PostHog methods', () => {
+            // Verify the instance has expected methods
+            expect(typeof ph!.init).toBe('function');
+            expect(typeof ph!.debug).toBe('function');
+            expect(typeof ph!.get_distinct_id).toBe('function');
+        });
 
-    it('should expose standard PostHog methods', () => {
-        const ph = getPostHog();
-
-        // In jsdom test environment, window exists so ph should not be null
-        expect(ph).not.toBeNull();
-
-        // Verify the instance has expected methods
-        expect(ph!.get_distinct_id).toBeDefined();
-        expect(ph!.init).toBeDefined();
-        expect(ph!.debug).toBeDefined();
-        expect(typeof ph!.get_distinct_id).toBe('function');
-        expect(typeof ph!.init).toBe('function');
-        expect(typeof ph!.debug).toBe('function');
+        it('should correctly execute get_distinct_id', () => {
+            const id = ph!.get_distinct_id();
+            expect(id).toBe('anon_id_123');
+            expect(ph!.get_distinct_id).toHaveBeenCalled();
+        });
     });
   });
 });
