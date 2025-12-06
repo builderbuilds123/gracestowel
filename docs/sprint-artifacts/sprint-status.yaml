@@ -32,7 +32,7 @@ development_status:
   # --- Core Epics (from docs/epics.md) ---
   epic-0: backlog
   0-1-establish-medusa-client-hyperdrive-connection: review
-  0-2-refactor-pdp-to-dynamic-data: in-progress
+  0-2-refactor-pdp-to-dynamic-data: done
   epic-0-retrospective: optional
 
   epic-1: backlog

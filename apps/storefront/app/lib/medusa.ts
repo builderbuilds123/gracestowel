@@ -60,6 +60,25 @@ export interface MedusaProductResponse {
 }
 
 /**
+ * Validates and casts an API response item to MedusaProduct
+ * Ensures critical fields exist before casting to prevent runtime errors
+ */
+export function validateMedusaProduct(item: unknown): MedusaProduct | null {
+    if (!item || typeof item !== 'object') return null;
+    
+    // Check for critical identifying fields
+    const p = item as any;
+    if (typeof p.id !== 'string' || typeof p.handle !== 'string') {
+        console.warn('Invalid product data: missing id or handle', p);
+        return null;
+    }
+
+    // Checking for v2 Store API shape compatibility
+    // We trust the API to return the correct shape for nested objects if ID/Handle match
+    return item as MedusaProduct;
+}
+
+/**
  * Helper to format price from Medusa (prices are in cents)
  */
 export function formatPrice(amount: number, currencyCode: string = "usd"): string {
@@ -151,8 +170,19 @@ export function getStockStatusDisplay(status: StockStatus): {
 
 /**
  * Create a Medusa client instance using environment variables from context or process
+ * Uses a WeakMap to cache instances per context object to prevent multiple instantiations
+ * during a single request flow (e.g. loader + helpers).
  */
+const clientCache = new WeakMap<object, Medusa>();
+
 export function getMedusaClient(context?: { cloudflare?: { env?: { MEDUSA_BACKEND_URL?: string, MEDUSA_PUBLISHABLE_KEY?: string } } }) {
+    // If context is provided, try to use it for caching
+    if (context && typeof context === 'object') {
+        if (clientCache.has(context)) {
+            return clientCache.get(context)!;
+        }
+    }
+
     const backendUrl = context?.cloudflare?.env?.MEDUSA_BACKEND_URL || 
                       process.env.VITE_MEDUSA_BACKEND_URL || 
                       "http://localhost:9000";
@@ -162,5 +192,12 @@ export function getMedusaClient(context?: { cloudflare?: { env?: { MEDUSA_BACKEN
                           process.env.MEDUSA_PUBLISHABLE_KEY || 
                           "";
 
-    return createMedusaClient(backendUrl, publishableKey);
+    const client = createMedusaClient(backendUrl, publishableKey);
+    
+    // Cache the client if we have a context object
+    if (context && typeof context === 'object') {
+        clientCache.set(context, client);
+    }
+
+    return client;
 }

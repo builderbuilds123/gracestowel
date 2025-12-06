@@ -9,7 +9,7 @@ import { ProductActions } from "../components/ProductActions";
 import { ProductDetails } from "../components/ProductDetails";
 import { RelatedProducts } from "../components/RelatedProducts";
 import { getMedusaClient } from "../lib/medusa";
-import { getStockStatus, type MedusaProduct } from "../lib/medusa";
+import { getStockStatus, validateMedusaProduct, type MedusaProduct } from "../lib/medusa";
 import { transformToDetail, type ProductDetail } from "../lib/product-transformer";
 
 // SEO Meta tags for product pages
@@ -82,7 +82,7 @@ export async function loader({ params, context }: Route.LoaderArgs) {
         const startTime = Date.now();
         // Use the Medusa SDK v2 methods
         const { products } = await medusa.store.product.list({ handle, limit: 1, fields: "+variants,+variants.prices,+variants.inventory_quantity,+options,+options.values,+images,+categories,+metadata" });
-        medusaProduct = (products[0] as unknown as MedusaProduct) || null;
+        medusaProduct = validateMedusaProduct(products[0]);
 
         if (medusaProduct) {
             // Fetch related products
