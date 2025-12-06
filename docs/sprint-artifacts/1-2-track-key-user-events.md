@@ -1,6 +1,6 @@
 # Story 1.2: Track Key User Events on the Storefront
 
-Status: Ready for Review
+Status: Done
 
 ## Story
 
