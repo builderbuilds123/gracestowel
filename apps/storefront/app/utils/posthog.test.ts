@@ -56,26 +56,45 @@ describe('PostHog Utilities', () => {
         vi.stubEnv('VITE_POSTHOG_API_KEY', 'ph_test_key');
         // No host
         vi.stubEnv('MODE', 'development');
-    
+
           initPostHog();
-    
+
           expect(posthog.init).toHaveBeenCalledWith('ph_test_key', expect.objectContaining({
             api_host: 'https://app.posthog.com',
           }));
-    });
-
-    it('should expose get_distinct_id capability', () => {
-        // This test verifies that we are dealing with a PostHog instance that has the standard methods
-        // and that our mocking setup properly reflects the library's interface for ID retrieval.
-        const id = posthog.get_distinct_id();
-        expect(id).toBe('anon_id_123');
-        expect(posthog.get_distinct_id).toHaveBeenCalled();
     });
   });
 
   describe('getPostHog', () => {
     it('should return posthog instance', () => {
         expect(getPostHog()).toBe(posthog);
+    });
+
+    it('should expose get_distinct_id capability', () => {
+        // Verify that getPostHog returns an instance with the standard PostHog methods
+        const ph = getPostHog();
+
+        // In jsdom test environment, window exists so ph should not be null
+        expect(ph).not.toBeNull();
+
+        const id = ph!.get_distinct_id();
+        expect(id).toBe('anon_id_123');
+        expect(ph!.get_distinct_id).toHaveBeenCalled();
+    });
+
+    it('should expose standard PostHog methods', () => {
+        const ph = getPostHog();
+
+        // In jsdom test environment, window exists so ph should not be null
+        expect(ph).not.toBeNull();
+
+        // Verify the instance has expected methods
+        expect(ph!.get_distinct_id).toBeDefined();
+        expect(ph!.init).toBeDefined();
+        expect(ph!.debug).toBeDefined();
+        expect(typeof ph!.get_distinct_id).toBe('function');
+        expect(typeof ph!.init).toBe('function');
+        expect(typeof ph!.debug).toBe('function');
     });
   });
 });

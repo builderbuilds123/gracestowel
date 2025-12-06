@@ -17,12 +17,12 @@ so that we can analyze user journeys.
 
 ## Tasks / Subtasks
 
-- [ ] Verify `posthog-js` configuration in `apps/storefront/app/utils/posthog.ts`
-  - [ ] Ensure `persistence` is NOT disabled (default is cookie+localStorage, which is correct for our "info-only" policy).
-  - [ ] Explicitly check `bootstrap` options to ensure no ID overrides are happening unintentionally.
-- [ ] Add Test Verification
-  - [ ] Update `posthog.test.ts` to verify that `posthog.get_distinct_id()` returns a value after initialization (mocking `posthog-js` behavior or verifying the library is called correctly).
-  - [ ] Note: Since we mock `posthog-js` in tests, we are verifying OUR configuration passed to it, and trusting the library to generate IDs.
+- [x] Verify `posthog-js` configuration in `apps/storefront/app/utils/posthog.ts`
+  - [x] Ensure `persistence` is NOT disabled (default is cookie+localStorage, which is correct for our "info-only" policy).
+  - [x] Explicitly check `bootstrap` options to ensure no ID overrides are happening unintentionally.
+- [x] Add Test Verification
+  - [x] Update `posthog.test.ts` to verify that `posthog.get_distinct_id()` returns a value after initialization (mocking `posthog-js` behavior or verifying the library is called correctly).
+  - [x] Note: Since we mock `posthog-js` in tests, we are verifying OUR configuration passed to it, and trusting the library to generate IDs.
 
 ## Dev Notes
 
@@ -56,6 +56,8 @@ Antigravity (bmad-bmm-create-story)
 ### Completion Notes List
 
 - Story is ready-for-dev. Primarily verification work.
+- [Code Review] explicit persistence added to posthog.ts.
+- [Code Review] Added tests for reportWebVitals and loaded callback.
 
 ### File List
 
