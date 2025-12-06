@@ -1,3 +1,13 @@
+import Medusa from "@medusajs/js-sdk"
+
+export const createMedusaClient = (backendUrl: string, publishableKey: string) => {
+  return new Medusa({
+    baseUrl: backendUrl,
+    debug: process.env.NODE_ENV === "development",
+    publishableKey
+  })
+}
+
 /**
  * Client-safe Medusa types and helper functions
  * These can be used in both server and client code
@@ -139,3 +149,18 @@ export function getStockStatusDisplay(status: StockStatus): {
     }
 }
 
+/**
+ * Create a Medusa client instance using environment variables from context or process
+ */
+export function getMedusaClient(context?: { cloudflare?: { env?: { MEDUSA_BACKEND_URL?: string, MEDUSA_PUBLISHABLE_KEY?: string } } }) {
+    const backendUrl = context?.cloudflare?.env?.MEDUSA_BACKEND_URL || 
+                      process.env.VITE_MEDUSA_BACKEND_URL || 
+                      "http://localhost:9000";
+    
+    // Prioritize context key, then process env, then hardcoded fallback (or empty)
+    const publishableKey = context?.cloudflare?.env?.MEDUSA_PUBLISHABLE_KEY || 
+                          process.env.MEDUSA_PUBLISHABLE_KEY || 
+                          "";
+
+    return createMedusaClient(backendUrl, publishableKey);
+}

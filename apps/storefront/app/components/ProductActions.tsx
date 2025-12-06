@@ -97,8 +97,10 @@ export function ProductActions({ product, selectedVariant, isOutOfStock }: Produ
         setQuantity(prev => Math.max(1, prev + delta));
     };
 
-    const handleEmbroideryConfirm = (data: EmbroideryData) => {
-        setEmbroideryData(data);
+    const handleEmbroideryConfirm = (data: EmbroideryData | null) => {
+        if (data) {
+            setEmbroideryData(data);
+        }
         setIsEmbroideryOpen(false);
     };
 

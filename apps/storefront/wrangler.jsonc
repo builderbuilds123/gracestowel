@@ -10,7 +10,17 @@
     // Runtime secrets (set via `wrangler secret put` or Cloudflare Dashboard):
     // - MEDUSA_BACKEND_URL: Backend API URL
     // - MEDUSA_PUBLISHABLE_KEY: Medusa Store API key
+    "MEDUSA_BACKEND_URL": "http://localhost:9000",
+    "MEDUSA_PUBLISHABLE_KEY": "pk_4cc1cc37285c660264befb5cec0f50cdfded4a4371158da578d17cd24eeb8377"
   },
+
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "43cb3470f0b5446c881a7b30aa87eb3e",
+      "localConnectionString": "postgresql://postgres:password@localhost:5432/medusa-db"
+    }
+  ],
 
   // Observability configuration
   "observability": {

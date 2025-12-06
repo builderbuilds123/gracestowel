@@ -2,7 +2,7 @@ import type { Route } from "./+types/towels";
 import { useState, useMemo } from "react";
 import { ProductCard } from "../components/ProductCard";
 import { ProductFilters } from "../components/ProductFilters";
-import { getMedusaClient } from "../lib/medusa.server";
+import { getMedusaClient, type MedusaProduct } from "../lib/medusa";
 import { productList } from "../data/products";
 import { SlidersHorizontal, X } from "lucide-react";
 import { transformToListItems, type ProductListItem } from "../lib/product-transformer";
@@ -28,22 +28,24 @@ export function meta() {
 export async function loader({ context }: Route.LoaderArgs) {
     try {
         const medusa = getMedusaClient(context);
-        const response = await medusa.getProducts({ limit: 50 });
+        const { products } = await medusa.store.product.list({ limit: 50, fields: "+variants,+variants.prices,+variants.inventory_quantity,+options,+options.values,+images,+categories,+metadata" });
 
         // Transform Medusa products using centralized transformer
-        const products = transformToListItems(response.products);
+        // Cast to MedusaProduct[] because SDK method returns HttpTypes.StoreProduct which might differ slightly in strictness
+        // but our transformer expects our MedusaProduct interface.
+        const transformedProducts = transformToListItems(products as unknown as MedusaProduct[]);
 
         // Extract all unique colors
-        const allColors = [...new Set(products.flatMap(p => p.colors))].sort();
+        const allColors = [...new Set(transformedProducts.flatMap(p => p.colors))].sort();
 
         // Get price range
-        const prices = products.map(p => p.priceAmount).filter(p => p > 0);
+        const prices = transformedProducts.map(p => p.priceAmount).filter(p => p > 0);
         const priceRange = {
             min: Math.floor(Math.min(...prices, 0)),
             max: Math.ceil(Math.max(...prices, 200)),
         };
 
-        return { products, allColors, priceRange, error: null };
+        return { products: transformedProducts, allColors, priceRange, error: null };
     } catch (error) {
         console.error("Failed to fetch products from Medusa:", error);
         // Fallback to static products

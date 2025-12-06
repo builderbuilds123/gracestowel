@@ -73,7 +73,7 @@ export default function Checkout() {
             }),
         })
             .then((res) => res.json())
-            .then((data: { clientSecret: string }) => setClientSecret(data.clientSecret));
+            .then((data) => setClientSecret((data as { clientSecret: string }).clientSecret));
     }, [cartTotal, currency, items, isAuthenticated, customer]); // Include customer in dependencies
 
     // Separate effect to update PaymentIntent when shipping changes
@@ -103,9 +103,9 @@ export default function Checkout() {
             }),
         })
             .then((res) => res.json())
-            .then((data: { clientSecret: string }) => {
+            .then((data) => {
                 // Update client secret with new PaymentIntent
-                setClientSecret(data.clientSecret);
+                setClientSecret((data as { clientSecret: string }).clientSecret);
             });
     }, [selectedShipping, items, isAuthenticated, customer]); // Include customer in dependencies
 

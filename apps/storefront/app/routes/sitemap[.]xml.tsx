@@ -1,5 +1,5 @@
 import type { Route } from "./+types/sitemap[.]xml";
-import { getMedusaClient } from "../lib/medusa.server";
+import { getMedusaClient, type MedusaProduct } from "../lib/medusa";
 
 const SITE_URL = "https://gracestowel.com";
 
@@ -17,9 +17,9 @@ export async function loader({ context }: Route.LoaderArgs) {
     
     try {
         const medusa = getMedusaClient(context);
-        const response = await medusa.getProducts({ limit: 100 });
+        const { products } = await medusa.store.product.list({ limit: 100, fields: "+handle" });
         
-        productUrls = response.products.map((product) => ({
+        productUrls = (products as unknown as MedusaProduct[]).map((product: MedusaProduct) => ({
             url: `/products/${product.handle}`,
             priority: "0.8",
             changefreq: "weekly",

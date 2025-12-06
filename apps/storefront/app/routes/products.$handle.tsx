@@ -8,9 +8,8 @@ import { ProductInfo } from "../components/ProductInfo";
 import { ProductActions } from "../components/ProductActions";
 import { ProductDetails } from "../components/ProductDetails";
 import { RelatedProducts } from "../components/RelatedProducts";
-import { getMedusaClient } from "../lib/medusa.server";
+import { getMedusaClient } from "../lib/medusa";
 import { getStockStatus, type MedusaProduct } from "../lib/medusa";
-import { products as staticProducts } from "../data/products";
 import { transformToDetail, type ProductDetail } from "../lib/product-transformer";
 
 // SEO Meta tags for product pages
@@ -70,81 +69,53 @@ export async function loader({ params, context }: Route.LoaderArgs) {
         throw new Response("Product not found", { status: 404 });
     }
 
-    const backendUrl = (context as { cloudflare?: { env?: { MEDUSA_BACKEND_URL?: string } } })?.cloudflare?.env?.MEDUSA_BACKEND_URL || "http://localhost:9000";
+    const medusa = getMedusaClient(context);
+    // Extract backend URL for the review fetcher manually or via client
+    // We can get it from context safely now
+    const backendUrl = (context as any)?.cloudflare?.env?.MEDUSA_BACKEND_URL || "http://localhost:9000";
 
-    // Strategy: Try Hyperdrive (direct DB) first for fastest response,
-    // then fall back to Medusa API, then to static products
     let medusaProduct: MedusaProduct | null = null;
     let allProducts: { products: MedusaProduct[] } = { products: [] };
-    let dataSource: "hyperdrive" | "medusa" | "static" = "static";
+    let dataSource: "hyperdrive" | "medusa" = "medusa"; // Defaulting to medusa api
 
-    // 1. Try Hyperdrive (direct PostgreSQL via connection pooling)
-    // TEMPORARILY DISABLED: Database schema needs updating for Medusa v2 price tables
-    // TODO: Update price query to use price_set and price tables instead of product_variant_price
-    // Hyperdrive code removed - need to import getProductByHandleFromDB, getProductsFromDB, isHyperdriveAvailable when re-enabling
-    if (false) {
-        // Hyperdrive functionality temporarily disabled
-        dataSource = "static";
-    }
+    try {
+        const startTime = Date.now();
+        // Use the Medusa SDK v2 methods
+        const { products } = await medusa.store.product.list({ handle, limit: 1, fields: "+variants,+variants.prices,+variants.inventory_quantity,+options,+options.values,+images,+categories,+metadata" });
+        medusaProduct = (products[0] as unknown as MedusaProduct) || null;
 
-    // 2. Fall back to Medusa API if Hyperdrive didn't work
-    if (!medusaProduct) {
-        try {
-            const startTime = Date.now();
-            const medusa = getMedusaClient(context);
-            medusaProduct = await medusa.getProductByHandle(handle);
-
-            if (medusaProduct) {
-                allProducts = await medusa.getProducts({ limit: 10 });
-                dataSource = "medusa";
-                console.log(`✅ Medusa API: Fetched product in ${Date.now() - startTime}ms`);
-            }
-        } catch (error) {
-            console.error("Failed to fetch product from Medusa:", error);
+        if (medusaProduct) {
+            // Fetch related products
+            const response = await medusa.store.product.list({ limit: 10, fields: "+variants.prices,+images" });
+            allProducts = { products: (response.products as unknown as MedusaProduct[]) };
+            console.log(`✅ Medusa API: Fetched product in ${Date.now() - startTime}ms`);
         }
+    } catch (error: any) {
+        console.error("Failed to fetch product from Medusa:", error);
     }
 
-    // 3. Return Medusa/Hyperdrive product if found
-    if (medusaProduct) {
-        const product = transformToDetail(medusaProduct);
-
-        // Fetch reviews from Medusa backend (reviews require API, not direct DB)
-        const reviewData = await fetchReviews(medusaProduct.id, backendUrl);
-
-        const relatedProducts = allProducts.products
-            .filter(p => p.handle !== handle)
-            .slice(0, 3)
-            .map(p => transformToDetail(p));
-
-        return {
-            product,
-            relatedProducts,
-            reviews: reviewData.reviews,
-            reviewStats: reviewData.stats,
-            backendUrl,
-            error: null,
-            _dataSource: dataSource, // For debugging
-        };
-    }
-
-    // 4. Final fallback to static products
-    const staticProduct = staticProducts[handle];
-    if (!staticProduct) {
+    if (!medusaProduct) {
         throw new Response("Product not found", { status: 404 });
     }
 
-    const relatedProducts = Object.values(staticProducts)
+    const product = transformToDetail(medusaProduct);
+
+    // Fetch reviews from Medusa backend
+    const reviewData = (await fetchReviews(medusaProduct.id, backendUrl)) as { reviews: Review[]; stats: ReviewStats };
+
+    const relatedProducts = allProducts.products
         .filter(p => p.handle !== handle)
-        .slice(0, 3);
+        .slice(0, 3)
+        .map(p => transformToDetail(p));
 
     return {
-        product: { ...staticProduct, variants: [] },
-        relatedProducts: relatedProducts.map(p => ({ ...p, variants: [] })),
-        reviews: [] as Review[],
-        reviewStats: { average: 0, count: 0, distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 } } as ReviewStats,
+        product,
+        relatedProducts,
+        reviews: reviewData.reviews,
+        reviewStats: reviewData.stats,
         backendUrl,
-        error: "Using cached product",
-        _dataSource: "static" as const,
+        error: null,
+        _dataSource: dataSource,
     };
 }
 
@@ -183,7 +154,7 @@ export default function ProductDetail({ loaderData }: Route.ComponentProps) {
         try {
             const response = await fetch(`${backendUrl}/store/products/${product.id}/reviews?sort=${sort}&limit=10`);
             if (response.ok) {
-                const data = await response.json();
+                const data = (await response.json()) as { reviews: Review[] };
                 setReviews(data.reviews);
             }
         } catch (error) {
@@ -200,7 +171,7 @@ export default function ProductDetail({ loaderData }: Route.ComponentProps) {
                 body: JSON.stringify(reviewData),
             });
             if (!response.ok) {
-                const error = await response.json();
+                const error = (await response.json()) as { message?: string };
                 throw new Error(error.message || "Failed to submit review");
             }
             setIsReviewFormOpen(false);

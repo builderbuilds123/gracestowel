@@ -49,6 +49,43 @@ This document provides the complete epic and story breakdown for `gracestowel`, 
 
 ---
 
+## Epic 0: Architecture & Data Foundation
+
+**Goal:** Transition storefront from static content to dynamic Medusa backend integration using Hyperdrive, establishing the "single source of truth."
+
+### Story 0.1: Establish Medusa Client & Hyperdrive Connection
+
+As a developer,
+I want to configure the Medusa JS client and Cloudflare Hyperdrive in the storefront,
+So that I can securely and performantly fetch data from the Medusa backend.
+
+**Acceptance Criteria:**
+*   **Given** the storefront application is configured.
+*   **When** the application attempts to connect to the backend.
+*   **Then** the Medusa JS client is initialized with correct environment variables.
+*   **And** the Hyperdrive binding is configured in `wrangler.toml` and accessible in loaders.
+*   **And** the connection is verified by fetching a simple endpoint (e.g., store details).
+
+**Technical Notes:** Ensure `wrangler.toml` in `apps/storefront` is updated with local and production Hyperdrive bindings.
+
+### Story 0.2: Refactor PDP to Dynamic Data
+
+As a customer,
+I want to see real-time product details (price, inventory) on the Product Page,
+So that I can make accurate purchasing decisions.
+
+**Acceptance Criteria:**
+*   **Given** I am on a Product Detail Page (PDP).
+*   **When** the page loads.
+*   **Then** the static JSON loader is replaced with `medusa.products.retrieve` call.
+*   **And** loading states are handled gracefully.
+*   **And** 404s are correctly displayed for missing products.
+*   **And** SEO metadata is generated using the dynamic product data.
+
+**Technical Notes:** Update `loader` function in PDP route to use `context.medusa`.
+
+---
+
 ## Epic 1: Foundational Event Tracking
 
 Establish the core infrastructure for capturing essential user interaction data from the storefront.

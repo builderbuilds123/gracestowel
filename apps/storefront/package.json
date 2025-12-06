@@ -16,6 +16,7 @@
     "test:server": "cd build/server && wrangler dev --port 5173 --ip 0.0.0.0"
   },
   "dependencies": {
+    "@medusajs/js-sdk": "^2.12.1",
     "@phosphor-icons/react": "^2.1.10",
     "@stripe/react-stripe-js": "^5.4.0",
     "@stripe/stripe-js": "^8.5.2",
