@@ -23,7 +23,6 @@ export default async function ({ container }: ExecArgs) {
       filename: "test-r2-upload.txt",
       mimeType: "text/plain",
       content: fileContent.toString("base64"),
-      access: "public"
     })
 
     console.log("Upload successful!")
