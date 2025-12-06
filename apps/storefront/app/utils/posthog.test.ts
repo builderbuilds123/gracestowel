@@ -34,7 +34,7 @@ describe('PostHog Utilities', () => {
       expect(posthog.init).not.toHaveBeenCalled();
     });
 
-    it('should initialize PostHog if API key is present', () => {
+    it('should initialize PostHog and enable debug in development', () => {
       // Mock present API key
       vi.stubEnv('VITE_POSTHOG_API_KEY', 'ph_test_key');
       vi.stubEnv('VITE_POSTHOG_HOST', 'https://test.posthog.com');
@@ -46,6 +46,7 @@ describe('PostHog Utilities', () => {
         api_host: 'https://test.posthog.com',
         autocapture: true,
       }));
+      expect(posthog.debug).toHaveBeenCalled();
     });
 
     it('should use default host if not provided', () => {
