@@ -1,6 +1,6 @@
 import { ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Elements, ExpressCheckoutElement } from '@stripe/react-stripe-js';
 import { useCart } from '../context/CartContext';
 import { useLocale } from '../context/LocaleContext';
@@ -28,9 +28,10 @@ export default function Checkout() {
     const shippingCost = selectedShipping?.amount || 0;
     const finalTotal = cartTotal + shippingCost;
 
+    const hasFiredCheckoutStarted = useRef(false);
     // Track checkout started event in PostHog
     useEffect(() => {
-        if (cartTotal > 0 && typeof window !== 'undefined') {
+        if (cartTotal > 0 && typeof window !== 'undefined' && !hasFiredCheckoutStarted.current) {
             import('../utils/posthog').then(({ default: posthog }) => {
                 posthog.capture('checkout_started', {
                     cart_total: cartTotal,
@@ -44,8 +45,9 @@ export default function Checkout() {
                     })),
                 });
             });
+            hasFiredCheckoutStarted.current = true;
         }
-    }, []); // Only run once on mount
+    }, [cartTotal, items, currency]); // Run when cart updates, but use ref to fire only once
 
     useEffect(() => {
         if (cartTotal <= 0) return;

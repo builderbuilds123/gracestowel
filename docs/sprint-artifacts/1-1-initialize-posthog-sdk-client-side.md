@@ -1,6 +1,6 @@
 # Story 1.1: Initialize PostHog SDK for Client-Side Tracking
 
-Status: Ready for Review
+Status: Done
 
 ## Story
 
