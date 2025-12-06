@@ -48,23 +48,7 @@ export async function loader({ context }: Route.LoaderArgs) {
         return { products: transformedProducts, allColors, priceRange, error: null };
     } catch (error) {
         console.error("Failed to fetch products from Medusa:", error);
-        // Fallback to static products
-        const products: ProductListItem[] = productList.map((product) => ({
-            id: String(product.id),
-            handle: product.handle,
-            title: product.title,
-            price: product.formattedPrice,
-            priceAmount: product.price,
-            image: product.images[0],
-            description: product.description,
-            colors: product.colors || [],
-        }));
-        return {
-            products,
-            allColors: ["Cream", "Sage", "Blush", "Stone"],
-            priceRange: { min: 0, max: 200 },
-            error: "Using cached products"
-        };
+        throw new Response("Failed to load products from backend", { status: 500 });
     }
 }
 
