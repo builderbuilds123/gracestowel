@@ -57,7 +57,6 @@ async function testR2() {
       Key: "test-direct-upload.txt",
       Body: "Direct AWS SDK upload test",
       ContentType: "text/plain",
-      ACL: "public-read",
     });
 
     console.log("Sending PutObjectCommand...");
