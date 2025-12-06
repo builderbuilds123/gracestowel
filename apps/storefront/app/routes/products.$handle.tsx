@@ -130,7 +130,6 @@ export default function ProductDetail({ loaderData }: Route.ComponentProps) {
     const isOutOfStock = stockStatus === "out_of_stock";
 
     // Track product view in PostHog
-    // Track product view in PostHog
     useEffect(() => {
         if (typeof window !== 'undefined') {
             import('../utils/posthog').then(({ default: posthog }) => {

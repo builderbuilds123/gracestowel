@@ -91,19 +91,50 @@ describe('ProductDetail Route', () => {
     });
   });
 
-  it('should NOT capture event if window is undefined (SSR)', async () => {
-     // This is harder to test in jsdom environment which emulates window. 
-     // We rely on the implementation guard.
-     // But we can verify it doesn't fire multiple times.
-     render(<ProductDetail loaderData={mockLoaderData as any} />);
-     
-     // Wait for effects
-     await waitFor(() => expect(mockPostHog.capture).toHaveBeenCalledTimes(1));
-     
-     // Re-render (simulate update)
-     render(<ProductDetail loaderData={mockLoaderData as any} />);
-     
-     // Should still be called (since it's a new render in test, but useEffect dependency matters)
-     // Actually, let's focus on the payload correctness first.
+  it('should only capture product_viewed event once on mount, not on re-renders with same props', async () => {
+    const { rerender } = render(<ProductDetail loaderData={mockLoaderData as any} />);
+
+    // It should be called once on initial mount
+    await waitFor(() => {
+      expect(mockPostHog.capture).toHaveBeenCalledTimes(1);
+    });
+
+    // Re-render with the same props
+    rerender(<ProductDetail loaderData={mockLoaderData as any} />);
+
+    // Use a small delay to ensure no more calls are made
+    await new Promise(r => setTimeout(r, 50));
+
+    // The capture function should still have been called only once
+    expect(mockPostHog.capture).toHaveBeenCalledTimes(1);
+  });
+
+  it('should re-capture event when product changes (dependency change)', async () => {
+    const { rerender } = render(<ProductDetail loaderData={mockLoaderData as any} />);
+
+    // Initial capture
+    await waitFor(() => {
+      expect(mockPostHog.capture).toHaveBeenCalledTimes(1);
+      expect(mockPostHog.capture).toHaveBeenCalledWith('product_viewed', expect.objectContaining({
+        product_id: mockLoaderData.product.id,
+      }));
+    });
+
+    // Change product data (new product ID triggers useEffect dependency)
+    const newLoaderData = {
+      ...mockLoaderData,
+      product: { ...mockLoaderData.product, id: 'different-product-id', handle: 'new-handle' }
+    };
+
+    rerender(<ProductDetail loaderData={newLoaderData as any} />);
+
+    // Should capture again with new product ID
+    await waitFor(() => {
+      expect(mockPostHog.capture).toHaveBeenCalledTimes(2);
+      expect(mockPostHog.capture).toHaveBeenLastCalledWith('product_viewed', expect.objectContaining({
+        product_id: 'different-product-id',
+        product_handle: 'new-handle',
+      }));
+    });
   });
 });
