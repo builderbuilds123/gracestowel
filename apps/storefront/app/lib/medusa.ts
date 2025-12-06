@@ -183,14 +183,17 @@ export function getMedusaClient(context?: { cloudflare?: { env?: { MEDUSA_BACKEN
         }
     }
 
-    const backendUrl = context?.cloudflare?.env?.MEDUSA_BACKEND_URL || 
-                      process.env.VITE_MEDUSA_BACKEND_URL || 
+    const backendUrl = context?.cloudflare?.env?.MEDUSA_BACKEND_URL ||
+                      process.env.VITE_MEDUSA_BACKEND_URL ||
                       "http://localhost:9000";
-    
-    // Prioritize context key, then process env, then hardcoded fallback (or empty)
-    const publishableKey = context?.cloudflare?.env?.MEDUSA_PUBLISHABLE_KEY || 
-                          process.env.MEDUSA_PUBLISHABLE_KEY || 
-                          "";
+
+    // Prioritize context key, then process env
+    const publishableKey = context?.cloudflare?.env?.MEDUSA_PUBLISHABLE_KEY ||
+                          process.env.MEDUSA_PUBLISHABLE_KEY;
+
+    if (!publishableKey) {
+        throw new Error("Medusa publishable key is not configured. Set MEDUSA_PUBLISHABLE_KEY environment variable.");
+    }
 
     const client = createMedusaClient(backendUrl, publishableKey);
     
