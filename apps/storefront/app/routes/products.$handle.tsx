@@ -8,7 +8,7 @@ import { ProductInfo } from "../components/ProductInfo";
 import { ProductActions } from "../components/ProductActions";
 import { ProductDetails } from "../components/ProductDetails";
 import { RelatedProducts } from "../components/RelatedProducts";
-import { getMedusaClient } from "../lib/medusa";
+import { getMedusaClient, getBackendUrl } from "../lib/medusa";
 import { getStockStatus, validateMedusaProduct, type MedusaProduct } from "../lib/medusa";
 import { transformToDetail, type ProductDetail } from "../lib/product-transformer";
 
@@ -70,9 +70,8 @@ export async function loader({ params, context }: Route.LoaderArgs) {
     }
 
     const medusa = getMedusaClient(context);
-    // Extract backend URL for the review fetcher manually or via client
-    // We can get it from context safely now
-    const backendUrl = (context as any)?.cloudflare?.env?.MEDUSA_BACKEND_URL || "http://localhost:9000";
+    // Use centralized backend URL resolution for consistency
+    const backendUrl = getBackendUrl(context);
 
     let medusaProduct: MedusaProduct | null = null;
     let allProducts: { products: MedusaProduct[] } = { products: [] };

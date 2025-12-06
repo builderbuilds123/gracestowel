@@ -169,6 +169,16 @@ export function getStockStatusDisplay(status: StockStatus): {
 }
 
 /**
+ * Get the backend URL from context or environment variables
+ * Centralizes the backend URL resolution logic
+ */
+export function getBackendUrl(context?: { cloudflare?: { env?: { MEDUSA_BACKEND_URL?: string } } }): string {
+    return context?.cloudflare?.env?.MEDUSA_BACKEND_URL ||
+           process.env.VITE_MEDUSA_BACKEND_URL ||
+           "http://localhost:9000";
+}
+
+/**
  * Create a Medusa client instance using environment variables from context or process
  * Uses a WeakMap to cache instances per context object to prevent multiple instantiations
  * during a single request flow (e.g. loader + helpers).
@@ -183,9 +193,7 @@ export function getMedusaClient(context?: { cloudflare?: { env?: { MEDUSA_BACKEN
         }
     }
 
-    const backendUrl = context?.cloudflare?.env?.MEDUSA_BACKEND_URL ||
-                      process.env.VITE_MEDUSA_BACKEND_URL ||
-                      "http://localhost:9000";
+    const backendUrl = getBackendUrl(context);
 
     // Prioritize context key, then process env
     const publishableKey = context?.cloudflare?.env?.MEDUSA_PUBLISHABLE_KEY ||
@@ -196,7 +204,7 @@ export function getMedusaClient(context?: { cloudflare?: { env?: { MEDUSA_BACKEN
     }
 
     const client = createMedusaClient(backendUrl, publishableKey);
-    
+
     // Cache the client if we have a context object
     if (context && typeof context === 'object') {
         clientCache.set(context, client);
