@@ -7,15 +7,15 @@ WORKDIR /app
 FROM base AS builder
 WORKDIR /app
 
-# Copy package.json first for layer caching
-COPY package.json ./
+# Copy package.json from apps/backend assuming root build context
+COPY apps/backend/package.json ./
 
 # Install ALL dependencies (production + dev) for the build
 # Legacy peer deps needed for some Medusa packages
 RUN npm install --legacy-peer-deps
 
-# Copy source code
-COPY . .
+# Copy source code from apps/backend
+COPY apps/backend .
 
 # Build Medusa backend using npm run build to reliably use local CLI
 RUN npm run build

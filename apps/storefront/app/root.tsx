@@ -8,7 +8,8 @@ import {
 } from "react-router";
 
 import type { Route } from "./+types/root";
-import { createMedusaClient } from "./lib/medusa";
+import { getMedusaClient } from "./lib/medusa";
+import { useLoaderData } from "react-router";
 import { CartProvider } from "./context/CartContext";
 import { LocaleProvider } from "./context/LocaleContext";
 import { CustomerProvider } from "./context/CustomerContext";
@@ -41,10 +42,14 @@ export async function loader({ context }: Route.LoaderArgs) {
     throw new Error("Missing MEDUSA_BACKEND_URL environment variable");
   }
 
-  // Initialize client server-side to verify config
-  // Note: specific data fetching will happen in page loaders, this is just a quick check
-  // or verifying the factory works with the env.
-  // We don't necessarily need to return the client instance, just use it or pass config down if needed.
+  // Initialize client server-side to verify config and connection (AC requirement)
+  try {
+      const client = getMedusaClient({ cloudflare: { env } });
+      await client.store.product.list({ limit: 1 });
+      console.log("✅ Medusa connection verified via loader");
+  } catch (err) {
+      console.error("❌ Failed to verify Medusa connection:", err);
+  }
   
   return { 
     env: { 
@@ -88,6 +93,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 <Footer />
                 <CartDrawer />
                 <ScrollRestoration />
+                <EnvScript />
                 <Scripts />
               </body>
             </html>
@@ -95,6 +101,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </CartProvider>
       </CustomerProvider>
     </LocaleProvider>
+  );
+}
+
+function EnvScript() {
+  const data = useLoaderData<typeof loader>();
+  return (
+    <script
+      dangerouslySetInnerHTML={{
+        __html: `window.ENV = ${JSON.stringify(data?.env || {})}`,
+      }}
+    />
   );
 }
 

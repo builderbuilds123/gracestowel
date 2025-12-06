@@ -168,14 +168,33 @@ export function getStockStatusDisplay(status: StockStatus): {
     }
 }
 
+// Add global type for window.ENV
+declare global {
+  interface Window {
+    ENV?: {
+      MEDUSA_BACKEND_URL?: string;
+      MEDUSA_PUBLISHABLE_KEY?: string;
+    };
+  }
+}
+
 /**
  * Get the backend URL from context or environment variables
  * Centralizes the backend URL resolution logic
  */
 export function getBackendUrl(context?: { cloudflare?: { env?: { MEDUSA_BACKEND_URL?: string } } }): string {
-    return context?.cloudflare?.env?.MEDUSA_BACKEND_URL ||
-           process.env.VITE_MEDUSA_BACKEND_URL ||
-           "http://localhost:9000";
+    // 1. Check Cloudflare context (server-side)
+    if (context?.cloudflare?.env?.MEDUSA_BACKEND_URL) {
+        return context.cloudflare.env.MEDUSA_BACKEND_URL;
+    }
+
+    // 2. Check window.ENV (client-side hydration)
+    if (typeof window !== "undefined" && window.ENV?.MEDUSA_BACKEND_URL) {
+        return window.ENV.MEDUSA_BACKEND_URL;
+    }
+
+    // 3. Check process.env (build-time or Node.js)
+    return process.env.VITE_MEDUSA_BACKEND_URL || "http://localhost:9000";
 }
 
 /**
@@ -185,6 +204,9 @@ export function getBackendUrl(context?: { cloudflare?: { env?: { MEDUSA_BACKEND_
  */
 const clientCache = new WeakMap<object, Medusa>();
 
+// Singleton for client-side usage to avoid recreating client on every render
+let clientSideInstance: Medusa | null = null;
+
 export function getMedusaClient(context?: { cloudflare?: { env?: { MEDUSA_BACKEND_URL?: string, MEDUSA_PUBLISHABLE_KEY?: string } } }) {
     // If context is provided, try to use it for caching
     if (context && typeof context === 'object') {
@@ -193,11 +215,23 @@ export function getMedusaClient(context?: { cloudflare?: { env?: { MEDUSA_BACKEN
         }
     }
 
+    // Return singleton on client-side if no context or strictly client-side
+    if (!context && typeof window !== "undefined" && clientSideInstance) {
+        return clientSideInstance;
+    }
+
     const backendUrl = getBackendUrl(context);
 
-    // Prioritize context key, then process env
-    const publishableKey = context?.cloudflare?.env?.MEDUSA_PUBLISHABLE_KEY ||
-                          process.env.MEDUSA_PUBLISHABLE_KEY;
+    // Prioritize context key, then window.ENV, then process env
+    let publishableKey = context?.cloudflare?.env?.MEDUSA_PUBLISHABLE_KEY;
+    
+    if (!publishableKey && typeof window !== "undefined") {
+        publishableKey = window.ENV?.MEDUSA_PUBLISHABLE_KEY;
+    }
+
+    if (!publishableKey) {
+        publishableKey = process.env.MEDUSA_PUBLISHABLE_KEY;
+    }
 
     if (!publishableKey) {
         throw new Error("Medusa publishable key is not configured. Set MEDUSA_PUBLISHABLE_KEY environment variable.");
@@ -208,6 +242,8 @@ export function getMedusaClient(context?: { cloudflare?: { env?: { MEDUSA_BACKEN
     // Cache the client if we have a context object
     if (context && typeof context === 'object') {
         clientCache.set(context, client);
+    } else if (typeof window !== "undefined") {
+        clientSideInstance = client;
     }
 
     return client;

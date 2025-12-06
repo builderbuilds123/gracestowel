@@ -53,3 +53,9 @@
 ## Change Log
 - 2025-12-05: Initial implementation of Story 0.1 (Medusa Client & Hyperdrive)
 - 2025-12-05: Code Review passed. Fixed missing `jsdom` in tests, removed dead code in `root.tsx`, and secured `MEDUSA_PUBLISHABLE_KEY` in `.dev.vars`.
+- 2025-12-06: **Amelia Code Review & Fixes** (Automated)
+  - Fixed `root.tsx` to verify Medusa connection via loader ping.
+  - Fixed `wrangler.jsonc` duplicate keys.
+  - Added comprehensive tests for `getMedusaClient` and global env hydration.
+  - Implemented `window.ENV` hydration for robust client-side usage.
+

@@ -9,10 +9,14 @@
      - **Solution:** How it was fixed
      - **Prevention:** How to avoid similar bugs -->
 ### 2025-12-06 - Docker Build Failure in Medusa Backend
-- **Symptom:** Docker build fails with `npm error could not determine executable to run` at `RUN npx medusa build`.
-- **Root Cause:** `npx` in node:alpine container failing to resolve the `medusa` binary correctly or attempting to fetch it when it should utilize the local `@medusajs/cli` dependency.
-- **Solution:** Replaced `npx medusa ...` commands with `npm run ...` scripts. Added `"migrate": "medusa db:migrate"` to `package.json` and updated Dockerfile to use `npm run build` and `npm run migrate`.
-- **Prevention:** Always prefer `npm run <script>` over `npx <package>` in Dockerfiles when the package is already a dependency.
+- **Symptom:** Docker build fails with `npm error could not determine executable to run` (npx issue) or `npm error Missing script: "build"`.
+- **Root Cause:** 
+    1. `npx` resolution failure in Alpine.
+    2. **Incorrect Build Context:** The build is running from the repository root, so `COPY package.json` copies the root `package.json` (which lacks the build script) instead of the backend one.
+- **Solution:** 
+    1. Switched to `npm run build`. 
+    2. Updated Dockerfile to copy from `apps/backend/package.json` and `apps/backend` specifically, handling the root build context correctly.
+- **Prevention:** When Dockerfiles are in subdirectories of a monorepo, verify the build context (Root Directory) in CI/Deployment settings. Explicit paths in Dockerfile are safer if context is Root.
 
 ## Solutions That Worked
 
