@@ -43,7 +43,7 @@ This workflow uses a single comprehensive CSV file to intelligently document you
 </step>
 
 <step n="0.6" goal="Check for existing documentation and determine workflow mode">
-<action>Check if {output_folder}/index.md exists</action>
+<action>Check if {output_folder}/README.md exists</action>
 
 <check if="index.md exists">
   <action>Read existing index.md to extract metadata (date, project structure, parts count)</action>
@@ -325,7 +325,7 @@ findings.batches_completed: [
   </check>
 
 <action>Build API contracts catalog</action>
-<action>IMMEDIATELY write to: {output_folder}/api-contracts-{part_id}.md</action>
+<action>IMMEDIATELY write to: {output_folder}/reference/api-contracts-{part_id}.md</action>
 <action>Validate document has all required sections</action>
 <action>Update state file with output generated</action>
 <action>PURGE detailed API data, keep only: "{{api_count}} endpoints documented"</action>
@@ -346,7 +346,7 @@ findings.batches_completed: [
   </check>
 
 <action>Build database schema documentation</action>
-<action>IMMEDIATELY write to: {output_folder}/data-models-{part_id}.md</action>
+<action>IMMEDIATELY write to: {output_folder}/architecture/data-models-{part_id}.md</action>
 <action>Validate document completeness</action>
 <action>Update state file with output generated</action>
 <action>PURGE detailed schema data, keep only: "{{table_count}} tables documented"</action>
@@ -454,7 +454,7 @@ project-root/
 <template-output>source_tree_analysis</template-output>
 <template-output>critical_folders_summary</template-output>
 
-<action>IMMEDIATELY write source-tree-analysis.md to disk</action>
+<action>IMMEDIATELY write source-tree-analysis.md to {output_folder}/insights/source-tree-analysis.md</action>
 <action>Validate document structure</action>
 <action>Update state file:
 
@@ -521,7 +521,7 @@ project-root/
 - details: Endpoints, protocols, data formats
   </action>
 
-<action>IMMEDIATELY write integration-architecture.md to disk</action>
+<action>IMMEDIATELY write integration-architecture.md to {output_folder}/architecture/integration.md</action>
 <action>Validate document completeness</action>
 
 <template-output>integration_architecture</template-output>
@@ -551,11 +551,11 @@ project-root/
 </action>
 
 <action if="single part project">
-  - Generate: architecture.md (no part suffix)
+  - Generate: architecture/overview.md (no part suffix)
 </action>
 
 <action if="multi-part project">
-  - Generate: architecture-{part_id}.md for each part
+  - Generate: architecture/{part_id}.md for each part
 </action>
 
 <action>For each architecture file generated:
@@ -576,7 +576,7 @@ project-root/
   </step>
 
 <step n="9" goal="Generate supporting documentation files" if="workflow_mode != deep_dive">
-<action>Generate project-overview.md with:
+<action>Generate product/overview.md with:
 - Project name and purpose (from README or user input)
 - Executive summary
 - Tech stack summary table
@@ -593,13 +593,13 @@ project-root/
 - Multi-part structure (if applicable)
   </action>
 
-<action>IMMEDIATELY write project-overview.md to disk</action>
+<action>IMMEDIATELY write product/overview.md to disk</action>
 <action>Validate document sections</action>
 
 <action>Generate source-tree-analysis.md (if not already written in Step 5)</action>
 <action>IMMEDIATELY write to disk and validate</action>
 
-<action>Generate component-inventory.md (or per-part versions) with:
+<action>Generate reference/component-inventory.md (or per-part versions) with:
 
 - All discovered components from Step 4
 - Categorized by type
@@ -608,7 +608,7 @@ project-root/
   </action>
   <action>IMMEDIATELY write each component inventory to disk and validate</action>
 
-<action>Generate development-guide.md (or per-part versions) with:
+<action>Generate guides/development.md (or per-part versions) with:
 
 - Prerequisites and dependencies
 - Environment setup instructions
@@ -620,7 +620,7 @@ project-root/
   <action>IMMEDIATELY write each development guide to disk and validate</action>
 
 <action if="deployment configuration found">
-  <action>Generate deployment-guide.md with:
+  <action>Generate guides/deployment.md with:
     - Infrastructure requirements
     - Deployment process
     - Environment configuration
@@ -630,7 +630,7 @@ project-root/
 </action>
 
 <action if="contribution guidelines found">
-  <action>Generate contribution-guide.md with:
+  <action>Generate guides/contribution.md with:
     - Code style and conventions
     - PR process
     - Testing requirements
@@ -640,7 +640,7 @@ project-root/
 </action>
 
 <action if="API contracts documented">
-  <action>Generate api-contracts.md (or per-part) with:
+  <action>Generate reference/api-contracts.md (or per-part) with:
     - All API endpoints
     - Request/response schemas
     - Authentication requirements
@@ -650,7 +650,7 @@ project-root/
 </action>
 
 <action if="Data models documented">
-  <action>Generate data-models.md (or per-part) with:
+  <action>Generate architecture/data-models.md (or per-part) with:
     - Database schema
     - Table relationships
     - Data models and entities
@@ -660,7 +660,7 @@ project-root/
 </action>
 
 <action if="multi-part project">
-  <action>Generate integration-architecture.md with:
+  <action>Generate architecture/integration.md with:
     - How parts communicate
     - Integration points diagram/description
     - Data flow between parts
@@ -668,7 +668,7 @@ project-root/
   </action>
   <action>IMMEDIATELY write to disk and validate</action>
 
-<action>Generate project-parts.json metadata file:
+<action>Generate insights/project-parts.json metadata file:
 `json
     {
       "repository_type": "monorepo",
@@ -704,7 +704,7 @@ When a document SHOULD be generated but wasn't (due to quick scan, missing data,
 - ALWAYS use this exact format for consistency and automated detection
   </critical>
 
-<action>Create index.md with intelligent navigation based on project structure</action>
+<action>Create README.md with intelligent navigation based on project structure</action>
 
 <action if="single part project">
   <action>Generate simple index with:
@@ -757,16 +757,16 @@ When a document SHOULD be generated but wasn't (due to quick scan, missing data,
 
 ### Generated Documentation
 
-- [Project Overview](./project-overview.md)
-- [Architecture](./architecture{{#if multi-part}}-{part\*id}{{/if}}.md){{#unless architecture_file_exists}} (To be generated) {{/unless}}
-- [Source Tree Analysis](./source-tree-analysis.md)
-- [Component Inventory](./component-inventory{{#if multi-part}}-{part\*id}{{/if}}.md){{#unless component_inventory_exists}} (To be generated) {{/unless}}
-- [Development Guide](./development-guide{{#if multi-part}}-{part\*id}{{/if}}.md){{#unless dev_guide_exists}} (To be generated) {{/unless}}
-  {{#if deployment_found}}- [Deployment Guide](./deployment-guide.md){{#unless deployment_guide_exists}} (To be generated) {{/unless}}{{/if}}
-  {{#if contribution_found}}- [Contribution Guide](./contribution-guide.md){{/if}}
-  {{#if api_documented}}- [API Contracts](./api-contracts{{#if multi-part}}-{part_id}{{/if}}.md){{#unless api_contracts_exists}} (To be generated) {{/unless}}{{/if}}
-  {{#if data_models_documented}}- [Data Models](./data-models{{#if multi-part}}-{part_id}{{/if}}.md){{#unless data_models_exists}} (To be generated) {{/unless}}{{/if}}
-  {{#if multi-part}}- [Integration Architecture](./integration-architecture.md){{#unless integration_arch_exists}} (To be generated) {{/unless}}{{/if}}
+- [Project Overview](./product/overview.md)
+- [Architecture](./architecture/{{#if multi-part}}{part*id}{{else}}overview{{/if}}.md){{#unless architecture_file_exists}} (To be generated) {{/unless}}
+- [Source Tree Analysis](./insights/source-tree-analysis.md)
+- [Component Inventory](./reference/component-inventory{{#if multi-part}}-{part*id}{{/if}}.md){{#unless component_inventory_exists}} (To be generated) {{/unless}}
+- [Development Guide](./guides/development{{#if multi-part}}-{part*id}{{/if}}.md){{#unless dev_guide_exists}} (To be generated) {{/unless}}
+  {{#if deployment_found}}- [Deployment Guide](./guides/deployment.md){{#unless deployment_guide_exists}} (To be generated) {{/unless}}{{/if}}
+  {{#if contribution_found}}- [Contribution Guide](./guides/contribution.md){{/if}}
+  {{#if api_documented}}- [API Contracts](./reference/api-contracts{{#if multi-part}}-{part_id}{{/if}}.md){{#unless api_contracts_exists}} (To be generated) {{/unless}}{{/if}}
+  {{#if data_models_documented}}- [Data Models](./architecture/data-models{{#if multi-part}}-{part_id}{{/if}}.md){{#unless data_models_exists}} (To be generated) {{/unless}}{{/if}}
+  {{#if multi-part}}- [Integration Architecture](./architecture/integration.md){{#unless integration_arch_exists}} (To be generated) {{/unless}}{{/if}}
 
 ### Existing Documentation
 
@@ -788,7 +788,7 @@ When a document SHOULD be generated but wasn't (due to quick scan, missing data,
 - Track which files are missing in {{missing_docs_list}} for reporting
   </action>
 
-<action>IMMEDIATELY write index.md to disk with appropriate _(To be generated)_ markers for missing files</action>
+<action>IMMEDIATELY write README.md to disk with appropriate _(To be generated)_ markers for missing files</action>
 <action>Validate index has all required sections and links are valid</action>
 
 <template-output>index</template-output>

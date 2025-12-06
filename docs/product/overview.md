@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-**Grace Stowel** is a modern e-commerce platform built on a Headless Commerce architecture. It combines a robust, extensible backend engine (Medusa v2) with a high-performance, edge-rendered storefront (React Router v7). The system is designed for scalability, flexibility, and a premium user experience.
+**Grace7:     - **[`epics/`](epics/overview.md)**: Detailed feature specifications. a Headless Commerce architecture. It combines a robust, extensible backend engine (Medusa v2) with a high-performance, edge-rendered storefront (React Router v7). The system is designed for scalability, flexibility, and a premium user experience.
 
 ## Repository Structure
 

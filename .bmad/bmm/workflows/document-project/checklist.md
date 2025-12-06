@@ -109,29 +109,29 @@
 
 ## Index and Navigation
 
-- [ ] index.md created as master entry point
-- [ ] Project structure clearly summarized in index
+- [ ] README.md created as master entry point
+- [ ] Project structure clearly summarized in README
 - [ ] Quick reference section complete and accurate
-- [ ] All generated docs linked from index
-- [ ] All existing docs linked from index (if found)
+- [ ] All generated docs linked from README
+- [ ] All existing docs linked from README (if found)
 - [ ] Getting started section provides clear next steps
 - [ ] AI-assisted development guidance included
 - [ ] Navigation structure matches project complexity (simple for single-part, detailed for multi-part)
 
 ## File Completeness
 
-- [ ] index.md generated
-- [ ] project-overview.md generated
-- [ ] source-tree-analysis.md generated
-- [ ] architecture.md (or per-part) generated
-- [ ] component-inventory.md (or per-part) generated if UI components exist
-- [ ] development-guide.md (or per-part) generated
-- [ ] api-contracts.md (or per-part) generated if APIs documented
-- [ ] data-models.md (or per-part) generated if data models found
-- [ ] deployment-guide.md generated if deployment config found
-- [ ] contribution-guide.md generated if guidelines found
-- [ ] integration-architecture.md generated if multi-part
-- [ ] project-parts.json generated if multi-part
+- [ ] README.md generated
+- [ ] product/overview.md generated
+- [ ] insights/source-tree-analysis.md generated
+- [ ] architecture/overview.md (or per-part) generated
+- [ ] reference/component-inventory.md (or per-part) generated if UI components exist
+- [ ] guides/development.md (or per-part) generated
+- [ ] reference/api-contracts.md (or per-part) generated if APIs documented
+- [ ] architecture/data-models.md (or per-part) generated if data models found
+- [ ] guides/deployment.md generated if deployment config found
+- [ ] guides/contribution.md generated if guidelines found
+- [ ] architecture/integration.md generated if multi-part
+- [ ] insights/project-parts.json generated if multi-part
 
 ## Content Quality
 
@@ -204,7 +204,7 @@
 - [ ] Reuse opportunities documented
 - [ ] Implementation guidance provided
 - [ ] Modification instructions clear
-- [ ] Index.md updated with deep-dive link
+- [ ] README.md updated with deep-dive link
 - [ ] Deep-dive documentation is immediately useful for implementation
 
 ---

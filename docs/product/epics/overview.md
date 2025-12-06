@@ -9,7 +9,7 @@
 
 ## Overview
 
-This document provides the complete epic and story breakdown for `gracestowel`, decomposing the requirements from the [PRD](./posthog-analytics-integration-prd.md) into implementable stories.
+This document provides the complete epic and story breakdown for `gracestowel`, decomposing the requirements from the [PRD](../prds/posthog-analytics.md) into implementable stories.
 
 **Living Document Notice:** This is the initial version. It will be updated after UX Design and Architecture workflows add interaction and technical details to stories.
 
