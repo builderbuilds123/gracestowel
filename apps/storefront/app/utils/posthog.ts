@@ -39,6 +39,9 @@ export function initPostHog() {
     
     // Respect user privacy
     respect_dnt: true,
+
+    // Explicitly enable persistence (localStorage+cookie) as per architecture policy
+    persistence: 'localStorage+cookie',
     
     // Debugging (only in development)
     loaded: (posthog) => {
