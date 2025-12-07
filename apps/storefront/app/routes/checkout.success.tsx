@@ -1,9 +1,10 @@
 import { useEffect, useState, lazy, Suspense, useRef, useCallback } from "react";
-import { Link, useSearchParams, useNavigate } from "react-router";
+import { Link, useSearchParams, useNavigate, useLoaderData } from "react-router";
+import type { LoaderFunctionArgs } from "react-router";
 import { CheckCircle2, Package, Truck, ArrowRight, MapPin, XCircle, Pencil, Plus } from "lucide-react";
 import { useCart } from "../context/CartContext";
 import { posts } from "../data/blogPosts";
-import { getStripe } from "../lib/stripe";
+import { getStripe, initStripe } from "../lib/stripe";
 import { CountdownTimer } from "../components/CountdownTimer";
 import { CancelOrderDialog } from "../components/CancelOrderDialog";
 import { EditAddressDialog } from "../components/EditAddressDialog";
@@ -42,11 +43,30 @@ interface OrderApiResponse {
     remaining_seconds: number;
 }
 
+interface LoaderData {
+    stripePublishableKey: string;
+}
+
+export async function loader({ context }: LoaderFunctionArgs): Promise<LoaderData> {
+    const env = context.cloudflare.env as { STRIPE_PUBLISHABLE_KEY: string };
+    return {
+        stripePublishableKey: env.STRIPE_PUBLISHABLE_KEY,
+    };
+}
+
 export default function CheckoutSuccess() {
+    const { stripePublishableKey } = useLoaderData<LoaderData>();
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
     const { clearCart, items } = useCart();
     const [paymentStatus, setPaymentStatus] = useState<'loading' | 'success' | 'error' | 'canceled'>('loading');
+
+    // Initialize Stripe on mount (required for retrievePaymentIntent)
+    useEffect(() => {
+        if (stripePublishableKey) {
+            initStripe(stripePublishableKey);
+        }
+    }, [stripePublishableKey]);
     const [message, setMessage] = useState<string | null>(null);
     const [orderDetails, setOrderDetails] = useState<any>(null);
     const [shippingAddress, setShippingAddress] = useState<any>(null);
