@@ -29,3 +29,16 @@ The backend exposes API endpoints in `src/api`:
 ## Database
 - Migrations are managed via Medusa's CLI.
 - No custom models found in `src/models` (likely using module-specific models inside `src/modules`).
+
+## Payment Processing Architecture
+We implement a **Delayed Capture** pattern for payments to allow for a 1-hour customer "grace period" for order edits.
+
+- **Provider**: Stripe (via `@medusajs/payment-stripe`).
+- **Authorization**: All payments are authorized (`capture_method: manual`) at checkout.
+- **Grace Period Management**:
+  - Redis keys (`capture_intent:{order_id}`) set with 1-hour TTL on purchase.
+  - Redis Keyspace Notifications (`notify-keyspace-events Ex`) trigger the capture workflow.
+- **Capture Trigger**:
+  - **Primary**: Redis expiration event listener triggers the capture of the standard Medusa order.
+  - **Fallback**: Cron job runs periodically to capture any orders authorized > 65 minutes ago.
+- **Order Edits**: Modifications during the grace period update the order total. If the total increases, we trigger `increment_authorization` on Stripe.

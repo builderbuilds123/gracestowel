@@ -29,7 +29,7 @@ Integrate **Stripe** as the primary payment processor for the Medusa backend and
 ## 4. Functional Requirements
 
 ### 4.1. Checkout Experience (Remix Storefront)
-*   **Express Checkout**: Implement `<ExpressCheckoutElement />` at the top of the checkout page. Must strictly support Apple Pay, Google Pay, and Link.
+*   **Express Checkout**: Implement `<ExpressCheckoutElement />` at the top of the checkout page. Must strictly support Apple Pay, Google Pay, PayPal,and Link.
 *   **Standard Payment**: Implement `<PaymentElement />` for Credit Cards and BNPL (Klarna, Affirm).
 *   **Guest Checkout**: Full support for Guest Checkout (no account required to pay, but account created/linked for order editing).
 
@@ -42,7 +42,8 @@ Integrate **Stripe** as the primary payment processor for the Medusa backend and
     *   *Decision*: For this phase, we support standard methods (Cards, Wallets, BNPL) which all support auth-capture.
 
 ### 4.3. 1-Hour Grace Period (The "Edit Window")
-*   **Guest Access**: Order Confirmation emails must contain a secure **Magic Link** (tokenized URL) to allow Guest Users to re-access the Order Status page and make edits without logging in.
+*   **Session Persistence**: The system must persist a secure **HttpOnly Cookie** (or LocalStorage Token) containing the `order_id` and a temporary `edit_token`. This allows users to simply navigate back to the store (or refresh the page) and immediately see their pending order/edit interface without needing to click a link.
+*   **Guest Access (Fallback)**: Order Confirmation emails must *also* contain a secure **Magic Link** (tokenized URL) to allow Guest Users to re-access the Order Status page from a different device or if cookies are cleared.
 *   **Token Logic**: Upon purchase, a **Redis Token** (`capture_intent:{order_id}`) is generated with a **1-hour TTL**.
 *   **Permissions**: 
     *   **Active Token**: User sees "Edit Order" button on Order Confirmation page.
