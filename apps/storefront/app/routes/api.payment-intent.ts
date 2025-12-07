@@ -49,32 +49,39 @@ async function validateStock(cartItems: CartItem[], medusaBackendUrl: string): P
         if (!item.variantId) continue; // Skip items without variant IDs (legacy items)
 
         try {
-            // Fetch product to get variant inventory
+            // Fetch specific variant to check inventory
             const response = await fetch(
-                `${medusaBackendUrl}/store/products?fields=+variants,+variants.inventory_quantity`,
+                `${medusaBackendUrl}/store/variants/${item.variantId}`,
                 {
                     headers: { "Content-Type": "application/json" },
                 }
             );
 
-            if (!response.ok) continue;
+            if (!response.ok) {
+                // If variant not found (404), treat as out-of-stock to prevent
+                // charging customers for products that can't be fulfilled
+                if (response.status === 404) {
+                    console.warn(`Variant ${item.variantId} not found in Medusa. Treating as out of stock.`);
+                    outOfStockItems.push({
+                        title: item.title,
+                        requested: item.quantity,
+                        available: 0,
+                    });
+                }
+                continue;
+            }
 
-            const data = await response.json() as { products?: any[] };
-            const products = data.products || [];
+            const data = await response.json() as { variant: { id: string; inventory_quantity?: number } };
+            const variant = data.variant;
 
-            // Find the variant in any product
-            for (const product of products) {
-                const variant = product.variants?.find((v: { id: string }) => v.id === item.variantId);
-                if (variant) {
-                    const available = variant.inventory_quantity ?? Infinity;
-                    if (item.quantity > available) {
-                        outOfStockItems.push({
-                            title: item.title,
-                            requested: item.quantity,
-                            available: Math.max(0, available),
-                        });
-                    }
-                    break;
+            if (variant) {
+                const available = variant.inventory_quantity ?? Infinity;
+                if (item.quantity > available) {
+                    outOfStockItems.push({
+                        title: item.title,
+                        requested: item.quantity,
+                        available: Math.max(0, available),
+                    });
                 }
             }
         } catch (error) {
@@ -135,7 +142,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
         const totalAmount = amount + (shipping || 0);
 
         const body = new URLSearchParams();
-        body.append("amount", Math.round(totalAmount * 100).toString());
+        body.append("amount", Math.round(totalAmount).toString());
         body.append("currency", currency || "usd");
         body.append("automatic_payment_methods[enabled]", "true");
         // Use manual capture to enable 1-hour modification window
