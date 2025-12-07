@@ -5,9 +5,12 @@ let stripePromise: Promise<Stripe | null>;
 
 export const getStripe = () => {
     if (!stripePromise) {
-        stripePromise = loadStripe(
-            "pk_test_51SUzHePAvLfNBsYS9Ey7HtypfmA28w0rfkTQPCrRvJMkBP1DUkN2zNfJtI5VoI566LaDrJoeO6GsbuQAv2JC3FUA00Gt5crRWu"
-        );
+        const publishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
+        if (!publishableKey) {
+            console.error("VITE_STRIPE_PUBLISHABLE_KEY is not defined");
+            return null;
+        }
+        stripePromise = loadStripe(publishableKey);
     }
     return stripePromise;
 };
