@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import {
     PaymentElement,
     useStripe,
@@ -7,7 +7,11 @@ import {
     AddressElement,
     ExpressCheckoutElement,
 } from '@stripe/react-stripe-js';
-import type { StripeExpressCheckoutElementConfirmEvent } from '@stripe/stripe-js';
+import type {
+    StripeExpressCheckoutElementConfirmEvent,
+    StripeExpressCheckoutElementShippingAddressChangeEvent,
+    StripeExpressCheckoutElementShippingRateChangeEvent,
+} from '@stripe/stripe-js';
 import type { CartItem } from '../context/CartContext';
 
 export interface ShippingOption {
@@ -103,6 +107,51 @@ export function CheckoutForm({
         setIsLoading(false);
     };
 
+    // Handle shipping address change in Express Checkout (GPay/Apple Pay)
+    // This provides shipping options to the wallet UI
+    const handleExpressShippingAddressChange = useCallback(
+        async (event: StripeExpressCheckoutElementShippingAddressChangeEvent) => {
+            // Resolve with available shipping rates
+            // The wallet UI will display these options to the user
+            if (shippingOptions.length > 0) {
+                event.resolve({
+                    shippingRates: shippingOptions.map((opt) => ({
+                        id: opt.id,
+                        displayName: opt.displayName,
+                        amount: opt.amount, // Already in cents from shipping-rates API
+                    })),
+                });
+            } else {
+                // Provide a default shipping rate if none available yet
+                event.resolve({
+                    shippingRates: [
+                        {
+                            id: 'standard',
+                            displayName: 'Standard Shipping',
+                            amount: 999, // $9.99 in cents
+                        },
+                    ],
+                });
+            }
+        },
+        [shippingOptions]
+    );
+
+    // Handle shipping rate selection in Express Checkout
+    const handleExpressShippingRateChange = useCallback(
+        (event: StripeExpressCheckoutElementShippingRateChangeEvent) => {
+            // Find and select the shipping option that matches the selected rate
+            const selectedRate = shippingOptions.find(
+                (opt) => opt.id === event.shippingRate.id
+            );
+            if (selectedRate) {
+                setSelectedShipping(selectedRate);
+            }
+            event.resolve();
+        },
+        [shippingOptions, setSelectedShipping]
+    );
+
     const handleExpressConfirm = async (event: StripeExpressCheckoutElementConfirmEvent) => {
         if (!stripe || !elements) {
             return;
@@ -153,15 +202,17 @@ export function CheckoutForm({
         <form id="payment-form" onSubmit={handleSubmit} className="space-y-8">
             {/* Express Checkout Section */}
             <div className="mb-8">
-                <ExpressCheckoutElement 
-                    onConfirm={handleExpressConfirm} 
-                    options={{ 
-                        buttonType: { 
-                            applePay: 'check-out', 
-                            googlePay: 'checkout', 
-                            paypal: 'checkout' 
-                        } 
-                    }} 
+                <ExpressCheckoutElement
+                    onConfirm={handleExpressConfirm}
+                    onShippingAddressChange={handleExpressShippingAddressChange}
+                    onShippingRateChange={handleExpressShippingRateChange}
+                    options={{
+                        buttonType: {
+                            applePay: 'check-out',
+                            googlePay: 'checkout',
+                            paypal: 'checkout'
+                        },
+                    }}
                 />
             </div>
 
