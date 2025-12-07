@@ -127,7 +127,7 @@ development_status:
     status: ready-for-dev
   2-2-expiration-listener:
     path: docs/sprint/sprint-artifacts/2-2-expiration-listener.md
-    status: backlog
+    status: in-progress
   2-3-capture-workflow:
     path: docs/sprint/sprint-artifacts/2-3-capture-workflow.md
     status: backlog
