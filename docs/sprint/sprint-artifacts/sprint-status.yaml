@@ -120,3 +120,17 @@ development_status:
     path: docs/sprint/sprint-artifacts/1-4-validate-auth-only-logic.md
     status: done
   pi-epic-1-retrospective: optional
+
+  pi-epic-2: in-progress
+  2-1-implement-redis-token-infra:
+    path: docs/sprint/sprint-artifacts/2-1-implement-redis-token-infra.md
+    status: ready-for-dev
+  2-2-expiration-listener:
+    path: docs/sprint/sprint-artifacts/2-2-expiration-listener.md
+    status: backlog
+  2-3-capture-workflow:
+    path: docs/sprint/sprint-artifacts/2-3-capture-workflow.md
+    status: backlog
+  2-4-fallback-cron:
+    path: docs/sprint/sprint-artifacts/2-4-fallback-cron.md
+    status: backlog
