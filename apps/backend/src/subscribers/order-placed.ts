@@ -47,7 +47,8 @@ export default async function orderPlacedHandler({
         await schedulePaymentCapture(data.id, paymentIntentId)
         console.log(`Payment capture scheduled for order ${data.id} (1 hour delay)`)
       } else {
-        console.warn(`No payment intent ID found for order ${data.id}`)
+        // M1: Log as error/warn indicating data integrity issue
+        console.error(`[CRITICAL] No payment intent ID found for order ${data.id} - Automatic capture will NOT happen.`)
       }
 
       // Track order_placed event in PostHog

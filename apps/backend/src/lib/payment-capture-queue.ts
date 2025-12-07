@@ -26,6 +26,7 @@ const getRedisConnection = () => {
         port: parseInt(url.port || "6379"),
         password: url.password || undefined,
         username: url.username || undefined,
+        tls: url.protocol === "rediss:" ? {} : undefined,
     };
 };
 
@@ -38,7 +39,7 @@ const getStripeClient = () => {
         throw new Error("STRIPE_SECRET_KEY is not configured");
     }
     return new Stripe(secretKey, {
-        apiVersion: "2025-10-29.clover",
+        apiVersion: "2024-06-20" as any, // Cast to avoid TS strict enum check mismatch with installed SDK
     });
 };
 
@@ -187,6 +188,15 @@ export function startPaymentCaptureWorker(): Worker<PaymentCaptureJobData> {
     });
 
     console.log("Payment capture worker started");
+
+    // Graceful shutdown
+    const shutdown = async () => {
+        console.log("Shutting down payment capture worker...");
+        await worker?.close();
+    };
+    process.on("SIGTERM", shutdown);
+    process.on("SIGINT", shutdown);
+
     return worker;
 }
 
