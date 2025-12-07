@@ -118,5 +118,5 @@ development_status:
     status: done
   1-4-validate-auth-only-logic:
     path: docs/sprint/sprint-artifacts/1-4-validate-auth-only-logic.md
-    status: active
+    status: done
   pi-epic-1-retrospective: optional
