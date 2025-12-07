@@ -109,44 +109,44 @@ export function CheckoutForm({
         }
 
         setIsLoading(true);
-
-        const { error: submitError } = await elements.submit();
-        if (submitError) {
-            setMessage(submitError.message || 'Submission failed');
-            setIsLoading(false);
-            return;
-        }
-        
-        // Persist order details for success page
-        saveOrderToLocalStorage();
-
-        const { error } = await stripe.confirmPayment({
-            elements,
-            confirmParams: {
-                return_url: `${window.location.origin}/checkout/success`,
-                shipping: event.shippingAddress ? {
-                    name: event.shippingAddress.name,
-                    address: {
-                        line1: event.shippingAddress.address.line1,
-                        line2: event.shippingAddress.address.line2 || undefined,
-                        city: event.shippingAddress.address.city,
-                        state: event.shippingAddress.address.state,
-                        postal_code: event.shippingAddress.address.postal_code,
-                        country: event.shippingAddress.address.country,
-                    },
-                } : undefined,
-            },
-        });
-
-        if (error) {
-            if (error.type === 'card_error' || error.type === 'validation_error') {
-                setMessage(error.message || 'An unexpected error occurred.');
-            } else {
-                setMessage('An unexpected error occurred.');
+        try {
+            const { error: submitError } = await elements.submit();
+            if (submitError) {
+                setMessage(submitError.message || 'Submission failed');
+                return;
             }
-        }
 
-        setIsLoading(false);
+            // Persist order details for success page
+            saveOrderToLocalStorage();
+
+            const { error } = await stripe.confirmPayment({
+                elements,
+                confirmParams: {
+                    return_url: `${window.location.origin}/checkout/success`,
+                    shipping: event.shippingAddress ? {
+                        name: event.shippingAddress.name,
+                        address: {
+                            line1: event.shippingAddress.address.line1,
+                            line2: event.shippingAddress.address.line2 || undefined,
+                            city: event.shippingAddress.address.city,
+                            state: event.shippingAddress.address.state,
+                            postal_code: event.shippingAddress.address.postal_code,
+                            country: event.shippingAddress.address.country,
+                        },
+                    } : undefined,
+                },
+            });
+
+            if (error) {
+                if (error.type === 'card_error' || error.type === 'validation_error') {
+                    setMessage(error.message || 'An unexpected error occurred.');
+                } else {
+                    setMessage('An unexpected error occurred.');
+                }
+            }
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     return (
