@@ -16,6 +16,13 @@ vi.mock('@stripe/react-stripe-js', async () => {
         PaymentElement: () => <div data-testid="payment-element">Payment Element</div>,
         LinkAuthenticationElement: () => <div data-testid="link-authentication-element">Link Auth Element</div>,
         AddressElement: () => <div data-testid="address-element">Address Element</div>,
+        ExpressCheckoutElement: ({ onConfirm }: any) => (
+            <div data-testid="express-checkout-element">
+                <button type="button" onClick={() => onConfirm({})} data-testid="express-checkout-button">
+                    Express Checkout
+                </button>
+            </div>
+        ),
     };
 });
 
@@ -33,7 +40,7 @@ describe('CheckoutForm', () => {
     };
     const mockElements = {
         getElement: vi.fn(),
-        submit: vi.fn(),
+        submit: vi.fn().mockResolvedValue({ error: null }),
     };
 
     const defaultProps: CheckoutFormProps = {
@@ -58,6 +65,9 @@ describe('CheckoutForm', () => {
 
     beforeEach(async () => {
         vi.clearAllMocks();
+        mockStripe.confirmPayment.mockResolvedValue({ error: null });
+        mockElements.submit.mockResolvedValue({ error: null });
+
         const { useStripe, useElements } = await import('@stripe/react-stripe-js');
         (useStripe as any).mockReturnValue(mockStripe);
         (useElements as any).mockReturnValue(mockElements);
@@ -175,5 +185,54 @@ describe('CheckoutForm', () => {
 
         const submitButton = screen.getByRole('button', { name: /pay now/i });
         expect(submitButton).toBeDisabled();
+    });
+
+    it('handles express checkout confirmation', async () => {
+        mockStripe.confirmPayment.mockResolvedValue({ error: null });
+        
+        render(<CheckoutForm {...defaultProps} />);
+
+        const expressButton = screen.getByTestId('express-checkout-button');
+        fireEvent.click(expressButton);
+
+        await waitFor(() => {
+            expect(mockElements.submit).toHaveBeenCalled();
+            expect(mockStripe.confirmPayment).toHaveBeenCalledWith(expect.objectContaining({
+                confirmParams: expect.objectContaining({
+                    return_url: expect.stringContaining('/checkout/success'),
+                }),
+            }));
+        });
+    });
+
+    it('handles express checkout error', async () => {
+        mockStripe.confirmPayment.mockResolvedValue({
+            error: { type: 'card_error', message: 'Express payment declined.' }
+        });
+        
+        render(<CheckoutForm {...defaultProps} />);
+
+        const expressButton = screen.getByTestId('express-checkout-button');
+        fireEvent.click(expressButton);
+
+        await waitFor(() => {
+            expect(screen.getByText('Express payment declined.')).toBeInTheDocument();
+        });
+    });
+
+    it('handles express checkout submit error', async () => {
+        mockElements.submit.mockResolvedValue({ 
+            error: { message: 'Validation failed' } 
+        });
+        
+        render(<CheckoutForm {...defaultProps} />);
+
+        const expressButton = screen.getByTestId('express-checkout-button');
+        fireEvent.click(expressButton);
+
+        await waitFor(() => {
+            expect(screen.getByText('Validation failed')).toBeInTheDocument();
+        });
+        expect(mockStripe.confirmPayment).not.toHaveBeenCalled();
     });
 });
