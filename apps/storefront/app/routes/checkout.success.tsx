@@ -45,17 +45,19 @@ interface OrderApiResponse {
 
 interface LoaderData {
     stripePublishableKey: string;
+    medusaBackendUrl: string;
 }
 
 export async function loader({ context }: LoaderFunctionArgs): Promise<LoaderData> {
-    const env = context.cloudflare.env as { STRIPE_PUBLISHABLE_KEY: string };
+    const env = context.cloudflare.env as { STRIPE_PUBLISHABLE_KEY: string; MEDUSA_BACKEND_URL: string };
     return {
         stripePublishableKey: env.STRIPE_PUBLISHABLE_KEY,
+        medusaBackendUrl: env.MEDUSA_BACKEND_URL,
     };
 }
 
 export default function CheckoutSuccess() {
-    const { stripePublishableKey } = useLoaderData<LoaderData>();
+    const { stripePublishableKey, medusaBackendUrl } = useLoaderData<LoaderData>();
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
     const { clearCart, items } = useCart();
@@ -213,7 +215,7 @@ export default function CheckoutSuccess() {
 
                         // Fetch order from API to get modification token
                         // Poll until order is created (webhook may still be processing)
-                        const medusaUrl = import.meta.env.VITE_MEDUSA_BACKEND_URL || 'http://localhost:9000';
+                        const medusaUrl = medusaBackendUrl;
                         let retries = 0;
                         const maxRetries = 10;
                         const retryDelay = 1000; // 1 second
@@ -301,7 +303,7 @@ export default function CheckoutSuccess() {
             throw new Error("Missing order information");
         }
 
-        const medusaUrl = import.meta.env.VITE_MEDUSA_BACKEND_URL || 'http://localhost:9000';
+        const medusaUrl = medusaBackendUrl;
         const response = await fetch(`${medusaUrl}/store/orders/${orderId}/cancel`, {
             method: 'POST',
             headers: {
@@ -342,7 +344,7 @@ export default function CheckoutSuccess() {
             throw new Error("Missing order information");
         }
 
-        const medusaUrl = import.meta.env.VITE_MEDUSA_BACKEND_URL || 'http://localhost:9000';
+        const medusaUrl = medusaBackendUrl;
         const response = await fetch(`${medusaUrl}/store/orders/${orderId}/address`, {
             method: 'POST',
             headers: {
@@ -379,7 +381,7 @@ export default function CheckoutSuccess() {
             throw new Error("Missing order information");
         }
 
-        const medusaUrl = import.meta.env.VITE_MEDUSA_BACKEND_URL || 'http://localhost:9000';
+        const medusaUrl = medusaBackendUrl;
         const response = await fetch(`${medusaUrl}/store/orders/${orderId}/line-items`, {
             method: 'POST',
             headers: {
