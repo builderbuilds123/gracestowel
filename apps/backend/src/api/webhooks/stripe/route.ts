@@ -22,6 +22,19 @@ const getStripeClient = () => {
     });
 };
 
+/**
+ * Helper to read raw body from request stream
+ * Required because bodyParser is disabled for this route via middlewares.ts
+ */
+async function getRawBody(req: MedusaRequest): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const chunks: Buffer[] = [];
+        req.on("data", (chunk: Buffer) => chunks.push(chunk));
+        req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+        req.on("error", reject);
+    });
+}
+
 export async function POST(
     req: MedusaRequest,
     res: MedusaResponse
@@ -37,7 +50,7 @@ export async function POST(
 
     // Get the raw body for signature verification
     const sig = req.headers["stripe-signature"] as string;
-    
+
     if (!sig) {
         console.error("No Stripe signature found in request");
         res.status(400).json({ error: "No signature provided" });
@@ -45,14 +58,14 @@ export async function POST(
     }
 
     let event: Stripe.Event;
+    let rawBody: string;
 
     try {
-        // Verify the webhook signature
-        // Note: req.body should be the raw body for signature verification
-        const rawBody = typeof req.body === "string" 
-            ? req.body 
-            : JSON.stringify(req.body);
-        
+        // Read the raw body from the request stream
+        // bodyParser is disabled for this route via middlewares.ts
+        rawBody = await getRawBody(req);
+
+        // Verify the webhook signature with the exact raw body
         event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
     } catch (err) {
         const message = err instanceof Error ? err.message : "Unknown error";
