@@ -109,10 +109,10 @@ development_status:
   pi-epic-1: in-progress
   1-1-validate-backend-webhooks:
     path: docs/sprint/sprint-artifacts/1-1-validate-backend-webhooks.md
-    status: review
+    status: done
   1-2-validate-storefront-checkout:
     path: docs/sprint/sprint-artifacts/1-2-validate-storefront-checkout.md
-    status: planned
+    status: done
   1-3-implement-express-checkout-handler:
     path: docs/sprint/sprint-artifacts/1-3-implement-express-checkout-handler.md
     status: planned

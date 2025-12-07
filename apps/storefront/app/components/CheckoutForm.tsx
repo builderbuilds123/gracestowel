@@ -86,10 +86,12 @@ export function CheckoutForm({
             },
         });
 
-        if (error.type === 'card_error' || error.type === 'validation_error') {
-            setMessage(error.message || 'An unexpected error occurred.');
-        } else {
-            setMessage('An unexpected error occurred.');
+        if (error) {
+            if (error.type === 'card_error' || error.type === 'validation_error') {
+                setMessage(error.message || 'An unexpected error occurred.');
+            } else {
+                setMessage('An unexpected error occurred.');
+            }
         }
 
         setIsLoading(false);
@@ -216,7 +218,7 @@ function ShippingMethodSelector({ options, selected, onSelect }: ShippingMethodS
                                 <span className="font-bold text-text-earthy">FREE</span>
                             ) : (
                                 <span className="font-semibold text-text-earthy">
-                                    ${option.amount.toFixed(2)}
+                                    ${(option.amount / 100).toFixed(2)}
                                 </span>
                             )}
                         </div>
