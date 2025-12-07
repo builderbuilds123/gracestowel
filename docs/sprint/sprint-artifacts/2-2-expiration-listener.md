@@ -1,37 +1,36 @@
-# Story 2.2: Expiration Listener
+# Story 2.2: Validate Delayed Capture Infrastructure
 
 ## Goal
-Implement a **Redis Keyspace Notification Listener** that detects when a "Capture Intent" token expires and triggers the asynchronous `capture_order` job. This is the primary trigger for the delayed capture mechanism.
+Validate and enable the existing **BullMQ-based Payment Capture Queue**. The codebase nominally implements delayed capture, but we must confirm it is correctly instantiated and resilient to server restarts.
 
 ## Context
 - **Epic**: [Epic 2: Grace Period & Delayed Capture Engine](../product/epics/payment-integration.md)
-- **PRD**: [FR-4.1 Event-Driven Capture](../prd/payment-integration.md)
-- **Architecture**: [Redis Event Bus](../analysis/research/technical-stripe-integration-research-2025-12-06.md)
+- **Existing Code**:
+    - `src/lib/payment-capture-queue.ts` (Defines Queue & Worker)
+    - `src/loaders/payment-capture-worker.ts` (Starts Worker)
+    - `src/subscribers/order-placed.ts` (Schedules Job)
+    - `src/loaders/index.ts` (Verify loader is called here)
 
 ## Implementation Steps
 
-### 1. Redis Configuration
-- [ ] Ensure `notify-keyspace-events Ex` is enabled in Redis config (or via command on startup).
-- [ ] Verify the backend Redis client is subscribed to `__keyevent@0__:expired`.
+### 1. Verify Configuration
+- [ ] Ensure `paymentCaptureWorkerLoader` is actually imported and used in `medusa-config.ts` (or `src/loaders/index.ts`).
+- [ ] Verify `REDIS_URL` is correctly set in the environment.
 
-### 2. Event Subscriber
-- [ ] Create `apps/backend/src/subscribers/redis-expiry.ts` (or similar).
-- [ ] Implement listener for the expired channel.
-- [ ] Filter logic: ONLY act if key matches pattern `capture_intent:*`.
-- [ ] Extract `order_id` from the key.
+### 2. Integration Test
+- [ ] Manually test the flow:
+    - Place an Order.
+    - Check Redis (via CLI or GUI) to see a job in the `payment-capture` queue with a `delay`.
+    - **Verification Command**: `redis-cli KEYS "bull:payment-capture:*"` should show keys.
+    - Verify `delay` is 3600000ms (1 hour).
 
-### 3. Job Dispatch
-- [ ] When a valid key expires, trigger a new BullMQ job (or Medusa Event): `order.capture_scheduled`.
-- [ ] Payload: `{ orderId: string, timestamp: number }`.
-- [ ] Log the event: "Capture Triggered for Order X via Redis Expiration".
+### 3. Reliability Check
+- [ ] **Restart Test**: Schedule a job -> Restart Backend -> Ensure job is still in queue and not lost.
 
 ## Acceptance Criteria
-- [ ] **Event Detection**: Subscriber receives `expired` event immediately when TTL hits 0.
-- [ ] **Filtering**: Ignores non-capture-intent keys.
-- [ ] **Job Creation**: Successfully queues a `capture_order` job in the system.
-- [ ] **Idempotency**: Basic check to ensure we don't double-queue if Redis fires twice (rare but possible).
+- [ ] **Job Scheduling**: Placing an order creates a delayed job.
+- [ ] **Persistence**: Jobs survive server restarts.
+- [ ] **Worker Active**: The worker logs "Payment capture worker started" on boot.
 
 ## Technical Notes
-- **Key Pattern**: `capture_intent:{order_id}`
-- **Channel**: `__keyevent@0__:expired` (Assuming DB 0)
-- **Warning**: Redis Pub/Sub is fire-and-forget. If the app is down when the event fires, it is LOST. This validates the need for Story 2.4 (Fallback Cron).
+- This story is primarily *verification* and *configuration* of existing code.

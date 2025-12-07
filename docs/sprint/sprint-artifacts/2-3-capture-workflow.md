@@ -1,41 +1,44 @@
-# Story 2.3: Capture Workflow
+# Story 2.3: Enhance Capture Logic for Dynamic Totals
 
 ## Goal
-Implement the **Capture Worker/Handler** that executes the actual Stripe payment capture. This handler is triggered by the Expiration Listener (Story 2.2) or the Fallback Cron (Story 2.4).
+Modify the **Payment Capture Worker** to handle dynamic order totals. The current implementation blindly captures the original `PaymentIntent` amount, which may be incorrect if the user modified the order (added/removed items) during the grace period.
 
 ## Context
 - **Epic**: [Epic 2: Grace Period & Delayed Capture Engine](../product/epics/payment-integration.md)
-- **PRD**: [FR-4.1 Event-Driven Capture](../prd/payment-integration.md)
+- **Problem**: `processPaymentCapture` uses the static `PaymentIntent` amount. We must capture the *current* `order.total`.
+- **Critical Requirement**: Stripe requires amounts in **cents** (integer), but Medusa might store them differently depending on the context. API calls must use integer cents.
+- **Existing Code**: `src/lib/payment-capture-queue.ts`.
 
 ## Implementation Steps
 
-### 1. Capture Processor/Job
-- [ ] Create/Update the handler for `order.capture_scheduled`.
-- [ ] **Fetch Order**: Retrieve Order by ID, including `total` and `payments`.
-- [ ] **Status Check**:
-    - If status is `captured` or `canceled` -> ABORT.
-    - If status is `requires_action` or `pending` -> PROCEED.
+### 1. Fetch Fresh Order Data
+- [ ] In `processPaymentCapture`, resolve the Medusa `OrderService` (or Module).
+- [ ] Fetch the *latest* Order by `orderId`, including `total` and `currency_code`.
 
-### 2. Stripe Interaction
-- [ ] Service Method: `PaymentProviderService.capturePayment(paymentId)`.
-- [ ] **Amount Check**: Ensure we capture the *current* `order.total`.
-    - *Note*: If the user edited the order, the `order.total` differs from the initial auth. Stripe `capture` amount must match the new total (up to the authorized limit + increment).
+### 2. Currency Conversion (CRITICAL)
+- [ ] Ensure `order.total` is converted to the correct Stripe integer format (cents).
+    - *Note*: Medusa usually stores `total` in cents (integer) for the backend. **Verify this**.
+    - If `total` is float (e.g. 10.99), multiply by 100.
+    - If `total` is integer (1099), pass as is.
+    - Use `medusa-core-utils` or existing helpers if available.
 
-### 3. Post-Capture Updates
-- [ ] **Success**:
-    - Update Order Status -> `captured` (or `processing` / `completed` per Medusa flow).
-    - Emit event `order.payment_captured`.
-- [ ] **Failure** (e.g., specific decline):
-    - Log Error "Capture Failed for Order X: Reason".
-    - Retry Logic: Configure 3 retries with backoff.
-    - Final Failure: Alert Admin (Log/Notification).
+### 3. Dynamic Capture Call
+- [ ] Call `stripe.paymentIntents.capture`:
+    - `amount_to_capture`: The calculated integer total.
+    - `idempotency_key`: `capture_${orderId}_${job.timestamp}`.
+- [ ] Log the capture attempt: "Capturing ${amount} cents for Order ${orderId}".
+
+### 4. Handle Partial/Excess Scenarios
+- [ ] **Partial**: If `amount` < `authorized`, Stripe handles this (releases rest).
+- [ ] **Excess**: If `amount` > `authorized`, this capture will fail unless `increment_authorization` was done previously.
+    - Wrap in `try/catch`.
+    - If error is "amount_too_large", fail gracefully and alert admin (or trigger specific recovery workflow).
 
 ## Acceptance Criteria
-- [ ] **Successful Capture**: Funds move in Stripe Dashboard; Order status updates in Medusa.
-- [ ] **Dynamic Amount**: Captures the *latest* order total, not just the original session total.
-- [ ] **Idempotency**: Processing the same job twice does not charge the customer twice.
-- [ ] **Error Handling**: Retries on transient errors; fails gracefully on permanent ones.
+- [ ] **Correct Amount**: Captures the EXACT `order.total` (in cents).
+- [ ] **Idempotency**: Retrying the job does not result in double charges.
+- [ ] **Logging**: Logs show specific amount being captured.
 
 ## Technical Notes
-- Use `idempotency_key` when calling Stripe API to prevent double-charging on retries.
-- Ensure `order.payment_status` transitions correctly (`awaiting` -> `captured`).
+- Access Medusa Container within the worker scope to get `OrderService`.
+- **Currency**: `payment-capture-queue.ts` currently does not import any utils. Check `src/utils` or `@medusajs/utils`.

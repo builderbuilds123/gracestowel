@@ -1,39 +1,40 @@
-# Story 2.1: Redis Token Infrastructure
+# Story 2.1: Fix Modification Token Flow
 
 ## Goal
-Implement the **Redis Token Infrastructure** to manage the 1-hour grace period for order edits. This involves creating a service to generate, store, and validate "Capture Intent" tokens in Redis with a strict 1-hour TTL.
+Ensure the **Modification Token** (JWT), which is correctly generated during order creation, is successfully passed to the `send-order-confirmation` workflow so it can be included in the customer's email.
 
 ## Context
 - **Epic**: [Epic 2: Grace Period & Delayed Capture Engine](../product/epics/payment-integration.md)
-- **PRD**: [FR-5 1-Hour Grace Period](../prd/payment-integration.md)
-- **Architecture**: [Redis Keyspace Notifications](../analysis/research/technical-stripe-integration-research-2025-12-06.md)
+- **Problem**: `create-order-from-stripe.ts` generates the token and emits it in `order.placed`. The `order-placed` subscriber receives it but **fails to pass it** to the `sendOrderConfirmationWorkflow`. The workflow then re-fetches the order from the DB (where the token doesn't exist) and sends the email without the token.
+- **Existing Code**: 
+    - `src/services/modification-token.ts` (Working JWT logic)
+    - `src/subscribers/order-placed.ts` (Drops the token)
+    - `src/workflows/send-order-confirmation.ts` (Accepts only ID)
 
 ## Implementation Steps
 
-### 1. New Service: `CaptureIntentService`
-- [ ] Create `apps/backend/src/services/capture-intent.ts`.
-- [ ] Implement `createIntent(orderId: string): Promise<void>`.
-    - Should SET `capture_intent:{orderId}` in Redis.
-    - Value: `Date.now()` or Order Metadata.
-    - TTL: `3600` seconds (1 hour).
-- [ ] Implement `validateIntent(orderId: string): Promise<boolean>`.
-    - Should return `true` if key exists, `false` otherwise.
+### 1. Update Subscriber
+- [ ] Modify `apps/backend/src/subscribers/order-placed.ts`.
+- [ ] In `orderPlacedHandler`, extract `modification_token` from `event.data`.
+- [ ] Pass `modification_token` into the `input` payload of `sendOrderConfirmationWorkflow`.
 
-### 2. Event Subscriber
-- [ ] Create `apps/backend/src/subscribers/order-placed.ts`.
-- [ ] Listen for `order.placed` event.
-- [ ] Call `CaptureIntentService.createIntent` to start the timer immediately upon order creation.
+### 2. Update Workflow
+- [ ] Modify `apps/backend/src/workflows/send-order-confirmation.ts`.
+- [ ] Update `SendOrderConfirmationInput` type to include optional `modification_token`.
+- [ ] Pass this token into the `data` object of `sendNotificationStep`.
 
-### 3. Redis Persistence Configuration
-- [ ] Verify `medusa-config.ts` uses the shared Redis connection for the new service.
-- [ ] Ensure Redis is configured for persistent keys (should be standard in our setup, but verify).
+### 3. Verify Email Template Data
+- [ ] Ensure the `order-placed` email template (likely in Resend or local template lookup) expects `data.token` (or `data.modification_token`).
+- [ ] **Link Format**: The email should generate a link like:
+    ```
+    ${process.env.STORE_URL}/order/edit/${order.id}?token=${token}
+    ```
 
 ## Acceptance Criteria
-- [ ] **Redis Key Generation**: Placing an order creates a key `capture_intent:{order_id}`.
-- [ ] **TTL Accuracy**: The key MUST have a TTL of 3600 seconds.
-- [ ] **Validation**: `validateIntent` correctly reports active/expired status.
-- [ ] **Integration**: The flow works automatically for every new order.
+- [ ] **Token Propagation**: The `data` object sent to the email provider clearly contains the valid JWT.
+- [ ] **No Regression**: Ordinary order flow remains uninterrupted.
+- [ ] **Type Safety**: New input fields are properly typed.
 
 ## Technical Notes
-- Use the `RedisService` or `EventBusService` connection if available, or inject `redisConnection`.
-- Key prefix `capture_intent:` is critical for the future Expiration Listener (Story 2.2).
+- The token is *stateless* (JWT), so we do not need to save it to the DB.
+- `modificationTokenService` is already correctly implemented.
