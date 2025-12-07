@@ -32,18 +32,19 @@ loadEnv();
 
 async function testR2() {
   console.log("Testing R2 Connection Direct...");
-  console.log("URL:", process.env.S3_URL || "MISSING");
+  console.log("ENDPOINT:", process.env.S3_ENDPOINT || "MISSING");
+  console.log("PUBLIC_URL:", process.env.S3_PUBLIC_URL || "MISSING");
   console.log("Bucket:", process.env.S3_BUCKET || "MISSING");
   console.log("Region:", process.env.S3_REGION || "MISSING");
-  
-  if (!process.env.S3_URL || !process.env.S3_ACCESS_KEY_ID || !process.env.S3_SECRET_ACCESS_KEY) {
-      console.error("ERROR: Missing URL or Credentials in environment");
+
+  if (!process.env.S3_ENDPOINT || !process.env.S3_ACCESS_KEY_ID || !process.env.S3_SECRET_ACCESS_KEY) {
+      console.error("ERROR: Missing S3_ENDPOINT or Credentials in environment");
       return;
   }
 
   const client = new S3Client({
     region: process.env.S3_REGION || "auto",
-    endpoint: process.env.S3_URL,
+    endpoint: process.env.S3_ENDPOINT,
     credentials: {
       accessKeyId: process.env.S3_ACCESS_KEY_ID,
       secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
@@ -63,8 +64,8 @@ async function testR2() {
     const response = await client.send(command);
     console.log("SUCCESS! File uploaded.");
     console.log("ETag:", response.ETag);
-    console.log(`Verify at: ${process.env.S3_URL}/${process.env.S3_BUCKET}/test-direct-upload.txt`); 
-    // Note: Public access URL might differ depending on custom domain setup, but this confirms write access.
+    console.log(`Public URL: ${process.env.S3_PUBLIC_URL}/test-direct-upload.txt`);
+    console.log(`(Uploaded via endpoint: ${process.env.S3_ENDPOINT})`);
   } catch (error) {
     console.error("\n--- UPLOAD FAILED ---");
     console.error("Error Name:", error.name);

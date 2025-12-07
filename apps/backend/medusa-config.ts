@@ -40,16 +40,15 @@ module.exports = defineConfig({
             resolve: "@medusajs/file-s3",
             id: "s3",
             options: {
-              // For R2: Use S3_PUBLIC_URL (custom domain) for public file URLs
-              //         Use S3_ENDPOINT (R2 API) for upload operations
-              s3_url: process.env.S3_PUBLIC_URL,
+              // For R2: file_url is the public URL (custom domain) for accessing uploaded files
+              //         endpoint is the R2 API URL for upload operations
+              file_url: process.env.S3_PUBLIC_URL,
               bucket: process.env.S3_BUCKET,
               region: process.env.S3_REGION,
               access_key_id: process.env.S3_ACCESS_KEY_ID,
               secret_access_key: process.env.S3_SECRET_ACCESS_KEY,
               cache_control: process.env.S3_CACHE_CONTROL || "public, max-age=31536000",
               download_file_duration: 60 * 60, // 1 hour
-              s3_force_path_style: true,
               endpoint: process.env.S3_ENDPOINT,
             },
           },
