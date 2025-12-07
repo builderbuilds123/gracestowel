@@ -1,16 +1,36 @@
 import { ArrowLeft } from 'lucide-react';
-import { Link } from 'react-router';
+import { Link, useLoaderData } from 'react-router';
+import type { LoaderFunctionArgs } from 'react-router';
 import { useState, useEffect, useRef } from 'react';
-import { Elements, ExpressCheckoutElement } from '@stripe/react-stripe-js';
+import { Elements } from '@stripe/react-stripe-js';
 import { useCart } from '../context/CartContext';
 import { useLocale } from '../context/LocaleContext';
 import { useCustomer, getAuthToken } from '../context/CustomerContext';
-import { getStripe } from '../lib/stripe';
+import { initStripe, getStripe } from '../lib/stripe';
 import { CheckoutForm, type ShippingOption } from '../components/CheckoutForm';
 import { OrderSummary } from '../components/OrderSummary';
 import { parsePrice } from '../lib/price';
 
+interface LoaderData {
+    stripePublishableKey: string;
+}
+
+export async function loader({ context }: LoaderFunctionArgs): Promise<LoaderData> {
+    const env = context.cloudflare.env as { STRIPE_PUBLISHABLE_KEY: string };
+    return {
+        stripePublishableKey: env.STRIPE_PUBLISHABLE_KEY,
+    };
+}
+
 export default function Checkout() {
+    const { stripePublishableKey } = useLoaderData<LoaderData>();
+
+    // Initialize Stripe with key from loader (runs once)
+    useEffect(() => {
+        if (stripePublishableKey) {
+            initStripe(stripePublishableKey);
+        }
+    }, [stripePublishableKey]);
     const { items, cartTotal, updateQuantity, removeFromCart } = useCart();
     const { currency } = useLocale();
     const { customer, isAuthenticated } = useCustomer();
@@ -254,16 +274,6 @@ export default function Checkout() {
                         {clientSecret && (
                             <Elements options={options} stripe={getStripe()}>
                                 <div className="bg-white p-6 lg:p-8 rounded-lg shadow-sm border border-card-earthy/20">
-                                    <div className="mb-8">
-                                        <ExpressCheckoutElement onConfirm={() => { }} options={{ buttonType: { applePay: 'check-out', googlePay: 'checkout', paypal: 'checkout' } }} />
-                                    </div>
-
-                                    <div className="relative flex py-5 items-center">
-                                        <div className="flex-grow border-t border-gray-200"></div>
-                                        <span className="flex-shrink-0 mx-4 text-gray-400 text-sm">Or</span>
-                                        <div className="flex-grow border-t border-gray-200"></div>
-                                    </div>
-
                                     <CheckoutForm
                                         items={items}
                                         cartTotal={cartTotal}
