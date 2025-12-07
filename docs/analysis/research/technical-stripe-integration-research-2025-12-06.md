@@ -24,7 +24,7 @@
 
 ### Database & Storage
 *   **PostgreSQL**: Stores `PaymentSession` and `Order` data.
-*   **Redis**: Critical for **Event Bus** (Webhooks) and **Scheduled Jobs** (Delayed Capture).
+*   **Redis**: Critical for **Event Bus** (Webhooks) and **Keyspace Notifications** (Delayed Capture).
 
 ---
 
@@ -52,38 +52,43 @@
 
 ## Architectural Patterns and Design
 
-### 1-Hour Grace Period Architecture (Authorize-Capture)
+### 1-Hour Grace Period Architecture (Event-Driven Token Expiration)
 
-This is the core architecture to support your "add/delete/modify within 1 hour" requirement.
+This architecture eliminates "polling" or "scheduled jobs" in favor of a reactive **Token Expiration** pattern using Redis Keyspace Notifications.
 
 1.  **Authorization (At Purchase)**:
-    *   We set `capture_method: 'manual'` in the Stripe Plugin options.
-    *   When user "buys", Stripe **authorizes** the funds (holds them) but does *not* charge the card.
-    *   Order is created in Medusa with Payment Status `awaiting` (or `authorized`).
+    *   **Stripe**: Payment is authorized (`capture_method: manual`). Funds are held.
+    *   **Redis Token**: Medusa creates a "Capture Token" in Redis:
+        *   **Key**: `capture_intent:{order_id}`
+        *   **Value**: `payment_id`
+        *   **TTL**: `3600` (1 hour)
+    *   **State**: Order is `pending_capture`.
 
 2.  **Modification Window (0-60 mins)**:
-    *   **User Edits Cart**:
-        *   **Decrease Total (Delete Item)**: No action needed on Stripe immediately. Or we can release the difference if significantly lower.
-        *   **Increase Total (Add Item)**:
-            *   *Minor Increase*: Stripe allows capturing slightly more than authorized (sometimes).
-            *   *Major Increase*: We must use the **`increment_authorization`** endpoint (if supported by the card/bank) OR trigger a re-authorization flow.
-            *   *Fallback*: If increment fails, user must re-enter CVV/Auth.
+    *   **User Action**: User edits order via storefront.
+    *   **Token Validation**: The presence of the `capture_intent` key confirms the edit window is open.
+    *   **Updates**: 
+        *   If amount increases: Call Stripe `increment_authorization`.
+        *   If amount decreases: No immediate Stripe action needed.
+        *   **Reset Timer (Optional)**: If you want to reset the 1-hour window on edit, we update the Redis TTL. If not, we leave it.
 
-3.  **Delayed Capture (At 60 mins)**:
-    *   **Mechanism**: A **Medusa Scheduled Job** (Cron) runs every X minutes (or triggered via Redis delay).
-    *   **Logic**: Finds Orders created > 60 mins ago with Payment Status `authorized`.
-    *   **Action**: Triggers `medusa.orders.capturePayment(orderId)`.
-    *   **Result**: Funds move from Customer -> Merchant. Order is "Completed".
+3.  **Delayed Capture (At 60 mins - The Trigger)**:
+    *   **Event**: The Redis Key `capture_intent:{order_id}` **expires**.
+    *   **Notification**: Redis publishes a `__keyevent@0__:expired` event.
+    *   **Subscriber**: A Medusa Subscriber Service listening to this channel receives the `order_id`.
+    *   **Action**: The Subscriber triggers `medusa.payment_processor.capturePayment(order_id)`.
+    *   **Outcome**: Payment is captured precisely when the token expires.
 
 ### Performance & Security
-*   **Tokenization**: Raw card data never touches the server (SAQ A Compliance).
-*   **Redis Event Bus**: Webhooks are acknowledged instantly and processed in background.
+*   **Redis Keyspace Notifications**: Efficient, event-driven mechanism. No database scanning.
+*   **PCI-DSS**: Uses Stripe Elements (Tokenization) -> SAQ A.
+*   **Scalability**: Redis handles millions of expiring keys efficiently.
 
 ---
 
 ## Implementation Roadmap (Next Steps)
 
-1.  **Configure Stripe Plugin**: Enable `capture_method: manual`.
-2.  **Frontend**: Implement Express Checkout + Payment Element.
-3.  **Scheduled Job**: Create `src/jobs/capture-expired-orders.ts` to scan for >1hr authorized orders.
-4.  **Order Edit Flow**: Implement the UI for users to modify their "Pending" orders and the backend logic to `updatePaymentCollection` and `increment_authorization`.
+1.  **Redis Config**: Enable Keyspace Notifications (`notify-keyspace-events Ex`).
+2.  **Medusa Subscriber**: Create a subscriber to listen to Redis expired events.
+3.  **Purchase Flow**: Update Cart Completion strategy to set the Redis Key with 1h TTL.
+4.  **Order Edit Flow**: Implement logic to check Redis Key existence before allowing edits.
