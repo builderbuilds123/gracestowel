@@ -58,7 +58,7 @@ describe('api.payment-intent action', () => {
         const request = new Request('http://localhost:3000/api/payment-intent', {
             method: 'POST',
             body: JSON.stringify({
-                amount: 1000,
+                amount: 10, // $10.00 in dollars (frontend sends dollars)
                 currency: 'usd',
                 cartItems: [{
                     id: 'item_1',
@@ -78,9 +78,10 @@ describe('api.payment-intent action', () => {
         // Verify Stripe call payload
         const stripeCall = fetchSpy.mock.calls[1];
         expect(stripeCall[0]).toBe('https://api.stripe.com/v1/payment_intents');
-        
+
         const body = new URLSearchParams(stripeCall[1].body);
         expect(body.get('capture_method')).toBe('manual');
+        // Stripe receives cents: $10.00 -> 1000 cents
         expect(body.get('amount')).toBe('1000');
     });
 
@@ -96,7 +97,7 @@ describe('api.payment-intent action', () => {
         const request = new Request('http://localhost:3000/api/payment-intent', {
             method: 'POST',
             body: JSON.stringify({
-                amount: 1000,
+                amount: 10, // $10.00 in dollars
                 currency: 'usd',
                 cartItems: [{
                     id: 'item_1',
@@ -128,7 +129,7 @@ describe('api.payment-intent action', () => {
         const request = new Request('http://localhost:3000/api/payment-intent', {
             method: 'POST',
             body: JSON.stringify({
-                amount: 1000,
+                amount: 10, // $10.00 in dollars
                 currency: 'usd',
                 cartItems: [{
                     id: 'item_1',
@@ -167,7 +168,7 @@ describe('api.payment-intent action', () => {
     it('returns 500 when STRIPE_SECRET_KEY is not configured', async () => {
         const request = new Request('http://localhost:3000/api/payment-intent', {
             method: 'POST',
-            body: JSON.stringify({ amount: 1000, currency: 'usd' }),
+            body: JSON.stringify({ amount: 10, currency: 'usd' }), // $10.00 in dollars
         });
         const contextWithoutKey = { cloudflare: { env: {} } };
         const response: any = await action({ request, context: contextWithoutKey as any, params: {} });

@@ -1,4 +1,5 @@
 import { type ActionFunctionArgs, data } from "react-router";
+import { toCents } from "../lib/price";
 
 interface CartItem {
     id: string | number;
@@ -142,7 +143,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
         const totalAmount = amount + (shipping || 0);
 
         const body = new URLSearchParams();
-        body.append("amount", Math.round(totalAmount).toString());
+        body.append("amount", toCents(totalAmount).toString());
         body.append("currency", currency || "usd");
         body.append("automatic_payment_methods[enabled]", "true");
         // Use manual capture to enable 1-hour modification window

@@ -42,6 +42,27 @@
   Never use the internal R2 endpoint for public-facing assets.
 - **Note:** Existing images with old URLs need to be re-uploaded OR database URLs need migration.
 
+### 2025-12-07 - Stripe "amount_too_small" Error Due to Dollars vs Cents Mismatch [RESOLVED]
+
+- **Symptom:** Stripe API returns `amount_too_small` error when creating PaymentIntent. Low-value orders ($35) fail, but doubling the amount ($70) works. Error says "Amount must be at least $0.50 cad".
+- **Root Cause:** The payment-intent API endpoint was sending dollar amounts directly to Stripe, but **Stripe expects amounts in cents** (smallest currency unit). A $35.00 order was sent as `35`, which Stripe interpreted as $0.35 (35 cents) - below the $0.50 minimum.
+- **Data Flow Traced:**
+    1. `CartContext.cartTotal` = `calculateTotal(items)` → returns dollars (e.g., `35`)
+    2. `checkout.tsx` sends `amount: cartTotal` to `/api/payment-intent`
+    3. `api.payment-intent.ts` sent `amount` directly to Stripe without conversion
+- **Solution:** Used existing `toCents()` utility in `api.payment-intent.ts` to convert dollars to cents before sending to Stripe:
+    ```typescript
+    import { toCents } from "../lib/price";
+    // ...
+    body.append("amount", toCents(totalAmount).toString());
+    ```
+- **Prevention:**
+    - Always verify currency unit expectations when integrating with payment APIs
+    - Stripe, PayPal, and most payment processors expect **cents** (smallest currency unit)
+    - Add clear documentation/comments about expected units at API boundaries
+    - Consider adding validation: if amount < 50 cents, something is likely wrong
+- **Location:** `apps/storefront/app/routes/api.payment-intent.ts:146`
+
 ### 2025-12-06 - Test Failure Due to Callback Not Executing in Mock (PostHog) [RESOLVED]
 
 - **Symptom:** Test fails with `AssertionError: expected "spy" to be called at least once` when testing `posthog.debug()` call in development mode.
