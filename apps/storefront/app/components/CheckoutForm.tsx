@@ -5,7 +5,9 @@ import {
     useElements,
     LinkAuthenticationElement,
     AddressElement,
+    ExpressCheckoutElement,
 } from '@stripe/react-stripe-js';
+import type { StripeExpressCheckoutElementConfirmEvent } from '@stripe/stripe-js';
 import type { CartItem } from '../context/CartContext';
 
 export interface ShippingOption {
@@ -56,16 +58,7 @@ export function CheckoutForm({
     const [message, setMessage] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-
-        if (!stripe || !elements) {
-            return;
-        }
-
-        setIsLoading(true);
-
-        // Persist order details for success page
+    const saveOrderToLocalStorage = () => {
         localStorage.setItem(
             'lastOrder',
             JSON.stringify({
@@ -78,6 +71,19 @@ export function CheckoutForm({
                 }),
             })
         );
+    };
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+
+        if (!stripe || !elements) {
+            return;
+        }
+
+        setIsLoading(true);
+
+        // Persist order details for success page
+        saveOrderToLocalStorage();
 
         const { error } = await stripe.confirmPayment({
             elements,
@@ -97,8 +103,74 @@ export function CheckoutForm({
         setIsLoading(false);
     };
 
+    const handleExpressConfirm = async (event: StripeExpressCheckoutElementConfirmEvent) => {
+        if (!stripe || !elements) {
+            return;
+        }
+
+        setIsLoading(true);
+        try {
+            const { error: submitError } = await elements.submit();
+            if (submitError) {
+                setMessage(submitError.message || 'Submission failed');
+                return;
+            }
+
+            // Persist order details for success page
+            saveOrderToLocalStorage();
+
+            const { error } = await stripe.confirmPayment({
+                elements,
+                confirmParams: {
+                    return_url: `${window.location.origin}/checkout/success`,
+                    shipping: event.shippingAddress ? {
+                        name: event.shippingAddress.name,
+                        address: {
+                            line1: event.shippingAddress.address.line1,
+                            line2: event.shippingAddress.address.line2 || undefined,
+                            city: event.shippingAddress.address.city,
+                            state: event.shippingAddress.address.state,
+                            postal_code: event.shippingAddress.address.postal_code,
+                            country: event.shippingAddress.address.country,
+                        },
+                    } : undefined,
+                },
+            });
+
+            if (error) {
+                if (error.type === 'card_error' || error.type === 'validation_error') {
+                    setMessage(error.message || 'An unexpected error occurred.');
+                } else {
+                    setMessage('An unexpected error occurred.');
+                }
+            }
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     return (
         <form id="payment-form" onSubmit={handleSubmit} className="space-y-8">
+            {/* Express Checkout Section */}
+            <div className="mb-8">
+                <ExpressCheckoutElement 
+                    onConfirm={handleExpressConfirm} 
+                    options={{ 
+                        buttonType: { 
+                            applePay: 'check-out', 
+                            googlePay: 'checkout', 
+                            paypal: 'checkout' 
+                        } 
+                    }} 
+                />
+            </div>
+
+            <div className="relative flex py-5 items-center">
+                <div className="flex-grow border-t border-gray-200"></div>
+                <span className="flex-shrink-0 mx-4 text-gray-400 text-sm">Or</span>
+                <div className="flex-grow border-t border-gray-200"></div>
+            </div>
+
             {/* Contact Section */}
             <div>
                 <h2 className="text-lg font-medium mb-4">Contact</h2>
