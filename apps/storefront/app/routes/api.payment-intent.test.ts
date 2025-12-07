@@ -118,6 +118,43 @@ describe('api.payment-intent action', () => {
         expect(fetchSpy).toHaveBeenCalledTimes(1); // Only stock check
     });
 
+    it('returns 400 when variant is not found (404 from Medusa)', async () => {
+        // Mock stock check returning 404 (variant deleted/not found)
+        fetchSpy.mockResolvedValueOnce({
+            ok: false,
+            status: 404,
+        });
+
+        const request = new Request('http://localhost:3000/api/payment-intent', {
+            method: 'POST',
+            body: JSON.stringify({
+                amount: 1000,
+                currency: 'usd',
+                cartItems: [{
+                    id: 'item_1',
+                    variantId: 'variant_deleted',
+                    title: 'Deleted Towel',
+                    price: '20.00',
+                    quantity: 1
+                }]
+            }),
+        });
+
+        const response: any = await action({ request, context: mockContext as any, params: {} });
+        const { data, status } = await unwrap(response);
+
+        expect(status).toBe(400);
+        expect(data.message).toContain('out of stock');
+        expect(data.outOfStockItems).toEqual([{
+            title: 'Deleted Towel',
+            requested: 1,
+            available: 0,
+        }]);
+
+        // Ensure Stripe was NOT called
+        expect(fetchSpy).toHaveBeenCalledTimes(1); // Only stock check
+    });
+
     it('returns 405 for non-POST requests', async () => {
         const request = new Request('http://localhost:3000/api/payment-intent', {
             method: 'GET',

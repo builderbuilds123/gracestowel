@@ -58,12 +58,15 @@ async function validateStock(cartItems: CartItem[], medusaBackendUrl: string): P
             );
 
             if (!response.ok) {
-                // If variant not found (404), maybe it was deleted. Treat as OOS? 
-                // Or just log and skip? Current logic skips errors.
-                // But if it's 404, we should probably flag it? 
-                // For now, keeping existing "skip on error" behavior but logging it.
+                // If variant not found (404), treat as out-of-stock to prevent
+                // charging customers for products that can't be fulfilled
                 if (response.status === 404) {
-                     console.warn(`Variant ${item.variantId} not found in Medusa`);
+                    console.warn(`Variant ${item.variantId} not found in Medusa. Treating as out of stock.`);
+                    outOfStockItems.push({
+                        title: item.title,
+                        requested: item.quantity,
+                        available: 0,
+                    });
                 }
                 continue;
             }
