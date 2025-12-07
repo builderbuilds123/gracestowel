@@ -21,6 +21,7 @@ vi.mock('@stripe/react-stripe-js', () => ({
 
 vi.mock('../lib/stripe', () => ({
   getStripe: () => Promise.resolve(null),
+  initStripe: vi.fn(),
 }));
 
 vi.mock('../lib/price', () => ({
@@ -50,9 +51,14 @@ vi.mock('../context/CustomerContext', () => ({
   getAuthToken: () => null,
 }));
 
-vi.mock('react-router', () => ({
-    Link: ({ children }: any) => <a>{children}</a>,
-}));
+vi.mock('react-router', async () => {
+    const actual = await vi.importActual('react-router');
+    return {
+        ...actual,
+        Link: ({ children }: any) => <a>{children}</a>,
+        useLoaderData: () => ({ stripePublishableKey: 'pk_test_mock' }),
+    };
+});
 
 
 describe('Checkout Route', () => {
