@@ -1,5 +1,6 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import Stripe from "stripe";
+import { getStripeClient } from "../../../utils/stripe";
 import { createOrderFromStripeWorkflow } from "../../../workflows/create-order-from-stripe";
 
 /**
@@ -11,16 +12,7 @@ import { createOrderFromStripeWorkflow } from "../../../workflows/create-order-f
  * Endpoint: POST /webhooks/stripe
  */
 
-// Initialize Stripe client
-const getStripeClient = () => {
-    const secretKey = process.env.STRIPE_SECRET_KEY;
-    if (!secretKey) {
-        throw new Error("STRIPE_SECRET_KEY is not configured");
-    }
-    return new Stripe(secretKey, {
-        apiVersion: "2025-10-29.clover",
-    });
-};
+// Stripe client imported from ../../../utils/stripe
 
 /**
  * Helper to read raw body from request stream

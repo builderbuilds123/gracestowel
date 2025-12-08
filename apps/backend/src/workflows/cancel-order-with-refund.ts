@@ -8,6 +8,7 @@ import {
 import { updateInventoryLevelsStep } from "@medusajs/core-flows";
 import type { UpdateInventoryLevelInput } from "@medusajs/types";
 import Stripe from "stripe";
+import { getStripeClient } from "../utils/stripe";
 
 /**
  * Input for the cancel order workflow
@@ -18,18 +19,7 @@ export interface CancelOrderWithRefundInput {
     reason?: string;
 }
 
-/**
- * Get Stripe client
- */
-const getStripeClient = () => {
-    const secretKey = process.env.STRIPE_SECRET_KEY;
-    if (!secretKey) {
-        throw new Error("STRIPE_SECRET_KEY is not configured");
-    }
-    return new Stripe(secretKey, {
-        apiVersion: "2025-10-29.clover",
-    });
-};
+// Stripe client imported from ../utils/stripe
 
 /**
  * Payment cancellation result type

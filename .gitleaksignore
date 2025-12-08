@@ -31,3 +31,8 @@ cf6d1047bc457159c1b782e820f3164fe2fa9112:repomix-output.xml:stripe-access-token:
 # Test file mock client_secrets (not real secrets)
 ddf62774c9caf8caf9affa46441dcc88e5b0d25a:apps/storefront/app/routes/api.payment-intent.test.ts:generic-api-key:55
 ddf62774c9caf8caf9affa46441dcc88e5b0d25a:apps/storefront/app/routes/api.payment-intent.test.ts:generic-api-key:76
+
+# BMAD framework documentation hashes (false positives - SHA256 file hashes misidentified as API keys)
+ece141cc9e78ba37232e3e083426053fd534b3aa:.bmad/_cfg/files-manifest.csv:generic-api-key:167
+ece141cc9e78ba37232e3e083426053fd534b3aa:.bmad/_cfg/files-manifest.csv:generic-api-key:170
+ece141cc9e78ba37232e3e083426053fd534b3aa:.bmad/_cfg/files-manifest.csv:generic-api-key:200

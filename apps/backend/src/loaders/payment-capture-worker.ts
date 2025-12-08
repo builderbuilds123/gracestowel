@@ -12,12 +12,14 @@ export default async function paymentCaptureWorkerLoader(container: MedusaContai
         // Only start the worker if Redis is configured
         if (process.env.REDIS_URL) {
             startPaymentCaptureWorker();
-            console.log("Payment capture worker loader initialized");
+            // L1: Removed duplicate "worker loader initialized" log since startPaymentCaptureWorker logs "worker started"
         } else {
             console.warn("REDIS_URL not configured - payment capture worker not started");
         }
     } catch (error) {
-        console.error("Failed to start payment capture worker:", error);
+        // H2: Fail loudness
+        console.error("CRITICAL: Failed to start payment capture worker:", error);
+        throw error;
     }
 }
 

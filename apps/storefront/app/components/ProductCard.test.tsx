@@ -197,9 +197,12 @@ describe("ProductCard", () => {
       const productWithoutImage = { ...mockProduct, image: "" };
       renderProductCard(<ProductCard {...productWithoutImage} />);
 
-      const image = screen.getByAltText(mockProduct.title);
-      expect(image).toBeInTheDocument();
-      // Image element should exist even if src is empty
+      // Expect fallback placeholder
+      expect(screen.getByText("No Image")).toBeInTheDocument();
+      // Ensure the broken image tag is NOT rendered
+      const images = screen.queryAllByRole("img");
+      const productImages = images.filter(img => img.getAttribute("alt") === mockProduct.title);
+      expect(productImages).toHaveLength(0);
     });
 
     it("should handle numeric price values", () => {

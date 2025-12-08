@@ -120,6 +120,17 @@
     - Always verify if "secrets" are in framework/config files vs actual code
 - **Location:** `.gitleaksignore:35-38`
 
+### 2025-12-07 - Jest Mock Path Mismatch in Nested Test Directories [RESOLVED]
+
+- **Symptom:** Jest tests failing with "Cannot find module" error when mocking dependencies, even though the module exists. Mock functions not being called despite proper setup.
+- **Root Cause:** Mock path didn't account for deeper directory nesting. Test at `integration-tests/unit/webhooks/stripe/route.unit.spec.ts` (4 levels deep) needed `../../../../src/utils/stripe` not `../../../utils/stripe` or `../../src/utils/stripe`.
+- **Solution:** Counted directory levels carefully from test location to source file. From `integration-tests/unit/webhooks/stripe/` → go up 4 levels (`../../../../`) to reach backend root → then down into `src/utils/stripe`.
+- **Prevention:** 
+    - Always verify mock paths by counting actual directory levels from test file to target
+    - Check existing working test files in the same project for correct path patterns
+    - Remember that relative paths change based on test directory depth, not just source file location
+- **Location:** `apps/backend/integration-tests/unit/webhooks/stripe/route.unit.spec.ts:12`
+
 ### 2025-12-06 - Test Failure Due to Callback Not Executing in Mock (PostHog) [RESOLVED]
 
 - **Symptom:** Test fails with `AssertionError: expected "spy" to be called at least once` when testing `posthog.debug()` call in development mode.
@@ -211,6 +222,104 @@
     - Use Stripe CLI for local webhook testing: `stripe listen --forward-to localhost:9000/webhooks/stripe`
     - Document all webhook endpoints and required events
 - **Location:** `apps/backend/src/api/webhooks/stripe/route.ts`
+
+### 2025-12-07 - Jest Singleton Cache Causing Mock Bypass in CI [RESOLVED]
+
+- **Symptom:** Tests pass locally but fail in CI with `--runInBand`. Mock functions show 0 calls despite correct `jest.mock()` setup. All 5 tests in `route.unit.spec.ts` fail with `mockConstructEvent` never called.
+- **Root Cause:** Singleton pattern in `utils/stripe.ts` caches the Stripe client at module level:
+    ```typescript
+    let stripeClient: Stripe | null = null;
+    export function getStripeClient(): Stripe {
+        if (stripeClient) return stripeClient; // ← Returns cached, bypasses mock!
+        // ...creates new client
+    }
+    ```
+    When CI runs with `--runInBand`, all tests execute in the same process. Earlier test suites (e.g., `payment-capture-queue.unit.spec.ts`) initialize the real/differently-mocked singleton. When `route.unit.spec.ts` runs later, `getStripeClient()` returns the **cached** client instead of the mock.
+- **Why Local Works:** Tests may run in different order, or Jest's default behavior isolates modules differently without `--runInBand`.
+- **Solution:** 
+    1. Added `resetStripeClient()` function to `utils/stripe.ts`:
+        ```typescript
+        export function resetStripeClient(): void {
+            stripeClient = null;
+        }
+        ```
+    2. Updated test to mock and call it:
+        ```typescript
+        jest.mock("../../../../src/utils/stripe", () => ({
+            getStripeClient: jest.fn(() => ({ webhooks: { constructEvent: mockConstructEvent }})),
+            resetStripeClient: jest.fn(), // ← Mock the reset function
+        }));
+        import { resetStripeClient } from "../../../../src/utils/stripe";
+        
+        beforeEach(() => {
+            jest.clearAllMocks();
+            resetStripeClient(); // ← Clear singleton cache
+        });
+        ```
+- **Prevention:**
+    - When mocking modules with singletons, always provide a reset mechanism
+    - Add `reset*()` functions to singleton patterns for testability
+    - Be aware that `--runInBand` shares state between test files
+    - Test locally with `--runInBand` to catch CI-specific failures early
+- **Location:** `apps/backend/src/utils/stripe.ts`, `apps/backend/integration-tests/unit/webhooks/stripe/route.unit.spec.ts`
+
+### 2025-12-07 - Test Request Object Missing Stream Methods for getRawBody() [RESOLVED]
+
+- **Symptom:** Tests pass locally but fail in CI. `mockConstructEvent` shows 0 calls. Clearing local cache (`rm -rf node_modules/.cache .swc dist && npm test -- --clearCache`) reproduces the failure locally.
+- **Root Cause:** The `route.ts` webhook handler was updated to use `getRawBody(req)` which reads request body via Node.js stream events:
+    ```typescript
+    async function getRawBody(req: MedusaRequest): Promise<string> {
+        return new Promise((resolve, reject) => {
+            const chunks: Buffer[] = [];
+            req.on("data", (chunk: Buffer) => chunks.push(chunk));
+            req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+            req.on("error", reject);
+        });
+    }
+    ```
+    The tests were creating plain objects with a `body` property:
+    ```typescript
+    const req = {
+        headers: { "stripe-signature": "sig_valid" },
+        body: JSON.stringify({ id: "evt_123" }),  // ← Not a stream!
+    } as any;
+    ```
+    These plain objects don't have `on()` method. The `getRawBody()` promise hangs forever because no `data`/`end` events are ever emitted, so `constructEvent` never gets called.
+- **Why Local Worked Initially:** Stale transpiled code in `.swc` cache was using an older version of `route.ts` that didn't use `getRawBody()`.
+- **Solution:** Created a helper function that builds a proper stream-like request using Node.js `EventEmitter`:
+    ```typescript
+    import { EventEmitter } from "events";
+    
+    function createMockStreamRequest(options: {
+        headers?: Record<string, string>;
+        body?: string;
+        scope?: { resolve: jest.Mock };
+    }): any {
+        const emitter = new EventEmitter();
+        const req = Object.assign(emitter, {
+            headers: options.headers || {},
+            scope: options.scope,
+        });
+        
+        // Schedule events AFTER handler starts listening
+        setImmediate(() => {
+            if (options.body) {
+                req.emit("data", Buffer.from(options.body));
+            }
+            req.emit("end");
+        });
+        
+        return req;
+    }
+    ```
+    Updated all 5 failing tests to use `createMockStreamRequest()` instead of plain objects.
+- **Prevention:**
+    - When testing Express/Medusa routes that read raw body from stream, mock the request as an EventEmitter
+    - Always clear cache (`npm test -- --clearCache`) when tests behave differently local vs CI
+    - If implementation changes how request body is read, update corresponding test mocks
+    - Use `setImmediate()` to emit stream events after the handler attaches listeners
+- **Key Insight:** The singleton cache theory was a red herring. The real issue was test/implementation mismatch. Always verify by clearing cache locally before concluding root cause.
+- **Location:** `apps/backend/integration-tests/unit/webhooks/stripe/route.unit.spec.ts`
 
 ## Solutions That Worked
 

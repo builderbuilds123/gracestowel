@@ -1,8 +1,8 @@
 {
   "config": {
-    "configFile": "/app/playwright.config.ts",
-    "rootDir": "/app/tests",
-    "forbidOnly": true,
+    "configFile": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/playwright.config.ts",
+    "rootDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/tests",
+    "forbidOnly": false,
     "fullyParallel": true,
     "globalSetup": null,
     "globalTeardown": null,
@@ -10,9 +10,7 @@
     "grep": {},
     "grepInvert": null,
     "maxFailures": 0,
-    "metadata": {
-      "actualWorkers": 1
-    },
+    "metadata": {},
     "preserveOutput": "always",
     "reporter": [
       [
@@ -28,7 +26,7 @@
         }
       ],
       [
-        "github",
+        "list",
         null
       ]
     ],
@@ -39,13 +37,13 @@
     "quiet": false,
     "projects": [
       {
-        "outputDir": "/app/test-results",
+        "outputDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results",
         "repeatEach": 1,
-        "retries": 2,
+        "retries": 0,
         "metadata": {},
         "id": "chromium",
         "name": "chromium",
-        "testDir": "/app/tests",
+        "testDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/tests",
         "testIgnore": [],
         "testMatch": [
           "**/*.@(spec|test).?(c|m)[jt]s?(x)"
@@ -53,13 +51,13 @@
         "timeout": 30000
       },
       {
-        "outputDir": "/app/test-results",
+        "outputDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results",
         "repeatEach": 1,
-        "retries": 2,
+        "retries": 0,
         "metadata": {},
         "id": "firefox",
         "name": "firefox",
-        "testDir": "/app/tests",
+        "testDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/tests",
         "testIgnore": [],
         "testMatch": [
           "**/*.@(spec|test).?(c|m)[jt]s?(x)"
@@ -67,13 +65,13 @@
         "timeout": 30000
       },
       {
-        "outputDir": "/app/test-results",
+        "outputDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results",
         "repeatEach": 1,
-        "retries": 2,
+        "retries": 0,
         "metadata": {},
         "id": "webkit",
         "name": "webkit",
-        "testDir": "/app/tests",
+        "testDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/tests",
         "testIgnore": [],
         "testMatch": [
           "**/*.@(spec|test).?(c|m)[jt]s?(x)"
@@ -81,13 +79,13 @@
         "timeout": 30000
       },
       {
-        "outputDir": "/app/test-results",
+        "outputDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results",
         "repeatEach": 1,
-        "retries": 2,
+        "retries": 0,
         "metadata": {},
         "id": "Mobile Chrome",
         "name": "Mobile Chrome",
-        "testDir": "/app/tests",
+        "testDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/tests",
         "testIgnore": [],
         "testMatch": [
           "**/*.@(spec|test).?(c|m)[jt]s?(x)"
@@ -95,13 +93,13 @@
         "timeout": 30000
       },
       {
-        "outputDir": "/app/test-results",
+        "outputDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results",
         "repeatEach": 1,
-        "retries": 2,
+        "retries": 0,
         "metadata": {},
         "id": "Mobile Safari",
         "name": "Mobile Safari",
-        "testDir": "/app/tests",
+        "testDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/tests",
         "testIgnore": [],
         "testMatch": [
           "**/*.@(spec|test).?(c|m)[jt]s?(x)"
@@ -109,13 +107,13 @@
         "timeout": 30000
       },
       {
-        "outputDir": "/app/test-results",
+        "outputDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results",
         "repeatEach": 1,
-        "retries": 2,
+        "retries": 0,
         "metadata": {},
         "id": "resilience",
         "name": "resilience",
-        "testDir": "/app/resilience",
+        "testDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/resilience",
         "testIgnore": [],
         "testMatch": [
           "**/*.@(spec|test).?(c|m)[jt]s?(x)"
@@ -127,302 +125,26 @@
     "updateSnapshots": "missing",
     "version": "1.49.0",
     "workers": 1,
-    "webServer": null
+    "webServer": {
+      "command": "cd ../.. && MEDUSA_PUBLISHABLE_KEY=undefined CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE='undefined' npm run dev --workspace=apps/storefront",
+      "url": "https://localhost:5173",
+      "reuseExistingServer": true,
+      "ignoreHTTPSErrors": true,
+      "timeout": 120000
+    }
   },
-  "suites": [
+  "suites": [],
+  "errors": [
     {
-      "title": "visual-regression.spec.ts",
-      "file": "visual-regression.spec.ts",
-      "column": 0,
-      "line": 0,
-      "specs": [],
-      "suites": [
-        {
-          "title": "Visual Regression",
-          "file": "visual-regression.spec.ts",
-          "line": 10,
-          "column": 6,
-          "specs": [],
-          "suites": [
-            {
-              "title": "Homepage",
-              "file": "visual-regression.spec.ts",
-              "line": 11,
-              "column": 8,
-              "specs": [
-                {
-                  "title": "should match homepage snapshot",
-                  "ok": true,
-                  "tags": [],
-                  "tests": [
-                    {
-                      "timeout": 30000,
-                      "annotations": [
-                        {
-                          "type": "skip"
-                        }
-                      ],
-                      "expectedStatus": "skipped",
-                      "projectId": "chromium",
-                      "projectName": "chromium",
-                      "results": [
-                        {
-                          "workerIndex": -1,
-                          "status": "skipped",
-                          "duration": 0,
-                          "errors": [],
-                          "stdout": [],
-                          "stderr": [],
-                          "retry": 0,
-                          "startTime": "2025-12-02T07:34:51.429Z",
-                          "attachments": []
-                        }
-                      ],
-                      "status": "skipped"
-                    }
-                  ],
-                  "id": "78e23c5201ba1ea12e76-b5189f233562bce69cf5",
-                  "file": "visual-regression.spec.ts",
-                  "line": 12,
-                  "column": 10
-                },
-                {
-                  "title": "should match homepage mobile snapshot",
-                  "ok": true,
-                  "tags": [],
-                  "tests": [
-                    {
-                      "timeout": 30000,
-                      "annotations": [],
-                      "expectedStatus": "passed",
-                      "projectId": "chromium",
-                      "projectName": "chromium",
-                      "results": [
-                        {
-                          "workerIndex": 0,
-                          "status": "passed",
-                          "duration": 1287,
-                          "errors": [],
-                          "stdout": [],
-                          "stderr": [],
-                          "retry": 0,
-                          "startTime": "2025-12-02T07:34:51.939Z",
-                          "attachments": []
-                        }
-                      ],
-                      "status": "expected"
-                    }
-                  ],
-                  "id": "78e23c5201ba1ea12e76-1372df7448c1b7d02fee",
-                  "file": "visual-regression.spec.ts",
-                  "line": 25,
-                  "column": 9
-                }
-              ]
-            },
-            {
-              "title": "Product Page",
-              "file": "visual-regression.spec.ts",
-              "line": 37,
-              "column": 8,
-              "specs": [
-                {
-                  "title": "should match product page snapshot",
-                  "ok": true,
-                  "tags": [],
-                  "tests": [
-                    {
-                      "timeout": 30000,
-                      "annotations": [],
-                      "expectedStatus": "passed",
-                      "projectId": "chromium",
-                      "projectName": "chromium",
-                      "results": [
-                        {
-                          "workerIndex": 0,
-                          "status": "passed",
-                          "duration": 2443,
-                          "errors": [],
-                          "stdout": [],
-                          "stderr": [],
-                          "retry": 0,
-                          "startTime": "2025-12-02T07:34:53.353Z",
-                          "attachments": []
-                        }
-                      ],
-                      "status": "expected"
-                    }
-                  ],
-                  "id": "78e23c5201ba1ea12e76-72bd547a67d7ab526994",
-                  "file": "visual-regression.spec.ts",
-                  "line": 38,
-                  "column": 9
-                }
-              ]
-            },
-            {
-              "title": "Cart",
-              "file": "visual-regression.spec.ts",
-              "line": 50,
-              "column": 8,
-              "specs": [
-                {
-                  "title": "should match cart drawer snapshot",
-                  "ok": true,
-                  "tags": [],
-                  "tests": [
-                    {
-                      "timeout": 30000,
-                      "annotations": [],
-                      "expectedStatus": "passed",
-                      "projectId": "chromium",
-                      "projectName": "chromium",
-                      "results": [
-                        {
-                          "workerIndex": 0,
-                          "status": "passed",
-                          "duration": 1255,
-                          "errors": [],
-                          "stdout": [],
-                          "stderr": [],
-                          "retry": 0,
-                          "startTime": "2025-12-02T07:34:55.800Z",
-                          "attachments": []
-                        }
-                      ],
-                      "status": "expected"
-                    }
-                  ],
-                  "id": "78e23c5201ba1ea12e76-f81ab2754b5c12f92546",
-                  "file": "visual-regression.spec.ts",
-                  "line": 51,
-                  "column": 9
-                },
-                {
-                  "title": "should match empty cart snapshot",
-                  "ok": true,
-                  "tags": [],
-                  "tests": [
-                    {
-                      "timeout": 30000,
-                      "annotations": [],
-                      "expectedStatus": "passed",
-                      "projectId": "chromium",
-                      "projectName": "chromium",
-                      "results": [
-                        {
-                          "workerIndex": 0,
-                          "status": "passed",
-                          "duration": 1264,
-                          "errors": [],
-                          "stdout": [],
-                          "stderr": [],
-                          "retry": 0,
-                          "startTime": "2025-12-02T07:34:57.060Z",
-                          "attachments": []
-                        }
-                      ],
-                      "status": "expected"
-                    }
-                  ],
-                  "id": "78e23c5201ba1ea12e76-2c9ff581dd8c907ca67a",
-                  "file": "visual-regression.spec.ts",
-                  "line": 68,
-                  "column": 9
-                }
-              ]
-            },
-            {
-              "title": "Checkout",
-              "file": "visual-regression.spec.ts",
-              "line": 87,
-              "column": 8,
-              "specs": [
-                {
-                  "title": "should match checkout page snapshot",
-                  "ok": true,
-                  "tags": [],
-                  "tests": [
-                    {
-                      "timeout": 30000,
-                      "annotations": [],
-                      "expectedStatus": "passed",
-                      "projectId": "chromium",
-                      "projectName": "chromium",
-                      "results": [
-                        {
-                          "workerIndex": 0,
-                          "status": "passed",
-                          "duration": 1047,
-                          "errors": [],
-                          "stdout": [],
-                          "stderr": [],
-                          "retry": 0,
-                          "startTime": "2025-12-02T07:34:58.338Z",
-                          "attachments": []
-                        }
-                      ],
-                      "status": "expected"
-                    }
-                  ],
-                  "id": "78e23c5201ba1ea12e76-ba0b9259813ab546da49",
-                  "file": "visual-regression.spec.ts",
-                  "line": 88,
-                  "column": 9
-                }
-              ]
-            },
-            {
-              "title": "Error States",
-              "file": "visual-regression.spec.ts",
-              "line": 100,
-              "column": 8,
-              "specs": [
-                {
-                  "title": "should match 404 page snapshot",
-                  "ok": true,
-                  "tags": [],
-                  "tests": [
-                    {
-                      "timeout": 30000,
-                      "annotations": [],
-                      "expectedStatus": "passed",
-                      "projectId": "chromium",
-                      "projectName": "chromium",
-                      "results": [
-                        {
-                          "workerIndex": 0,
-                          "status": "passed",
-                          "duration": 953,
-                          "errors": [],
-                          "stdout": [],
-                          "stderr": [],
-                          "retry": 0,
-                          "startTime": "2025-12-02T07:34:59.395Z",
-                          "attachments": []
-                        }
-                      ],
-                      "status": "expected"
-                    }
-                  ],
-                  "id": "78e23c5201ba1ea12e76-28ee3176965b23a2af8c",
-                  "file": "visual-regression.spec.ts",
-                  "line": 101,
-                  "column": 9
-                }
-              ]
-            }
-          ]
-        }
-      ]
+      "message": "Error: Process from config.webServer was not able to start. Exit code: 1",
+      "stack": "Error: Process from config.webServer was not able to start. Exit code: 1"
     }
   ],
-  "errors": [],
   "stats": {
-    "startTime": "2025-12-02T07:34:45.822Z",
-    "duration": 14568.835,
-    "expected": 6,
-    "skipped": 1,
+    "startTime": "2025-12-08T02:19:31.982Z",
+    "duration": 1470.7939999999999,
+    "expected": 0,
+    "skipped": 0,
     "unexpected": 0,
     "flaky": 0
   }

@@ -20,7 +20,7 @@
 
 {{#if has_api_routes}}
 
-### API Routes ({{api_route_count}} endpoints found)
+## API Routes ({{api_route_count}} endpoints found)
 
 {{#each api_route_groups}}
 {{group_index}}. {{group_name}} - {{endpoint_count}} endpoints in `{{path}}`
@@ -29,7 +29,7 @@
 
 {{#if has_feature_modules}}
 
-### Feature Modules ({{feature_count}} features)
+## Feature Modules ({{feature_count}} features)
 
 {{#each feature_modules}}
 {{module_index}}. {{module_name}} - {{file_count}} files in `{{path}}`
@@ -194,7 +194,7 @@ This will read EVERY file in this area. Proceed? [y/n]
 
 <action>Load complete deep-dive template from: {installed_path}/templates/deep-dive-template.md</action>
 <action>Fill template with all collected data from steps 13b-13d</action>
-<action>Write filled template to: {output_folder}/insights/deep-dive-{{sanitized_target_name}}.md</action>
+<action>Write filled template to: {output_folder}/deep-dive-{{sanitized_target_name}}.md</action>
 <action>Validate deep-dive document completeness</action>
 
 <template-output>deep_dive_documentation</template-output>
@@ -204,7 +204,7 @@ This will read EVERY file in this area. Proceed? [y/n]
 </step>
 
 <step n="13f" goal="Update master index with deep-dive link">
-  <action>Read existing README.md</action>
+  <action>Read existing index.md</action>
 
 <action>Check if "Deep-Dive Documentation" section exists</action>
 
@@ -229,7 +229,7 @@ Detailed exhaustive analysis of specific areas:
   Deep-Dives: {{deep_dive_count}}
   </action>
 
-  <action>Save updated README.md</action>
+  <action>Save updated index.md</action>
 
   <template-output>updated_index</template-output>
   </step>
@@ -241,7 +241,7 @@ Detailed exhaustive analysis of specific areas:
 
 ## Deep-Dive Documentation Complete! ✓
 
-**Generated:** {output_folder}/insights/deep-dive-{{target_name}}.md
+**Generated:** {output_folder}/deep-dive-{{target_name}}.md
 **Files Analyzed:** {{file_count}}
 **Lines of Code Scanned:** {{total_loc}}
 **Time Taken:** ~{{duration}}
@@ -255,7 +255,7 @@ Detailed exhaustive analysis of specific areas:
 - Related code and reuse opportunities
 - Implementation guidance
 
-**Index Updated:** {output_folder}/README.md now includes link to this deep-dive
+**Index Updated:** {output_folder}/index.md now includes link to this deep-dive
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 </action>
@@ -278,7 +278,7 @@ Your choice [1/2]:
 
 All deep-dive documentation complete!
 
-**Master Index:** {output_folder}/README.md
+**Master Index:** {output_folder}/index.md
 **Deep-Dives Generated:** {{deep_dive_count}}
 
 These comprehensive docs are now ready for:

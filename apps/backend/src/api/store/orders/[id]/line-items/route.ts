@@ -1,6 +1,7 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { modificationTokenService } from "../../../../../services/modification-token";
 import Stripe from "stripe";
+import { getStripeClient } from "../../../../../utils/stripe";
 
 /**
  * POST /store/orders/:id/line-items
@@ -15,15 +16,7 @@ import Stripe from "stripe";
  *   - quantity: number
  */
 
-const getStripeClient = () => {
-    const secretKey = process.env.STRIPE_SECRET_KEY;
-    if (!secretKey) {
-        throw new Error("STRIPE_SECRET_KEY is not configured");
-    }
-    return new Stripe(secretKey, {
-        apiVersion: "2025-10-29.clover",
-    });
-};
+// Stripe client imported from ../../../../../utils/stripe
 
 export async function POST(
     req: MedusaRequest,
