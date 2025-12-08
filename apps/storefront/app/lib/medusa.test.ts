@@ -2,12 +2,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createMedusaClient, getMedusaClient, getBackendUrl } from './medusa';
 import Medusa from "@medusajs/js-sdk";
 
-// Mock the SDK
+// Mock the SDK - vitest 4.x requires class/function for `new` calls
 vi.mock("@medusajs/js-sdk", () => {
   return {
-    default: vi.fn().mockImplementation((config) => ({
-      config // Expose config for verification
-    }))
+    default: vi.fn().mockImplementation(function(this: { config: unknown }, config: unknown) {
+      this.config = config; // Expose config for verification
+    })
   };
 });
 
