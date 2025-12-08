@@ -18,6 +18,8 @@
     "seed": "medusa exec ./src/scripts/seed.ts",
     "start": "medusa start --host 0.0.0.0 --port ${PORT:-8080}",
     "dev": "medusa develop",
+    "lint": "echo 'Lint not configured for backend'",
+    "typecheck": "tsc --noEmit",
     "test": "TEST_TYPE=unit NODE_OPTIONS=--experimental-vm-modules jest --silent --runInBand --forceExit",
     "test:unit": "TEST_TYPE=unit NODE_OPTIONS=--experimental-vm-modules jest --silent --runInBand --forceExit",
     "test:integration": "TEST_TYPE=integration:http NODE_OPTIONS=--experimental-vm-modules jest --silent=false --runInBand --forceExit",

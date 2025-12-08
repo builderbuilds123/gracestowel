@@ -9,6 +9,7 @@
     "dev": "react-router dev",
     "postinstall": "node -e \"process.env.CI || require('child_process').execSync('npm run cf-typegen', {stdio: 'inherit'})\"",
     "preview": "npm run build && vite preview",
+    "lint": "echo 'Lint not configured for storefront'",
     "typecheck": "npm run cf-typegen && react-router typegen && tsc -b",
     "test": "vitest",
     "test:ui": "vitest --ui",

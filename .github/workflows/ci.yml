@@ -15,7 +15,6 @@ concurrency:
 
 env:
   NODE_VERSION: "24"
-  PNPM_VERSION: "8"
 
 jobs:
   # ============================================
@@ -49,28 +48,21 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
 
-      - name: Cache node_modules
+      - name: Cache turbo
         uses: actions/cache@v4
         with:
-          path: node_modules
-          key: ${{ runner.os }}-node-${{ env.NODE_VERSION }}-${{ hashFiles('package-lock.json') }}
+          path: .turbo
+          key: ${{ runner.os }}-turbo-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-node-${{ env.NODE_VERSION }}-
+            ${{ runner.os }}-turbo-
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Lint
-        run: npm run lint --if-present
-
-      - name: Type check (Backend)
-        working-directory: apps/backend
-        run: npx tsc --noEmit
-
-      - name: Type check (Storefront)
-        working-directory: apps/storefront
-        run: npx tsc --noEmit
+      - name: Lint & Typecheck
+        run: npx turbo run lint typecheck
 
       - name: Security audit
         run: npm audit --audit-level=high
@@ -92,25 +84,24 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
 
-      - name: Cache node_modules
+      - name: Cache turbo
         uses: actions/cache@v4
         with:
-          path: node_modules
-          key: ${{ runner.os }}-node-${{ env.NODE_VERSION }}-${{ hashFiles('package-lock.json') }}
+          path: .turbo
+          key: ${{ runner.os }}-turbo-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-node-${{ env.NODE_VERSION }}-
+            ${{ runner.os }}-turbo-
 
       - name: Install dependencies
         run: npm ci
 
       - name: Run backend unit tests
-        working-directory: apps/backend
         env:
-          # Test mode env vars (no real services needed)
           NODE_ENV: test
           RESEND_API_KEY: re_test_ci_placeholder_key
-        run: npm test -- --coverage
+        run: npx turbo run test --filter=@gracestowel/backend -- --coverage
 
       - name: Upload coverage
         uses: codecov/codecov-action@v5
@@ -132,21 +123,21 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
 
-      - name: Cache node_modules
+      - name: Cache turbo
         uses: actions/cache@v4
         with:
-          path: node_modules
-          key: ${{ runner.os }}-node-${{ env.NODE_VERSION }}-${{ hashFiles('package-lock.json') }}
+          path: .turbo
+          key: ${{ runner.os }}-turbo-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-node-${{ env.NODE_VERSION }}-
+            ${{ runner.os }}-turbo-
 
       - name: Install dependencies
         run: npm ci
 
       - name: Run storefront tests
-        working-directory: apps/storefront
-        run: npm test -- --coverage
+        run: npx turbo run test --filter=apps-storefront -- --coverage
 
       - name: Upload coverage
         uses: codecov/codecov-action@v5
@@ -173,14 +164,15 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
 
-      - name: Cache node_modules
+      - name: Cache turbo
         uses: actions/cache@v4
         with:
-          path: node_modules
-          key: ${{ runner.os }}-node-${{ env.NODE_VERSION }}-${{ hashFiles('package-lock.json') }}
+          path: .turbo
+          key: ${{ runner.os }}-turbo-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-node-${{ env.NODE_VERSION }}-
+            ${{ runner.os }}-turbo-
 
       - name: Install dependencies
         run: npm ci
@@ -338,21 +330,21 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
 
-      - name: Cache node_modules
+      - name: Cache turbo
         uses: actions/cache@v4
         with:
-          path: node_modules
-          key: ${{ runner.os }}-node-${{ env.NODE_VERSION }}-${{ hashFiles('package-lock.json') }}
+          path: .turbo
+          key: ${{ runner.os }}-turbo-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-node-${{ env.NODE_VERSION }}-
+            ${{ runner.os }}-turbo-
 
       - name: Install dependencies
         run: npm ci
 
       - name: Build Storefront
-        working-directory: apps/storefront
-        run: npm run build
+        run: npx turbo run build --filter=apps-storefront
 
       - name: Patch wrangler config for staging
         working-directory: apps/storefront
@@ -389,21 +381,21 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
 
-      - name: Cache node_modules
+      - name: Cache turbo
         uses: actions/cache@v4
         with:
-          path: node_modules
-          key: ${{ runner.os }}-node-${{ env.NODE_VERSION }}-${{ hashFiles('package-lock.json') }}
+          path: .turbo
+          key: ${{ runner.os }}-turbo-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-node-${{ env.NODE_VERSION }}-
+            ${{ runner.os }}-turbo-
 
       - name: Install dependencies
         run: npm ci
 
       - name: Build Storefront
-        working-directory: apps/storefront
-        run: npm run build
+        run: npx turbo run build --filter=apps-storefront
 
       - name: Patch wrangler config for production
         working-directory: apps/storefront

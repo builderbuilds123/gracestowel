@@ -6,13 +6,16 @@
     "apps/*"
   ],
   "scripts": {
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
     "dev:storefront": "npm run dev --workspace=apps/storefront",
     "deploy:storefront": "npm run deploy --workspace=apps/storefront",
     "dev:api": "npm run dev --workspace=apps/api",
     "deploy:api": "npm run deploy --workspace=apps/api",
     "dev:background": "npm run dev --workspace=apps/background",
     "deploy:background": "npm run deploy --workspace=apps/background",
-    "test": "npm run test --workspaces --if-present",
+    "test": "turbo run test",
     "test:storefront": "npm run test --workspace=apps/storefront",
     "test:backend": "npm run test:integration --workspace=apps/backend",
     "test:e2e": "npm run test --workspace=apps/e2e",
@@ -37,6 +40,7 @@
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^4.0.14",
+    "turbo": "^2.5.0",
     "vitest": "^4.0.14"
   }
 }
