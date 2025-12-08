@@ -39,22 +39,26 @@ export async function action({ request }: ActionFunctionArgs) {
                 // Apply free shipping logic for ground shipping
                 const isGroundShipping = rateId === GROUND_SHIPPING_ID;
                 const isFreeShipping = isGroundShipping && subtotal >= FREE_SHIPPING_THRESHOLD;
-                const amount = isFreeShipping ? 0 : rate.fixed_amount.amount / 100;
+
+                // Stripe returns fixed_amount.amount in cents (smallest currency unit)
+                // Keep it in cents for consistency with display components
+                const originalAmountCents = rate.fixed_amount.amount;
+                const amountCents = isFreeShipping ? 0 : originalAmountCents;
 
                 console.log(`Shipping rate ${rate.display_name}:`, {
                     isGroundShipping,
                     subtotal,
                     threshold: FREE_SHIPPING_THRESHOLD,
                     isFreeShipping,
-                    originalAmount: rate.fixed_amount.amount / 100,
-                    finalAmount: amount
+                    originalAmountCents,
+                    finalAmountCents: amountCents
                 });
 
                 return {
                     id: rate.id,
                     displayName: rate.display_name,
-                    amount: amount,
-                    originalAmount: rate.fixed_amount.amount / 100, // Always include original price
+                    amount: amountCents,
+                    originalAmount: originalAmountCents, // Always include original price in cents
                     deliveryEstimate: rate.delivery_estimate ?
                         `${rate.delivery_estimate.minimum?.value || ''}-${rate.delivery_estimate.maximum?.value || ''} ${rate.delivery_estimate.maximum?.unit || 'days'}` :
                         null,

@@ -45,7 +45,8 @@ export default function Checkout() {
         return total + originalPrice * item.quantity;
     }, 0);
 
-    const shippingCost = selectedShipping?.amount || 0;
+    const shippingCostCents = selectedShipping?.amount ?? 0;
+    const shippingCost = shippingCostCents / 100;
     const finalTotal = cartTotal + shippingCost;
 
     const hasFiredCheckoutStarted = useRef(false);
@@ -110,7 +111,7 @@ export default function Checkout() {
             body: JSON.stringify({
                 amount: cartTotal,
                 currency: currency.toLowerCase(),
-                shipping: selectedShipping.amount,
+                shipping: shippingCost,
                 customerId: isAuthenticated ? customer?.id : undefined,
                 customerEmail: isAuthenticated ? customer?.email : undefined,
                 cartItems: items.map(item => ({
