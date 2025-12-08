@@ -19,47 +19,11 @@ env:
 
 jobs:
   # ============================================
-  # Stage 0: Setup (Install Once, Share via Artifact)
-  # ============================================
-  setup:
-    name: Setup Dependencies
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Cache node_modules
-        uses: actions/cache@v4
-        id: cache-deps
-        with:
-          path: node_modules
-          key: ${{ runner.os }}-node-${{ env.NODE_VERSION }}-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-${{ env.NODE_VERSION }}-
-
-      - name: Install dependencies
-        if: steps.cache-deps.outputs.cache-hit != 'true'
-        run: npm ci
-
-      - name: Upload node_modules artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: node-modules
-          path: node_modules
-          retention-days: 1
-
-  # ============================================
   # Stage 1: Validation (Lint, Typecheck, Audit)
   # ============================================
   validate:
     name: Validate
     runs-on: ubuntu-latest
-    needs: setup
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -86,14 +50,16 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: Download node_modules
-        uses: actions/download-artifact@v4
+      - name: Cache node_modules
+        uses: actions/cache@v4
         with:
-          name: node-modules
           path: node_modules
+          key: ${{ runner.os }}-node-${{ env.NODE_VERSION }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-${{ env.NODE_VERSION }}-
 
-      - name: Rebuild bin symlinks
-        run: npm rebuild
+      - name: Install dependencies
+        run: npm ci
 
       - name: Lint
         run: npm run lint --if-present
@@ -116,7 +82,7 @@ jobs:
   test-backend:
     name: Backend Unit Tests
     runs-on: ubuntu-latest
-    needs: setup
+    needs: validate
     # No services needed - unit tests use mocks
     steps:
       - name: Checkout
@@ -127,14 +93,16 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: Download node_modules
-        uses: actions/download-artifact@v4
+      - name: Cache node_modules
+        uses: actions/cache@v4
         with:
-          name: node-modules
           path: node_modules
+          key: ${{ runner.os }}-node-${{ env.NODE_VERSION }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-${{ env.NODE_VERSION }}-
 
-      - name: Rebuild bin symlinks
-        run: npm rebuild
+      - name: Install dependencies
+        run: npm ci
 
       - name: Run backend unit tests
         working-directory: apps/backend
@@ -155,7 +123,7 @@ jobs:
   test-storefront:
     name: Storefront Tests
     runs-on: ubuntu-latest
-    needs: setup
+    needs: validate
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -165,14 +133,16 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: Download node_modules
-        uses: actions/download-artifact@v4
+      - name: Cache node_modules
+        uses: actions/cache@v4
         with:
-          name: node-modules
           path: node_modules
+          key: ${{ runner.os }}-node-${{ env.NODE_VERSION }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-${{ env.NODE_VERSION }}-
 
-      - name: Rebuild bin symlinks
-        run: npm rebuild
+      - name: Install dependencies
+        run: npm ci
 
       - name: Run storefront tests
         working-directory: apps/storefront
@@ -193,7 +163,7 @@ jobs:
     name: E2E Tests
     if: false # Paused for frontend changes
     runs-on: ubuntu-latest
-    needs: setup
+    needs: validate
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -204,14 +174,16 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: Download node_modules
-        uses: actions/download-artifact@v4
+      - name: Cache node_modules
+        uses: actions/cache@v4
         with:
-          name: node-modules
           path: node_modules
+          key: ${{ runner.os }}-node-${{ env.NODE_VERSION }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-${{ env.NODE_VERSION }}-
 
-      - name: Rebuild bin symlinks
-        run: npm rebuild
+      - name: Install dependencies
+        run: npm ci
 
       - name: Start backend and database
         run: docker compose -f docker-compose.test.yml up -d postgres redis backend
@@ -357,7 +329,7 @@ jobs:
     name: Deploy Staging
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/staging'
-    needs: [setup, validate, test-backend, test-storefront] # e2e paused
+    needs: [validate, test-backend, test-storefront] # e2e paused
     environment: staging
     steps:
       - uses: actions/checkout@v4
@@ -367,14 +339,16 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: Download node_modules
-        uses: actions/download-artifact@v4
+      - name: Cache node_modules
+        uses: actions/cache@v4
         with:
-          name: node-modules
           path: node_modules
+          key: ${{ runner.os }}-node-${{ env.NODE_VERSION }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-${{ env.NODE_VERSION }}-
 
-      - name: Rebuild bin symlinks
-        run: npm rebuild
+      - name: Install dependencies
+        run: npm ci
 
       - name: Build Storefront
         working-directory: apps/storefront
@@ -406,13 +380,7 @@ jobs:
     name: Deploy Production
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
-    needs: [
-        setup,
-        validate,
-        test-backend,
-        test-storefront,
-        deploy-backend-production,
-      ] # e2e paused
+    needs: [validate, test-backend, test-storefront, deploy-backend-production] # e2e paused
     environment: production
     steps:
       - uses: actions/checkout@v4
@@ -422,14 +390,16 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: Download node_modules
-        uses: actions/download-artifact@v4
+      - name: Cache node_modules
+        uses: actions/cache@v4
         with:
-          name: node-modules
           path: node_modules
+          key: ${{ runner.os }}-node-${{ env.NODE_VERSION }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-${{ env.NODE_VERSION }}-
 
-      - name: Rebuild bin symlinks
-        run: npm rebuild
+      - name: Install dependencies
+        run: npm ci
 
       - name: Build Storefront
         working-directory: apps/storefront
