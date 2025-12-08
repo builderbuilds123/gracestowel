@@ -34,6 +34,7 @@ module.exports = defineConfig({
   modules: [
     {
       // Event bus backed by Redis for durable cross-instance delivery (useful in dev/staging/prod)
+      key: "eventBusService",
       resolve: "@medusajs/event-bus-redis",
       options: {
         redisUrl: process.env.REDIS_URL || "redis://localhost:6379",
