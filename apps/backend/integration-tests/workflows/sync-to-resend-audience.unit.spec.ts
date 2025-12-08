@@ -60,19 +60,7 @@ describe("syncToResendAudienceStep", () => {
     })
   })
 
-  describe("environment variable checks", () => {
-    it("should require RESEND_API_KEY", () => {
-      const apiKey = process.env.RESEND_API_KEY
-      // Step should gracefully handle missing API key
-      expect(apiKey).toBeDefined // In test env this might be undefined
-    })
 
-    it("should require RESEND_AUDIENCE_ID", () => {
-      const audienceId = process.env.RESEND_AUDIENCE_ID
-      // Step should gracefully handle missing audience ID
-      expect(audienceId).toBeDefined // In test env this might be undefined
-    })
-  })
 
   describe("output structure", () => {
     it("should return synced: true on success", () => {

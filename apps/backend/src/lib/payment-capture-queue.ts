@@ -1,5 +1,5 @@
 import { Queue, Worker, Job } from "bullmq";
-import Stripe from "stripe";
+import { getStripeClient } from "../utils/stripe";
 
 /**
  * Payment capture job data
@@ -30,18 +30,7 @@ const getRedisConnection = () => {
     };
 };
 
-/**
- * Get Stripe client
- */
-const getStripeClient = () => {
-    const secretKey = process.env.STRIPE_SECRET_KEY;
-    if (!secretKey) {
-        throw new Error("STRIPE_SECRET_KEY is not configured");
-    }
-    return new Stripe(secretKey, {
-        apiVersion: "2024-06-20" as any, // Cast to avoid TS strict enum check mismatch with installed SDK
-    });
-};
+// Stripe client imported from ../utils/stripe
 
 // Queue name for payment capture
 export const PAYMENT_CAPTURE_QUEUE = "payment-capture";
