@@ -124,7 +124,7 @@ development_status:
   pi-epic-2: in-progress
   2-1-implement-redis-token-infra:
     path: docs/sprint/sprint-artifacts/2-1-implement-redis-token-infra.md
-    status: review
+    status: done
   2-2-expiration-listener:
     path: docs/sprint/sprint-artifacts/2-2-expiration-listener.md
     status: review
