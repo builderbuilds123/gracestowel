@@ -92,6 +92,9 @@ jobs:
           name: node-modules
           path: node_modules
 
+      - name: Rebuild bin symlinks
+        run: npm rebuild
+
       - name: Lint
         run: npm run lint --if-present
 
@@ -130,6 +133,9 @@ jobs:
           name: node-modules
           path: node_modules
 
+      - name: Rebuild bin symlinks
+        run: npm rebuild
+
       - name: Run backend unit tests
         working-directory: apps/backend
         env:
@@ -164,6 +170,9 @@ jobs:
         with:
           name: node-modules
           path: node_modules
+
+      - name: Rebuild bin symlinks
+        run: npm rebuild
 
       - name: Run storefront tests
         working-directory: apps/storefront
@@ -200,6 +209,9 @@ jobs:
         with:
           name: node-modules
           path: node_modules
+
+      - name: Rebuild bin symlinks
+        run: npm rebuild
 
       - name: Start backend and database
         run: docker compose -f docker-compose.test.yml up -d postgres redis backend
@@ -361,6 +373,9 @@ jobs:
           name: node-modules
           path: node_modules
 
+      - name: Rebuild bin symlinks
+        run: npm rebuild
+
       - name: Build Storefront
         working-directory: apps/storefront
         run: npm run build
@@ -412,6 +427,9 @@ jobs:
         with:
           name: node-modules
           path: node_modules
+
+      - name: Rebuild bin symlinks
+        run: npm rebuild
 
       - name: Build Storefront
         working-directory: apps/storefront
