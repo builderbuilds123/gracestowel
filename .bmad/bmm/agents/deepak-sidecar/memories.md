@@ -9,6 +9,21 @@
      - **Solution:** How it was fixed
      - **Prevention:** How to avoid similar bugs -->
 
+### 2025-12-07 - No Region Found for Currency (CAD) [RESOLVED]
+
+- **Symptom:** Order creation fails after successful Stripe payment with error `No region found for currency: cad`. Backend receives webhook correctly but `createOrderFromStripeWorkflow` throws at line 58.
+- **Root Cause:** The seed script (`seed.ts`) only created regions for USD (North America) and EUR (Europe). Stripe was configured for Canadian payments (CAD), but no Medusa region existed for CAD currency. The workflow looks up region by currency code, finds nothing, and throws.
+- **Solution:** Updated `seed.ts` to:
+  1. Add CAD as a supported store currency (set as default)
+  2. Split "North America" into separate "Canada" (CAD) and "United States" (USD) regions
+  3. Update shipping option references from `regionNA` to `regionUS`
+- **Prevention:**
+  - When setting up Stripe for a specific country, ensure Medusa has a matching region with that currency
+  - Run seed script after adding new regions, OR add regions manually via Admin dashboard
+  - Document all supported currencies in project setup checklist
+- **Location:** `apps/backend/src/workflows/create-order-from-stripe.ts:58`, `apps/backend/src/scripts/seed.ts`
+
+
 ### 2025-12-06 - Docker Build Failure in Medusa Backend [RESOLVED]
 
 - **Symptom:** Docker build fails with `npm error could not determine executable to run` (npx issue) or `npm error Missing script: "build"`.
