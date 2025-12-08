@@ -52,9 +52,9 @@ describe("sendOrderConfirmationWorkflow", () => {
     it("should accept optional modification_token in input", () => {
       const inputWithToken = { 
         id: "order_test_123",
-        modification_token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test.token"
+        modification_token: "test-modification-token-for-unit-tests"
       }
-      expect(inputWithToken.modification_token).toBe("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test.token")
+      expect(inputWithToken.modification_token).toBe("test-modification-token-for-unit-tests")
     })
 
     it("should allow modification_token to be undefined", () => {

@@ -76,7 +76,7 @@ describe("orderPlacedHandler", () => {
       const mockEvent = {
         data: { 
           id: "order_test_123",
-          modification_token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test.token"
+          modification_token: "test-modification-token-for-unit-tests"
         },
       }
 
@@ -89,7 +89,7 @@ describe("orderPlacedHandler", () => {
       expect(mockWorkflowRun).toHaveBeenCalledWith({
         input: {
           id: "order_test_123",
-          modification_token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test.token",
+          modification_token: "test-modification-token-for-unit-tests",
         },
       })
     })

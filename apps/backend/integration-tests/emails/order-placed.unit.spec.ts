@@ -88,7 +88,7 @@ describe("OrderPlacedEmailComponent", () => {
     })
 
     it("should render modify order link when modification_token is provided", async () => {
-      const token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test.signature"
+      const token = "test-modification-token-for-unit-tests"
       
       const html = await render(
         React.createElement(OrderPlacedEmailComponent, { 
@@ -129,7 +129,7 @@ describe("OrderPlacedEmailComponent", () => {
     it("should log error and not render link when STORE_URL is missing", async () => {
       delete process.env.STORE_URL
       const consoleSpy = jest.spyOn(console, "error")
-      const token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test.signature"
+      const token = "test-modification-token-for-unit-tests"
       
       const html = await render(
         React.createElement(OrderPlacedEmailComponent, { 
