@@ -20,6 +20,18 @@ export const STRIPE_API_VERSION = "2025-10-29.clover" as Stripe.LatestApiVersion
 let stripeClient: Stripe | null = null;
 
 /**
+ * Reset the Stripe client singleton
+ * 
+ * Used in tests to ensure a fresh client is created between test runs.
+ * This prevents cached clients from interfering with mocks.
+ * 
+ * @internal For testing purposes only
+ */
+export function resetStripeClient(): void {
+    stripeClient = null;
+}
+
+/**
  * Get singleton Stripe client instance
  * 
  * Uses the centralized API version to ensure consistency across the application.

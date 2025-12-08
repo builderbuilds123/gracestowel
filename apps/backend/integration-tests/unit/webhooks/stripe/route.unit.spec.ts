@@ -15,6 +15,7 @@ jest.mock("../../../../src/utils/stripe", () => ({
             constructEvent: mockConstructEvent,
         },
     })),
+    resetStripeClient: jest.fn(),
     STRIPE_API_VERSION: "2025-10-29.clover",
 }));
 
@@ -27,12 +28,14 @@ jest.mock("../../../../src/workflows/create-order-from-stripe", () => ({
 
 import { POST } from "../../../../src/api/webhooks/stripe/route";
 import { createOrderFromStripeWorkflow } from "../../../../src/workflows/create-order-from-stripe";
+import { resetStripeClient } from "../../../../src/utils/stripe";
 
 describe("Stripe Webhook POST", () => {
     const originalEnv = process.env;
 
     beforeEach(() => {
         jest.clearAllMocks();
+        resetStripeClient(); // Clear singleton cache to ensure mock is used
         process.env = { ...originalEnv };
         process.env.STRIPE_WEBHOOK_SECRET = "whsec_test";
         process.env.STRIPE_SECRET_KEY = "sk_test_key";
