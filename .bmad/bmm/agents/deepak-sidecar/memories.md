@@ -63,6 +63,29 @@
     - Consider adding validation: if amount < 50 cents, something is likely wrong
 - **Location:** `apps/storefront/app/routes/api.payment-intent.ts:146`
 
+### 2025-12-07 - Gitleaks False Positives from BMAD Framework [RESOLVED]
+
+- **Symptom:** CI/CD pipeline blocked by Gitleaks detecting 3 "secrets" in `.bmad/_cfg/files-manifest.csv` - generic-api-key rule with high entropy (3.7-3.8)
+- **Root Cause:** Gitleaks misinterpreting SHA256 file hashes in BMAD framework manifest as API keys. The manifest contains documentation references and file hashes, not actual secrets.
+- **Data Flow Traced:**
+    1. Gitleaks scans commit `ece141cc9e78ba37232e3e083426053fd534b3aa`
+    2. Detects high-entropy strings in `.bmad/_cfg/files-manifest.csv` at lines 167, 170, 200
+    3. These are actually SHA256 hashes of BMAD documentation files
+    4. Referenced files (`testarch/knowledge/*.md`) don't exist in repo - they're framework docs
+- **Solution:** Added the three specific fingerprints to `.gitleaksignore` with explanatory comments:
+    ```
+    # BMAD framework documentation hashes (false positives - SHA256 file hashes misidentified as API keys)
+    ece141cc9e78ba37232e3e083426053fd534b3aa:.bmad/_cfg/files-manifest.csv:generic-api-key:167
+    ece141cc9e78ba37232e3e083426053fd534b3aa:.bmad/_cfg/files-manifest.csv:generic-api-key:170
+    ece141cc9e78ba37232e3e083426053fd534b3aa:.bmad/_cfg/files-manifest.csv:generic-api-key:200
+    ```
+- **Prevention:**
+    - When using BMAD framework, expect manifest files to contain high-entropy hashes
+    - Add BMAD framework files to `.gitleaksignore` proactively
+    - Consider excluding `.bmad/_cfg/` directory entirely from secret scanning
+    - Always verify if "secrets" are in framework/config files vs actual code
+- **Location:** `.gitleaksignore:35-38`
+
 ### 2025-12-06 - Test Failure Due to Callback Not Executing in Mock (PostHog) [RESOLVED]
 
 - **Symptom:** Test fails with `AssertionError: expected "spy" to be called at least once` when testing `posthog.debug()` call in development mode.
