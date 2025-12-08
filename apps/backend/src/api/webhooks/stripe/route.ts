@@ -189,6 +189,16 @@ async function createOrderFromPaymentIntent(
     }
 
     try {
+        console.log("[webhook] Starting order creation from PaymentIntent", {
+            payment_intent_id: paymentIntent.id,
+            currency: paymentIntent.currency,
+            amount: paymentIntent.amount,
+            amount_capturable: paymentIntent.amount_capturable,
+            status: paymentIntent.status,
+            has_cart: !!cartData,
+            has_shipping: !!shippingAddress,
+        });
+
         // Create order in Medusa using workflow
         const { result: order } = await createOrderFromStripeWorkflow(req.scope).run({
             input: {
@@ -206,7 +216,14 @@ async function createOrderFromPaymentIntent(
             console.log(`Modification token generated for order ${order.id}`);
         }
     } catch (error) {
-        console.error("Failed to create order:", error);
+        console.error("[webhook] Failed to create order", {
+            payment_intent_id: paymentIntent.id,
+            currency: paymentIntent.currency,
+            amount: paymentIntent.amount,
+            amount_capturable: paymentIntent.amount_capturable,
+            status: paymentIntent.status,
+            cart_metadata_present: !!cartData,
+        }, error);
         // Don't throw - we still want to return 200 to Stripe
     }
 }

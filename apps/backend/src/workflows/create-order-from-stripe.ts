@@ -48,17 +48,20 @@ const prepareOrderDataStep = createStep(
     async (input: CreateOrderFromStripeInput, { container }) => {
         const { cartData, customerEmail, shippingAddress, amount, currency, paymentIntentId } = input;
 
-        // Get region based on currency
         const regionService = container.resolve("region");
         const regions = await regionService.listRegions({
             currency_code: currency.toLowerCase(),
         });
 
+        console.log("[create-order-from-stripe] Regions for currency", currency, regions.map((r: any) => ({ id: r.id, name: r.name, currency_code: r.currency_code, countries: r.countries })));
+
         if (!regions.length) {
+            console.error(`[create-order-from-stripe] No region found for currency: ${currency}`);
             throw new Error(`No region found for currency: ${currency}`);
         }
 
         const region = regions[0];
+        console.log("[create-order-from-stripe] Using region", { id: region.id, name: region.name, currency_code: region.currency_code });
 
         // Transform cart items to order line items
         const items = cartData.items.map((item) => ({
@@ -71,6 +74,8 @@ const prepareOrderDataStep = createStep(
                 sku: item.sku,
             },
         }));
+
+        console.log("[create-order-from-stripe] Prepared items", items);
 
         // Prepare shipping address
         const shipping_address = shippingAddress
@@ -97,6 +102,15 @@ const prepareOrderDataStep = createStep(
                 stripe_payment_intent_id: paymentIntentId,
             },
         };
+
+        console.log("[create-order-from-stripe] Prepared order data", {
+            region_id: orderData.region_id,
+            email: orderData.email,
+            items_count: orderData.items.length,
+            has_shipping: !!orderData.shipping_address,
+            currency,
+            amount,
+        });
 
         return new StepResponse(orderData);
     }
