@@ -193,4 +193,48 @@ describe("payment-capture-queue", () => {
             )
         })
     })
+
+    describe("startPaymentCaptureWorker (Story 2.3)", () => {
+        it("should accept optional container parameter", () => {
+            const { startPaymentCaptureWorker } = require("../../src/lib/payment-capture-queue")
+            
+            const mockContainer = {
+                resolve: jest.fn().mockReturnValue({
+                    graph: jest.fn().mockResolvedValue({ data: [] })
+                })
+            }
+            
+            // Should not throw with container
+            expect(() => startPaymentCaptureWorker(mockContainer)).not.toThrow()
+        })
+
+        it("should work without container parameter (backwards compatible)", () => {
+            jest.resetModules()
+            const { startPaymentCaptureWorker } = require("../../src/lib/payment-capture-queue")
+            
+            // Should not throw without container
+            expect(() => startPaymentCaptureWorker()).not.toThrow()
+        })
+
+        it("should register event listeners", () => {
+            jest.resetModules()
+            const { startPaymentCaptureWorker } = require("../../src/lib/payment-capture-queue")
+            
+            startPaymentCaptureWorker()
+            
+            // Worker.on should be called for 'completed' and 'failed' events
+            expect(mockWorkerOn).toHaveBeenCalledWith("completed", expect.any(Function))
+            expect(mockWorkerOn).toHaveBeenCalledWith("failed", expect.any(Function))
+        })
+
+        it("should log worker start message", () => {
+            jest.resetModules()
+            const consoleSpy = jest.spyOn(console, "log")
+            const { startPaymentCaptureWorker } = require("../../src/lib/payment-capture-queue")
+            
+            startPaymentCaptureWorker()
+            
+            expect(consoleSpy).toHaveBeenCalledWith("[PaymentCapture] Worker started")
+        })
+    })
 })

@@ -127,10 +127,10 @@ development_status:
     status: done
   2-2-expiration-listener:
     path: docs/sprint/sprint-artifacts/2-2-expiration-listener.md
-    status: review
+    status: done
   2-3-capture-workflow:
     path: docs/sprint/sprint-artifacts/2-3-capture-workflow.md
-    status: backlog
+    status: review
   2-4-fallback-cron:
     path: docs/sprint/sprint-artifacts/2-4-fallback-cron.md
     status: backlog

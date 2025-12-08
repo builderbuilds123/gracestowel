@@ -6,13 +6,15 @@ import { startPaymentCaptureWorker } from "../lib/payment-capture-queue";
  * 
  * This worker processes delayed jobs that capture payments after the 1-hour
  * modification window expires.
+ * 
+ * Story 2.3: Now passes the container to enable fetching fresh order totals.
  */
 export default async function paymentCaptureWorkerLoader(container: MedusaContainer) {
     try {
         // Only start the worker if Redis is configured
         if (process.env.REDIS_URL) {
-            startPaymentCaptureWorker();
-            // L1: Removed duplicate "worker loader initialized" log since startPaymentCaptureWorker logs "worker started"
+            // Pass container to worker for accessing Medusa services (Story 2.3)
+            startPaymentCaptureWorker(container);
         } else {
             console.warn("REDIS_URL not configured - payment capture worker not started");
         }
@@ -22,4 +24,3 @@ export default async function paymentCaptureWorkerLoader(container: MedusaContai
         throw error;
     }
 }
-

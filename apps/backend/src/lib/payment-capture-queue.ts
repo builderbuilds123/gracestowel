@@ -1,5 +1,6 @@
 import { Queue, Worker, Job } from "bullmq";
 import { getStripeClient } from "../utils/stripe";
+import { MedusaContainer } from "@medusajs/framework/types";
 
 /**
  * Payment capture job data
@@ -49,6 +50,9 @@ export const PAYMENT_CAPTURE_WORKER_CONCURRENCY = parseInt(
 
 let queue: Queue<PaymentCaptureJobData> | null = null;
 let worker: Worker<PaymentCaptureJobData> | null = null;
+
+// Store container reference for use in worker
+let containerRef: MedusaContainer | null = null;
 
 /**
  * Get or create the payment capture queue
@@ -126,44 +130,160 @@ export async function cancelPaymentCaptureJob(orderId: string): Promise<boolean>
 }
 
 /**
+ * Fetch the current order total from Medusa
+ * Story 2.3: Ensures we capture the ACTUAL order total, not the original PaymentIntent amount
+ * 
+ * @param orderId - The Medusa order ID
+ * @returns Object with total in cents and currency code, or null if order not found
+ */
+async function fetchOrderTotal(orderId: string): Promise<{ totalCents: number; currencyCode: string } | null> {
+    if (!containerRef) {
+        console.error("[PaymentCapture] Container not initialized - cannot fetch order");
+        return null;
+    }
+
+    try {
+        const query = containerRef.resolve("query");
+        const { data: orders } = await query.graph({
+            entity: "order",
+            fields: ["id", "total", "currency_code"],
+            filters: { id: orderId },
+        });
+
+        if (orders.length === 0) {
+            console.error(`[PaymentCapture] Order ${orderId} not found`);
+            return null;
+        }
+
+        const order = orders[0];
+        
+        // Medusa stores total in cents (integer) for backend operations
+        // Verify it's a valid integer
+        const total = order.total;
+        if (typeof total !== "number" || !Number.isInteger(total)) {
+            console.error(`[PaymentCapture] Order ${orderId} has invalid total: ${total}`);
+            return null;
+        }
+
+        return {
+            totalCents: total,
+            currencyCode: order.currency_code || "usd",
+        };
+    } catch (error) {
+        console.error(`[PaymentCapture] Error fetching order ${orderId}:`, error);
+        return null;
+    }
+}
+
+/**
  * Process a payment capture job
+ * Story 2.3: Enhanced to capture dynamic order total instead of static PaymentIntent amount
  */
 async function processPaymentCapture(job: Job<PaymentCaptureJobData>): Promise<void> {
-    const { orderId, paymentIntentId } = job.data;
+    const { orderId, paymentIntentId, scheduledAt } = job.data;
     
-    console.log(`Processing payment capture for order ${orderId}`);
+    console.log(`[PaymentCapture] Processing capture for order ${orderId}`);
     
     const stripe = getStripeClient();
     
     try {
-        // Get the current state of the payment intent
+        // Step 1: Get the current state of the payment intent
         const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
         
-        if (paymentIntent.status === "requires_capture") {
-            // Capture the payment
-            const captured = await stripe.paymentIntents.capture(paymentIntentId);
-            console.log(`Payment captured for order ${orderId}: ${captured.status}`);
-        } else if (paymentIntent.status === "canceled") {
-            // Order was canceled, nothing to do
-            console.log(`Payment for order ${orderId} was already canceled`);
-        } else if (paymentIntent.status === "succeeded") {
-            // Already captured
-            console.log(`Payment for order ${orderId} was already captured`);
-        } else {
-            console.log(`Payment for order ${orderId} in unexpected state: ${paymentIntent.status}`);
+        if (paymentIntent.status === "canceled") {
+            console.log(`[PaymentCapture] Order ${orderId}: Payment was already canceled`);
+            return;
         }
-    } catch (error) {
-        console.error(`Error capturing payment for order ${orderId}:`, error);
+        
+        if (paymentIntent.status === "succeeded") {
+            console.log(`[PaymentCapture] Order ${orderId}: Payment was already captured`);
+            return;
+        }
+        
+        if (paymentIntent.status !== "requires_capture") {
+            console.log(`[PaymentCapture] Order ${orderId}: Unexpected status: ${paymentIntent.status}`);
+            return;
+        }
+
+        // Step 2: Fetch fresh order total from Medusa (Story 2.3)
+        const orderData = await fetchOrderTotal(orderId);
+        
+        if (!orderData) {
+            // If we can't fetch order, capture the original authorized amount as fallback
+            console.warn(`[PaymentCapture] Order ${orderId}: Could not fetch order total, capturing original amount`);
+            const captured = await stripe.paymentIntents.capture(paymentIntentId, {}, {
+                idempotencyKey: `capture_${orderId}_${scheduledAt}`,
+            });
+            console.log(`[PaymentCapture] Order ${orderId}: Captured original amount ${paymentIntent.amount} cents (${captured.status})`);
+            return;
+        }
+
+        const { totalCents, currencyCode } = orderData;
+        const authorizedAmount = paymentIntent.amount;
+
+        console.log(`[PaymentCapture] Order ${orderId}: Authorized=${authorizedAmount} cents, Order Total=${totalCents} cents`);
+
+        // Step 3: Handle different capture scenarios
+        if (totalCents > authorizedAmount) {
+            // EXCESS: Order total increased beyond authorized amount
+            // This should not happen normally - would require increment_authorization
+            console.error(
+                `[PaymentCapture][CRITICAL] Order ${orderId}: Total (${totalCents}) exceeds authorized amount (${authorizedAmount}). ` +
+                `Manual intervention required!`
+            );
+            throw new Error(`Amount to capture (${totalCents}) exceeds authorized amount (${authorizedAmount})`);
+        }
+
+        // Step 4: Capture the dynamic amount with idempotency
+        const captured = await stripe.paymentIntents.capture(
+            paymentIntentId,
+            {
+                amount_to_capture: totalCents,
+            },
+            {
+                idempotencyKey: `capture_${orderId}_${scheduledAt}`,
+            }
+        );
+
+        if (totalCents < authorizedAmount) {
+            // PARTIAL: Order total decreased (items removed during grace period)
+            // Stripe automatically releases the uncaptured portion
+            const released = authorizedAmount - totalCents;
+            console.log(
+                `[PaymentCapture] Order ${orderId}: Captured ${totalCents} cents, released ${released} cents (${captured.status})`
+            );
+        } else {
+            console.log(`[PaymentCapture] Order ${orderId}: Captured ${totalCents} cents (${captured.status})`);
+        }
+
+    } catch (error: any) {
+        // Handle specific Stripe errors
+        if (error?.type === "StripeInvalidRequestError") {
+            if (error.code === "amount_too_large") {
+                console.error(
+                    `[PaymentCapture][CRITICAL] Order ${orderId}: Amount too large error. ` +
+                    `The order total exceeds authorized amount. Manual intervention required!`
+                );
+            }
+        }
+        
+        console.error(`[PaymentCapture] Error capturing payment for order ${orderId}:`, error);
         throw error; // Re-throw to trigger retry
     }
 }
 
 /**
  * Start the payment capture worker
+ * @param container - Optional Medusa container for accessing services
  */
-export function startPaymentCaptureWorker(): Worker<PaymentCaptureJobData> {
+export function startPaymentCaptureWorker(container?: MedusaContainer): Worker<PaymentCaptureJobData> {
     if (worker) {
         return worker;
+    }
+
+    // Store container reference for use in processPaymentCapture
+    if (container) {
+        containerRef = container;
     }
 
     const connection = getRedisConnection();
@@ -178,7 +298,7 @@ export function startPaymentCaptureWorker(): Worker<PaymentCaptureJobData> {
     );
 
     worker.on("completed", (job) => {
-        console.log(`Payment capture job ${job.id} completed`);
+        console.log(`[PaymentCapture] Job ${job.id} completed`);
     });
 
     worker.on("failed", (job, err) => {
@@ -196,17 +316,17 @@ export function startPaymentCaptureWorker(): Worker<PaymentCaptureJobData> {
             // TODO: Integrate with alerting service (PagerDuty, Slack webhook, etc.)
         } else {
             console.error(
-                `Payment capture job ${job?.id} failed (attempt ${attemptsMade}/${maxAttempts}):`,
+                `[PaymentCapture] Job ${job?.id} failed (attempt ${attemptsMade}/${maxAttempts}):`,
                 err
             );
         }
     });
 
-    console.log("Payment capture worker started");
+    console.log("[PaymentCapture] Worker started");
 
     // Graceful shutdown
     const shutdown = async () => {
-        console.log("Shutting down payment capture worker...");
+        console.log("[PaymentCapture] Shutting down worker...");
         await worker?.close();
     };
     process.on("SIGTERM", shutdown);
@@ -214,4 +334,3 @@ export function startPaymentCaptureWorker(): Worker<PaymentCaptureJobData> {
 
     return worker;
 }
-
