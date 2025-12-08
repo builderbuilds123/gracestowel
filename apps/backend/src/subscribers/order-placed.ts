@@ -22,6 +22,7 @@ export default async function orderPlacedHandler({
     await sendOrderConfirmationWorkflow(container).run({
       input: {
         id: data.id,
+        modification_token: data.modification_token,
       },
     })
     console.log("Order confirmation email workflow completed for order:", data.id)

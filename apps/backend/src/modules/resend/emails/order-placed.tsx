@@ -7,6 +7,7 @@ import {
   Heading,
   Hr,
   Html,
+  Link,
   Preview,
   Section,
   Text,
@@ -47,6 +48,7 @@ interface Order {
 
 interface OrderPlacedEmailProps {
   order: Order
+  modification_token?: string
 }
 
 const formatPrice = (amount: number, currency: string = "usd") => {
@@ -56,8 +58,19 @@ const formatPrice = (amount: number, currency: string = "usd") => {
   }).format(amount / 100)
 }
 
-export const OrderPlacedEmailComponent = ({ order }: OrderPlacedEmailProps) => {
+export const OrderPlacedEmailComponent = ({ order, modification_token }: OrderPlacedEmailProps) => {
   const previewText = `Thank you for your order #${order.display_id || order.id}`
+  
+  // Build modify order URL only if token is present and STORE_URL is configured
+  let modifyOrderUrl: string | null = null
+  if (modification_token) {
+    const storeUrl = process.env.STORE_URL
+    if (!storeUrl) {
+      console.error('[OrderPlacedEmail] STORE_URL environment variable is not set - modify order link will not be included')
+    } else {
+      modifyOrderUrl = `${storeUrl}/order/edit/${order.id}?token=${modification_token}`
+    }
+  }
 
   return (
     <Html>
@@ -73,6 +86,17 @@ export const OrderPlacedEmailComponent = ({ order }: OrderPlacedEmailProps) => {
           <Text style={paragraph}>
             Thank you for your order! We're preparing your premium towels with care.
           </Text>
+
+          {modifyOrderUrl && (
+            <Section style={modifyOrderSection}>
+              <Text style={modifyOrderText}>
+                Changed your mind? You have 1 hour to modify your order.
+              </Text>
+              <Link href={modifyOrderUrl} style={modifyOrderLink}>
+                Modify Order
+              </Link>
+            </Section>
+          )}
           
           <Section style={orderInfo}>
             <Text style={orderNumber}>Order #{order.display_id || order.id}</Text>
@@ -184,6 +208,9 @@ const grandTotalValue = { color: "#1a1a1a", fontSize: "18px", fontWeight: "600",
 const addressText = { color: "#333333", fontSize: "14px", lineHeight: "22px" }
 const footer = { color: "#666666", fontSize: "14px", textAlign: "center" as const, marginTop: "30px" }
 const footerSmall = { color: "#999999", fontSize: "12px", textAlign: "center" as const, margin: "10px 0 0" }
+const modifyOrderSection = { backgroundColor: "#e8f4fd", padding: "16px 20px", borderRadius: "8px", margin: "20px 0", textAlign: "center" as const, border: "1px solid #b8daef" }
+const modifyOrderText = { color: "#1a5276", fontSize: "14px", margin: "0 0 12px" }
+const modifyOrderLink = { backgroundColor: "#2980b9", color: "#ffffff", padding: "10px 24px", borderRadius: "6px", fontSize: "14px", fontWeight: "600", textDecoration: "none", display: "inline-block" }
 
 export const orderPlacedEmail = (props: unknown) => {
   return <OrderPlacedEmailComponent {...(props as OrderPlacedEmailProps)} />

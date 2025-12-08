@@ -36,3 +36,7 @@ ddf62774c9caf8caf9affa46441dcc88e5b0d25a:apps/storefront/app/routes/api.payment-
 ece141cc9e78ba37232e3e083426053fd534b3aa:.bmad/_cfg/files-manifest.csv:generic-api-key:167
 ece141cc9e78ba37232e3e083426053fd534b3aa:.bmad/_cfg/files-manifest.csv:generic-api-key:170
 ece141cc9e78ba37232e3e083426053fd534b3aa:.bmad/_cfg/files-manifest.csv:generic-api-key:200
+
+# Test file mock JWT tokens (not real secrets - fake tokens for unit tests)
+434d365f5fdc14bbeb2afadfe09da7d57b5ec802:apps/backend/integration-tests/emails/order-placed.unit.spec.ts:generic-api-key:91
+434d365f5fdc14bbeb2afadfe09da7d57b5ec802:apps/backend/integration-tests/emails/order-placed.unit.spec.ts:generic-api-key:132
