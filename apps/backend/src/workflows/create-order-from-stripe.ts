@@ -122,7 +122,17 @@ const prepareOrderDataStep = createStep(
 const emitEventStep = createStep(
     "emit-event",
     async (input: { eventName: string; data: any }, { container }) => {
-        const eventBusModuleService = container.resolve("eventBus") as any;
+        let eventBusModuleService: any;
+        try {
+            eventBusModuleService = container.resolve("eventBus") as any;
+        } catch (err) {
+            console.warn("[create-order-from-stripe] eventBus not configured, skipping emit", {
+                event: input.eventName,
+                error: err instanceof Error ? err.message : err,
+            });
+            return new StepResponse({ success: false, skipped: true });
+        }
+
         await eventBusModuleService.emit(input.eventName, input.data);
         console.log(`Event ${input.eventName} emitted with data:`, input.data);
         return new StepResponse({ success: true });
