@@ -63,6 +63,40 @@
     - Consider adding validation: if amount < 50 cents, something is likely wrong
 - **Location:** `apps/storefront/app/routes/api.payment-intent.ts:146`
 
+### 2025-12-07 - Checkout Flow Failure - Missing Medusa Publishable API Key [RESOLVED]
+
+- **Symptom:** Checkout flow broken with orders not propagating to backend. Frontend error: "Publishable API key required in the request header: x-publishable-api-key". Backend webhook signature verification failures.
+- **Root Cause:** The `validateStock` function in `api.payment-intent.ts` was calling Medusa's `/store/variants/{id}` endpoint without the required `x-publishable-api-key` header, causing authentication failures during stock validation before PaymentIntent creation.
+- **Data Flow Traced:**
+    1. User proceeds to checkout → Frontend calls `/api/payment-intent`
+    2. Backend attempts stock validation → Calls Medusa API without auth header
+    3. **FAILS:** Missing `x-publishable-api-key` header → 400 error
+    4. PaymentIntent creation fails → No order data stored
+    5. Stripe webhook fires → Can't find order metadata → signature verification fails
+- **Solution:** 
+    1. Modified `validateStock` function to accept `publishableKey` parameter
+    2. Added `x-publishable-api-key` header to Medusa API calls when key is available
+    3. Updated environment variable extraction to include `MEDUSA_PUBLISHABLE_KEY`
+    4. Added validation to ensure publishable key is configured before proceeding
+- **Code Changes:**
+    ```typescript
+    // Added header with publishable API key
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (publishableKey) {
+        headers["x-publishable-api-key"] = publishableKey;
+    }
+    
+    // Updated function signature and call
+    async function validateStock(cartItems: CartItem[], medusaBackendUrl: string, publishableKey?: string)
+    const stockValidation = await validateStock(cartItems, medusaBackendUrl, publishableKey);
+    ```
+- **Prevention:**
+    - Always check Medusa API documentation for required authentication headers
+    - Ensure environment variables are properly extracted from Cloudflare context
+    - Add validation for required API keys before making external calls
+    - Test checkout flow end-to-end after any API integration changes
+- **Location:** `apps/storefront/app/routes/api.payment-intent.ts:47,140`
+
 ### 2025-12-07 - Gitleaks False Positives from BMAD Framework [RESOLVED]
 
 - **Symptom:** CI/CD pipeline blocked by Gitleaks detecting 3 "secrets" in `.bmad/_cfg/files-manifest.csv` - generic-api-key rule with high entropy (3.7-3.8)

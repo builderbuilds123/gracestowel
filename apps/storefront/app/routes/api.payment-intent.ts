@@ -42,19 +42,26 @@ interface StockValidationResult {
  * Validate stock availability for cart items
  * @param cartItems - Items to validate
  * @param medusaBackendUrl - Medusa backend URL for API calls
+ * @param publishableKey - Medusa publishable API key for authentication
  */
-async function validateStock(cartItems: CartItem[], medusaBackendUrl: string): Promise<StockValidationResult> {
+async function validateStock(cartItems: CartItem[], medusaBackendUrl: string, publishableKey?: string): Promise<StockValidationResult> {
     const outOfStockItems: StockValidationResult["outOfStockItems"] = [];
 
     for (const item of cartItems) {
         if (!item.variantId) continue; // Skip items without variant IDs (legacy items)
 
         try {
+            // Prepare headers with required publishable API key
+            const headers: Record<string, string> = { "Content-Type": "application/json" };
+            if (publishableKey) {
+                headers["x-publishable-api-key"] = publishableKey;
+            }
+
             // Fetch specific variant to check inventory
             const response = await fetch(
                 `${medusaBackendUrl}/store/variants/${item.variantId}`,
                 {
-                    headers: { "Content-Type": "application/json" },
+                    headers,
                 }
             );
 
@@ -112,19 +119,25 @@ export async function action({ request, context }: ActionFunctionArgs) {
         shippingAddress
     } = await request.json() as PaymentIntentRequest;
 
-    const env = context.cloudflare.env as { STRIPE_SECRET_KEY: string; MEDUSA_BACKEND_URL?: string };
+    const env = context.cloudflare.env as { STRIPE_SECRET_KEY: string; MEDUSA_BACKEND_URL?: string; MEDUSA_PUBLISHABLE_KEY?: string };
     const STRIPE_SECRET_KEY = env.STRIPE_SECRET_KEY;
     const medusaBackendUrl = env.MEDUSA_BACKEND_URL || "http://localhost:9000";
+    const publishableKey = env.MEDUSA_PUBLISHABLE_KEY;
 
     if (!STRIPE_SECRET_KEY) {
         console.error("STRIPE_SECRET_KEY environment variable is not set");
         return data({ message: "Payment service not configured" }, { status: 500 });
     }
 
+    if (!publishableKey) {
+        console.error("MEDUSA_PUBLISHABLE_KEY environment variable is not set");
+        return data({ message: "Medusa API key not configured" }, { status: 500 });
+    }
+
     try {
         // Validate stock availability before creating PaymentIntent
         if (cartItems && cartItems.length > 0) {
-            const stockValidation = await validateStock(cartItems, medusaBackendUrl);
+            const stockValidation = await validateStock(cartItems, medusaBackendUrl, publishableKey);
             if (!stockValidation.valid) {
                 const itemMessages = stockValidation.outOfStockItems
                     .map(item => `${item.title}: only ${item.available} available (requested ${item.requested})`)
