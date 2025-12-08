@@ -143,6 +143,86 @@
     3. Choose based on how critical the callback behavior is to test
 - **Location:** `apps/storefront/app/utils/posthog.test.ts:49`
 
+### 2025-12-07 - Express Checkout Missing Shipping Address (GPay/Apple Pay) [RESOLVED]
+
+- **Symptom:** After successful GPay express checkout, the success page shows "No shipping details in payment intent". Order not created in Medusa because shipping address is missing from PaymentIntent.
+- **Root Cause:** The `ExpressCheckoutElement` (Stripe) was not configured to collect shipping address from wallet providers (GPay/Apple Pay). Without `onShippingAddressChange` and `onShippingRateChange` handlers, the wallet UI doesn't prompt for shipping info.
+- **Data Flow Issue:**
+    1. User clicks GPay button → GPay wallet opens
+    2. Without shipping handlers, GPay doesn't request shipping address
+    3. `event.shippingAddress` is `undefined` in `handleExpressConfirm`
+    4. PaymentIntent created without `shipping` property
+    5. Stripe webhook can't create order (no shipping address)
+- **Solution:** Added shipping address collection to `ExpressCheckoutElement`:
+    ```typescript
+    // Handle shipping address change - provides rates to wallet UI
+    const handleExpressShippingAddressChange = useCallback(
+        async (event: StripeExpressCheckoutElementShippingAddressChangeEvent) => {
+            event.resolve({
+                shippingRates: shippingOptions.map((opt) => ({
+                    id: opt.id,
+                    displayName: opt.displayName,
+                    amount: opt.amount,
+                })),
+            });
+        },
+        [shippingOptions]
+    );
+
+    // Handle shipping rate selection
+    const handleExpressShippingRateChange = useCallback(
+        (event: StripeExpressCheckoutElementShippingRateChangeEvent) => {
+            const selectedRate = shippingOptions.find(
+                (opt) => opt.id === event.shippingRate.id
+            );
+            if (selectedRate) setSelectedShipping(selectedRate);
+            event.resolve();
+        },
+        [shippingOptions, setSelectedShipping]
+    );
+
+    // Wire up handlers
+    <ExpressCheckoutElement
+        onConfirm={handleExpressConfirm}
+        onShippingAddressChange={handleExpressShippingAddressChange}
+        onShippingRateChange={handleExpressShippingRateChange}
+        options={{ ... }}
+    />
+    ```
+- **Prevention:**
+    - When implementing Express Checkout (GPay/Apple Pay), ALWAYS configure shipping collection if physical goods are sold
+    - Test express checkout flow separately from regular card checkout
+    - Verify PaymentIntent contains `shipping` property before expecting it in webhooks
+- **Location:** `apps/storefront/app/components/CheckoutForm.tsx:112-153, 205-216`
+
+### 2025-12-07 - CORS Error: Cloudflare Worker to Railway Backend [CONFIGURATION]
+
+- **Symptom:** Browser shows CORS error when storefront (Cloudflare Worker) calls Medusa backend (Railway). Error: "No 'Access-Control-Allow-Origin' header is present".
+- **Root Cause:** Railway staging backend's `STORE_CORS` environment variable only included production domains (`gracestowel.com`), not the staging Cloudflare Worker origin (`gracestowelstorefront-staging.leonshichuan.workers.dev`).
+- **Solution:** Update Railway environment variable:
+    ```bash
+    railway variables --set STORE_CORS='https://gracestowel.com,https://www.gracestowel.com,https://gracestowelstorefront-staging.leonshichuan.workers.dev'
+    ```
+- **Prevention:**
+    - When deploying staging environments, always update CORS to include all relevant origins
+    - Document all CORS origins in a central location
+    - Consider using wildcard for staging subdomains if security allows
+- **Related:** Medusa CORS is configured in `medusa-config.ts:23-25` using env vars
+
+### 2025-12-07 - Stripe Webhook Not Configured for Staging [CONFIGURATION]
+
+- **Symptom:** Orders not being created in Medusa after successful Stripe payment. Success page polls `/store/orders/by-payment-intent` but gets 404.
+- **Root Cause:** Stripe webhook not configured to send events to staging backend. The webhook at `/webhooks/stripe` listens for `payment_intent.amount_capturable_updated` to trigger order creation.
+- **Solution:** In Stripe Dashboard → Developers → Webhooks:
+    1. Add endpoint: `https://graces-towel-staging.up.railway.app/webhooks/stripe`
+    2. Select events: `payment_intent.amount_capturable_updated`, `payment_intent.succeeded`, `payment_intent.payment_failed`
+    3. Copy signing secret → Set as `STRIPE_WEBHOOK_SECRET` in Railway
+- **Prevention:**
+    - Create a deployment checklist that includes webhook configuration
+    - Use Stripe CLI for local webhook testing: `stripe listen --forward-to localhost:9000/webhooks/stripe`
+    - Document all webhook endpoints and required events
+- **Location:** `apps/backend/src/api/webhooks/stripe/route.ts`
+
 ## Solutions That Worked
 
 <!-- Successful fixes and their contexts -->

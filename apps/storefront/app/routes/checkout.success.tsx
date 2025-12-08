@@ -46,18 +46,24 @@ interface OrderApiResponse {
 interface LoaderData {
     stripePublishableKey: string;
     medusaBackendUrl: string;
+    medusaPublishableKey: string;
 }
 
 export async function loader({ context }: LoaderFunctionArgs): Promise<LoaderData> {
-    const env = context.cloudflare.env as { STRIPE_PUBLISHABLE_KEY: string; MEDUSA_BACKEND_URL: string };
+    const env = context.cloudflare.env as {
+        STRIPE_PUBLISHABLE_KEY: string;
+        MEDUSA_BACKEND_URL: string;
+        MEDUSA_PUBLISHABLE_KEY: string;
+    };
     return {
         stripePublishableKey: env.STRIPE_PUBLISHABLE_KEY,
         medusaBackendUrl: env.MEDUSA_BACKEND_URL,
+        medusaPublishableKey: env.MEDUSA_PUBLISHABLE_KEY,
     };
 }
 
 export default function CheckoutSuccess() {
-    const { stripePublishableKey, medusaBackendUrl } = useLoaderData<LoaderData>();
+    const { stripePublishableKey, medusaBackendUrl, medusaPublishableKey } = useLoaderData<LoaderData>();
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
     const { clearCart, items } = useCart();
@@ -223,7 +229,12 @@ export default function CheckoutSuccess() {
                         const fetchOrderWithToken = async (): Promise<void> => {
                             try {
                                 const response = await fetch(
-                                    `${medusaUrl}/store/orders/by-payment-intent?payment_intent_id=${encodeURIComponent(paymentIntentId)}`
+                                    `${medusaUrl}/store/orders/by-payment-intent?payment_intent_id=${encodeURIComponent(paymentIntentId)}`,
+                                    {
+                                        headers: {
+                                            "x-publishable-api-key": medusaPublishableKey,
+                                        },
+                                    }
                                 );
 
                                 if (response.ok) {
@@ -308,6 +319,7 @@ export default function CheckoutSuccess() {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'x-publishable-api-key': medusaPublishableKey,
             },
             body: JSON.stringify({
                 token: modificationToken,
@@ -326,7 +338,7 @@ export default function CheckoutSuccess() {
 
         // Update UI to show canceled state
         setPaymentStatus('canceled');
-    }, [orderId, modificationToken]);
+    }, [orderId, modificationToken, medusaBackendUrl, medusaPublishableKey]);
 
     // Handle address update
     const handleUpdateAddress = useCallback(async (address: {
@@ -349,6 +361,7 @@ export default function CheckoutSuccess() {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'x-publishable-api-key': medusaPublishableKey,
             },
             body: JSON.stringify({
                 token: modificationToken,
@@ -373,7 +386,7 @@ export default function CheckoutSuccess() {
             countryCode: address.country_code,
             phone: address.phone,
         });
-    }, [orderId, modificationToken]);
+    }, [orderId, modificationToken, medusaBackendUrl, medusaPublishableKey]);
 
     // Handle adding items to order
     const handleAddItems = useCallback(async (items: Array<{ variant_id: string; quantity: number }>) => {
@@ -386,6 +399,7 @@ export default function CheckoutSuccess() {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'x-publishable-api-key': medusaPublishableKey,
             },
             body: JSON.stringify({
                 token: modificationToken,
@@ -407,7 +421,7 @@ export default function CheckoutSuccess() {
                 total: `$${(result.new_total / 100).toFixed(2)}`,
             });
         }
-    }, [orderId, modificationToken, orderDetails]);
+    }, [orderId, modificationToken, orderDetails, medusaBackendUrl, medusaPublishableKey]);
 
     if (paymentStatus === 'loading') {
         return (
