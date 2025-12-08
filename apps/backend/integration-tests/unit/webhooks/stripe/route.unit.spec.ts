@@ -4,6 +4,8 @@
  * Tests webhook signature verification and event handling
  */
 
+import { EventEmitter } from "events";
+
 // Create shared mock functions at module level (before jest.mock calls)
 const mockConstructEvent = jest.fn();
 const mockWorkflowRun = jest.fn();
@@ -29,6 +31,32 @@ jest.mock("../../../../src/workflows/create-order-from-stripe", () => ({
 import { POST } from "../../../../src/api/webhooks/stripe/route";
 import { createOrderFromStripeWorkflow } from "../../../../src/workflows/create-order-from-stripe";
 import { resetStripeClient } from "../../../../src/utils/stripe";
+
+/**
+ * Create a mock request object that simulates a readable stream
+ * Required because route.ts uses getRawBody() which reads from req.on("data")/req.on("end")
+ */
+function createMockStreamRequest(options: {
+    headers?: Record<string, string>;
+    body?: string;
+    scope?: { resolve: jest.Mock };
+}): any {
+    const emitter = new EventEmitter();
+    const req = Object.assign(emitter, {
+        headers: options.headers || {},
+        scope: options.scope,
+    });
+    
+    // Schedule the data and end events to fire after the handler starts listening
+    setImmediate(() => {
+        if (options.body) {
+            req.emit("data", Buffer.from(options.body));
+        }
+        req.emit("end");
+    });
+    
+    return req;
+}
 
 describe("Stripe Webhook POST", () => {
     const originalEnv = process.env;
@@ -101,10 +129,10 @@ describe("Stripe Webhook POST", () => {
             throw new Error("Invalid signature");
         });
 
-        const req = {
+        const req = createMockStreamRequest({
             headers: { "stripe-signature": "sig_invalid" },
             body: JSON.stringify({ id: "evt_123" }),
-        } as any;
+        });
 
         const res = {
             status: jest.fn().mockReturnThis(),
@@ -136,11 +164,11 @@ describe("Stripe Webhook POST", () => {
         };
         mockConstructEvent.mockReturnValue(mockEvent);
 
-        const req = {
+        const req = createMockStreamRequest({
             headers: { "stripe-signature": "sig_valid" },
             body: JSON.stringify({ id: "evt_no_cart" }),
             scope: { resolve: jest.fn() },
-        } as any;
+        });
 
         const res = {
             status: jest.fn().mockReturnThis(),
@@ -166,10 +194,10 @@ describe("Stripe Webhook POST", () => {
         };
         mockConstructEvent.mockReturnValue(mockEvent);
 
-        const req = {
+        const req = createMockStreamRequest({
             headers: { "stripe-signature": "sig_valid" },
             body: JSON.stringify({ id: "evt_fail" }),
-        } as any;
+        });
 
         const res = {
             status: jest.fn().mockReturnThis(),
@@ -197,11 +225,11 @@ describe("Stripe Webhook POST", () => {
         };
         mockConstructEvent.mockReturnValue(mockEvent);
 
-        const req = {
+        const req = createMockStreamRequest({
             headers: { "stripe-signature": "sig_valid" },
             body: JSON.stringify({ id: "evt_123" }),
             scope: { resolve: jest.fn() },
-        } as any;
+        });
 
         const res = {
             status: jest.fn().mockReturnThis(),
@@ -241,11 +269,11 @@ describe("Stripe Webhook POST", () => {
             }
         });
 
-        const req = {
+        const req = createMockStreamRequest({
             headers: { "stripe-signature": "sig_valid" },
             body: JSON.stringify({ id: "evt_auth_123" }),
             scope: { resolve: jest.fn() },
-        } as any;
+        });
 
         const res = {
             status: jest.fn().mockReturnThis(),
