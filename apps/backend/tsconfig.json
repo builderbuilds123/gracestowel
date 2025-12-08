@@ -28,7 +28,8 @@
       ]
     },
     "checkJs": false,
-    "strictNullChecks": true
+    "strictNullChecks": true,
+    "types": ["jest", "node"]
   },
   "ts-node": {
     "swc": true

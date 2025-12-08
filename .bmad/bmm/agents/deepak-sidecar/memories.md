@@ -120,6 +120,17 @@
     - Always verify if "secrets" are in framework/config files vs actual code
 - **Location:** `.gitleaksignore:35-38`
 
+### 2025-12-07 - Jest Mock Path Mismatch in Nested Test Directories [RESOLVED]
+
+- **Symptom:** Jest tests failing with "Cannot find module" error when mocking dependencies, even though the module exists. Mock functions not being called despite proper setup.
+- **Root Cause:** Mock path didn't account for deeper directory nesting. Test at `integration-tests/unit/webhooks/stripe/route.unit.spec.ts` (4 levels deep) needed `../../../../src/utils/stripe` not `../../../utils/stripe` or `../../src/utils/stripe`.
+- **Solution:** Counted directory levels carefully from test location to source file. From `integration-tests/unit/webhooks/stripe/` → go up 4 levels (`../../../../`) to reach backend root → then down into `src/utils/stripe`.
+- **Prevention:** 
+    - Always verify mock paths by counting actual directory levels from test file to target
+    - Check existing working test files in the same project for correct path patterns
+    - Remember that relative paths change based on test directory depth, not just source file location
+- **Location:** `apps/backend/integration-tests/unit/webhooks/stripe/route.unit.spec.ts:12`
+
 ### 2025-12-06 - Test Failure Due to Callback Not Executing in Mock (PostHog) [RESOLVED]
 
 - **Symptom:** Test fails with `AssertionError: expected "spy" to be called at least once` when testing `posthog.debug()` call in development mode.
