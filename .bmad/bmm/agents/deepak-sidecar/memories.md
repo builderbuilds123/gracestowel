@@ -223,6 +223,46 @@
     - Document all webhook endpoints and required events
 - **Location:** `apps/backend/src/api/webhooks/stripe/route.ts`
 
+### 2025-12-07 - Jest Singleton Cache Causing Mock Bypass in CI [RESOLVED]
+
+- **Symptom:** Tests pass locally but fail in CI with `--runInBand`. Mock functions show 0 calls despite correct `jest.mock()` setup. All 5 tests in `route.unit.spec.ts` fail with `mockConstructEvent` never called.
+- **Root Cause:** Singleton pattern in `utils/stripe.ts` caches the Stripe client at module level:
+    ```typescript
+    let stripeClient: Stripe | null = null;
+    export function getStripeClient(): Stripe {
+        if (stripeClient) return stripeClient; // ← Returns cached, bypasses mock!
+        // ...creates new client
+    }
+    ```
+    When CI runs with `--runInBand`, all tests execute in the same process. Earlier test suites (e.g., `payment-capture-queue.unit.spec.ts`) initialize the real/differently-mocked singleton. When `route.unit.spec.ts` runs later, `getStripeClient()` returns the **cached** client instead of the mock.
+- **Why Local Works:** Tests may run in different order, or Jest's default behavior isolates modules differently without `--runInBand`.
+- **Solution:** 
+    1. Added `resetStripeClient()` function to `utils/stripe.ts`:
+        ```typescript
+        export function resetStripeClient(): void {
+            stripeClient = null;
+        }
+        ```
+    2. Updated test to mock and call it:
+        ```typescript
+        jest.mock("../../../../src/utils/stripe", () => ({
+            getStripeClient: jest.fn(() => ({ webhooks: { constructEvent: mockConstructEvent }})),
+            resetStripeClient: jest.fn(), // ← Mock the reset function
+        }));
+        import { resetStripeClient } from "../../../../src/utils/stripe";
+        
+        beforeEach(() => {
+            jest.clearAllMocks();
+            resetStripeClient(); // ← Clear singleton cache
+        });
+        ```
+- **Prevention:**
+    - When mocking modules with singletons, always provide a reset mechanism
+    - Add `reset*()` functions to singleton patterns for testability
+    - Be aware that `--runInBand` shares state between test files
+    - Test locally with `--runInBand` to catch CI-specific failures early
+- **Location:** `apps/backend/src/utils/stripe.ts`, `apps/backend/integration-tests/unit/webhooks/stripe/route.unit.spec.ts`
+
 ## Solutions That Worked
 
 <!-- Successful fixes and their contexts -->
