@@ -63,6 +63,63 @@
     - Consider adding validation: if amount < 50 cents, something is likely wrong
 - **Location:** `apps/storefront/app/routes/api.payment-intent.ts:146`
 
+### 2025-12-07 - Checkout Flow Failure - Missing Medusa Publishable API Key [RESOLVED]
+
+- **Symptom:** Checkout flow broken with orders not propagating to backend. Frontend error: "Publishable API key required in the request header: x-publishable-api-key". Backend webhook signature verification failures.
+- **Root Cause:** The `validateStock` function in `api.payment-intent.ts` was calling Medusa's `/store/variants/{id}` endpoint without the required `x-publishable-api-key` header, causing authentication failures during stock validation before PaymentIntent creation.
+- **Data Flow Traced:**
+    1. User proceeds to checkout → Frontend calls `/api/payment-intent`
+    2. Backend attempts stock validation → Calls Medusa API without auth header
+    3. **FAILS:** Missing `x-publishable-api-key` header → 400 error
+    4. PaymentIntent creation fails → No order data stored
+    5. Stripe webhook fires → Can't find order metadata → signature verification fails
+- **Solution:** 
+    1. Modified `validateStock` function to accept `publishableKey` parameter
+    2. Added `x-publishable-api-key` header to Medusa API calls when key is available
+    3. Updated environment variable extraction to include `MEDUSA_PUBLISHABLE_KEY`
+    4. Added validation to ensure publishable key is configured before proceeding
+- **Code Changes:**
+    ```typescript
+    // Added header with publishable API key
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (publishableKey) {
+        headers["x-publishable-api-key"] = publishableKey;
+    }
+    
+    // Updated function signature and call
+    async function validateStock(cartItems: CartItem[], medusaBackendUrl: string, publishableKey?: string)
+    const stockValidation = await validateStock(cartItems, medusaBackendUrl, publishableKey);
+    ```
+- **Prevention:**
+    - Always check Medusa API documentation for required authentication headers
+    - Ensure environment variables are properly extracted from Cloudflare context
+    - Add validation for required API keys before making external calls
+    - Test checkout flow end-to-end after any API integration changes
+- **Location:** `apps/storefront/app/routes/api.payment-intent.ts:47,140`
+
+### 2025-12-07 - Gitleaks False Positives from BMAD Framework [RESOLVED]
+
+- **Symptom:** CI/CD pipeline blocked by Gitleaks detecting 3 "secrets" in `.bmad/_cfg/files-manifest.csv` - generic-api-key rule with high entropy (3.7-3.8)
+- **Root Cause:** Gitleaks misinterpreting SHA256 file hashes in BMAD framework manifest as API keys. The manifest contains documentation references and file hashes, not actual secrets.
+- **Data Flow Traced:**
+    1. Gitleaks scans commit `ece141cc9e78ba37232e3e083426053fd534b3aa`
+    2. Detects high-entropy strings in `.bmad/_cfg/files-manifest.csv` at lines 167, 170, 200
+    3. These are actually SHA256 hashes of BMAD documentation files
+    4. Referenced files (`testarch/knowledge/*.md`) don't exist in repo - they're framework docs
+- **Solution:** Added the three specific fingerprints to `.gitleaksignore` with explanatory comments:
+    ```
+    # BMAD framework documentation hashes (false positives - SHA256 file hashes misidentified as API keys)
+    ece141cc9e78ba37232e3e083426053fd534b3aa:.bmad/_cfg/files-manifest.csv:generic-api-key:167
+    ece141cc9e78ba37232e3e083426053fd534b3aa:.bmad/_cfg/files-manifest.csv:generic-api-key:170
+    ece141cc9e78ba37232e3e083426053fd534b3aa:.bmad/_cfg/files-manifest.csv:generic-api-key:200
+    ```
+- **Prevention:**
+    - When using BMAD framework, expect manifest files to contain high-entropy hashes
+    - Add BMAD framework files to `.gitleaksignore` proactively
+    - Consider excluding `.bmad/_cfg/` directory entirely from secret scanning
+    - Always verify if "secrets" are in framework/config files vs actual code
+- **Location:** `.gitleaksignore:35-38`
+
 ### 2025-12-06 - Test Failure Due to Callback Not Executing in Mock (PostHog) [RESOLVED]
 
 - **Symptom:** Test fails with `AssertionError: expected "spy" to be called at least once` when testing `posthog.debug()` call in development mode.
