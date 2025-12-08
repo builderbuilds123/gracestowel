@@ -28,14 +28,20 @@ export function ProductCard({ id, image, title, description, price, handle }: Pr
         <div className="group">
             <div className="relative overflow-hidden rounded mb-3 bg-card-earthy/20">
                 <Link to={`/products/${handle}`}>
-                    <img
-                        src={image}
-                        alt={title}
-                        width="400"
-                        height="300"
-                        loading="lazy"
-                        className="w-full h-48 object-cover transform group-hover:scale-105 transition-transform duration-500 ease-out"
-                    />
+                    {image ? (
+                        <img
+                            src={image}
+                            alt={title}
+                            width="400"
+                            height="300"
+                            loading="lazy"
+                            className="w-full h-48 object-cover transform group-hover:scale-105 transition-transform duration-500 ease-out"
+                        />
+                    ) : (
+                        <div className="w-full h-48 bg-gray-200 flex items-center justify-center text-gray-400">
+                            No Image
+                        </div>
+                    )}
                 </Link>
                 {/* Wishlist Button */}
                 <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-20">
