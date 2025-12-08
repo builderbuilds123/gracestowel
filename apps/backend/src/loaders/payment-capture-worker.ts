@@ -19,6 +19,7 @@ export default async function paymentCaptureWorkerLoader(container: MedusaContai
     } catch (error) {
         // H2: Fail loudness
         console.error("CRITICAL: Failed to start payment capture worker:", error);
+        throw error;
     }
 }
 
