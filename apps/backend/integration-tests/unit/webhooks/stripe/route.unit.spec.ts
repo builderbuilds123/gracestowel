@@ -4,31 +4,32 @@
  * Tests webhook signature verification and event handling
  */
 
+// Create shared mock functions at module level (before jest.mock calls)
+const mockConstructEvent = jest.fn();
+const mockWorkflowRun = jest.fn();
+
 // Mock getStripeClient from utils/stripe
 jest.mock("../../../../src/utils/stripe", () => ({
-    getStripeClient: jest.fn().mockReturnValue({
+    getStripeClient: jest.fn(() => ({
         webhooks: {
-            constructEvent: jest.fn(),
+            constructEvent: mockConstructEvent,
         },
-    }),
+    })),
     STRIPE_API_VERSION: "2025-10-29.clover",
 }));
 
 // Mock Workflow
 jest.mock("../../../../src/workflows/create-order-from-stripe", () => ({
-    createOrderFromStripeWorkflow: jest.fn().mockImplementation(() => ({
-        run: jest.fn().mockResolvedValue({ result: { id: "order_123" } })
+    createOrderFromStripeWorkflow: jest.fn(() => ({
+        run: mockWorkflowRun
     }))
 }));
 
 import { POST } from "../../../../src/api/webhooks/stripe/route";
-import { getStripeClient } from "../../../../src/utils/stripe";
 import { createOrderFromStripeWorkflow } from "../../../../src/workflows/create-order-from-stripe";
 
 describe("Stripe Webhook POST", () => {
     const originalEnv = process.env;
-    let mockConstructEvent: jest.Mock;
-    let mockWorkflowRun: jest.Mock;
 
     beforeEach(() => {
         jest.clearAllMocks();
@@ -36,20 +37,9 @@ describe("Stripe Webhook POST", () => {
         process.env.STRIPE_WEBHOOK_SECRET = "whsec_test";
         process.env.STRIPE_SECRET_KEY = "sk_test_key";
 
-        // Reset mock implementations for each test
-        mockConstructEvent = jest.fn();
-        mockWorkflowRun = jest.fn().mockResolvedValue({ result: { id: "order_123" } });
-
-        // Setup fresh mocks for each test
-        (getStripeClient as jest.Mock).mockReturnValue({
-            webhooks: {
-                constructEvent: mockConstructEvent,
-            },
-        });
-
-        (createOrderFromStripeWorkflow as jest.Mock).mockImplementation(() => ({
-            run: mockWorkflowRun
-        }));
+        // Reset mock implementations to defaults
+        mockConstructEvent.mockReset();
+        mockWorkflowRun.mockReset().mockResolvedValue({ result: { id: "order_123" } });
 
         jest.spyOn(console, "log").mockImplementation(() => {});
         jest.spyOn(console, "error").mockImplementation(() => {});
