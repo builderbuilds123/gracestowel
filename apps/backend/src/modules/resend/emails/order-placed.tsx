@@ -60,10 +60,17 @@ const formatPrice = (amount: number, currency: string = "usd") => {
 
 export const OrderPlacedEmailComponent = ({ order, modification_token }: OrderPlacedEmailProps) => {
   const previewText = `Thank you for your order #${order.display_id || order.id}`
-  const storeUrl = process.env.STORE_URL || "https://gracestowel.com"
-  const modifyOrderUrl = modification_token 
-    ? `${storeUrl}/order/edit/${order.id}?token=${modification_token}`
-    : null
+  
+  // Build modify order URL only if token is present and STORE_URL is configured
+  let modifyOrderUrl: string | null = null
+  if (modification_token) {
+    const storeUrl = process.env.STORE_URL
+    if (!storeUrl) {
+      console.error('[OrderPlacedEmail] STORE_URL environment variable is not set - modify order link will not be included')
+    } else {
+      modifyOrderUrl = `${storeUrl}/order/edit/${order.id}?token=${modification_token}`
+    }
+  }
 
   return (
     <Html>
