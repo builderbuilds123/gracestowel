@@ -35,8 +35,17 @@ const getRedisConnection = () => {
 // Queue name for payment capture
 export const PAYMENT_CAPTURE_QUEUE = "payment-capture";
 
-// Delay for payment capture (1 hour in milliseconds)
-export const PAYMENT_CAPTURE_DELAY_MS = 60 * 60 * 1000;
+// Delay for payment capture - configurable via env, defaults to 1 hour (3600000ms)
+export const PAYMENT_CAPTURE_DELAY_MS = parseInt(
+    process.env.PAYMENT_CAPTURE_DELAY_MS || String(60 * 60 * 1000),
+    10
+);
+
+// Worker concurrency - configurable via env, defaults to 5
+export const PAYMENT_CAPTURE_WORKER_CONCURRENCY = parseInt(
+    process.env.PAYMENT_CAPTURE_WORKER_CONCURRENCY || "5",
+    10
+);
 
 let queue: Queue<PaymentCaptureJobData> | null = null;
 let worker: Worker<PaymentCaptureJobData> | null = null;
@@ -164,7 +173,7 @@ export function startPaymentCaptureWorker(): Worker<PaymentCaptureJobData> {
         processPaymentCapture,
         {
             connection,
-            concurrency: 5,
+            concurrency: PAYMENT_CAPTURE_WORKER_CONCURRENCY,
         }
     );
 
@@ -173,7 +182,24 @@ export function startPaymentCaptureWorker(): Worker<PaymentCaptureJobData> {
     });
 
     worker.on("failed", (job, err) => {
-        console.error(`Payment capture job ${job?.id} failed:`, err);
+        const attemptsMade = job?.attemptsMade || 0;
+        const maxAttempts = job?.opts?.attempts || 3;
+        
+        if (attemptsMade >= maxAttempts) {
+            // CRITICAL: Job has exhausted all retries - revenue at risk
+            console.error(
+                `[CRITICAL][DLQ] Payment capture PERMANENTLY FAILED for order ${job?.data?.orderId}. ` +
+                `PaymentIntent: ${job?.data?.paymentIntentId}. Attempts: ${attemptsMade}/${maxAttempts}. ` +
+                `Manual intervention required!`,
+                err
+            );
+            // TODO: Integrate with alerting service (PagerDuty, Slack webhook, etc.)
+        } else {
+            console.error(
+                `Payment capture job ${job?.id} failed (attempt ${attemptsMade}/${maxAttempts}):`,
+                err
+            );
+        }
     });
 
     console.log("Payment capture worker started");

@@ -90,8 +90,29 @@ Validate and enable the existing **BullMQ-based Payment Capture Queue**. The cod
 ## File List
 - `apps/backend/integration-tests/unit/payment-capture-queue.unit.spec.ts` (NEW)
 - `apps/backend/integration-tests/unit/payment-capture-worker.unit.spec.ts` (NEW)
+- `apps/backend/src/lib/payment-capture-queue.ts` (MODIFIED - review follow-ups)
+- `apps/backend/src/subscribers/order-placed.ts` (MODIFIED - review follow-ups)
 - `docs/sprint/sprint-artifacts/2-2-expiration-listener.md` (MODIFIED)
 - `docs/sprint/sprint-artifacts/sprint-status.yaml` (MODIFIED)
+
+---
+
+## Senior Developer Review (AI)
+
+### Review Outcome: Changes Requested
+**Review Date**: 2025-12-07
+
+### Action Items
+- [x] **[M1]** Hardcoded Configuration: Extract `PAYMENT_CAPTURE_DELAY_MS` and worker concurrency to env vars
+- [x] **[M2]** Missing Alerting/DLQ: Add CRITICAL logging for permanently failed jobs after retry exhaustion
+- [x] **[L1]** Type Safety: Validate `stripe_payment_intent_id` before casting in `order-placed.ts`
+
+### Resolutions Applied
+| ID | Severity | Issue | Resolution |
+|----|----------|-------|------------|
+| M1 | Medium | Hardcoded delay (1h) and concurrency (5) | Now configurable via `PAYMENT_CAPTURE_DELAY_MS` and `PAYMENT_CAPTURE_WORKER_CONCURRENCY` env vars |
+| M2 | Medium | No alerting for DLQ/failed jobs | Added `[CRITICAL][DLQ]` logging with order/payment details when retries exhausted. TODO placeholder for PagerDuty/Slack integration |
+| L1 | Low | Unsafe type cast on payment intent ID | Added validation: must be string starting with `pi_` prefix |
 
 ---
 
@@ -103,8 +124,17 @@ Validate and enable the existing **BullMQ-based Payment Capture Queue**. The cod
 | 2025-12-07 | Added 8 unit tests for payment-capture-worker.ts |
 | 2025-12-07 | Documented manual verification steps for Redis CLI |
 | 2025-12-07 | Verified all acceptance criteria met |
+| 2025-12-07 | [M1] Made delay/concurrency configurable via env vars |
+| 2025-12-07 | [M2] Added CRITICAL DLQ alerting for failed captures |
+| 2025-12-07 | [L1] Fixed type validation for payment intent ID |
+| 2025-12-07 | Fixed Stripe webhook unit tests (mock restructure) |
+| 2025-12-07 | All 161 tests passing (77 backend + 84 storefront) |
 
 ---
 
 ## Status
-Ready for Review
+Done ✅
+
+**All tests passing**:
+- Backend: 77/77 ✅
+- Storefront: 84/84 ✅

@@ -41,7 +41,12 @@ export default async function orderPlacedHandler({
 
     if (orders.length > 0) {
       const order = orders[0]
-      const paymentIntentId = order.metadata?.stripe_payment_intent_id as string | undefined
+      const rawPaymentIntentId = order.metadata?.stripe_payment_intent_id
+      
+      // L1: Validate payment intent ID is a non-empty string
+      const paymentIntentId = typeof rawPaymentIntentId === "string" && rawPaymentIntentId.startsWith("pi_")
+        ? rawPaymentIntentId
+        : undefined
 
       if (paymentIntentId) {
         await schedulePaymentCapture(data.id, paymentIntentId)
