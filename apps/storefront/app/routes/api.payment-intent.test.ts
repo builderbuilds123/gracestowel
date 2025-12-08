@@ -7,6 +7,7 @@ const mockContext = {
         env: {
             STRIPE_SECRET_KEY: 'sk_test_mock',
             MEDUSA_BACKEND_URL: 'http://localhost:9000',
+            MEDUSA_PUBLISHABLE_KEY: 'pk_test_mock',
         },
     },
 };
