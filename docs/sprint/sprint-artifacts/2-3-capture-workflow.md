@@ -44,7 +44,7 @@ Modify the **Payment Capture Worker** to handle dynamic order totals. The curren
 - **Currency**: `payment-capture-queue.ts` currently does not import any utils. Check `src/utils` or `@medusajs/utils`.
 
 ## Status
-**Ready for Review** ✅
+**Done** ✅
 
 ## Dev Agent Record
 

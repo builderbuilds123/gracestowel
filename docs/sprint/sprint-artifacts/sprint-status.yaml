@@ -133,4 +133,4 @@ development_status:
     status: done
   2-4-fallback-cron:
     path: docs/sprint/sprint-artifacts/2-4-fallback-cron.md
-    status: backlog
+    status: done
