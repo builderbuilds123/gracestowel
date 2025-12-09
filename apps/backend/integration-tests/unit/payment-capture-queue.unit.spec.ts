@@ -326,17 +326,17 @@ describe("payment-capture-queue", () => {
         });
         
         it("should skip if already canceled", async () => {
-             mockStripeRetrieve.mockResolvedValue({ status: "canceled" });
-             await processPaymentCapture(mockJob as Job);
-             expect(console.log).toHaveBeenCalledWith(expect.stringContaining("already canceled"));
-             expect(mockStripeCapture).not.toHaveBeenCalled();
+            mockStripeRetrieve.mockResolvedValue({ status: "canceled" });
+            await processPaymentCapture(mockJob as Job);
+            expect(console.log).toHaveBeenCalledWith(expect.stringContaining("already canceled"));
+            expect(mockStripeCapture).not.toHaveBeenCalled();
         });
 
         it("should skipped if already succeeded", async () => {
-             mockStripeRetrieve.mockResolvedValue({ status: "succeeded" });
-             await processPaymentCapture(mockJob as Job);
-             expect(console.log).toHaveBeenCalledWith(expect.stringContaining("already captured"));
-             expect(mockStripeCapture).not.toHaveBeenCalled();
+            mockStripeRetrieve.mockResolvedValue({ status: "succeeded" });
+            await processPaymentCapture(mockJob as Job);
+            expect(console.log).toHaveBeenCalledWith(expect.stringContaining("already captured"));
+            expect(mockStripeCapture).not.toHaveBeenCalled();
         });
     });
 
