@@ -131,6 +131,18 @@ export async function cancelPaymentCaptureJob(orderId: string): Promise<boolean>
 }
 
 /**
+ * Get the state of a capture job for an order
+ * Used by fallback cron to check if job exists and its status
+ * @param orderId - The Medusa order ID
+ */
+export async function getJobState(orderId: string): Promise<"waiting" | "active" | "delayed" | "failed" | "completed" | "unknown" | "missing"> {
+    const queue = getPaymentCaptureQueue();
+    const job = await queue.getJob(`capture-${orderId}`);
+    if (!job) return "missing";
+    return await job.getState() as any;
+}
+
+/**
  * Fetch the current order total from Medusa
  * Story 2.3: Ensures we capture the ACTUAL order total, not the original PaymentIntent amount
  * Exported for unit testing

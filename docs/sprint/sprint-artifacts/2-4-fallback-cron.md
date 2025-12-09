@@ -10,26 +10,42 @@ Implement a **Safety Net Cron Job** that ensures no orders are left in a "Pendin
 ## Implementation Steps
 
 ### 1. Cron Definition
-- [ ] Create `src/jobs/fallback-capture.ts`.
-- [ ] Schedule: Every 1 hour.
-- [ ] *Ref*: Use Medusa v2 `scheduled-jobs` loader or standard cron pattern used in project.
+- [x] Create `src/jobs/fallback-capture.ts`.
+- [x] Schedule: Every 1 hour (cron: `0 * * * *`).
+- [x] *Ref*: Use Medusa v2 `scheduled-jobs` pattern.
 
 ### 2. Logic
-- [ ] Query Orders: `payment_status` = `awaiting`, `created_at` < `NOW - 65 mins`.
-- [ ] For each order:
-    - check `getPaymentCaptureQueue().getJob('capture-{orderId}')`.
+- [x] Query Orders: `created_at` < `NOW - 65 mins`, `status != canceled`.
+- [x] For each order:
+    - Check Stripe `PaymentIntent.status === "requires_capture"`.
+    - Check `getJobState(orderId)` via new helper in `payment-capture-queue.ts`.
     - If job exists (waiting/active/delayed): **SKIP**.
-    - If job is matching `failed`: **LOG & ALERT**.
+    - If job is `failed`: **LOG & ALERT** with `[CRITICAL]` tag.
     - If job is **MISSING**: **TRIGGER CAPTURE** immediately.
 
 ### 3. Alerting & Metrics
-- [ ] Log: "Fallback Cron: Found X orders needing capture".
-- [ ] If capture is triggered, increment a metric (if simple metrics exist) or log `[METRIC] fallback_capture_triggered`.
+- [x] Log: "Fallback Cron: Found X orders needing capture".
+- [x] Log `[METRIC] fallback_capture_triggered` when capture is triggered.
+- [x] Log `[METRIC] fallback_capture_alert` when failed job detected.
 
 ## Acceptance Criteria
-- [ ] **Safety Net**: Simulating a deleted Redis job results in the Cron picking up the order and capturing it.
-- [ ] **No Double Processing**: Respects existing queue jobs.
+- [x] **Safety Net**: Simulating a deleted Redis job results in the Cron picking up the order and capturing it.
+- [x] **No Double Processing**: Respects existing queue jobs by checking Stripe status and job state first.
 
-## Technical Notes
-- Use `queue.getJob(id)` to check status.
-- Ensure the Cron job has access to the Medusa container.
+## Status
+**Done** ✅
+
+## Validation
+- **Unit Tests**: 5 tests passing in `fallback-capture.unit.spec.ts`
+  - Skips orders with already captured payments
+  - Skips orders with active BullMQ jobs  
+  - Logs critical alert for failed jobs
+  - Triggers capture for missing jobs
+  - Handles no orders gracefully
+
+## Dev Agent Record
+
+### Files Created/Modified
+- **NEW**: `src/jobs/fallback-capture.ts` - Scheduled job (hourly)
+- **NEW**: `integration-tests/unit/fallback-capture.unit.spec.ts` - Unit tests
+- **MODIFIED**: `src/lib/payment-capture-queue.ts` - Added `getJobState()` helper
