@@ -122,8 +122,18 @@ export async function cancelPaymentCaptureJob(orderId: string): Promise<boolean>
     const job = await queue.getJob(`capture-${orderId}`);
     
     if (job) {
+        const state = await job.getState();
+        
+        // Story 3.4 AC4: Race Condition Handling
+        // If job is already active (being processed), we cannot safely remove it.
+        // The worker is running concurrently. We must abort cancellation.
+        if (state === "active") {
+            console.warn(`[CancelOrder] Cannot cancel capture job for ${orderId}: Job is active/processing`);
+            throw new Error("JOB_ACTIVE");
+        }
+
         await job.remove();
-        console.log(`Canceled payment capture job for order ${orderId}`);
+        console.log(`Canceled payment capture job for order ${orderId} (state: ${state})`);
         return true;
     }
     

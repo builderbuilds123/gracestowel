@@ -146,7 +146,7 @@ development_status:
     meta: "Contains merged scope from 3-3. 5 review rounds completed."
   3-4-order-cancellation-during-grace-period:
     path: docs/sprint/sprint-artifacts/3-4-order-cancellation-during-grace-period.md
-    status: ready-for-dev
+    status: review
   pi-epic-3-retrospective: optional
 
   pi-epic-4: backlog
