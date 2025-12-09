@@ -109,7 +109,7 @@ export default function OrderStatus() {
     const isModificationActive = modification_window.status === "active";
 
     // Callbacks to update local state
-    const handleOrderUpdate = (newTotal: number) => {
+    const handleOrderUpdate = (newTotal?: number) => {
         if(newTotal) {
              // In a real app we might revalidate to get fresh items
              revalidator.revalidate();
