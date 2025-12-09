@@ -279,7 +279,7 @@ export async function processPaymentCapture(job: Job<PaymentCaptureJobData>): Pr
     } catch (error: any) {
         // Handle specific Stripe errors (M3)
         if (error instanceof Stripe.errors.StripeInvalidRequestError) {
-             if (error.code === "amount_too_large") {
+            if (error.code === "amount_too_large") {
                 console.error(
                     `[PaymentCapture][CRITICAL] Order ${orderId}: Amount too large error. ` +
                     `The order total exceeds authorized amount. Manual intervention required!`
