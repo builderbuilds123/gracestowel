@@ -123,7 +123,7 @@ export async function GET(
                 tax_total: order.tax_total,
                 shipping_total: order.shipping_total,
                 created_at: order.created_at,
-                items: order.items?.map((item: any) => ({
+                items: order.items?.map((item) => ({
                     id: item.id,
                     title: item.variant?.product?.title || item.title,
                     variant_title: item.variant?.title,
