@@ -142,8 +142,8 @@ development_status:
     status: done
   3-2-increment-authorization-logic:
     path: docs/sprint/sprint-artifacts/3-2-increment-authorization-logic.md
-    status: review
-    meta: "Contains merged scope from 3-3"
+    status: done
+    meta: "Contains merged scope from 3-3. 5 review rounds completed."
   3-4-order-cancellation-during-grace-period:
     path: docs/sprint/sprint-artifacts/3-4-order-cancellation-during-grace-period.md
     status: ready-for-dev

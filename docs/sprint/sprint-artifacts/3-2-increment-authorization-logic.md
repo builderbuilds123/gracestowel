@@ -136,7 +136,31 @@ Implemented `add-item-to-order` workflow as a Medusa workflow with 4 sequential 
 
 | Date | Change | Author |
 |------|--------|--------|
-| 2025-12-09 | Implemented add-item-to-order workflow, updated route, added unit tests | Dev Agent |
+| 2025-12-09 | Initial implementation: workflow, route, unit tests | Dev Agent |
+| 2025-12-09 | Review Round 1: Fixed inventory (multi-location sum), error handling (instanceof) | Dev Agent |
+| 2025-12-09 | Review Round 2: Fixed idempotency key (stable requestId), response items array | Dev Agent |
+| 2025-12-09 | Review Round 3: Fixed retry logic (1+3 attempts), capture worker metadata read, added ADR | Dev Agent |
+| 2025-12-09 | Review Round 4: Custom error classes (OrderNotFoundError, etc.), defensive JSON parsing | Dev Agent |
+| 2025-12-09 | Review Round 5: Exported validatePreconditionsHandler for unit testing, updated AC to Medusa v2 patterns | Dev Agent |
+
+---
+
+## Review History
+
+| Round | Findings | Resolution |
+|-------|----------|------------|
+| 1 | Inventory only checked first location | Fixed: Sum stock across ALL locations |
+| 1 | String matching for error handling | Fixed: Custom error classes + instanceof |
+| 2 | Idempotency key used Date.now() | Fixed: Use stable requestId from header/UUID |
+| 2 | Response didn't include new item | Fixed: Append new item to items array |
+| 3 | Retry logic off-by-one | Fixed: 1 initial + maxRetries attempts |
+| 3 | Capture worker ignored metadata.updated_total | Fixed: fetchOrderTotal reads metadata first |
+| 3 | No architecture documentation | Fixed: Added ADR for metadata approach |
+| 4 | Generic errors for ORDER_NOT_FOUND etc. | Fixed: Custom error classes |
+| 4 | Unsafe JSON.parse on metadata | Fixed: Defensive try/catch |
+| 5 | Tests don't test step logic | Fixed: Exported handler, tests mock deps |
+| 5 | AC references non-existent InventoryService | Fixed: Updated AC to Medusa v2 patterns |
+| 5 | Shipping not recalculated | Descoped: Documented as limitation in ADR |
 
 ---
 
