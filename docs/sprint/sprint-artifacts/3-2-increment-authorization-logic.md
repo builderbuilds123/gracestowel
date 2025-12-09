@@ -137,3 +137,52 @@ Implemented `add-item-to-order` workflow as a Medusa workflow with 4 sequential 
 |------|--------|--------|
 | 2025-12-09 | Implemented add-item-to-order workflow, updated route, added unit tests | Dev Agent |
 
+---
+
+## Infrastructure Notes
+
+### Rate Limiting (Deferred to Infrastructure)
+
+Per code review, rate limiting for `POST /store/orders/:id/line-items` should be implemented at the **Cloudflare edge layer** rather than in application code:
+
+**Configuration:**
+- **Path:** `/store/orders/*/line-items`
+- **Method:** POST
+- **Limit:** 60 requests per minute per IP
+- **Action:** Block with HTTP 429
+
+**Rationale:** Already using Cloudflare for storefront deployment. Edge-based rate limiting blocks abuse before it reaches the Medusa backend, requires zero code changes, and scales automatically.
+
+**Future Enhancement:** If token-based abuse is detected, add server-side Redis-based rate limiting per `x-modification-token` (10 req/min).
+
+---
+
+## Architecture Decision Record: Metadata Storage
+
+### Decision
+
+Store pending order modifications in **order metadata** rather than creating actual line items.
+
+### Context
+
+Medusa v2's Order module does not provide a direct "add line item to existing order" API. Order Edits workflow is designed for post-capture adjustments, not pre-capture modifications during a grace period.
+
+### Implementation
+
+| Operation | Metadata Storage | Stripe Action | Capture Behavior |
+|-----------|-----------------|---------------|------------------|
+| **Add Item** | `added_items[]` + `updated_total` | `increment_authorization` | Capture `updated_total` |
+| **Remove Item** | `removed_items[]` + `updated_total` | None | Capture `updated_total` (less) |
+| **Cancel** | N/A (status = canceled) | `cancel` | Skip capture |
+
+### Integration Points
+
+1. **add-item-to-order.ts** → Stores `metadata.updated_total` and `metadata.added_items`
+2. **payment-capture-queue.ts** → `fetchOrderTotal()` reads `metadata.updated_total` if present
+
+### Trade-offs
+
+- ✅ Simple: No complex Order Edits workflow
+- ✅ Integrated: Capture worker handles all cases
+- ⚠️ Pending items not visible in standard order queries (require metadata parsing)
+- ⚠️ Requires capture worker enhancement for each modification type

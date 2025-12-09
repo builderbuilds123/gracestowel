@@ -173,6 +173,16 @@ export class TaxProviderError extends Error {
 // Utility Functions
 // ============================================================================
 
+/**
+ * Retry utility with exponential backoff.
+ * 
+ * @param fn - Function to retry
+ * @param options.maxRetries - Maximum number of RETRY attempts (default: 3)
+ *                            Total attempts = 1 (initial) + maxRetries
+ * @param options.initialDelayMs - Initial delay before first retry (default: 200ms)
+ * @param options.factor - Exponential backoff factor (default: 2)
+ * @param options.shouldRetry - Predicate to determine if error is retryable
+ */
 async function retryWithBackoff<T>(
     fn: () => Promise<T>,
     options: {
@@ -192,15 +202,18 @@ async function retryWithBackoff<T>(
     let lastError: any;
     let delayMs = initialDelayMs;
 
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    // Total attempts = 1 (initial) + maxRetries
+    // Loop: attempt 0 = initial, attempts 1..maxRetries = retries
+    for (let attempt = 0; attempt < maxRetries + 1; attempt++) {
         try {
             return await fn();
         } catch (error) {
             lastError = error;
+            // If this is the last attempt OR error is not retryable, throw immediately
             if (attempt >= maxRetries || !shouldRetry(error)) {
                 throw error;
             }
-            console.log(`[add-item-to-order] Retry attempt ${attempt + 1}/${maxRetries}, waiting ${delayMs}ms`);
+            console.log(`[add-item-to-order] Retry ${attempt + 1}/${maxRetries}, waiting ${delayMs}ms`);
             await new Promise(resolve => setTimeout(resolve, delayMs));
             delayMs *= factor;
         }
