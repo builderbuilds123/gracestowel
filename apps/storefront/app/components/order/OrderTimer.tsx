@@ -46,7 +46,7 @@ export function OrderTimer({ expiresAt, serverTime, onExpire, className = "" }: 
         }, 1000);
 
         return () => clearInterval(timer);
-    }, [expiresAt, offset, onExpire, lastAnnouncedMinute]);
+    }, [expiresAt, offset, onExpire]);
 
     // Format time as MM:SS
     const minutes = Math.floor(timeLeft / 60);
