@@ -167,6 +167,20 @@ describe("Cancel Order Workflow Steps", () => {
                 .rejects.toThrow(LateCancelError);
         });
 
+        it("should throw LateCancelError if metadata.payment_captured_at is set", async () => {
+            queryMock.mockResolvedValue({
+                data: [{ 
+                    id: "ord_meta_captured", 
+                    status: "pending", 
+                    payment_status: "awaiting",
+                    metadata: { payment_captured_at: "2025-12-09T12:00:00Z" }
+                }]
+            });
+
+            await expect(lockOrderHandler({ orderId: "ord_meta_captured", paymentIntentId: "pi_1" }, container))
+                .rejects.toThrow(LateCancelError);
+        });
+
         it("should throw OrderAlreadyCanceledError if order status is canceled", async () => {
             queryMock.mockResolvedValue({
                 data: [{ id: "ord_already_canceled", status: "canceled", payment_status: "awaiting" }]

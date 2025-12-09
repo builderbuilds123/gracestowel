@@ -13,7 +13,7 @@ medusaIntegrationTestRunner({
             await api.post("/store/orders/ord_test/cancel", {});
         } catch (err) {
             expect(err.response.status).toBe(400);
-            expect(err.response.data.message).toContain("Missing modification token");
+            expect(err.response.data.error).toContain("Modification token is required");
         }
       });
 
@@ -26,7 +26,7 @@ medusaIntegrationTestRunner({
             });
         } catch (err) {
             expect(err.response.status).toBe(401);
-            expect(err.response.data.message).toContain("Invalid or expired modification token");
+            expect(err.response.data.code).toBe("TOKEN_INVALID");
         }
       });
 
