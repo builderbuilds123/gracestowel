@@ -87,13 +87,15 @@ export default async function fallbackCaptureJob(container: MedusaContainer) {
                     continue;
                 }
                 
-                // Step 3: Job is MISSING - trigger immediate capture
-                console.log(`[FallbackCron] Order ${orderId}: No capture job found, triggering fallback capture`);
+                // Step 3: Job is MISSING or COMPLETED - trigger immediate capture
+                // Use same job ID pattern as normal captures for deduplication
+                console.log(`[FallbackCron] Order ${orderId}: No active capture job found (state: ${jobState}), triggering fallback capture`);
                 
                 // Schedule immediate capture (delay: 0)
+                // Uses `capture-${orderId}` pattern for consistency with getJobState()
                 const queue = getPaymentCaptureQueue();
                 await queue.add(
-                    `fallback-capture-${orderId}`,
+                    `capture-${orderId}`,
                     {
                         orderId,
                         paymentIntentId,
@@ -101,7 +103,7 @@ export default async function fallbackCaptureJob(container: MedusaContainer) {
                     },
                     {
                         delay: 0, // Immediate
-                        jobId: `fallback-capture-${orderId}`,
+                        jobId: `capture-${orderId}`, // Same pattern as normal captures for deduplication
                     }
                 );
                 

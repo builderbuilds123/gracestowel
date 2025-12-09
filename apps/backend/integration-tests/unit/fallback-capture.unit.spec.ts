@@ -133,17 +133,46 @@ describe("fallback-capture", () => {
 
         await fallbackCaptureJob(mockContainer);
 
+        // M2 Fix: Uses consistent job ID pattern for deduplication
         expect(mockQueueAdd).toHaveBeenCalledWith(
-            "fallback-capture-ord_4",
+            "capture-ord_4",
             expect.objectContaining({
                 orderId: "ord_4",
                 paymentIntentId: "pi_abc",
             }),
             expect.objectContaining({
                 delay: 0,
+                jobId: "capture-ord_4",
             })
         );
         expect(console.log).toHaveBeenCalledWith(expect.stringContaining("[METRIC] fallback_capture_triggered"));
+    });
+
+    // M3: Test for completed job state
+    it("should trigger capture for completed jobs (stale completed state with requires_capture)", async () => {
+        mockQueryGraph.mockResolvedValue({
+            data: [createMockOrder("ord_5", "pi_completed")],
+        });
+        
+        // Payment still needs capture (edge case: job completed but didn't actually capture)
+        mockStripeRetrieve.mockResolvedValue({ status: "requires_capture" });
+        
+        // Job state is completed (but Stripe says still needs capture - rare edge case)
+        mockGetJobState.mockResolvedValue("completed");
+
+        await fallbackCaptureJob(mockContainer);
+
+        // Should trigger capture since Stripe still shows requires_capture
+        expect(mockQueueAdd).toHaveBeenCalledWith(
+            "capture-ord_5",
+            expect.objectContaining({
+                orderId: "ord_5",
+                paymentIntentId: "pi_completed",
+            }),
+            expect.objectContaining({
+                delay: 0,
+            })
+        );
     });
 
     it("should handle no orders gracefully", async () => {
