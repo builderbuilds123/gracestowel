@@ -102,7 +102,7 @@ export async function GET(
         const canModify = remainingTime > 0 && order.status !== "canceled";
 
         // PII Masking: AC10 allows ONLY email (masked), country_code, and last_name (masked)
-        const maskedLastName = order.shipping_address.last_name?.charAt(0) + "***";
+        const maskedLastName = order.shipping_address.last_name ? order.shipping_address.last_name.charAt(0) + "***" : "";
         const shippingAddress = order.shipping_address ? {
             last_name: maskedLastName,
             country_code: order.shipping_address.country_code,
