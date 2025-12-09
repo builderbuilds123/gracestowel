@@ -332,7 +332,7 @@ describe("payment-capture-queue", () => {
             expect(mockStripeCapture).not.toHaveBeenCalled();
         });
 
-        it("should skipped if already succeeded", async () => {
+        it("should skip if already succeeded", async () => {
             mockStripeRetrieve.mockResolvedValue({ status: "succeeded" });
             await processPaymentCapture(mockJob as Job);
             expect(console.log).toHaveBeenCalledWith(expect.stringContaining("already captured"));
