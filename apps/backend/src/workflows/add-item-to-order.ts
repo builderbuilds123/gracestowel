@@ -19,6 +19,8 @@ export interface AddItemToOrderInput {
     variantId: string;
     quantity: number;
     metadata?: Record<string, string>;
+    /** Stable request ID for idempotency (e.g., x-request-id header or UUID) */
+    requestId: string;
 }
 
 interface ValidationResult {
@@ -223,8 +225,12 @@ function isRetryableStripeError(error: any): boolean {
     return false;
 }
 
-function generateIdempotencyKey(orderId: string, variantId: string, quantity: number): string {
-    return `add-item-${orderId}-${variantId}-${quantity}-${Date.now()}`;
+/**
+ * Generate a stable idempotency key for Stripe operations.
+ * Uses requestId to ensure retries return cached results.
+ */
+function generateIdempotencyKey(orderId: string, variantId: string, quantity: number, requestId: string): string {
+    return `add-item-${orderId}-${variantId}-${quantity}-${requestId}`;
 }
 
 // ============================================================================
@@ -436,6 +442,7 @@ const incrementStripeAuthStep = createStep(
             orderId: string;
             variantId: string;
             quantity: number;
+            requestId: string;
         }
     ): Promise<StepResponse<StripeIncrementResult>> => {
         const difference = input.newAmount - input.currentAmount;
@@ -453,7 +460,7 @@ const incrementStripeAuthStep = createStep(
         }
 
         const stripe = getStripeClient();
-        const idempotencyKey = generateIdempotencyKey(input.orderId, input.variantId, input.quantity);
+        const idempotencyKey = generateIdempotencyKey(input.orderId, input.variantId, input.quantity, input.requestId);
 
         try {
             const updatedPaymentIntent = await retryWithBackoff(
@@ -620,6 +627,7 @@ export const addItemToOrderWorkflow = createWorkflow(
             orderId: data.input.orderId,
             variantId: data.input.variantId,
             quantity: data.input.quantity,
+            requestId: data.input.requestId,
         }));
         const stripeResult = incrementStripeAuthStep(stripeInput);
 
@@ -639,22 +647,28 @@ export const addItemToOrderWorkflow = createWorkflow(
 
         const result = transform(
             { validation, totals, stripeResult, updateResult, input },
-            (data) => ({
-                order: {
-                    id: data.validation.orderId,
-                    items: data.validation.order.items,
-                    total: data.totals.newOrderTotal,
-                    difference_due: data.totals.difference,
-                },
-                added_item: {
+            (data) => {
+                // Create the new item object
+                const newItem = {
                     variant_id: data.input.variantId,
                     title: data.totals.variantTitle,
                     quantity: data.input.quantity,
                     unit_price: data.totals.unitPrice,
                     total: data.totals.itemTotal,
-                },
-                payment_status: data.stripeResult.skipped ? "unchanged" : "succeeded",
-            })
+                };
+
+                return {
+                    order: {
+                        id: data.validation.orderId,
+                        // Include original items plus the newly added item
+                        items: [...(data.validation.order.items || []), newItem],
+                        total: data.totals.newOrderTotal,
+                        difference_due: data.totals.difference,
+                    },
+                    added_item: newItem,
+                    payment_status: data.stripeResult.skipped ? "unchanged" : "succeeded",
+                };
+            }
         );
 
         return new WorkflowResponse(result);

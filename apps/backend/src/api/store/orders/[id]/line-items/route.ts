@@ -95,6 +95,10 @@ export async function POST(
 
     const { variant_id, quantity, metadata } = parseResult.data!;
 
+    // Generate stable request ID for idempotency
+    // Use x-request-id header if provided, otherwise generate a UUID
+    const requestId = (req.headers["x-request-id"] as string) || crypto.randomUUID();
+
     try {
         const result = await addItemToOrderWorkflow(req.scope).run({
             input: {
@@ -103,6 +107,7 @@ export async function POST(
                 variantId: variant_id,
                 quantity,
                 metadata,
+                requestId,
             },
         });
 
