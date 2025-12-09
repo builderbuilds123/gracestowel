@@ -370,7 +370,7 @@ const cancelMedusaOrderStep = createStep(
 /**
  * Story 3.4: Enhanced workflow with CAS transaction pattern
  * 
- * This workflow implements a Serialized Transaction per AC:
+ * This workflow implements a Serializable Transaction per AC:
  * - Step 1 (Pre-Check): Token & Grace Period verification (in API route)
  * - Step 2 (Queue Stop): Remove capture job from BullMQ
  * - Step 3 (DB Lock): Validate order state and lock
