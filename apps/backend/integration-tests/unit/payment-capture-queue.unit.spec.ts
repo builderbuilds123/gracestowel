@@ -95,11 +95,19 @@ describe("payment-capture-queue", () => {
         jest.spyOn(console, "warn").mockImplementation(() => {});
         jest.spyOn(console, "error").mockImplementation(() => {});
 
-        // Setup mock container
+        // Setup mock container with query and order services
         mockQueryGraph = jest.fn();
+        const mockUpdateOrders = jest.fn().mockResolvedValue({});
+        (global as any).mockUpdateOrders = mockUpdateOrders; // Expose for test assertions
         mockContainer = {
-            resolve: jest.fn().mockReturnValue({
-                graph: mockQueryGraph
+            resolve: jest.fn((serviceName: string) => {
+                if (serviceName === "query") {
+                    return { graph: mockQueryGraph };
+                }
+                if (serviceName === "order") {
+                    return { updateOrders: mockUpdateOrders };
+                }
+                return {};
             })
         };
 
@@ -143,11 +151,11 @@ describe("payment-capture-queue", () => {
         it("should convert float total to cents (AC #2)", async () => {
             startPaymentCaptureWorker(mockContainer);
             mockQueryGraph.mockResolvedValue({ 
-                data: [{ id: "ord_float", total: 10.99, currency_code: "usd" }] 
+                data: [{ id: "ord_float", total: 10.99, currency_code: "usd", status: "pending" }] 
             });
 
             const result = await fetchOrderTotal("ord_float");
-            expect(result).toEqual({ totalCents: 1099, currencyCode: "usd" });
+            expect(result).toEqual({ totalCents: 1099, currencyCode: "usd", status: "pending" });
         });
 
         it("should return null if currency_code is missing (M1 Fix)", async () => {
@@ -164,11 +172,11 @@ describe("payment-capture-queue", () => {
         it("should return correct data when order exists and valid", async () => {
             startPaymentCaptureWorker(mockContainer);
             mockQueryGraph.mockResolvedValue({ 
-                data: [{ id: "ord_valid", total: 5000, currency_code: "usd" }] 
+                data: [{ id: "ord_valid", total: 5000, currency_code: "usd", status: "pending" }] 
             });
 
             const result = await fetchOrderTotal("ord_valid");
-            expect(result).toEqual({ totalCents: 5000, currencyCode: "usd" });
+            expect(result).toEqual({ totalCents: 5000, currencyCode: "usd", status: "pending" });
         });
     });
 
@@ -338,6 +346,46 @@ describe("payment-capture-queue", () => {
             await processPaymentCapture(mockJob as Job);
             expect(console.log).toHaveBeenCalledWith(expect.stringContaining("already captured"));
             expect(mockStripeCapture).not.toHaveBeenCalled();
+        });
+
+        // Code Review Fix: Test for canceled order guard
+        it("should skip capture if order is canceled in Medusa", async () => {
+            mockStripeRetrieve.mockResolvedValue({ status: "requires_capture", amount: 1000, currency: "usd" });
+            mockQueryGraph.mockResolvedValue({
+                data: [{ id: "ord_123", total: 1000, currency_code: "usd", status: "canceled" }]
+            });
+
+            await processPaymentCapture(mockJob as Job);
+
+            // Should log critical error about canceled order
+            expect(console.error).toHaveBeenCalledWith(
+                expect.stringContaining("canceled in Medusa")
+            );
+            expect(console.log).toHaveBeenCalledWith(expect.stringContaining("capture_blocked_canceled_order"));
+            // Should NOT capture
+            expect(mockStripeCapture).not.toHaveBeenCalled();
+        });
+
+        // Code Review Fix: Test for order metadata update after capture
+        it("should update order metadata after successful capture", async () => {
+            mockStripeRetrieve.mockResolvedValue({ status: "requires_capture", amount: 1000, currency: "usd" });
+            mockQueryGraph.mockResolvedValue({
+                data: [{ id: "ord_123", total: 1000, currency_code: "usd", status: "pending" }]
+            });
+            mockStripeCapture.mockResolvedValue({ status: "succeeded" });
+
+            await processPaymentCapture(mockJob as Job);
+
+            // Should have called updateOrders to set metadata
+            expect((global as any).mockUpdateOrders).toHaveBeenCalledWith([
+                expect.objectContaining({
+                    id: "ord_123",
+                    metadata: expect.objectContaining({
+                        payment_captured_at: expect.any(String),
+                        payment_amount_captured: 1000,
+                    }),
+                })
+            ]);
         });
     });
 

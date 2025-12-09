@@ -143,14 +143,14 @@ export async function getJobState(orderId: string): Promise<"waiting" | "active"
 }
 
 /**
- * Fetch the current order total from Medusa
+ * Fetch the current order data from Medusa
  * Story 2.3: Ensures we capture the ACTUAL order total, not the original PaymentIntent amount
  * Exported for unit testing
  * 
  * @param orderId - The Medusa order ID
- * @returns Object with total in cents and currency code, or null if order not found
+ * @returns Object with total in cents, currency code, and status, or null if order not found
  */
-export async function fetchOrderTotal(orderId: string): Promise<{ totalCents: number; currencyCode: string } | null> {
+export async function fetchOrderTotal(orderId: string): Promise<{ totalCents: number; currencyCode: string; status: string } | null> {
     if (!containerRef) {
         console.error("[PaymentCapture] Container not initialized - cannot fetch order");
         return null;
@@ -160,7 +160,7 @@ export async function fetchOrderTotal(orderId: string): Promise<{ totalCents: nu
         const query = containerRef.resolve("query");
         const { data: orders } = await query.graph({
             entity: "order",
-            fields: ["id", "total", "currency_code"],
+            fields: ["id", "total", "currency_code", "status"],
             filters: { id: orderId },
         });
 
@@ -189,10 +189,40 @@ export async function fetchOrderTotal(orderId: string): Promise<{ totalCents: nu
         return {
             totalCents: totalCents,
             currencyCode: order.currency_code,
+            status: order.status || "unknown",
         };
     } catch (error) {
         console.error(`[PaymentCapture] Error fetching order ${orderId}:`, error);
         return null;
+    }
+}
+
+/**
+ * Update order metadata to track payment capture status in Medusa
+ * Uses metadata since payment_status is not in UpdateOrderDTO
+ * @param orderId - The Medusa order ID
+ * @param capturedAt - Timestamp when payment was captured
+ * @param amountCaptured - Amount captured in cents
+ */
+async function updateOrderAfterCapture(orderId: string, amountCaptured: number): Promise<void> {
+    if (!containerRef) {
+        console.error("[PaymentCapture] Container not initialized - cannot update order");
+        return;
+    }
+
+    try {
+        const orderService = containerRef.resolve("order");
+        await orderService.updateOrders([{
+            id: orderId,
+            metadata: {
+                payment_captured_at: new Date().toISOString(),
+                payment_amount_captured: amountCaptured,
+            },
+        }]);
+        console.log(`[PaymentCapture] Order ${orderId}: Updated metadata with capture info`);
+    } catch (error) {
+        console.error(`[PaymentCapture] Error updating order ${orderId} after capture:`, error);
+        // Don't throw - payment was captured, metadata update is secondary
     }
 }
 
@@ -237,6 +267,16 @@ export async function processPaymentCapture(job: Job<PaymentCaptureJobData>): Pr
                 idempotencyKey: `capture_${orderId}_${scheduledAt}`,
             });
             console.log(`[PaymentCapture] Order ${orderId}: Captured original amount ${paymentIntent.amount} cents (${captured.status})`);
+            return;
+        }
+
+        // Guard: Skip capture if order is canceled in Medusa
+        if (orderData.status === "canceled") {
+            console.error(
+                `[PaymentCapture][CRITICAL] Order ${orderId} is canceled in Medusa ` +
+                `but PI ${paymentIntentId} still requires capture. Skipping capture.`
+            );
+            console.log(`[METRIC] capture_blocked_canceled_order order=${orderId}`);
             return;
         }
 
@@ -287,6 +327,9 @@ export async function processPaymentCapture(job: Job<PaymentCaptureJobData>): Pr
         } else {
             console.log(`[PaymentCapture] Order ${orderId}: Captured ${totalCents} cents (${captured.status})`);
         }
+
+        // Step 5: Update Medusa order with capture metadata
+        await updateOrderAfterCapture(orderId, totalCents);
 
     } catch (error: any) {
         // Handle specific Stripe errors using property checks (more robust than instanceof)
