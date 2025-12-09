@@ -6,6 +6,9 @@ import {
     InvalidPaymentStateError,
     CardDeclinedError,
     AuthMismatchError,
+    TokenExpiredError,
+    TokenInvalidError,
+    TokenMismatchError,
 } from "../../../../../workflows/add-item-to-order";
 
 /**
@@ -108,55 +111,129 @@ export async function POST(
             payment_status: result.result.payment_status,
         });
     } catch (error) {
+        // FIX: Use proper error type checks instead of string matching
+
+        // 409 Conflict - Stock issues
         if (error instanceof InsufficientStockError) {
-            res.status(409).json({ code: "insufficient_stock", message: error.message });
+            res.status(409).json({
+                code: "insufficient_stock",
+                message: error.message,
+                variant_id: error.variantId,
+                available: error.available,
+                requested: error.requested,
+            });
             return;
         }
+
+        // 422 Unprocessable Entity - State issues
         if (error instanceof InvalidOrderStateError) {
-            res.status(422).json({ code: "invalid_state", message: error.message });
+            res.status(422).json({
+                code: "invalid_state",
+                message: error.message,
+                order_id: error.orderId,
+                current_status: error.status,
+            });
             return;
         }
+
         if (error instanceof InvalidPaymentStateError) {
-            res.status(422).json({ code: "invalid_payment_state", message: error.message });
+            res.status(422).json({
+                code: "invalid_payment_state",
+                message: error.message,
+                payment_intent_id: error.paymentIntentId,
+                current_status: error.status,
+            });
             return;
         }
+
+        // 402 Payment Required - Card declined
         if (error instanceof CardDeclinedError) {
-            res.status(402).json({ code: "card_declined", message: error.message });
+            res.status(402).json({
+                code: "card_declined",
+                message: error.message,
+                stripe_code: error.stripeCode,
+                decline_code: error.declineCode,
+            });
             return;
         }
+
+        // 500 Internal Server Error - Critical auth mismatch
         if (error instanceof AuthMismatchError) {
             console.error("CRITICAL: AuthMismatch during line item addition", error);
-            res.status(500).json({ code: "AUTH_MISMATCH_OVERSOLD", message: "A critical error occurred." });
+            res.status(500).json({
+                code: "AUTH_MISMATCH_OVERSOLD",
+                message: "A critical error occurred. Please contact support.",
+            });
             return;
         }
 
+        // 401 Unauthorized - Token expired/invalid
+        if (error instanceof TokenExpiredError) {
+            res.status(401).json({
+                code: error.code,
+                message: error.message,
+                expired: true,
+            });
+            return;
+        }
+
+        if (error instanceof TokenInvalidError) {
+            res.status(401).json({
+                code: error.code,
+                message: error.message,
+            });
+            return;
+        }
+
+        // 403 Forbidden - Token mismatch
+        if (error instanceof TokenMismatchError) {
+            res.status(403).json({
+                code: error.code,
+                message: error.message,
+            });
+            return;
+        }
+
+        // Handle remaining errors with message pattern matching as fallback
         const errorMessage = (error as Error).message || "";
-        if (errorMessage.includes("TOKEN_EXPIRED")) {
-            res.status(401).json({ code: "TOKEN_EXPIRED", message: "The 1-hour modification window has expired." });
-            return;
-        }
-        if (errorMessage.includes("TOKEN_INVALID")) {
-            res.status(401).json({ code: "TOKEN_INVALID", message: "Invalid modification token." });
-            return;
-        }
-        if (errorMessage.includes("TOKEN_MISMATCH")) {
-            res.status(403).json({ code: "TOKEN_MISMATCH", message: "Token does not match this order." });
-            return;
-        }
+
         if (errorMessage.includes("ORDER_NOT_FOUND")) {
-            res.status(404).json({ code: "ORDER_NOT_FOUND", message: `Order ${id} not found.` });
-            return;
-        }
-        if (errorMessage.includes("VARIANT_NOT_FOUND")) {
-            res.status(400).json({ code: "VARIANT_NOT_FOUND", message: `Variant ${variant_id} not found.` });
-            return;
-        }
-        if (errorMessage.includes("PRICE_NOT_FOUND")) {
-            res.status(400).json({ code: "PRICE_NOT_FOUND", message: `No price found for variant.` });
+            res.status(404).json({
+                code: "ORDER_NOT_FOUND",
+                message: `Order ${id} not found.`,
+            });
             return;
         }
 
+        if (errorMessage.includes("VARIANT_NOT_FOUND")) {
+            res.status(400).json({
+                code: "VARIANT_NOT_FOUND",
+                message: `Variant ${variant_id} not found.`,
+            });
+            return;
+        }
+
+        if (errorMessage.includes("PRICE_NOT_FOUND")) {
+            res.status(400).json({
+                code: "PRICE_NOT_FOUND",
+                message: `No price found for variant.`,
+            });
+            return;
+        }
+
+        if (errorMessage.includes("NO_PAYMENT_INTENT")) {
+            res.status(400).json({
+                code: "NO_PAYMENT_INTENT",
+                message: `Order has no associated payment intent.`,
+            });
+            return;
+        }
+
+        // Generic error handler
         console.error("[line-items] Error adding item to order:", error);
-        res.status(500).json({ code: "ADD_ITEMS_FAILED", message: "An error occurred while adding items." });
+        res.status(500).json({
+            code: "ADD_ITEMS_FAILED",
+            message: "An error occurred while adding items.",
+        });
     }
 }

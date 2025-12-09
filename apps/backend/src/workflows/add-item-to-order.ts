@@ -13,9 +13,6 @@ import { modificationTokenService } from "../services/modification-token";
 // Input/Output Types
 // ============================================================================
 
-/**
- * Input for the add-item-to-order workflow
- */
 export interface AddItemToOrderInput {
     orderId: string;
     modificationToken: string;
@@ -24,9 +21,6 @@ export interface AddItemToOrderInput {
     metadata?: Record<string, string>;
 }
 
-/**
- * Result of validation step
- */
 interface ValidationResult {
     valid: boolean;
     orderId: string;
@@ -46,22 +40,17 @@ interface ValidationResult {
     };
 }
 
-/**
- * Result of totals calculation
- */
 interface TotalsResult {
     variantId: string;
     variantTitle: string;
     quantity: number;
     unitPrice: number;
+    taxAmount: number;
     itemTotal: number;
     newOrderTotal: number;
     difference: number;
 }
 
-/**
- * Result of Stripe increment step
- */
 interface StripeIncrementResult {
     success: boolean;
     previousAmount: number;
@@ -72,34 +61,51 @@ interface StripeIncrementResult {
 }
 
 // ============================================================================
-// Error Classes
+// Error Classes - Exported with full properties for testing
 // ============================================================================
 
 export class InsufficientStockError extends Error {
+    public readonly variantId: string;
+    public readonly available: number;
+    public readonly requested: number;
+
     constructor(variantId: string, available: number, requested: number) {
         super(`Insufficient stock for variant ${variantId}: available=${available}, requested=${requested}`);
         this.name = "InsufficientStockError";
+        this.variantId = variantId;
+        this.available = available;
+        this.requested = requested;
     }
 }
 
 export class InvalidOrderStateError extends Error {
+    public readonly orderId: string;
+    public readonly status: string;
+
     constructor(orderId: string, status: string) {
         super(`Order ${orderId} is in invalid state: ${status}. Must be 'pending'.`);
         this.name = "InvalidOrderStateError";
+        this.orderId = orderId;
+        this.status = status;
     }
 }
 
 export class InvalidPaymentStateError extends Error {
+    public readonly paymentIntentId: string;
+    public readonly status: string;
+
     constructor(paymentIntentId: string, status: string) {
         super(`PaymentIntent ${paymentIntentId} is not in requires_capture state: ${status}`);
         this.name = "InvalidPaymentStateError";
+        this.paymentIntentId = paymentIntentId;
+        this.status = status;
     }
 }
 
 export class CardDeclinedError extends Error {
     public readonly stripeCode: string;
     public readonly declineCode?: string;
-    
+
     constructor(message: string, stripeCode: string, declineCode?: string) {
         super(message);
         this.name = "CardDeclinedError";
@@ -109,9 +115,55 @@ export class CardDeclinedError extends Error {
 }
 
 export class AuthMismatchError extends Error {
+    public readonly orderId: string;
+    public readonly paymentIntentId: string;
+
     constructor(orderId: string, paymentIntentId: string, details: string) {
         super(`AUTH_MISMATCH_OVERSOLD: Order ${orderId}, PI ${paymentIntentId} - ${details}`);
         this.name = "AuthMismatchError";
+        this.orderId = orderId;
+        this.paymentIntentId = paymentIntentId;
+    }
+}
+
+// Token Error Classes - Proper types instead of string matching
+export class TokenExpiredError extends Error {
+    public readonly code = "TOKEN_EXPIRED" as const;
+
+    constructor() {
+        super("The 1-hour modification window has expired");
+        this.name = "TokenExpiredError";
+    }
+}
+
+export class TokenInvalidError extends Error {
+    public readonly code = "TOKEN_INVALID" as const;
+
+    constructor() {
+        super("Invalid modification token");
+        this.name = "TokenInvalidError";
+    }
+}
+
+export class TokenMismatchError extends Error {
+    public readonly code = "TOKEN_MISMATCH" as const;
+    public readonly expectedOrderId: string;
+    public readonly actualOrderId: string;
+
+    constructor(expectedOrderId: string, actualOrderId: string) {
+        super(`Token does not match this order. Expected: ${expectedOrderId}, Got: ${actualOrderId}`);
+        this.name = "TokenMismatchError";
+        this.expectedOrderId = expectedOrderId;
+        this.actualOrderId = actualOrderId;
+    }
+}
+
+export class TaxProviderError extends Error {
+    public readonly code = "TAX_PROVIDER_ERROR" as const;
+
+    constructor(message: string) {
+        super(`Tax provider error: ${message}`);
+        this.name = "TaxProviderError";
     }
 }
 
@@ -119,9 +171,6 @@ export class AuthMismatchError extends Error {
 // Utility Functions
 // ============================================================================
 
-/**
- * Retry utility with exponential backoff
- */
 async function retryWithBackoff<T>(
     fn: () => Promise<T>,
     options: {
@@ -157,9 +206,6 @@ async function retryWithBackoff<T>(
     throw lastError;
 }
 
-/**
- * Check if a Stripe error is retryable (network/5xx errors)
- */
 function isRetryableStripeError(error: any): boolean {
     if (error instanceof Stripe.errors.StripeCardError) {
         return false;
@@ -177,9 +223,6 @@ function isRetryableStripeError(error: any): boolean {
     return false;
 }
 
-/**
- * Generate an idempotency key for Stripe operations
- */
 function generateIdempotencyKey(orderId: string, variantId: string, quantity: number): string {
     return `add-item-${orderId}-${variantId}-${quantity}-${Date.now()}`;
 }
@@ -190,6 +233,10 @@ function generateIdempotencyKey(orderId: string, variantId: string, quantity: nu
 
 /**
  * Step 1: Validate Pre-conditions (Auth, Stock, Status)
+ * 
+ * FIXES:
+ * - Uses proper Token error classes instead of string-prefixed errors
+ * - Sums stock across ALL inventory locations, not just the first one
  */
 const validatePreconditionsStep = createStep(
     "validate-preconditions",
@@ -199,18 +246,17 @@ const validatePreconditionsStep = createStep(
     ): Promise<StepResponse<ValidationResult>> => {
         const query = container.resolve("query");
 
-        // 1. Validate modification token
+        // 1. Validate modification token with proper error types
         const tokenValidation = modificationTokenService.validateToken(input.modificationToken);
         if (!tokenValidation.valid) {
-            throw new Error(
-                tokenValidation.expired
-                    ? "TOKEN_EXPIRED: The 1-hour modification window has expired"
-                    : "TOKEN_INVALID: Invalid modification token"
-            );
+            if (tokenValidation.expired) {
+                throw new TokenExpiredError();
+            }
+            throw new TokenInvalidError();
         }
 
         if (tokenValidation.payload?.order_id !== input.orderId) {
-            throw new Error("TOKEN_MISMATCH: Token does not match this order");
+            throw new TokenMismatchError(input.orderId, tokenValidation.payload?.order_id || "unknown");
         }
 
         // 2. Fetch order and validate status
@@ -242,7 +288,7 @@ const validatePreconditionsStep = createStep(
             throw new InvalidPaymentStateError(paymentIntentId, paymentIntent.status);
         }
 
-        // 4. Check inventory for sufficient stock
+        // 4. Check inventory - SUM stock across ALL locations (FIX: was only checking first)
         const { data: variants } = await query.graph({
             entity: "product_variant",
             fields: ["id", "title", "inventory_items.inventory_item_id", "product.title"],
@@ -263,14 +309,18 @@ const validatePreconditionsStep = createStep(
                 filters: { inventory_item_id: inventoryItemId },
             });
 
-            if (inventoryLevels.length > 0) {
-                const level = inventoryLevels[0];
-                const availableStock = (level.stocked_quantity || 0) - (level.reserved_quantity || 0);
-
-                if (availableStock < input.quantity) {
-                    throw new InsufficientStockError(input.variantId, availableStock, input.quantity);
-                }
+            // FIX: Sum stock across ALL locations instead of just first
+            let totalAvailableStock = 0;
+            for (const level of inventoryLevels) {
+                const locationStock = (level.stocked_quantity || 0) - (level.reserved_quantity || 0);
+                totalAvailableStock += Math.max(0, locationStock);
             }
+
+            if (totalAvailableStock < input.quantity) {
+                throw new InsufficientStockError(input.variantId, totalAvailableStock, input.quantity);
+            }
+
+            console.log(`[add-item-to-order] Stock check: ${totalAvailableStock} available across ${inventoryLevels.length} locations`);
         }
 
         console.log(`[add-item-to-order] Preconditions validated for order ${input.orderId}`);
@@ -298,6 +348,14 @@ const validatePreconditionsStep = createStep(
 
 /**
  * Step 2: Calculate Order Totals (Tax, Shipping)
+ * 
+ * NOTE: Tax calculation is handled by Medusa's calculated_price which includes
+ * tax when configured. For explicit tax provider integration, this step would
+ * need to call the tax provider API. Currently uses calculated_price which
+ * represents the final price including applicable taxes.
+ * 
+ * Per Medusa v2 pricing: calculated_price already includes tax when tax-inclusive
+ * pricing is configured. For tax-exclusive regions, tax is added at checkout.
  */
 const calculateTotalsStep = createStep(
     "calculate-totals",
@@ -313,9 +371,18 @@ const calculateTotalsStep = createStep(
     ): Promise<StepResponse<TotalsResult>> => {
         const query = container.resolve("query");
 
+        // Fetch variant with calculated price (includes tax if configured)
         const { data: variants } = await query.graph({
             entity: "product_variant",
-            fields: ["id", "title", "calculated_price.*", "product.title"],
+            fields: [
+                "id",
+                "title",
+                "calculated_price.calculated_amount",
+                "calculated_price.currency_code",
+                "calculated_price.calculated_amount_with_tax",
+                "calculated_price.tax_total",
+                "product.title",
+            ],
             filters: { id: input.variantId },
         });
 
@@ -332,19 +399,23 @@ const calculateTotalsStep = createStep(
             );
         }
 
-        const unitPrice = price.calculated_amount;
+        // Use calculated_amount_with_tax if available, otherwise calculated_amount
+        // This ensures tax is included when the region is configured for it
+        const unitPrice = price.calculated_amount_with_tax || price.calculated_amount;
+        const taxAmount = price.tax_total || 0;
         const itemTotal = unitPrice * input.quantity;
         const newOrderTotal = input.currentTotal + itemTotal;
         const difference = itemTotal;
         const variantTitle = `${variant.product?.title || ""} - ${variant.title || ""}`.trim();
 
-        console.log(`[add-item-to-order] Calculated totals: item=${itemTotal}, newTotal=${newOrderTotal}`);
+        console.log(`[add-item-to-order] Calculated totals: unitPrice=${unitPrice}, tax=${taxAmount}, itemTotal=${itemTotal}, newTotal=${newOrderTotal}`);
 
         return new StepResponse({
             variantId: input.variantId,
             variantTitle,
             quantity: input.quantity,
             unitPrice,
+            taxAmount,
             itemTotal,
             newOrderTotal,
             difference,
@@ -523,9 +594,6 @@ const updateOrderValuesStep = createStep(
 // Workflow Definition
 // ============================================================================
 
-/**
- * Add Item to Order Workflow
- */
 export const addItemToOrderWorkflow = createWorkflow(
     "add-item-to-order",
     (input: AddItemToOrderInput) => {
