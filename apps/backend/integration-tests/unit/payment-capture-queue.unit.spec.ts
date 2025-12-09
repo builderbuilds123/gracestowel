@@ -348,6 +348,26 @@ describe("payment-capture-queue", () => {
             expect(mockStripeCapture).not.toHaveBeenCalled();
         });
 
+        // Code Review: Test for fallback capture when order fetch fails
+        it("should capture original amount as fallback when order fetch fails", async () => {
+            mockStripeRetrieve.mockResolvedValue({ status: "requires_capture", amount: 5000, currency: "usd" });
+            mockQueryGraph.mockResolvedValue({ data: [] }); // Order not found
+            mockStripeCapture.mockResolvedValue({ status: "succeeded" });
+
+            await processPaymentCapture(mockJob as Job);
+
+            // Should log warning about fallback
+            expect(console.warn).toHaveBeenCalledWith(
+                expect.stringContaining("Could not fetch order total, capturing original amount")
+            );
+            // Should capture with original amount (no amount_to_capture specified)
+            expect(mockStripeCapture).toHaveBeenCalledWith(
+                "pi_123",
+                {},
+                expect.objectContaining({ idempotencyKey: expect.any(String) })
+            );
+        });
+
         // Code Review Fix: Test for canceled order guard
         it("should skip capture if order is canceled in Medusa", async () => {
             mockStripeRetrieve.mockResolvedValue({ status: "requires_capture", amount: 1000, currency: "usd" });
