@@ -6,7 +6,7 @@ import {
     transform,
 } from "@medusajs/framework/workflows-sdk";
 import { updateInventoryLevelsStep } from "@medusajs/core-flows";
-import type { UpdateInventoryLevelInput } from "@medusajs/types";
+import type { UpdateInventoryLevelInput, MedusaContainer } from "@medusajs/types";
 import Stripe from "stripe";
 import { getStripeClient } from "../utils/stripe";
 import { cancelPaymentCaptureJob } from "../lib/payment-capture-queue";
