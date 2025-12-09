@@ -15,7 +15,7 @@ Implement a **Safety Net Cron Job** that ensures no orders are left in a "Pendin
 - [x] *Ref*: Use Medusa v2 `scheduled-jobs` pattern.
 
 ### 2. Logic
-- [x] Query Orders: `created_at` < `NOW - 65 mins`, `status != canceled`.
+- [x] Query Orders: `created_at` < `NOW - 65 mins`, `status = "pending"`.
 - [x] For each order:
     - Check Stripe `PaymentIntent.status === "requires_capture"`.
     - Check `getJobState(orderId)` via new helper in `payment-capture-queue.ts`.
