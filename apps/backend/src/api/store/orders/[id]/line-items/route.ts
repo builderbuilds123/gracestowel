@@ -32,7 +32,7 @@ import {
 
 function validateRequestBody(body: unknown): {
     valid: boolean;
-    data?: { variant_id: string; quantity: number; metadata?: Record<string, string> };
+    data?: { variant_id: string; quantity: number; metadata?: Record<string, unknown> };
     errors?: Record<string, string[]>;
 } {
     if (!body || typeof body !== "object") {
@@ -65,7 +65,7 @@ function validateRequestBody(body: unknown): {
         data: {
             variant_id: b.variant_id as string,
             quantity: b.quantity as number,
-            metadata: b.metadata as Record<string, string> | undefined,
+            metadata: b.metadata as Record<string, unknown> | undefined,
         },
     };
 }

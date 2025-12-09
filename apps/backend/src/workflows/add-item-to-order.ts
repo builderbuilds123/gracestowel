@@ -18,7 +18,7 @@ export interface AddItemToOrderInput {
     modificationToken: string;
     variantId: string;
     quantity: number;
-    metadata?: Record<string, string>;
+    metadata?: Record<string, unknown>;
     /** Stable request ID for idempotency (e.g., x-request-id header or UUID) */
     requestId: string;
 }
