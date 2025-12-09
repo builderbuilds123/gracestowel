@@ -195,8 +195,8 @@ export default function OrderStatus() {
                      </h3>
                      {shippingAddress ? (
                          <div className="text-text-earthy/80">
-                             <p className="font-medium">{shippingAddress.first_name} {shippingAddress.last_name}</p>
-                             <p>{shippingAddress.city} {shippingAddress.country_code?.toUpperCase()}</p>
+                             <p className="font-medium">{shippingAddress.last_name}</p>
+                             <p>{shippingAddress.country_code?.toUpperCase()}</p>
                              <p className="text-xs text-text-earthy/50 mt-2 italic">* Personal details masked for security</p>
                          </div>
                      ) : (
