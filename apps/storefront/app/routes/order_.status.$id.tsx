@@ -1,6 +1,6 @@
-import { json, redirect } from "@remix-run/cloudflare";
-import { useLoaderData, useRevalidator } from "@remix-run/react";
-import type { LoaderFunctionArgs } from "@remix-run/cloudflare";
+import { data } from "react-router";
+import { useLoaderData, useRevalidator } from "react-router";
+import type { LoaderFunctionArgs } from "react-router";
 import { useState, useCallback } from "react";
 import { CheckCircle2, MapPin, Package, Truck, AlertCircle } from "lucide-react";
 import { OrderTimer } from "../components/order/OrderTimer";
@@ -20,6 +20,11 @@ interface LoaderData {
     env: {
         STRIPE_PUBLISHABLE_KEY: string;
     }
+}
+
+interface ErrorData {
+    error: string;
+    message: string;
 }
 
 export async function loader({ params, request, context }: LoaderFunctionArgs) {
@@ -44,11 +49,11 @@ export async function loader({ params, request, context }: LoaderFunctionArgs) {
 
     if (response.status === 401 || response.status === 403) {
         // Token expired or invalid
-        const error = await response.json() as any;
-        if (error.code === "TOKEN_EXPIRED") {
+        const errorResp = await response.json() as any;
+        if (errorResp.code === "TOKEN_EXPIRED") {
              // We could render a specific "Request new link" page here, or handle it in component
              // For now, return error state to component
-             return json({ error: "TOKEN_EXPIRED", message: error.message }, { status: 403 });
+             return data({ error: "TOKEN_EXPIRED", message: errorResp.message } as ErrorData, { status: 403 });
         }
         throw new Response("Unauthorized", { status: 401 });
     }
@@ -57,26 +62,26 @@ export async function loader({ params, request, context }: LoaderFunctionArgs) {
         throw new Response("Order Not Found", { status: 404 });
     }
 
-    const data = await response.json();
+    const responseData = await response.json() as { order: any; modification_window: any };
 
-    return json({
-        order: data.order,
-        modification_window: data.modification_window,
+    return data({
+        order: responseData.order,
+        modification_window: responseData.modification_window,
         token,
         medusaBackendUrl,
         medusaPublishableKey,
         env: {
             STRIPE_PUBLISHABLE_KEY: env.STRIPE_PUBLISHABLE_KEY
         }
-    });
+    } as LoaderData);
 }
 
 export default function OrderStatus() {
-    const data = useLoaderData<typeof loader>();
+    const loaderData = useLoaderData<LoaderData | ErrorData>();
     const revalidator = useRevalidator();
     
     // Handle Token Expired View
-    if ('error' in data) {
+    if ('error' in loaderData) {
          return (
             <div className="min-h-screen bg-background-earthy flex items-center justify-center p-4">
                 <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8 text-center">
@@ -98,7 +103,7 @@ export default function OrderStatus() {
          );
     }
     
-    const { order, modification_window, token, medusaBackendUrl, medusaPublishableKey } = data as LoaderData;
+    const { order, modification_window, token, medusaBackendUrl, medusaPublishableKey } = loaderData as LoaderData;
     const [orderDetails, setOrderDetails] = useState(order);
     const [shippingAddress, setShippingAddress] = useState(order.shipping_address);
     const isModificationActive = modification_window.status === "active";
