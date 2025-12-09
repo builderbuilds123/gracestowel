@@ -9,7 +9,7 @@ import { updateInventoryLevelsStep } from "@medusajs/core-flows";
 import type { UpdateInventoryLevelInput, MedusaContainer } from "@medusajs/types";
 import Stripe from "stripe";
 import { getStripeClient } from "../utils/stripe";
-import { cancelPaymentCaptureJob } from "../lib/payment-capture-queue";
+import { cancelPaymentCaptureJob, JobActiveError } from "../lib/payment-capture-queue";
 
 /**
  * Story 3.4: Custom error classes for cancel workflow
@@ -45,6 +45,14 @@ export class QueueRemovalError extends Error {
         super(`Failed to remove capture job for order ${orderId}. Cancellation aborted to prevent zombie payment.`);
         this.name = "QueueRemovalError";
         this.cause = cause;
+    }
+}
+
+export class OrderNotFoundError extends Error {
+    code = "ORDER_NOT_FOUND";
+    constructor(orderId: string) {
+        super(`Order ${orderId} not found`);
+        this.name = "OrderNotFoundError";
     }
 }
 
@@ -107,7 +115,7 @@ const removeCaptureJobStep = createStep(
             // Story 3.4 AC4: Race Condition Handling
             // If job is active, the capture worker is already processing it.
             // We must consider this "Too Late" and return 409 Conflict.
-            if ((error as Error).message === "JOB_ACTIVE") {
+            if (error instanceof JobActiveError) {
                 console.error(`[CancelOrder][ABORT] Capture job is ACTIVE for ${input.orderId}. Too late to cancel.`);
                 throw new LateCancelError("Payment capture is already in progress");
             }
@@ -146,7 +154,7 @@ export const lockOrderHandler = async (input: { orderId: string; paymentIntentId
     });
     
     if (!orders.length) {
-        throw new Error(`Order ${input.orderId} not found`);
+        throw new OrderNotFoundError(input.orderId);
     }
     
     const order = orders[0];

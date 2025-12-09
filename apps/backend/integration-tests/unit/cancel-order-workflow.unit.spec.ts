@@ -13,6 +13,13 @@
 // Mock BullMQ before imports
 jest.mock("../../src/lib/payment-capture-queue", () => ({
     cancelPaymentCaptureJob: jest.fn(),
+    JobActiveError: class JobActiveError extends Error {
+        code = "JOB_ACTIVE";
+        constructor(orderId: string) {
+            super(`Cannot cancel capture job for ${orderId}: Job is active/processing`);
+            this.name = "JobActiveError";
+        }
+    },
 }));
 
 // Mock Stripe
@@ -25,10 +32,11 @@ import {
     PartialCaptureError,
     OrderAlreadyCanceledError,
     QueueRemovalError,
+    OrderNotFoundError,
     removeCaptureJobHandler,
     lockOrderHandler
 } from "../../src/workflows/cancel-order-with-refund";
-import { cancelPaymentCaptureJob } from "../../src/lib/payment-capture-queue";
+import { cancelPaymentCaptureJob, JobActiveError } from "../../src/lib/payment-capture-queue";
 import { MedusaContainer } from "@medusajs/framework/types";
 import { getStripeClient } from "../../src/utils/stripe";
 
@@ -61,12 +69,12 @@ describe("Cancel Order Workflow Steps", () => {
             expect(result).toEqual({ orderId: "ord_miss", removed: false, notFound: true });
         });
 
-        it("should propagate JOB_ACTIVE error (Race Condition)", async () => {
-            const activeError = new Error("JOB_ACTIVE");
+        it("should propagate JobActiveError (Race Condition)", async () => {
+            const activeError = new JobActiveError("ord_active");
             (cancelPaymentCaptureJob as jest.Mock).mockRejectedValue(activeError);
 
             await expect(removeCaptureJobHandler({ orderId: "ord_active" }))
-                .rejects.toThrow("JOB_ACTIVE");
+                .rejects.toThrow(JobActiveError);
         });
 
         it("should propagate Redis errors", async () => {
@@ -206,6 +214,15 @@ describe("Cancel Order Workflow Steps", () => {
                 const cause = new Error("Redis timeout");
                 const error = new QueueRemovalError("ord_123", cause);
                 expect(error.cause).toBe(cause);
+            });
+        });
+
+        describe("OrderNotFoundError", () => {
+            it("should have correct code and include order ID", () => {
+                const error = new OrderNotFoundError("ord_missing");
+                expect(error.name).toBe("OrderNotFoundError");
+                expect(error.code).toBe("ORDER_NOT_FOUND");
+                expect(error.message).toBe("Order ord_missing not found");
             });
         });
     });

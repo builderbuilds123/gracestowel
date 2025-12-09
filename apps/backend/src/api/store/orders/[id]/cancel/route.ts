@@ -6,6 +6,7 @@ import {
     PartialCaptureError,
     OrderAlreadyCanceledError,
     QueueRemovalError,
+    OrderNotFoundError,
 } from "../../../../../workflows/cancel-order-with-refund";
 
 /**
@@ -150,6 +151,15 @@ export async function POST(
             res.status(503).json({
                 code: "service_unavailable",
                 message: "Unable to process cancellation at this time. Please try again in a few moments.",
+            });
+            return;
+        }
+
+        // Order not found (race condition - deleted between route check and workflow)
+        if (error instanceof OrderNotFoundError) {
+            res.status(404).json({
+                code: "order_not_found",
+                message: error.message,
             });
             return;
         }
