@@ -29,11 +29,16 @@ export default async function fallbackCaptureJob(container: MedusaContainer) {
     }
     
     // Guard: Check if Redis/BullMQ is available
-    let queue;
-    try {
-        queue = getPaymentCaptureQueue();
-    } catch (error) {
-        console.error("[FallbackCron] Redis not available - skipping fallback capture check. This is expected in non-production environments.", error);
+    const queue = (() => {
+        try {
+            return getPaymentCaptureQueue();
+        } catch (error) {
+            console.error("[FallbackCron] Redis not available - skipping fallback capture check. This is expected in non-production environments.", error);
+            return null;
+        }
+    })();
+
+    if (!queue) {
         return;
     }
     
