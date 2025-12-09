@@ -169,6 +169,53 @@ export class TaxProviderError extends Error {
     }
 }
 
+// Not Found Error Classes
+export class OrderNotFoundError extends Error {
+    public readonly code = "ORDER_NOT_FOUND" as const;
+    public readonly orderId: string;
+
+    constructor(orderId: string) {
+        super(`Order ${orderId} not found`);
+        this.name = "OrderNotFoundError";
+        this.orderId = orderId;
+    }
+}
+
+export class VariantNotFoundError extends Error {
+    public readonly code = "VARIANT_NOT_FOUND" as const;
+    public readonly variantId: string;
+
+    constructor(variantId: string) {
+        super(`Variant ${variantId} not found`);
+        this.name = "VariantNotFoundError";
+        this.variantId = variantId;
+    }
+}
+
+export class PaymentIntentMissingError extends Error {
+    public readonly code = "NO_PAYMENT_INTENT" as const;
+    public readonly orderId: string;
+
+    constructor(orderId: string) {
+        super(`Order ${orderId} has no associated PaymentIntent`);
+        this.name = "PaymentIntentMissingError";
+        this.orderId = orderId;
+    }
+}
+
+export class PriceNotFoundError extends Error {
+    public readonly code = "PRICE_NOT_FOUND" as const;
+    public readonly variantId: string;
+    public readonly currencyCode: string;
+
+    constructor(variantId: string, currencyCode: string) {
+        super(`No price found for variant ${variantId} in ${currencyCode}`);
+        this.name = "PriceNotFoundError";
+        this.variantId = variantId;
+        this.currencyCode = currencyCode;
+    }
+}
+
 // ============================================================================
 // Utility Functions
 // ============================================================================
@@ -286,7 +333,7 @@ const validatePreconditionsStep = createStep(
         });
 
         if (!orders.length) {
-            throw new Error(`ORDER_NOT_FOUND: Order ${input.orderId} not found`);
+            throw new OrderNotFoundError(input.orderId);
         }
 
         const order = orders[0];
@@ -297,7 +344,7 @@ const validatePreconditionsStep = createStep(
         // 3. Validate PaymentIntent status
         const paymentIntentId = order.metadata?.stripe_payment_intent_id;
         if (!paymentIntentId) {
-            throw new Error(`NO_PAYMENT_INTENT: Order ${input.orderId} has no associated PaymentIntent`);
+            throw new PaymentIntentMissingError(input.orderId);
         }
 
         const stripe = getStripeClient();
@@ -315,7 +362,7 @@ const validatePreconditionsStep = createStep(
         });
 
         if (!variants.length) {
-            throw new Error(`VARIANT_NOT_FOUND: Variant ${input.variantId} not found`);
+            throw new VariantNotFoundError(input.variantId);
         }
 
         const variant = variants[0];
@@ -406,16 +453,14 @@ const calculateTotalsStep = createStep(
         });
 
         if (!variants.length) {
-            throw new Error(`VARIANT_NOT_FOUND: Variant ${input.variantId} not found`);
+            throw new VariantNotFoundError(input.variantId);
         }
 
         const variant = variants[0] as any;
         const price = variant.calculated_price;
 
         if (!price || !price.calculated_amount) {
-            throw new Error(
-                `PRICE_NOT_FOUND: No price found for variant ${input.variantId} in ${input.currencyCode}`
-            );
+            throw new PriceNotFoundError(input.variantId, input.currencyCode);
         }
 
         // Use calculated_amount_with_tax if available, otherwise calculated_amount

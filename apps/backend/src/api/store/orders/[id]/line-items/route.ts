@@ -9,6 +9,10 @@ import {
     TokenExpiredError,
     TokenInvalidError,
     TokenMismatchError,
+    OrderNotFoundError,
+    VariantNotFoundError,
+    PaymentIntentMissingError,
+    PriceNotFoundError,
 } from "../../../../../workflows/add-item-to-order";
 
 /**
@@ -199,37 +203,42 @@ export async function POST(
             return;
         }
 
-        // Handle remaining errors with message pattern matching as fallback
-        const errorMessage = (error as Error).message || "";
-
-        if (errorMessage.includes("ORDER_NOT_FOUND")) {
+        // 404 Not Found - Order not found
+        if (error instanceof OrderNotFoundError) {
             res.status(404).json({
-                code: "ORDER_NOT_FOUND",
-                message: `Order ${id} not found.`,
+                code: error.code,
+                message: error.message,
+                order_id: error.orderId,
             });
             return;
         }
 
-        if (errorMessage.includes("VARIANT_NOT_FOUND")) {
+        // 400 Bad Request - Variant not found
+        if (error instanceof VariantNotFoundError) {
             res.status(400).json({
-                code: "VARIANT_NOT_FOUND",
-                message: `Variant ${variant_id} not found.`,
+                code: error.code,
+                message: error.message,
+                variant_id: error.variantId,
             });
             return;
         }
 
-        if (errorMessage.includes("PRICE_NOT_FOUND")) {
+        // 400 Bad Request - Price not found
+        if (error instanceof PriceNotFoundError) {
             res.status(400).json({
-                code: "PRICE_NOT_FOUND",
-                message: `No price found for variant.`,
+                code: error.code,
+                message: error.message,
+                variant_id: error.variantId,
             });
             return;
         }
 
-        if (errorMessage.includes("NO_PAYMENT_INTENT")) {
+        // 400 Bad Request - No payment intent
+        if (error instanceof PaymentIntentMissingError) {
             res.status(400).json({
-                code: "NO_PAYMENT_INTENT",
-                message: `Order has no associated payment intent.`,
+                code: error.code,
+                message: error.message,
+                order_id: error.orderId,
             });
             return;
         }
