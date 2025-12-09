@@ -36,12 +36,17 @@ Implement a **Safety Net Cron Job** that ensures no orders are left in a "Pendin
 **Done** ✅
 
 ## Validation
-- **Unit Tests**: 5 tests passing in `fallback-capture.unit.spec.ts`
+- **Unit Tests**: 10 tests passing in `fallback-capture.unit.spec.ts`
   - Skips orders with already captured payments
   - Skips orders with active BullMQ jobs  
   - Logs critical alert for failed jobs
   - Triggers capture for missing jobs
   - Handles no orders gracefully
+  - Skips when `REDIS_URL` is missing
+  - Exits gracefully when Redis/BullMQ unavailable
+  - Rejects non-pending orders defensively
+  - Triggers capture for stale completed jobs
+  - Verifies pending-only query filter
 
 ## Dev Agent Record
 
