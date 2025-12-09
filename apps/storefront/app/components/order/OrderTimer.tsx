@@ -76,15 +76,10 @@ export function OrderTimer({ expiresAt, serverTime, onExpire, className = "" }: 
                     {isUrgent ? "left to modify" : "remaining to modify order"}
                 </span>
             </div>
-            {/* Screen Reader Announcement every minute */}
-            <div className="sr-only" role="status" aria-live="polite">
-                {timeLeft > 0 && timeLeft % 60 === 0 ? `${timeLeft / 60} minutes remaining` : ""}
-            </div>
             {/* Separate live region for screen reader announcements - updates only when minute changes */}
             <span className="sr-only" aria-live="polite" aria-atomic="true">
                 {minutes} minute{minutes !== 1 ? 's' : ''} remaining to modify order
             </span>
-        </div>
     );
 }
 
