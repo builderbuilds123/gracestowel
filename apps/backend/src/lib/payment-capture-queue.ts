@@ -277,17 +277,17 @@ export async function processPaymentCapture(job: Job<PaymentCaptureJobData>): Pr
         }
 
     } catch (error: any) {
-        // Handle specific Stripe errors (M3)
-        if (error instanceof Stripe.errors.StripeInvalidRequestError) {
-            if (error.code === "amount_too_large") {
-                console.error(
-                    `[PaymentCapture][CRITICAL] Order ${orderId}: Amount too large error. ` +
-                    `The order total exceeds authorized amount. Manual intervention required!`
-                );
-            }
+        // Handle specific Stripe errors using property checks (more robust than instanceof)
+        if (error?.type === "invalid_request_error" && error?.code === "amount_too_large") {
+            console.error(
+                `[PaymentCapture][CRITICAL] Order ${orderId}: Amount too large error. ` +
+                `The order total exceeds authorized amount. Manual intervention required!`,
+                error
+            );
+        } else {
+            console.error(`[PaymentCapture] Error capturing payment for order ${orderId}:`, error);
         }
         
-        console.error(`[PaymentCapture] Error capturing payment for order ${orderId}:`, error);
         throw error; // Re-throw to trigger retry
     }
 }

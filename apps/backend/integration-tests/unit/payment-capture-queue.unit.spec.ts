@@ -298,8 +298,8 @@ describe("payment-capture-queue", () => {
             );
         });
 
-        it("should handle StripeInvalidRequestError (M3 Fix)", async () => {
-            mockStripeRetrieve.mockResolvedValue({ 
+        it("should handle Stripe amount_too_large error (M3 Fix)", async () => {
+             mockStripeRetrieve.mockResolvedValue({
                 id: "pi_123", 
                 status: "requires_capture", 
                 amount: 5000, 
@@ -309,20 +309,21 @@ describe("payment-capture-queue", () => {
                 data: [{ id: "ord_123", total: 5000, currency_code: "usd" }] 
             });
 
-            // Mock Stripe error using real class for instanceof check
-            // Note: Stripe error constructor signature: new Error(rawStripeError)
-            const stripeError = new MockStripeInvalidRequestError({
-                message: "Amount too large",
-                type: "invalid_request_error",
-                code: "amount_too_large"
-            });
+            // Create error with type/code properties (robust property-based check)
+            const stripeError = new Error("Amount too large") as any;
+            stripeError.type = "invalid_request_error";
+            stripeError.code = "amount_too_large";
             
             mockStripeCapture.mockRejectedValue(stripeError);
 
             await expect(processPaymentCapture(mockJob as Job))
                 .rejects.toThrow("Amount too large");
             
-            expect(console.error).toHaveBeenCalledWith(expect.stringContaining("Amount too large error"));
+            // Should log CRITICAL error with the error object (no double logging)
+            expect(console.error).toHaveBeenCalledWith(
+                expect.stringContaining("Amount too large error"),
+                expect.anything()
+            );
         });
         
         it("should skip if already canceled", async () => {
