@@ -73,6 +73,9 @@ export default async function fallbackCaptureJob(container: MedusaContainer) {
             try {
                 // Double-check status defensively in case state changed after query
                 if (order.status !== "pending") {
+                    console.warn(
+                        `[FallbackCron][WARN] Order ${orderId} has status '${order.status}' but was expected to be 'pending'. Skipping.`
+                    );
                     skippedCount++;
                     continue;
                 }
