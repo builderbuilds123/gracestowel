@@ -23,6 +23,19 @@ const STALE_ORDER_THRESHOLD_MS = 65 * 60 * 1000;
  */
 export default async function fallbackCaptureJob(container: MedusaContainer) {
     console.log("[FallbackCron] Starting fallback capture check...");
+    if (!process.env.REDIS_URL) {
+        console.warn("[FallbackCron] REDIS_URL not configured - skipping fallback capture run");
+        return;
+    }
+    
+    // Guard: Check if Redis/BullMQ is available
+    let queue;
+    try {
+        queue = getPaymentCaptureQueue();
+    } catch (error) {
+        console.error("[FallbackCron] Redis not available - skipping fallback capture check. This is expected in non-production environments.", error);
+        return;
+    }
     
     const query = container.resolve("query");
     const stripe = getStripeClient();
@@ -31,13 +44,14 @@ export default async function fallbackCaptureJob(container: MedusaContainer) {
     const thresholdTime = new Date(Date.now() - STALE_ORDER_THRESHOLD_MS);
     
     try {
-        // Query all orders with Stripe payment intents in metadata
+        // Query orders that are PENDING with Stripe payment intents
+        // Only pending orders should be checked - processing/completed orders should be skipped
         const { data: orders } = await query.graph({
             entity: "order",
             fields: ["id", "metadata", "created_at", "status"],
             filters: {
                 created_at: { $lt: thresholdTime },
-                status: { $ne: "canceled" },
+                status: "pending", // Only pending orders - processing/completed should not be re-captured
             },
         });
         
@@ -57,6 +71,11 @@ export default async function fallbackCaptureJob(container: MedusaContainer) {
             const paymentIntentId = order.metadata.stripe_payment_intent_id;
             
             try {
+                // Double-check status defensively in case state changed after query
+                if (order.status !== "pending") {
+                    skippedCount++;
+                    continue;
+                }
                 // Step 1: Check Stripe payment status
                 const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
                 
@@ -93,7 +112,6 @@ export default async function fallbackCaptureJob(container: MedusaContainer) {
                 
                 // Schedule immediate capture (delay: 0)
                 // Uses `capture-${orderId}` pattern for consistency with getJobState()
-                const queue = getPaymentCaptureQueue();
                 await queue.add(
                     `capture-${orderId}`,
                     {

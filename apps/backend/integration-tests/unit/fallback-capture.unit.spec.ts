@@ -34,12 +34,16 @@ describe("fallback-capture", () => {
     let mockContainer: any;
     let mockQueryGraph: jest.Mock;
     let fallbackCaptureJob: any;
+    const originalEnv = process.env;
 
     beforeEach(() => {
         jest.clearAllMocks();
         
         // Reset modules to get fresh import
         jest.resetModules();
+
+        // Ensure REDIS_URL present for default test flows
+        process.env = { ...originalEnv, REDIS_URL: "redis://localhost:6379" } as any;
         
         // Setup mock container
         mockQueryGraph = jest.fn();
@@ -52,12 +56,14 @@ describe("fallback-capture", () => {
         // Mock console methods
         jest.spyOn(console, "log").mockImplementation(() => {});
         jest.spyOn(console, "error").mockImplementation(() => {});
+        jest.spyOn(console, "warn").mockImplementation(() => {});
         
         // Re-import the module
         fallbackCaptureJob = require("../../src/jobs/fallback-capture").default;
     });
 
     afterEach(() => {
+        process.env = originalEnv;
         jest.restoreAllMocks();
     });
 
@@ -183,5 +189,93 @@ describe("fallback-capture", () => {
         expect(mockStripeRetrieve).not.toHaveBeenCalled();
         expect(mockQueueAdd).not.toHaveBeenCalled();
         expect(console.log).toHaveBeenCalledWith(expect.stringContaining("Found 0 orders"));
+    });
+
+    it("should skip cron when REDIS_URL is missing", async () => {
+        process.env = { ...originalEnv }; // remove REDIS_URL
+
+        // Re-import to apply env
+        fallbackCaptureJob = require("../../src/jobs/fallback-capture").default;
+
+        await fallbackCaptureJob(mockContainer);
+
+        expect(console.warn).toHaveBeenCalledWith(expect.stringContaining("REDIS_URL not configured"));
+        expect(mockQueueAdd).not.toHaveBeenCalled();
+        expect(mockStripeRetrieve).not.toHaveBeenCalled();
+    });
+
+    it("should defensively skip non-pending orders returned by query", async () => {
+        mockQueryGraph.mockResolvedValue({
+            data: [{
+                id: "ord_np",
+                metadata: { stripe_payment_intent_id: "pi_np" },
+                created_at: new Date(Date.now() - 70 * 60 * 1000),
+                status: "processing",
+            }],
+        });
+
+        await fallbackCaptureJob(mockContainer);
+
+        expect(mockStripeRetrieve).not.toHaveBeenCalled();
+        expect(mockQueueAdd).not.toHaveBeenCalled();
+    });
+
+    // Code Review: Test for Redis guard
+    it("should exit gracefully when Redis/BullMQ is unavailable", async () => {
+        // Reset and re-mock to throw error
+        jest.resetModules();
+        jest.doMock("../../src/lib/payment-capture-queue", () => ({
+            getPaymentCaptureQueue: jest.fn().mockImplementation(() => {
+                throw new Error("Redis connection failed");
+            }),
+            getJobState: mockGetJobState,
+        }));
+        
+        // Re-import with new mock
+        const fallbackCaptureJobWithError = require("../../src/jobs/fallback-capture").default;
+        
+        await fallbackCaptureJobWithError(mockContainer);
+        
+        // Should log error and exit without querying orders
+        expect(console.error).toHaveBeenCalledWith(
+            expect.stringContaining("Redis not available"),
+            expect.anything()
+        );
+        expect(mockQueryGraph).not.toHaveBeenCalled();
+    });
+
+    // Code Review: Test that order query filters to pending status only
+    it("should only query pending orders (not processing/completed)", async () => {
+        // Re-import fresh due to previous test's resetModules
+        jest.resetModules();
+        
+        // Explicitly mock happy path for this test
+        jest.doMock("../../src/lib/payment-capture-queue", () => ({
+            getPaymentCaptureQueue: jest.fn().mockReturnValue({
+                add: jest.fn(),
+            }),
+            getJobState: jest.fn(),
+        }));
+
+        const freshFallbackCaptureJob = require("../../src/jobs/fallback-capture").default;
+        
+        const freshMockQueryGraph = jest.fn().mockResolvedValue({ data: [] });
+        const freshMockContainer = {
+            resolve: jest.fn().mockReturnValue({
+                graph: freshMockQueryGraph,
+            }),
+        };
+
+        await freshFallbackCaptureJob(freshMockContainer);
+
+        // Verify query was called with status: "pending" filter
+        expect(freshMockQueryGraph).toHaveBeenCalledWith(
+            expect.objectContaining({
+                entity: "order",
+                filters: expect.objectContaining({
+                    status: "pending",
+                }),
+            })
+        );
     });
 });
