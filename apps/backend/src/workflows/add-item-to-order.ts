@@ -607,9 +607,16 @@ const updateOrderValuesStep = createStep(
                 unit_price: input.unitPrice,
             };
 
-            const existingAddedItems = input.currentOrderMetadata?.added_items
-                ? JSON.parse(input.currentOrderMetadata.added_items as string)
-                : [];
+            // Defensively parse existing added items from metadata
+            const itemsJson = input.currentOrderMetadata?.added_items;
+            let existingAddedItems: any[] = [];
+            if (typeof itemsJson === "string") {
+                try {
+                    existingAddedItems = JSON.parse(itemsJson);
+                } catch (e) {
+                    console.warn(`[add-item-to-order] Malformed JSON in added_items for order ${input.orderId}. Ignoring corrupt data.`);
+                }
+            }
 
             const allAddedItems = [...existingAddedItems, newLineItem];
 
