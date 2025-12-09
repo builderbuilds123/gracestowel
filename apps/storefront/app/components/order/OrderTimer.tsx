@@ -80,6 +80,7 @@ export function OrderTimer({ expiresAt, serverTime, onExpire, className = "" }: 
             <span className="sr-only" aria-live="polite" aria-atomic="true">
                 {minutes} minute{minutes !== 1 ? 's' : ''} remaining to modify order
             </span>
+        </div>
     );
 }
 
