@@ -13,6 +13,18 @@ export interface PaymentCaptureJobData {
 }
 
 /**
+ * Story 3.4: Type-safe error for job active state
+ * Thrown when attempting to cancel a job that is currently being processed
+ */
+export class JobActiveError extends Error {
+    code = "JOB_ACTIVE";
+    constructor(orderId: string) {
+        super(`Cannot cancel capture job for ${orderId}: Job is active/processing`);
+        this.name = "JobActiveError";
+    }
+}
+
+/**
  * Get Redis connection options from environment
  */
 const getRedisConnection = () => {
@@ -122,8 +134,18 @@ export async function cancelPaymentCaptureJob(orderId: string): Promise<boolean>
     const job = await queue.getJob(`capture-${orderId}`);
     
     if (job) {
+        const state = await job.getState();
+        
+        // Story 3.4 AC4: Race Condition Handling
+        // If job is already active (being processed), we cannot safely remove it.
+        // The worker is running concurrently. We must abort cancellation.
+        if (state === "active") {
+            console.warn(`[CancelOrder] Cannot cancel capture job for ${orderId}: Job is active/processing`);
+            throw new JobActiveError(orderId);
+        }
+
         await job.remove();
-        console.log(`Canceled payment capture job for order ${orderId}`);
+        console.log(`Canceled payment capture job for order ${orderId} (state: ${state})`);
         return true;
     }
     
