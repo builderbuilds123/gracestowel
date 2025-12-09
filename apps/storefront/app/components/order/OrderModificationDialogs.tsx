@@ -4,14 +4,26 @@ import { EditAddressDialog } from "../EditAddressDialog";
 import { AddItemsDialog } from "../AddItemsDialog";
 import { Pencil, Plus } from "lucide-react";
 
+interface Address {
+    first_name: string;
+    last_name: string;
+    address_1: string;
+    address_2?: string;
+    city: string;
+    province?: string;
+    postal_code: string;
+    country_code: string;
+    phone?: string;
+}
+
 interface OrderModificationDialogsProps {
     orderId: string;
     token: string;
     orderNumber: string;
     currencyCode: string;
-    currentAddress: any;
-    onOrderUpdated: (newTotal?: any) => void;
-    onAddressUpdated: (address: any) => void;
+    currentAddress?: Address;
+    onOrderUpdated: (newTotal?: number) => void;
+    onAddressUpdated: (address: Address) => void;
     onOrderCanceled: () => void;
     medusaBackendUrl: string;
     medusaPublishableKey: string;
@@ -53,7 +65,7 @@ export function OrderModificationDialogs({
         setShowCancelDialog(false);
     };
 
-    const handleUpdateAddress = async (address: any) => {
+    const handleUpdateAddress = async (address: Address) => {
         const response = await fetch(`${medusaBackendUrl}/store/orders/${orderId}/address`, {
             method: 'POST',
             headers: {
