@@ -62,6 +62,26 @@ Modify the **Payment Capture Worker** to handle dynamic order totals. The curren
 - Added 4 new tests for worker container parameter
 - Backward compatible: falls back to original amount if order fetch fails
 
+### Tasks
+- [x] Configure BullMQ with Redis connection using `REDIS_URL`
+- [x] Implement `payment-capture` queue and processor
+- [x] Create `startPaymentCaptureWorker` loader
+- [x] Implement logic to fetch *current* order total from Medusa (Story 2.3)
+- [x] Implement dynamic capture logic (partial/excess handling) (Story 2.3)
+- [x] Add idempotency keys to capture requests
+- [x] Add logging for capture events
+- [x] **Design Review Corrections**:
+  - [x] Added `fetchOrderTotal` unit tests (H1)
+  - [x] Added `processPaymentCapture` unit tests (H2, H3)
+  - [x] Fixed currency validation & fallback logic (M1, M2)
+  - [x] Improved Stripe error handling integration (M3)
+
+### Validation
+- [x] Unit/Integration Tests:
+  - `apps/backend/integration-tests/unit/payment-capture-queue.unit.spec.ts`: Comprehensive coverage (14 tests) for queue, worker, order fetching, and dynamic capture scenarios.
+- [x] Manual verification of Redis connection (via logs)
+- [x] CI Check: All tests passed.
+
 ### File List
 - `apps/backend/src/lib/payment-capture-queue.ts` (modified)
 - `apps/backend/src/loaders/payment-capture-worker.ts` (modified)

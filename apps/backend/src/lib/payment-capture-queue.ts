@@ -1,6 +1,7 @@
 import { Queue, Worker, Job } from "bullmq";
 import { getStripeClient } from "../utils/stripe";
 import { MedusaContainer } from "@medusajs/framework/types";
+import Stripe from "stripe";
 
 /**
  * Payment capture job data
@@ -132,11 +133,12 @@ export async function cancelPaymentCaptureJob(orderId: string): Promise<boolean>
 /**
  * Fetch the current order total from Medusa
  * Story 2.3: Ensures we capture the ACTUAL order total, not the original PaymentIntent amount
+ * Exported for unit testing
  * 
  * @param orderId - The Medusa order ID
  * @returns Object with total in cents and currency code, or null if order not found
  */
-async function fetchOrderTotal(orderId: string): Promise<{ totalCents: number; currencyCode: string } | null> {
+export async function fetchOrderTotal(orderId: string): Promise<{ totalCents: number; currencyCode: string } | null> {
     if (!containerRef) {
         console.error("[PaymentCapture] Container not initialized - cannot fetch order");
         return null;
@@ -157,17 +159,24 @@ async function fetchOrderTotal(orderId: string): Promise<{ totalCents: number; c
 
         const order = orders[0];
         
-        // Medusa stores total in cents (integer) for backend operations
-        // Verify it's a valid integer
         const total = order.total;
-        if (typeof total !== "number" || !Number.isInteger(total)) {
+        if (typeof total !== "number") {
             console.error(`[PaymentCapture] Order ${orderId} has invalid total: ${total}`);
             return null;
         }
 
+        // Support both integer (cents) and float (dollars) totals (Story 2.3 AC #2)
+        const totalCents = Number.isInteger(total) ? total : Math.round(total * 100);
+
+        // M1: Fail if currency is missing instead of falling back to USD
+        if (!order.currency_code) {
+            console.error(`[PaymentCapture] Order ${orderId} has no currency code`);
+            return null;
+        }
+
         return {
-            totalCents: total,
-            currencyCode: order.currency_code || "usd",
+            totalCents: totalCents,
+            currencyCode: order.currency_code,
         };
     } catch (error) {
         console.error(`[PaymentCapture] Error fetching order ${orderId}:`, error);
@@ -178,8 +187,9 @@ async function fetchOrderTotal(orderId: string): Promise<{ totalCents: number; c
 /**
  * Process a payment capture job
  * Story 2.3: Enhanced to capture dynamic order total instead of static PaymentIntent amount
+ * Exported for unit testing
  */
-async function processPaymentCapture(job: Job<PaymentCaptureJobData>): Promise<void> {
+export async function processPaymentCapture(job: Job<PaymentCaptureJobData>): Promise<void> {
     const { orderId, paymentIntentId, scheduledAt } = job.data;
     
     console.log(`[PaymentCapture] Processing capture for order ${orderId}`);
@@ -221,6 +231,16 @@ async function processPaymentCapture(job: Job<PaymentCaptureJobData>): Promise<v
         const { totalCents, currencyCode } = orderData;
         const authorizedAmount = paymentIntent.amount;
 
+        // M2: Validate currency match
+        if (currencyCode.toLowerCase() !== paymentIntent.currency.toLowerCase()) {
+            console.error(
+                `[PaymentCapture][CRITICAL] Order ${orderId}: Currency mismatch! ` +
+                `Order: ${currencyCode}, PaymentIntent: ${paymentIntent.currency}. ` +
+                `Cannot capture.`
+            );
+            throw new Error(`Currency mismatch: Order ${currencyCode} vs PaymentIntent ${paymentIntent.currency}`);
+        }
+
         console.log(`[PaymentCapture] Order ${orderId}: Authorized=${authorizedAmount} cents, Order Total=${totalCents} cents`);
 
         // Step 3: Handle different capture scenarios
@@ -257,9 +277,9 @@ async function processPaymentCapture(job: Job<PaymentCaptureJobData>): Promise<v
         }
 
     } catch (error: any) {
-        // Handle specific Stripe errors
-        if (error?.type === "StripeInvalidRequestError") {
-            if (error.code === "amount_too_large") {
+        // Handle specific Stripe errors (M3)
+        if (error instanceof Stripe.errors.StripeInvalidRequestError) {
+             if (error.code === "amount_too_large") {
                 console.error(
                     `[PaymentCapture][CRITICAL] Order ${orderId}: Amount too large error. ` +
                     `The order total exceeds authorized amount. Manual intervention required!`
