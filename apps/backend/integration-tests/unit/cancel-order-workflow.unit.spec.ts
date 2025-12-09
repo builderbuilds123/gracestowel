@@ -166,6 +166,15 @@ describe("Cancel Order Workflow Steps", () => {
             await expect(lockOrderHandler({ orderId: "ord_1", paymentIntentId: "pi_1" }, container))
                 .rejects.toThrow(LateCancelError);
         });
+
+        it("should throw OrderAlreadyCanceledError if order status is canceled", async () => {
+            queryMock.mockResolvedValue({
+                data: [{ id: "ord_already_canceled", status: "canceled", payment_status: "awaiting" }]
+            });
+
+            await expect(lockOrderHandler({ orderId: "ord_already_canceled", paymentIntentId: "pi_1" }, container))
+                .rejects.toThrow(OrderAlreadyCanceledError);
+        });
     });
 
     describe("Error Classes", () => {
