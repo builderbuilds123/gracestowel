@@ -299,7 +299,7 @@ describe("payment-capture-queue", () => {
         });
 
         it("should handle StripeInvalidRequestError (M3 Fix)", async () => {
-             mockStripeRetrieve.mockResolvedValue({ 
+            mockStripeRetrieve.mockResolvedValue({ 
                 id: "pi_123", 
                 status: "requires_capture", 
                 amount: 5000, 
