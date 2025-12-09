@@ -20,10 +20,11 @@ So that I can sequentially:
 3. **Then** it must strictly VALIDATE:
     - **Token Auth**: `x-modification-token` is valid/active.
     - **Order Status**: Must be `pending` (not captured/canceled).
-    - **Inventory**: Check `InventoryService` for sufficient stock. If low, throw `409 Conflict`.
+    - **Inventory**: Query `inventory_level` via Medusa module system, sum stock across all locations. If insufficient, throw `409 Conflict`.
     - **Payment Status**: `stripe_payment_intent` must be in `requires_capture` state.
-4. **And** Pre-Calculation Check:
-    - Ensure Tax Provider and Shipping Provider are reachable.
+4. **And** Price Calculation:
+    - Use Medusa's `calculated_price` (includes tax when configured).
+    - **Note**: Shipping recalculation deferred to future story (see ADR).
     - If total difference is <= 0 (Item removed), SKIP Stripe Increment.
 
 ### Resilience & Error Handling
