@@ -145,6 +145,8 @@ export async function getJobState(orderId: string): Promise<"waiting" | "active"
 /**
  * Fetch the current order data from Medusa
  * Story 2.3: Ensures we capture the ACTUAL order total, not the original PaymentIntent amount
+ * Story 3.2: Now checks metadata.updated_total for orders modified during grace period
+ * 
  * Exported for unit testing
  * 
  * @param orderId - The Medusa order ID
@@ -160,7 +162,7 @@ export async function fetchOrderTotal(orderId: string): Promise<{ totalCents: nu
         const query = containerRef.resolve("query");
         const { data: orders } = await query.graph({
             entity: "order",
-            fields: ["id", "total", "currency_code", "status"],
+            fields: ["id", "total", "currency_code", "status", "metadata"],
             filters: { id: orderId },
         });
 
@@ -171,7 +173,18 @@ export async function fetchOrderTotal(orderId: string): Promise<{ totalCents: nu
 
         const order = orders[0];
         
-        const total = order.total;
+        // Story 3.2: Check metadata.updated_total first for orders modified during grace period
+        // The add-item workflow stores updated totals in metadata when items are added
+        let total: number;
+        const metadata = order.metadata as Record<string, any> | undefined;
+        
+        if (metadata?.updated_total !== undefined && typeof metadata.updated_total === "number") {
+            total = metadata.updated_total;
+            console.log(`[PaymentCapture] Order ${orderId}: Using metadata.updated_total=${total} (modified during grace period)`);
+        } else {
+            total = order.total;
+        }
+
         if (typeof total !== "number") {
             console.error(`[PaymentCapture] Order ${orderId} has invalid total: ${total}`);
             return null;
