@@ -16,7 +16,6 @@ jest.mock("../../src/lib/payment-capture-queue", () => ({
 }));
 
 // Mock Stripe
-// Mock Stripe
 jest.mock("../../src/utils/stripe", () => ({
     getStripeClient: jest.fn()
 }));
