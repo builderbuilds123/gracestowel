@@ -279,7 +279,7 @@ describe("payment-capture-queue", () => {
             expect(mockStripeCapture).not.toHaveBeenCalled();
         });
 
-        it("should fallback to original amount if order fetch fails", async () => {
+        it("should fail the job if order fetch fails (no capture)", async () => {
             // Setup: PaymentIntent = 5000, Order fetch fails (returns null)
             mockStripeRetrieve.mockResolvedValue({ 
                 id: "pi_123", 
@@ -289,21 +289,13 @@ describe("payment-capture-queue", () => {
             });
             // Simulate fetch failure
             mockQueryGraph.mockResolvedValue({ data: [] }); // not found
-            // Or make fetchOrderTotal throw/fail inside. 
-            // In our impl, if graph returns [], fetchOrderTotal returns null.
-            
-            mockStripeCapture.mockResolvedValue({ status: "succeeded" });
 
-            await processPaymentCapture(mockJob as Job);
+            await expect(processPaymentCapture(mockJob as Job))
+                .rejects.toThrow("Could not fetch order details");
 
-            expect(console.warn).toHaveBeenCalledWith(expect.stringContaining("Could not fetch order total"));
-
-            // Capture called without amount_to_capture (full capture)
-            expect(mockStripeCapture).toHaveBeenCalledWith(
-                "pi_123", 
-                {}, 
-                expect.any(Object)
-            );
+            // Should not attempt capture
+            expect(mockStripeCapture).not.toHaveBeenCalled();
+            expect(console.error).toHaveBeenCalledWith(expect.stringContaining("Could not fetch order details"));
         });
 
         it("should handle Stripe amount_too_large error (M3 Fix)", async () => {
@@ -348,24 +340,16 @@ describe("payment-capture-queue", () => {
             expect(mockStripeCapture).not.toHaveBeenCalled();
         });
 
-        // Code Review: Test for fallback capture when order fetch fails
-        it("should capture original amount as fallback when order fetch fails", async () => {
+        // Code Review: Test for fail-fast when order fetch fails
+        it("should fail the job when order fetch fails (no capture)", async () => {
             mockStripeRetrieve.mockResolvedValue({ status: "requires_capture", amount: 5000, currency: "usd" });
             mockQueryGraph.mockResolvedValue({ data: [] }); // Order not found
-            mockStripeCapture.mockResolvedValue({ status: "succeeded" });
 
-            await processPaymentCapture(mockJob as Job);
+            await expect(processPaymentCapture(mockJob as Job))
+                .rejects.toThrow("Could not fetch order details");
 
-            // Should log warning about fallback
-            expect(console.warn).toHaveBeenCalledWith(
-                expect.stringContaining("Could not fetch order total, capturing original amount")
-            );
-            // Should capture with original amount (no amount_to_capture specified)
-            expect(mockStripeCapture).toHaveBeenCalledWith(
-                "pi_123",
-                {},
-                expect.objectContaining({ idempotencyKey: expect.any(String) })
-            );
+            expect(console.error).toHaveBeenCalledWith(expect.stringContaining("Could not fetch order details"));
+            expect(mockStripeCapture).not.toHaveBeenCalled();
         });
 
         // Code Review Fix: Test for canceled order guard

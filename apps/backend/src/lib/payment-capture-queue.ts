@@ -261,13 +261,9 @@ export async function processPaymentCapture(job: Job<PaymentCaptureJobData>): Pr
         const orderData = await fetchOrderTotal(orderId);
         
         if (!orderData) {
-            // If we can't fetch order, capture the original authorized amount as fallback
-            console.warn(`[PaymentCapture] Order ${orderId}: Could not fetch order total, capturing original amount`);
-            const captured = await stripe.paymentIntents.capture(paymentIntentId, {}, {
-                idempotencyKey: `capture_${orderId}_${scheduledAt}`,
-            });
-            console.log(`[PaymentCapture] Order ${orderId}: Captured original amount ${paymentIntent.amount} cents (${captured.status})`);
-            return;
+            // Do NOT capture if order data is unavailable; fail for manual review to avoid charging canceled/missing orders
+            console.error(`[PaymentCapture][CRITICAL] Order ${orderId}: Could not fetch order details. Aborting capture.`);
+            throw new Error(`Could not fetch order details for order ${orderId}`);
         }
 
         // Guard: Skip capture if order is canceled in Medusa
