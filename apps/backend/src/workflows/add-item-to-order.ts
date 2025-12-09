@@ -303,112 +303,120 @@ function generateIdempotencyKey(orderId: string, variantId: string, quantity: nu
  * FIXES:
  * - Uses proper Token error classes instead of string-prefixed errors
  * - Sums stock across ALL inventory locations, not just the first one
+ * 
+ * Handler exported for unit testing.
  */
+export async function validatePreconditionsHandler(
+    input: { orderId: string; modificationToken: string; variantId: string; quantity: number },
+    context: { container: any }
+): Promise<ValidationResult> {
+    const { container } = context;
+    const query = container.resolve("query");
+
+    // 1. Validate modification token with proper error types
+    const tokenValidation = modificationTokenService.validateToken(input.modificationToken);
+    if (!tokenValidation.valid) {
+        if (tokenValidation.expired) {
+            throw new TokenExpiredError();
+        }
+        throw new TokenInvalidError();
+    }
+
+    if (tokenValidation.payload?.order_id !== input.orderId) {
+        throw new TokenMismatchError(input.orderId, tokenValidation.payload?.order_id || "unknown");
+    }
+
+    // 2. Fetch order and validate status
+    const { data: orders } = await query.graph({
+        entity: "order",
+        fields: ["id", "status", "total", "currency_code", "metadata", "items.*"],
+        filters: { id: input.orderId },
+    });
+
+    if (!orders.length) {
+        throw new OrderNotFoundError(input.orderId);
+    }
+
+    const order = orders[0];
+    if (order.status !== "pending") {
+        throw new InvalidOrderStateError(input.orderId, order.status);
+    }
+
+    // 3. Validate PaymentIntent status
+    const paymentIntentId = order.metadata?.stripe_payment_intent_id;
+    if (!paymentIntentId) {
+        throw new PaymentIntentMissingError(input.orderId);
+    }
+
+    const stripe = getStripeClient();
+    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+
+    if (paymentIntent.status !== "requires_capture") {
+        throw new InvalidPaymentStateError(paymentIntentId, paymentIntent.status);
+    }
+
+    // 4. Check inventory - SUM stock across ALL locations (FIX: was only checking first)
+    const { data: variants } = await query.graph({
+        entity: "product_variant",
+        fields: ["id", "title", "inventory_items.inventory_item_id", "product.title"],
+        filters: { id: input.variantId },
+    });
+
+    if (!variants.length) {
+        throw new VariantNotFoundError(input.variantId);
+    }
+
+    const variant = variants[0];
+    const inventoryItemId = variant.inventory_items?.[0]?.inventory_item_id;
+
+    if (inventoryItemId) {
+        const { data: inventoryLevels } = await query.graph({
+            entity: "inventory_level",
+            fields: ["id", "location_id", "inventory_item_id", "stocked_quantity", "reserved_quantity"],
+            filters: { inventory_item_id: inventoryItemId },
+        });
+
+        // FIX: Sum stock across ALL locations instead of just first
+        let totalAvailableStock = 0;
+        for (const level of inventoryLevels) {
+            const locationStock = (level.stocked_quantity || 0) - (level.reserved_quantity || 0);
+            totalAvailableStock += Math.max(0, locationStock);
+        }
+
+        if (totalAvailableStock < input.quantity) {
+            throw new InsufficientStockError(input.variantId, totalAvailableStock, input.quantity);
+        }
+
+        console.log(`[add-item-to-order] Stock check: ${totalAvailableStock} available across ${inventoryLevels.length} locations`);
+    }
+
+    console.log(`[add-item-to-order] Preconditions validated for order ${input.orderId}`);
+
+    return {
+        valid: true,
+        orderId: input.orderId,
+        paymentIntentId,
+        order: {
+            id: order.id,
+            status: order.status,
+            total: order.total,
+            currency_code: order.currency_code,
+            metadata: order.metadata || {},
+            items: order.items || [],
+        },
+        paymentIntent: {
+            id: paymentIntent.id,
+            status: paymentIntent.status,
+            amount: paymentIntent.amount,
+        },
+    };
+}
+
 const validatePreconditionsStep = createStep(
     "validate-preconditions",
-    async (
-        input: { orderId: string; modificationToken: string; variantId: string; quantity: number },
-        { container }
-    ): Promise<StepResponse<ValidationResult>> => {
-        const query = container.resolve("query");
-
-        // 1. Validate modification token with proper error types
-        const tokenValidation = modificationTokenService.validateToken(input.modificationToken);
-        if (!tokenValidation.valid) {
-            if (tokenValidation.expired) {
-                throw new TokenExpiredError();
-            }
-            throw new TokenInvalidError();
-        }
-
-        if (tokenValidation.payload?.order_id !== input.orderId) {
-            throw new TokenMismatchError(input.orderId, tokenValidation.payload?.order_id || "unknown");
-        }
-
-        // 2. Fetch order and validate status
-        const { data: orders } = await query.graph({
-            entity: "order",
-            fields: ["id", "status", "total", "currency_code", "metadata", "items.*"],
-            filters: { id: input.orderId },
-        });
-
-        if (!orders.length) {
-            throw new OrderNotFoundError(input.orderId);
-        }
-
-        const order = orders[0];
-        if (order.status !== "pending") {
-            throw new InvalidOrderStateError(input.orderId, order.status);
-        }
-
-        // 3. Validate PaymentIntent status
-        const paymentIntentId = order.metadata?.stripe_payment_intent_id;
-        if (!paymentIntentId) {
-            throw new PaymentIntentMissingError(input.orderId);
-        }
-
-        const stripe = getStripeClient();
-        const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
-
-        if (paymentIntent.status !== "requires_capture") {
-            throw new InvalidPaymentStateError(paymentIntentId, paymentIntent.status);
-        }
-
-        // 4. Check inventory - SUM stock across ALL locations (FIX: was only checking first)
-        const { data: variants } = await query.graph({
-            entity: "product_variant",
-            fields: ["id", "title", "inventory_items.inventory_item_id", "product.title"],
-            filters: { id: input.variantId },
-        });
-
-        if (!variants.length) {
-            throw new VariantNotFoundError(input.variantId);
-        }
-
-        const variant = variants[0];
-        const inventoryItemId = variant.inventory_items?.[0]?.inventory_item_id;
-
-        if (inventoryItemId) {
-            const { data: inventoryLevels } = await query.graph({
-                entity: "inventory_level",
-                fields: ["id", "location_id", "inventory_item_id", "stocked_quantity", "reserved_quantity"],
-                filters: { inventory_item_id: inventoryItemId },
-            });
-
-            // FIX: Sum stock across ALL locations instead of just first
-            let totalAvailableStock = 0;
-            for (const level of inventoryLevels) {
-                const locationStock = (level.stocked_quantity || 0) - (level.reserved_quantity || 0);
-                totalAvailableStock += Math.max(0, locationStock);
-            }
-
-            if (totalAvailableStock < input.quantity) {
-                throw new InsufficientStockError(input.variantId, totalAvailableStock, input.quantity);
-            }
-
-            console.log(`[add-item-to-order] Stock check: ${totalAvailableStock} available across ${inventoryLevels.length} locations`);
-        }
-
-        console.log(`[add-item-to-order] Preconditions validated for order ${input.orderId}`);
-
-        return new StepResponse({
-            valid: true,
-            orderId: input.orderId,
-            paymentIntentId,
-            order: {
-                id: order.id,
-                status: order.status,
-                total: order.total,
-                currency_code: order.currency_code,
-                metadata: order.metadata || {},
-                items: order.items || [],
-            },
-            paymentIntent: {
-                id: paymentIntent.id,
-                status: paymentIntent.status,
-                amount: paymentIntent.amount,
-            },
-        });
+    async (input: { orderId: string; modificationToken: string; variantId: string; quantity: number }, { container }) => {
+        const result = await validatePreconditionsHandler(input, { container });
+        return new StepResponse(result);
     }
 );
 

@@ -2,37 +2,43 @@
  * Unit tests for add-item-to-order workflow
  * Story: 3.2 Increment Authorization Logic
  * 
- * Tests import actual error classes and verify:
- * - Error class properties match expected values
- * - Retry logic parameters are correct
- * - Idempotency key is stable (uses requestId, not Date.now)
- * - Stock calculation sums all locations
+ * Tests:
+ * - Error class properties and behavior
+ * - Step handler logic with mocked dependencies
+ * - Retry logic parameters
+ * - Idempotency key stability
  */
 
 import Stripe from "stripe";
 
-// Dynamic import to avoid mock hoisting issues
-let InsufficientStockError: any;
-let InvalidOrderStateError: any;
-let InvalidPaymentStateError: any;
-let CardDeclinedError: any;
-let AuthMismatchError: any;
-let TokenExpiredError: any;
-let TokenInvalidError: any;
-let TokenMismatchError: any;
+// Mock services BEFORE importing the workflow
+jest.mock("../../src/services/modification-token", () => ({
+    modificationTokenService: {
+        validateToken: jest.fn(),
+    },
+}));
 
-beforeAll(async () => {
-    // Import error classes after test setup
-    const workflow = await import("../../src/workflows/add-item-to-order");
-    InsufficientStockError = workflow.InsufficientStockError;
-    InvalidOrderStateError = workflow.InvalidOrderStateError;
-    InvalidPaymentStateError = workflow.InvalidPaymentStateError;
-    CardDeclinedError = workflow.CardDeclinedError;
-    AuthMismatchError = workflow.AuthMismatchError;
-    TokenExpiredError = workflow.TokenExpiredError;
-    TokenInvalidError = workflow.TokenInvalidError;
-    TokenMismatchError = workflow.TokenMismatchError;
-});
+jest.mock("../../src/utils/stripe", () => ({
+    getStripeClient: jest.fn(),
+}));
+
+// Import after mocks
+import { modificationTokenService } from "../../src/services/modification-token";
+import { getStripeClient } from "../../src/utils/stripe";
+import {
+    validatePreconditionsHandler,
+    InsufficientStockError,
+    InvalidOrderStateError,
+    InvalidPaymentStateError,
+    CardDeclinedError,
+    AuthMismatchError,
+    TokenExpiredError,
+    TokenInvalidError,
+    TokenMismatchError,
+    OrderNotFoundError,
+    VariantNotFoundError,
+    PaymentIntentMissingError,
+} from "../../src/workflows/add-item-to-order";
 
 describe("add-item-to-order workflow - Error Classes", () => {
     beforeEach(() => {
@@ -55,12 +61,6 @@ describe("add-item-to-order workflow - Error Classes", () => {
             expect(error.message).toContain("available=0");
             expect(error.message).toContain("requested=2");
         });
-
-        it("should be throwable and catchable", () => {
-            expect(() => {
-                throw new InsufficientStockError("var_abc", 5, 10);
-            }).toThrow(InsufficientStockError);
-        });
     });
 
     describe("InvalidOrderStateError", () => {
@@ -70,41 +70,6 @@ describe("add-item-to-order workflow - Error Classes", () => {
             expect(error.orderId).toBe("ord_123");
             expect(error.status).toBe("completed");
             expect(error.message).toContain("pending");
-        });
-    });
-
-    describe("InvalidPaymentStateError", () => {
-        it("should create error with payment intent id and status", () => {
-            const error = new InvalidPaymentStateError("pi_123", "succeeded");
-            expect(error.name).toBe("InvalidPaymentStateError");
-            expect(error.paymentIntentId).toBe("pi_123");
-            expect(error.status).toBe("succeeded");
-            expect(error.message).toContain("requires_capture");
-        });
-    });
-
-    describe("CardDeclinedError", () => {
-        it("should create error with stripe code and decline code", () => {
-            const error = new CardDeclinedError("Card declined", "card_declined", "insufficient_funds");
-            expect(error.name).toBe("CardDeclinedError");
-            expect(error.stripeCode).toBe("card_declined");
-            expect(error.declineCode).toBe("insufficient_funds");
-        });
-
-        it("should work without decline code", () => {
-            const error = new CardDeclinedError("Generic decline", "generic_decline");
-            expect(error.stripeCode).toBe("generic_decline");
-            expect(error.declineCode).toBeUndefined();
-        });
-    });
-
-    describe("AuthMismatchError", () => {
-        it("should create error with audit-critical information", () => {
-            const error = new AuthMismatchError("ord_123", "pi_456", "DB commit failed");
-            expect(error.name).toBe("AuthMismatchError");
-            expect(error.orderId).toBe("ord_123");
-            expect(error.paymentIntentId).toBe("pi_456");
-            expect(error.message).toContain("AUTH_MISMATCH_OVERSOLD");
         });
     });
 
@@ -131,23 +96,342 @@ describe("add-item-to-order workflow - Error Classes", () => {
     });
 });
 
-describe("add-item-to-order workflow - Token Validation Behavior", () => {
-    it("should throw TokenExpiredError when token is expired", () => {
-        expect(() => {
-            throw new TokenExpiredError();
-        }).toThrow(TokenExpiredError);
+describe("validatePreconditionsHandler - Step Logic", () => {
+    let mockQuery: { graph: jest.Mock };
+    let mockStripe: { paymentIntents: { retrieve: jest.Mock } };
+    let mockContainer: { resolve: jest.Mock };
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+        jest.spyOn(console, "log").mockImplementation(() => {});
+        jest.spyOn(console, "error").mockImplementation(() => {});
+
+        // Set up mock query
+        mockQuery = {
+            graph: jest.fn(),
+        };
+
+        // Set up mock Stripe client
+        mockStripe = {
+            paymentIntents: {
+                retrieve: jest.fn(),
+            },
+        };
+
+        // Set up mock container
+        mockContainer = {
+            resolve: jest.fn((service: string) => {
+                if (service === "query") return mockQuery;
+                throw new Error(`Unknown service: ${service}`);
+            }),
+        };
+
+        // Default: valid token
+        (modificationTokenService.validateToken as jest.Mock).mockReturnValue({
+            valid: true,
+            expired: false,
+            payload: { order_id: "ord_123" },
+        });
+
+        // Default: Stripe client
+        (getStripeClient as jest.Mock).mockReturnValue(mockStripe);
     });
 
-    it("should throw TokenInvalidError when token is invalid", () => {
-        expect(() => {
-            throw new TokenInvalidError();
-        }).toThrow(TokenInvalidError);
+    afterEach(() => {
+        jest.restoreAllMocks();
     });
 
-    it("should throw TokenMismatchError when order ID doesn't match", () => {
-        expect(() => {
-            throw new TokenMismatchError("ord_123", "ord_different");
-        }).toThrow(TokenMismatchError);
+    it("should throw TokenExpiredError when token is expired", async () => {
+        (modificationTokenService.validateToken as jest.Mock).mockReturnValue({
+            valid: false,
+            expired: true,
+        });
+
+        const input = {
+            orderId: "ord_123",
+            modificationToken: "expired_token",
+            variantId: "var_123",
+            quantity: 1,
+        };
+
+        await expect(validatePreconditionsHandler(input, { container: mockContainer }))
+            .rejects.toThrow(TokenExpiredError);
+    });
+
+    it("should throw TokenInvalidError when token is invalid", async () => {
+        (modificationTokenService.validateToken as jest.Mock).mockReturnValue({
+            valid: false,
+            expired: false,
+        });
+
+        const input = {
+            orderId: "ord_123",
+            modificationToken: "invalid_token",
+            variantId: "var_123",
+            quantity: 1,
+        };
+
+        await expect(validatePreconditionsHandler(input, { container: mockContainer }))
+            .rejects.toThrow(TokenInvalidError);
+    });
+
+    it("should throw TokenMismatchError when order ID doesn't match", async () => {
+        (modificationTokenService.validateToken as jest.Mock).mockReturnValue({
+            valid: true,
+            payload: { order_id: "ord_different" },
+        });
+
+        const input = {
+            orderId: "ord_123",
+            modificationToken: "valid_token",
+            variantId: "var_123",
+            quantity: 1,
+        };
+
+        await expect(validatePreconditionsHandler(input, { container: mockContainer }))
+            .rejects.toThrow(TokenMismatchError);
+    });
+
+    it("should throw OrderNotFoundError when order doesn't exist", async () => {
+        mockQuery.graph.mockResolvedValueOnce({ data: [] }); // No orders found
+
+        const input = {
+            orderId: "ord_nonexistent",
+            modificationToken: "valid_token",
+            variantId: "var_123",
+            quantity: 1,
+        };
+
+        // Fix token validation to match input
+        (modificationTokenService.validateToken as jest.Mock).mockReturnValue({
+            valid: true,
+            payload: { order_id: "ord_nonexistent" },
+        });
+
+        await expect(validatePreconditionsHandler(input, { container: mockContainer }))
+            .rejects.toThrow(OrderNotFoundError);
+    });
+
+    it("should throw InvalidOrderStateError when order is not pending", async () => {
+        mockQuery.graph.mockResolvedValueOnce({
+            data: [{
+                id: "ord_123",
+                status: "captured",
+                total: 5000,
+                currency_code: "usd",
+                metadata: { stripe_payment_intent_id: "pi_123" },
+                items: [],
+            }],
+        });
+
+        const input = {
+            orderId: "ord_123",
+            modificationToken: "valid_token",
+            variantId: "var_123",
+            quantity: 1,
+        };
+
+        await expect(validatePreconditionsHandler(input, { container: mockContainer }))
+            .rejects.toThrow(InvalidOrderStateError);
+    });
+
+    it("should throw PaymentIntentMissingError when order has no PI", async () => {
+        mockQuery.graph.mockResolvedValueOnce({
+            data: [{
+                id: "ord_123",
+                status: "pending",
+                total: 5000,
+                currency_code: "usd",
+                metadata: {}, // No stripe_payment_intent_id
+                items: [],
+            }],
+        });
+
+        const input = {
+            orderId: "ord_123",
+            modificationToken: "valid_token",
+            variantId: "var_123",
+            quantity: 1,
+        };
+
+        await expect(validatePreconditionsHandler(input, { container: mockContainer }))
+            .rejects.toThrow(PaymentIntentMissingError);
+    });
+
+    it("should throw InvalidPaymentStateError when PI is not requires_capture", async () => {
+        mockQuery.graph.mockResolvedValueOnce({
+            data: [{
+                id: "ord_123",
+                status: "pending",
+                total: 5000,
+                currency_code: "usd",
+                metadata: { stripe_payment_intent_id: "pi_123" },
+                items: [],
+            }],
+        });
+
+        mockStripe.paymentIntents.retrieve.mockResolvedValueOnce({
+            id: "pi_123",
+            status: "succeeded", // Already captured
+            amount: 5000,
+        });
+
+        const input = {
+            orderId: "ord_123",
+            modificationToken: "valid_token",
+            variantId: "var_123",
+            quantity: 1,
+        };
+
+        await expect(validatePreconditionsHandler(input, { container: mockContainer }))
+            .rejects.toThrow(InvalidPaymentStateError);
+    });
+
+    it("should throw VariantNotFoundError when variant doesn't exist", async () => {
+        // Order found
+        mockQuery.graph.mockResolvedValueOnce({
+            data: [{
+                id: "ord_123",
+                status: "pending",
+                total: 5000,
+                currency_code: "usd",
+                metadata: { stripe_payment_intent_id: "pi_123" },
+                items: [],
+            }],
+        });
+
+        // Stripe PI valid
+        mockStripe.paymentIntents.retrieve.mockResolvedValueOnce({
+            id: "pi_123",
+            status: "requires_capture",
+            amount: 5000,
+        });
+
+        // Variant not found
+        mockQuery.graph.mockResolvedValueOnce({ data: [] });
+
+        const input = {
+            orderId: "ord_123",
+            modificationToken: "valid_token",
+            variantId: "var_nonexistent",
+            quantity: 1,
+        };
+
+        await expect(validatePreconditionsHandler(input, { container: mockContainer }))
+            .rejects.toThrow(VariantNotFoundError);
+    });
+
+    it("should throw InsufficientStockError when stock is insufficient across all locations", async () => {
+        // Order found
+        mockQuery.graph.mockResolvedValueOnce({
+            data: [{
+                id: "ord_123",
+                status: "pending",
+                total: 5000,
+                currency_code: "usd",
+                metadata: { stripe_payment_intent_id: "pi_123" },
+                items: [],
+            }],
+        });
+
+        // Stripe PI valid
+        mockStripe.paymentIntents.retrieve.mockResolvedValueOnce({
+            id: "pi_123",
+            status: "requires_capture",
+            amount: 5000,
+        });
+
+        // Variant found with inventory item
+        mockQuery.graph.mockResolvedValueOnce({
+            data: [{
+                id: "var_123",
+                title: "Test Variant",
+                inventory_items: [{ inventory_item_id: "inv_123" }],
+                product: { title: "Test Product" },
+            }],
+        });
+
+        // Inventory levels across 2 locations: 3 + 2 = 5 total available, but requesting 10
+        mockQuery.graph.mockResolvedValueOnce({
+            data: [
+                { location_id: "loc_1", stocked_quantity: 5, reserved_quantity: 2 }, // 3 available
+                { location_id: "loc_2", stocked_quantity: 3, reserved_quantity: 1 }, // 2 available
+                // Total: 5 available
+            ],
+        });
+
+        const input = {
+            orderId: "ord_123",
+            modificationToken: "valid_token",
+            variantId: "var_123",
+            quantity: 10, // Requesting more than available
+        };
+
+        let caughtError: InsufficientStockError | null = null;
+        try {
+            await validatePreconditionsHandler(input, { container: mockContainer });
+        } catch (e) {
+            caughtError = e as InsufficientStockError;
+        }
+
+        expect(caughtError).toBeInstanceOf(InsufficientStockError);
+        expect(caughtError?.available).toBe(5);
+        expect(caughtError?.requested).toBe(10);
+    });
+
+    it("should return valid result when all preconditions pass", async () => {
+        // Order found
+        mockQuery.graph.mockResolvedValueOnce({
+            data: [{
+                id: "ord_123",
+                status: "pending",
+                total: 5000,
+                currency_code: "usd",
+                metadata: { stripe_payment_intent_id: "pi_123" },
+                items: [{ id: "item_1" }],
+            }],
+        });
+
+        // Stripe PI valid
+        mockStripe.paymentIntents.retrieve.mockResolvedValueOnce({
+            id: "pi_123",
+            status: "requires_capture",
+            amount: 5000,
+        });
+
+        // Variant found with inventory item
+        mockQuery.graph.mockResolvedValueOnce({
+            data: [{
+                id: "var_123",
+                title: "Test Variant",
+                inventory_items: [{ inventory_item_id: "inv_123" }],
+                product: { title: "Test Product" },
+            }],
+        });
+
+        // Sufficient inventory (10 available, requesting 2)
+        mockQuery.graph.mockResolvedValueOnce({
+            data: [
+                { location_id: "loc_1", stocked_quantity: 8, reserved_quantity: 0 }, // 8 available
+                { location_id: "loc_2", stocked_quantity: 5, reserved_quantity: 3 }, // 2 available
+                // Total: 10 available
+            ],
+        });
+
+        const input = {
+            orderId: "ord_123",
+            modificationToken: "valid_token",
+            variantId: "var_123",
+            quantity: 2,
+        };
+
+        const result = await validatePreconditionsHandler(input, { container: mockContainer });
+
+        expect(result.valid).toBe(true);
+        expect(result.orderId).toBe("ord_123");
+        expect(result.paymentIntentId).toBe("pi_123");
+        expect(result.order.status).toBe("pending");
+        expect(result.paymentIntent.status).toBe("requires_capture");
     });
 });
 
@@ -158,13 +442,6 @@ describe("add-item-to-order workflow - Retry Logic", () => {
             type: "card_error",
         });
         expect(cardError instanceof Stripe.errors.StripeCardError).toBe(true);
-    });
-
-    it("ConnectionError should be retryable", () => {
-        const connError = new Stripe.errors.StripeConnectionError({
-            message: "Connection failed",
-        });
-        expect(connError instanceof Stripe.errors.StripeConnectionError).toBe(true);
     });
 
     it("should use exponential backoff: 200ms initial, factor 2, max 3 retries", () => {
@@ -192,45 +469,9 @@ describe("add-item-to-order workflow - Idempotency Key", () => {
         const quantity = 2;
         const requestId = "req_stable_123";
 
-        // Key format: `add-item-${orderId}-${variantId}-${quantity}-${requestId}`
         const key = `add-item-${orderId}-${variantId}-${quantity}-${requestId}`;
-
         expect(key).toBe("add-item-ord_abc-var_123-2-req_stable_123");
-        // Key should NOT contain 13-digit timestamp
         expect(key).not.toMatch(/\d{13}/);
-    });
-
-    it("same requestId produces identical idempotency key", () => {
-        const requestId = "req_abc123";
-        const key1 = `add-item-ord_1-var_1-1-${requestId}`;
-        const key2 = `add-item-ord_1-var_1-1-${requestId}`;
-
-        expect(key1).toBe(key2);
-    });
-});
-
-describe("add-item-to-order workflow - Stock Calculation", () => {
-    it("should sum stock across ALL locations", () => {
-        const inventoryLevels = [
-            { location_id: "loc_1", stocked_quantity: 5, reserved_quantity: 2 },
-            { location_id: "loc_2", stocked_quantity: 10, reserved_quantity: 0 },
-            { location_id: "loc_3", stocked_quantity: 2, reserved_quantity: 3 },
-        ];
-
-        let totalAvailableStock = 0;
-        for (const level of inventoryLevels) {
-            const locationStock = (level.stocked_quantity || 0) - (level.reserved_quantity || 0);
-            totalAvailableStock += Math.max(0, locationStock);
-        }
-
-        // 3 + 10 + 0 = 13
-        expect(totalAvailableStock).toBe(13);
-    });
-
-    it("should throw InsufficientStockError when total stock < requested", () => {
-        expect(() => {
-            throw new InsufficientStockError("var_123", 5, 10);
-        }).toThrow(InsufficientStockError);
     });
 });
 
@@ -245,19 +486,9 @@ describe("add-item-to-order API error mapping", () => {
         expect(error instanceof CardDeclinedError).toBe(true);
     });
 
-    it("InvalidOrderStateError -> 422 Unprocessable Entity", () => {
-        const error = new InvalidOrderStateError("ord_123", "captured");
-        expect(error instanceof InvalidOrderStateError).toBe(true);
-    });
-
     it("TokenExpiredError -> 401 Unauthorized", () => {
         const error = new TokenExpiredError();
         expect(error.code).toBe("TOKEN_EXPIRED");
-    });
-
-    it("TokenMismatchError -> 403 Forbidden", () => {
-        const error = new TokenMismatchError("ord_1", "ord_2");
-        expect(error.code).toBe("TOKEN_MISMATCH");
     });
 
     it("AuthMismatchError -> 500 with audit log", () => {

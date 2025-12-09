@@ -186,3 +186,4 @@ Medusa v2's Order module does not provide a direct "add line item to existing or
 - ✅ Integrated: Capture worker handles all cases
 - ⚠️ Pending items not visible in standard order queries (require metadata parsing)
 - ⚠️ Requires capture worker enhancement for each modification type
+- ⚠️ **Limitation**: Shipping costs are NOT recalculated. Assumes added items do not change shipping bracket. (Future Story: Implement shipping recalculation)
