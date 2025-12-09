@@ -512,11 +512,50 @@ So that I can intervene manually.
 
 ---
 
+## TODO: Identified Gaps (Pending Stories)
+
+> These items were identified during code review and need to be drafted as full stories.
+
+### TODO 1: Order Cancellation During Grace Period
+
+**Epic:** 3 (Self-Service Order Editing) or 6 (Error Handling & Resilience)
+
+**Problem:** No explicit handling for when a customer cancels their entire order during the grace period. The capture worker currently has no way to distinguish between "order not found" and "order canceled" - and the fallback behavior could charge customers for canceled orders.
+
+**Required Behavior:**
+- Customer cancels order → System calls `stripe.paymentIntents.cancel(paymentIntentId)`
+- Delete the Redis `capture_intent:{order_id}` key immediately
+- Update order status to `canceled`
+- Capture worker must check order status and skip capture for canceled orders
+- If order data cannot be fetched at capture time, fail the job for manual review (do NOT fallback to capturing original amount)
+
+**Related Code:** `apps/backend/src/lib/payment-capture-queue.ts` - `processPaymentCapture` fallback logic
+
+---
+
+### TODO 2: Increment Authorization at Edit Time
+
+**Epic:** 3 (Self-Service Order Editing) - Story 3.2 exists but not implemented
+
+**Problem:** Story 3.2 specifies that `increment_authorization` should be called when items are added during the grace period. This is NOT currently implemented. If a customer adds items, the order total increases but the authorization remains at the original amount. At capture time, the worker correctly rejects the excess amount, but the order is left in limbo requiring manual intervention.
+
+**Required Behavior:**
+- When customer adds item during grace period → Calculate new total
+- Call Stripe `increment_authorization` API immediately
+- If increment fails (insufficient funds) → Reject the addition with user-friendly error, revert order total
+- If increment succeeds → Update order and proceed
+- This prevents the capture worker from ever encountering excess amounts
+
+**Related Stories:** Story 3.2 (Increment Authorization Logic) - needs implementation
+**Related Code:** Order edit endpoints (not yet implemented)
+
+---
+
 ## Summary
 
-The Payment Integration is now fully specified with 5 Epics covering the complete lifecycle from Checkout to Delayed Capture and Order Modification, including Guest Access and QA verification.
+The Payment Integration is now fully specified with 8 Epics covering the complete lifecycle from Checkout to Delayed Capture and Order Modification, including Guest Access, QA verification, Error Handling, Security, and Operational Excellence.
 
-All 10 Functional Requirements are covered.
+All 10 Functional Requirements are covered. **2 implementation gaps identified** (see TODO section above).
 
 ---
 
