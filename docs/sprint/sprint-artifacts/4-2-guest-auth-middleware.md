@@ -205,7 +205,7 @@ so that unauthorized users cannot access random orders.
 
 **Storefront Audit (order_.status.$id.tsx):**
 - ✅ Calls `/guest-view` endpoint: Line 44
-- ✅ TOKEN_EXPIRED handling: Lines 53-103 (Link Expired UI)
+- ✅ TOKEN_EXPIRED handling: Loader logic (lines 53-56), UI rendering (lines 87-108)
 - ✅ 401 handling: Line 58 (throws Response)
 - ✅ Server-only loader: No client export
 - ⏳ Cookie-first logic: Deferred to Story 4.3
