@@ -60,7 +60,7 @@ export class ModificationTokenService {
         } else {
             // Validate secret strength in production
             if (process.env.NODE_ENV === "production" && envSecret.length < 32) {
-                 throw new Error("[CRITICAL] JWT_SECRET is too weak. Must be at least 32 characters.");
+                throw new Error("[CRITICAL] JWT_SECRET is too weak. Must be at least 32 characters.");
             }
             this.secret = envSecret;
         }
