@@ -92,6 +92,7 @@ so that we can verify the "Edit Button" disappears and capture triggers correctl
 **Test env files:**
 - `apps/backend/.env.test`
 - `apps/e2e/.env`
+  - If `apps/e2e/.env` does not exist, create it by copying from `apps/e2e/.env.example` and setting the required variables.
 
 ```bash
 PAYMENT_CAPTURE_DELAY_MS=10000 # 10 seconds
