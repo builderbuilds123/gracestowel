@@ -159,7 +159,7 @@ describe('ModificationTokenService', () => {
     });
 
     describe('expiry logic - custom createdAt', () => {
-        it('should expiry token based on provided createdAt', () => {
+        it('should expire token based on provided createdAt', () => {
             const service = new ModificationTokenService();
             // Order created 2 hours ago
             const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
