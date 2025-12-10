@@ -50,4 +50,12 @@ describe("PAYMENT_CAPTURE_DELAY_MS Configuration", () => {
         const service = new ModificationTokenService();
         expect((service as any).windowSeconds).toBe(3600);
     });
+
+    it("should default to 1 hour in ModificationTokenService if env var is invalid", () => {
+        process.env.PAYMENT_CAPTURE_DELAY_MS = "not-a-number";
+        const { ModificationTokenService } = require("../../src/services/modification-token");
+        const service = new ModificationTokenService();
+        // Falls back to default when env var is non-numeric
+        expect((service as any).windowSeconds).toBe(3600);
+    });
 });
