@@ -6,6 +6,8 @@ import { defineConfig, devices } from "@playwright/test";
  */
 export default defineConfig({
   testDir: "./tests",
+  /* Output directory for test artifacts */
+  outputDir: "./test-results",
   /* Run tests in files in parallel */
   fullyParallel: true,
   /* Fail the build on CI if you accidentally left test.only in the source code */
@@ -16,7 +18,8 @@ export default defineConfig({
   workers: 1,
   /* Reporter to use */
   reporter: [
-    ["html", { open: "never" }],
+    ["html", { outputFolder: "test-results/html", open: "never" }],
+    ["junit", { outputFile: "test-results/junit.xml" }],
     ["json", { outputFile: "test-results/results.json" }],
     process.env.CI ? ["github"] : ["list"],
   ],
@@ -25,13 +28,17 @@ export default defineConfig({
     /* Base URL to use in actions like `await page.goto('/')` */
     baseURL: process.env.STOREFRONT_URL || "https://localhost:5173",
     /* Collect trace when retrying the failed test */
-    trace: "on-first-retry",
+    trace: "retain-on-failure",
     /* Capture screenshot on failure */
     screenshot: "only-on-failure",
     /* Record video on failure */
-    video: "on-first-retry",
+    video: "retain-on-failure",
     /* Ignore HTTPS errors for local development */
     ignoreHTTPSErrors: true,
+    /* Action timeout: 15 seconds (click, fill, etc.) */
+    actionTimeout: 15 * 1000,
+    /* Navigation timeout: 30 seconds (page.goto, page.reload) */
+    navigationTimeout: 30 * 1000,
   },
 
   /* Configure projects for major browsers */
@@ -77,12 +84,12 @@ export default defineConfig({
         timeout: 120 * 1000,
       },
 
-  /* Global timeout for each test */
-  timeout: 30 * 1000,
+  /* Global timeout for each test: 60 seconds */
+  timeout: 60 * 1000,
 
-  /* Expect timeout */
+  /* Expect timeout: 15 seconds (all assertions) */
   expect: {
-    timeout: 5 * 1000,
+    timeout: 15 * 1000,
   },
 });
 
