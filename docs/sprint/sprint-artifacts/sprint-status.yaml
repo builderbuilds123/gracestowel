@@ -155,7 +155,7 @@ development_status:
     status: done
   4-2-guest-auth-middleware:
     path: docs/sprint/sprint-artifacts/4-2-guest-auth-middleware.md
-    status: ready-for-dev
+    status: done
   4-3-session-persistence:
     path: docs/sprint/sprint-artifacts/4-3-session-persistence.md
     status: ready-for-dev
