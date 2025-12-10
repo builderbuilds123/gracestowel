@@ -150,9 +150,15 @@ development_status:
   pi-epic-3-retrospective: optional
 
   pi-epic-4: backlog
-  4-1-magic-link-generation: backlog
-  4-2-guest-auth-middleware: backlog
-  4-3-session-persistence: backlog
+  4-1-magic-link-generation:
+    path: docs/sprint/sprint-artifacts/4-1-magic-link-generation.md
+    status: done
+  4-2-guest-auth-middleware:
+    path: docs/sprint/sprint-artifacts/4-2-guest-auth-middleware.md
+    status: ready-for-dev
+  4-3-session-persistence:
+    path: docs/sprint/sprint-artifacts/4-3-session-persistence.md
+    status: ready-for-dev
   pi-epic-4-retrospective: optional
 
   pi-epic-5: backlog

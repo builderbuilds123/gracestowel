@@ -1,4 +1,5 @@
 import jwt from "jsonwebtoken";
+import crypto from "crypto";
 
 /**
  * Payload structure for the modification token JWT
@@ -18,6 +19,7 @@ export interface TokenValidationResult {
     payload?: ModificationTokenPayload;
     error?: string;
     expired?: boolean;
+    originalError?: string;
 }
 
 /**
@@ -42,7 +44,26 @@ export class ModificationTokenService {
     private readonly windowSeconds: number;
 
     constructor(secret?: string, windowSeconds?: number) {
-        this.secret = secret || process.env.JWT_SECRET || "supersecret";
+        const envSecret = secret || process.env.JWT_SECRET;
+        if (!envSecret) {
+            const isProduction = process.env.NODE_ENV === "production";
+            const isTest = process.env.NODE_ENV === "test" || process.env.TEST_TYPE;
+            if (isProduction) {
+                throw new Error("[CRITICAL] JWT_SECRET environment variable is required in production");
+            }
+            // In non-production, use a dev-only fallback but log a warning
+            if (!isTest) {
+                console.warn("[SECURITY] JWT_SECRET not set - using random dev fallback. Set JWT_SECRET in production!");
+            }
+            // Generate a random fallback secret for this instance to prevent hardcoded secret reuse
+            this.secret = crypto.randomBytes(32).toString('hex');
+        } else {
+            // Validate secret strength in production
+            if (process.env.NODE_ENV === "production" && envSecret.length < 32) {
+                throw new Error("[CRITICAL] JWT_SECRET is too weak. Must be at least 32 characters.");
+            }
+            this.secret = envSecret;
+        }
         this.windowSeconds = windowSeconds || MODIFICATION_WINDOW_SECONDS;
     }
 
@@ -51,15 +72,19 @@ export class ModificationTokenService {
      * 
      * @param orderId - The Medusa order ID
      * @param paymentIntentId - The Stripe PaymentIntent ID
+     * @param createdAt - Optional order creation time to anchor expiry (defaults to now)
      * @returns The signed JWT token
      */
-    generateToken(orderId: string, paymentIntentId: string): string {
-        const now = Math.floor(Date.now() / 1000);
+    generateToken(orderId: string, paymentIntentId: string, createdAt?: Date): string {
+        // Use provided createdAt or "now" to calculate specific expiry
+        // This ensures token matches business window even if generated later (e.g. retries)
+        const timestamp = createdAt ? Math.floor(createdAt.getTime() / 1000) : Math.floor(Date.now() / 1000);
+        
         const payload = {
             order_id: orderId,
             payment_intent_id: paymentIntentId,
-            iat: now,
-            exp: now + this.windowSeconds,
+            iat: Math.floor(Date.now() / 1000), // Issued NOW
+            exp: timestamp + this.windowSeconds, // Expires relative to ORDER creation
         };
 
         return jwt.sign(payload, this.secret, { algorithm: "HS256" });
@@ -81,12 +106,15 @@ export class ModificationTokenService {
                 valid: true,
                 payload,
             };
-        } catch (error) {
+        } catch (error: any) {
+            const errorMsg = error.message || "Unknown error";
+            
             if (error instanceof jwt.TokenExpiredError) {
                 return {
                     valid: false,
                     expired: true,
                     error: "Modification window has expired",
+                    originalError: errorMsg,
                 };
             }
 
@@ -94,12 +122,14 @@ export class ModificationTokenService {
                 return {
                     valid: false,
                     error: "Invalid token",
+                    originalError: errorMsg,
                 };
             }
 
             return {
                 valid: false,
                 error: "Token validation failed",
+                originalError: errorMsg,
             };
         }
     }

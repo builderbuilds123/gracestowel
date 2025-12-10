@@ -201,10 +201,11 @@ const prepareInventoryAdjustmentsStep = createStep(
  */
 const generateModificationTokenStep = createStep(
     "generate-modification-token",
-    async (input: { orderId: string; paymentIntentId: string }) => {
+    async (input: { orderId: string; paymentIntentId: string; createdAt?: Date }) => {
         const token = modificationTokenService.generateToken(
             input.orderId,
-            input.paymentIntentId
+            input.paymentIntentId,
+            input.createdAt
         );
         console.log(`Generated modification token for order ${input.orderId}`);
         return new StepResponse({ token });
@@ -274,6 +275,7 @@ export const createOrderFromStripeWorkflow = createWorkflow(
         const tokenInput = transform({ order, input }, (data) => ({
             orderId: data.order.id,
             paymentIntentId: data.input.paymentIntentId,
+            createdAt: new Date(data.order.created_at),
         }));
         const tokenResult = generateModificationTokenStep(tokenInput);
 
