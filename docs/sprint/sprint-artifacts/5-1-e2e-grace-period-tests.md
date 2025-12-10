@@ -158,7 +158,6 @@ Antigravity (Google Deepmind)
 
 - apps/backend/src/services/modification-token.ts
 - apps/backend/.env.test
-- apps/e2e/.env
 - apps/backend/integration-tests/unit/payment-capture-config.unit.spec.ts
 - apps/e2e/tests/grace-period.spec.ts
 - apps/backend/integration-tests/unit/payment-capture-queue.unit.spec.ts
