@@ -17,6 +17,11 @@ export default async function orderPlacedHandler({
 }: SubscriberArgs<OrderPlacedEventData>) {
   console.log("Order placed event received:", data.id)
 
+  // Log masked token for audit trail (Story 4.1 requirement) - logged BEFORE email attempt
+  if (data.modification_token) {
+    console.log(`[ORDER_PLACED] Token received (masked): ****...${data.modification_token.slice(-8)}`)
+  }
+
   // Send order confirmation email
   try {
     await sendOrderConfirmationWorkflow(container).run({
