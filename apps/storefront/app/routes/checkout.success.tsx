@@ -1,12 +1,11 @@
 import { useEffect, useState, lazy, Suspense, useRef, useCallback } from "react";
 import { Link, useSearchParams, useNavigate, useLoaderData } from "react-router";
 import type { LoaderFunctionArgs } from "react-router";
-import { CheckCircle2, Package, Truck, ArrowRight, MapPin, XCircle, Pencil, Plus } from "lucide-react";
+import { CheckCircle2, Package, Truck, MapPin, XCircle } from "lucide-react";
 import { useCart } from "../context/CartContext";
 import { posts } from "../data/blogPosts";
 import { getStripe, initStripe } from "../lib/stripe";
 import { OrderTimer } from "../components/order/OrderTimer";
-import { OrderModificationDialogs } from "../components/order/OrderModificationDialogs";
 
 // Lazy load Map component to avoid SSR issues with Leaflet
 const Map = lazy(() => import("../components/Map.client"));
@@ -386,7 +385,7 @@ export default function CheckoutSuccess() {
 
                 {/* Modification Window Banner */}
                 {modificationAllowed && remainingSeconds > 0 && orderId && modificationToken && (
-                    <div className="bg-white rounded-lg shadow-lg p-4 mb-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div className="bg-white rounded-lg shadow-lg p-4 mb-6 flex flex-col sm:flex-row items-center justify-between gap-4 border border-accent-earthy/20">
                         <div className="flex items-center gap-3">
                             <OrderTimer
                                 expiresAt={new Date(Date.now() + remainingSeconds * 1000).toISOString()}
@@ -394,49 +393,13 @@ export default function CheckoutSuccess() {
                                 onExpire={handleTimerExpire}
                             />
                         </div>
-                        <OrderModificationDialogs
-                            orderId={orderId}
-                            token={modificationToken}
-                            orderNumber={orderDetails?.orderNumber || ''}
-                            currencyCode={orderDetails?.currency || 'USD'}
-                            currentAddress={shippingAddress ? {
-                                first_name: shippingAddress.firstName || '',
-                                last_name: shippingAddress.lastName || '',
-                                address_1: shippingAddress.address1 || '',
-                                address_2: shippingAddress.address2 || '',
-                                city: shippingAddress.city || '',
-                                province: shippingAddress.state || '',
-                                postal_code: shippingAddress.postalCode || '',
-                                country_code: shippingAddress.countryCode || 'US',
-                                phone: shippingAddress.phone || '',
-                            } : undefined}
-                            onOrderUpdated={(newTotal) => {
-                                if (orderDetails && newTotal) {
-                                    setOrderDetails({
-                                        ...orderDetails,
-                                        total: `$${(newTotal / 100).toFixed(2)}`,
-                                    });
-                                }
-                            }}
-                            onAddressUpdated={(address) => setShippingAddress({
-                                firstName: address.first_name,
-                                lastName: address.last_name,
-                                address1: address.address_1,
-                                address2: address.address_2,
-                                city: address.city,
-                                state: address.province,
-                                postalCode: address.postal_code,
-                                countryCode: address.country_code,
-                                phone: address.phone,
-                            })}
-                            onOrderCanceled={() => {
-                                localStorage.removeItem('modificationToken');
-                                localStorage.removeItem('orderId');
-                                setPaymentStatus('canceled');
-                            }}
-                            medusaBackendUrl={medusaBackendUrl}
-                            medusaPublishableKey={medusaPublishableKey}
-                        />
+                        {/* Link to order status page for modifications (uses cookie-based auth) */}
+                        <a
+                            href={`/order/status/${orderId}?token=${modificationToken}`}
+                            className="px-4 py-2 bg-accent-earthy text-white rounded-lg hover:bg-accent-earthy/90 transition-colors text-sm font-medium"
+                        >
+                            Manage Order
+                        </a>
                     </div>
                 )}
 

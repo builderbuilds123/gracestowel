@@ -158,7 +158,7 @@ development_status:
     status: done
   4-3-session-persistence:
     path: docs/sprint/sprint-artifacts/4-3-session-persistence.md
-    status: ready-for-dev
+    status: done
   pi-epic-4-retrospective: optional
 
   pi-epic-5: backlog
