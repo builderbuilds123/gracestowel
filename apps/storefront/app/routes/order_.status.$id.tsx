@@ -136,7 +136,7 @@ export async function action({ params, request, context }: ActionFunctionArgs) {
             const response = await fetch(`${medusaBackendUrl}/store/orders/${id}/cancel`, {
                 method: "POST",
                 headers,
-                body: JSON.stringify({ token, reason }),
+                body: JSON.stringify({ reason }),
             });
 
             if (!response.ok) {
