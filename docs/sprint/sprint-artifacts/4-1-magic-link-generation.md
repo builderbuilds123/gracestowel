@@ -1,6 +1,6 @@
 # Story 4.1: Magic Link Generation
 
-Status: Ready for Review
+Status: Done
 
 ## Story
 
