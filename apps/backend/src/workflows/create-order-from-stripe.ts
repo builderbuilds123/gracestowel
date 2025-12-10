@@ -47,17 +47,20 @@ const prepareOrderDataStep = createStep(
     async (input: CreateOrderFromStripeInput, { container }) => {
         const { cartData, customerEmail, shippingAddress, amount, currency, paymentIntentId } = input;
 
-        // Get region based on currency
         const regionService = container.resolve("region");
         const regions = await regionService.listRegions({
             currency_code: currency.toLowerCase(),
         });
 
+        console.log("[create-order-from-stripe] Regions for currency", currency, regions.map((r: any) => ({ id: r.id, name: r.name, currency_code: r.currency_code, countries: r.countries })));
+
         if (!regions.length) {
+            console.error(`[create-order-from-stripe] No region found for currency: ${currency}`);
             throw new Error(`No region found for currency: ${currency}`);
         }
 
         const region = regions[0];
+        console.log("[create-order-from-stripe] Using region", { id: region.id, name: region.name, currency_code: region.currency_code });
 
         // Transform cart items to order line items
         const items = cartData.items.map((item) => ({
@@ -70,6 +73,8 @@ const prepareOrderDataStep = createStep(
                 sku: item.sku,
             },
         }));
+
+        console.log("[create-order-from-stripe] Prepared items", items);
 
         // Prepare shipping address
         const shipping_address = shippingAddress
@@ -97,7 +102,39 @@ const prepareOrderDataStep = createStep(
             },
         };
 
+        console.log("[create-order-from-stripe] Prepared order data", {
+            region_id: orderData.region_id,
+            email: orderData.email,
+            items_count: orderData.items.length,
+            has_shipping: !!orderData.shipping_address,
+            currency,
+            amount,
+        });
+
         return new StepResponse(orderData);
+    }
+);
+
+/**
+ * Step to emit an event
+ */
+const emitEventStep = createStep(
+    "emit-event",
+    async (input: { eventName: string; data: any }, { container }) => {
+        let eventBusModuleService: any;
+        try {
+            eventBusModuleService = container.resolve("eventBus") as any;
+        } catch (err) {
+            console.warn("[create-order-from-stripe] eventBus not configured, skipping emit", {
+                event: input.eventName,
+                error: err instanceof Error ? err.message : err,
+            });
+            return new StepResponse({ success: false, skipped: true });
+        }
+
+        await eventBusModuleService.emit(input.eventName, input.data);
+        console.log(`Event ${input.eventName} emitted with data:`, input.data);
+        return new StepResponse({ success: true });
     }
 );
 
@@ -151,6 +188,23 @@ const prepareInventoryAdjustmentsStep = createStep(
         }
 
         return new StepResponse(adjustments);
+    }
+);
+
+/**
+ * Step to generate modification token for the order
+ * This token allows customers to modify their order within a 1-hour window
+ */
+const generateModificationTokenStep = createStep(
+    "generate-modification-token",
+    async (input: { orderId: string; paymentIntentId: string; createdAt?: Date }) => {
+        const token = modificationTokenService.generateToken(
+            input.orderId,
+            input.paymentIntentId,
+            input.createdAt
+        );
+        console.log(`Generated modification token for order ${input.orderId}`);
+        return new StepResponse({ token });
     }
 );
 
@@ -210,8 +264,16 @@ export const createOrderFromStripeWorkflow = createWorkflow(
         // Call the inventory adjustment step
         adjustInventoryLevelsStep(adjustedInventory);
 
-        // Step 5: Log the order creation
-        const logInput = transform({ order, input, shouldAdjustInventory }, (data) => ({
+        // Step 5: Generate modification token for 1-hour window
+        const tokenInput = transform({ order, input }, (data) => ({
+            orderId: data.order.id,
+            paymentIntentId: data.input.paymentIntentId,
+            createdAt: new Date(data.order.created_at),
+        }));
+        const tokenResult = generateModificationTokenStep(tokenInput);
+
+        // Step 6: Log the order creation
+        const logInput = transform({ order, input, shouldAdjustInventory, tokenResult }, (data) => ({
             orderId: data.order.id,
             paymentIntentId: data.input.paymentIntentId,
             inventoryAdjusted: data.shouldAdjustInventory,

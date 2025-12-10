@@ -9,9 +9,16 @@
     "dev": "react-router dev",
     "postinstall": "npm run cf-typegen",
     "preview": "npm run build && vite preview",
-    "typecheck": "npm run cf-typegen && react-router typegen && tsc -b"
+    "lint": "echo 'Lint not configured for storefront'",
+    "typecheck": "node -e \"process.env.CI ? null : require('child_process').execSync('npm run cf-typegen && react-router typegen', {stdio: 'inherit'})\" && tsc -b",
+    "typecheck:ci": "tsc -b",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage",
+    "test:server": "cd build/server && wrangler dev --port 5173 --ip 0.0.0.0"
   },
   "dependencies": {
+    "@medusajs/js-sdk": "^2.12.1",
     "@phosphor-icons/react": "^2.1.10",
     "@stripe/react-stripe-js": "^5.4.0",
     "@stripe/stripe-js": "^8.5.2",
@@ -22,22 +29,31 @@
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-leaflet": "^5.0.0",
-    "react-router": "^7.9.2",
-    "stripe": "^20.0.0"
+    "react-router": "^7.10.0",
+    "stripe": "^20.0.0",
+    "web-vitals": "^5.1.0"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.15.2",
-    "@react-router/dev": "^7.9.2",
+    "@faker-js/faker": "^10.1.0",
+    "@react-router/dev": "^7.10.0",
     "@tailwindcss/vite": "^4.1.13",
     "@types/node": "^22",
+    "@types/pg": "^8.15.6",
     "@types/react": "^19.1.15",
     "@types/react-dom": "^19.1.9",
+    "@vitest/coverage-v8": "^4.0.14",
+    "happy-dom": "^20.0.11",
+    "jsdom": "^26.1.0",
+    "msw": "^2.10.0",
     "pg": "^8.12.0",
     "tailwindcss": "^4.1.13",
     "typescript": "^5.9.2",
     "vite": "^7.1.7",
     "vite-plugin-mkcert": "^1.17.9",
     "vite-tsconfig-paths": "^5.1.4",
+    "vitest": "^4.0.14",
+    "vitest-axe": "^1.0.0-pre.3",
     "wrangler": "^4.40.2"
   }
 }

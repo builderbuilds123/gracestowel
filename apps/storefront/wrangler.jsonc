@@ -9,20 +9,29 @@
     // MEDUSA_BACKEND_URL is set via `wrangler secret put MEDUSA_BACKEND_URL`
     // Example: https://gracestowel-backend.up.railway.app
   },
-  // Hyperdrive configuration for direct PostgreSQL access
-  // This enables connection pooling at the edge for read-only product queries,
-  // bypassing the Medusa backend for faster product page loads.
-  //
-  // To configure:
-  // 1. Create a Hyperdrive config in Cloudflare Dashboard
-  // 2. Point it to your Railway PostgreSQL database
-  // 3. Replace <YOUR_HYPERDRIVE_ID> with the actual ID
-  //
-  // For local development, set DATABASE_URL in .dev.vars instead
+
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE",
-      "id": "1dffb86ef8b64f5197bd875b8e1cc026"
+      "id": "43cb3470f0b5446c881a7b30aa87eb3e",
+      "localConnectionString": "postgresql://postgres:password@localhost:5432/medusa-db"
+    }
+  ],
+
+  // Observability configuration
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "persist": true,
+      "invocation_logs": true
+    },
+    "traces": {
+      "enabled": true,
+      "persist": true,
+      "head_sampling_rate": 1
     }
   ]
 }

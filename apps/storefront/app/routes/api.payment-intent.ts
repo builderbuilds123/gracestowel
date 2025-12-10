@@ -1,4 +1,5 @@
 import { type ActionFunctionArgs, data } from "react-router";
+import { toCents } from "../lib/price";
 
 interface CartItem {
     id: string | number;
@@ -39,41 +40,56 @@ interface StockValidationResult {
 
 /**
  * Validate stock availability for cart items
+ * @param cartItems - Items to validate
+ * @param medusaBackendUrl - Medusa backend URL for API calls
+ * @param publishableKey - Medusa publishable API key for authentication
  */
-async function validateStock(cartItems: CartItem[]): Promise<StockValidationResult> {
-    const MEDUSA_BACKEND_URL = process.env.MEDUSA_BACKEND_URL || "http://localhost:9000";
+async function validateStock(cartItems: CartItem[], medusaBackendUrl: string, publishableKey?: string): Promise<StockValidationResult> {
     const outOfStockItems: StockValidationResult["outOfStockItems"] = [];
 
     for (const item of cartItems) {
         if (!item.variantId) continue; // Skip items without variant IDs (legacy items)
 
         try {
-            // Fetch product to get variant inventory
+            // Prepare headers with required publishable API key
+            const headers: Record<string, string> = { "Content-Type": "application/json" };
+            if (publishableKey) {
+                headers["x-publishable-api-key"] = publishableKey;
+            }
+
+            // Fetch specific variant to check inventory
             const response = await fetch(
-                `${MEDUSA_BACKEND_URL}/store/products?fields=+variants,+variants.inventory_quantity`,
+                `${medusaBackendUrl}/store/variants/${item.variantId}`,
                 {
-                    headers: { "Content-Type": "application/json" },
+                    headers,
                 }
             );
 
-            if (!response.ok) continue;
+            if (!response.ok) {
+                // If variant not found (404), treat as out-of-stock to prevent
+                // charging customers for products that can't be fulfilled
+                if (response.status === 404) {
+                    console.warn(`Variant ${item.variantId} not found in Medusa. Treating as out of stock.`);
+                    outOfStockItems.push({
+                        title: item.title,
+                        requested: item.quantity,
+                        available: 0,
+                    });
+                }
+                continue;
+            }
 
-            const data = await response.json();
-            const products = data.products || [];
+            const data = await response.json() as { variant: { id: string; inventory_quantity?: number } };
+            const variant = data.variant;
 
-            // Find the variant in any product
-            for (const product of products) {
-                const variant = product.variants?.find((v: { id: string }) => v.id === item.variantId);
-                if (variant) {
-                    const available = variant.inventory_quantity ?? Infinity;
-                    if (item.quantity > available) {
-                        outOfStockItems.push({
-                            title: item.title,
-                            requested: item.quantity,
-                            available: Math.max(0, available),
-                        });
-                    }
-                    break;
+            if (variant) {
+                const available = variant.inventory_quantity ?? Infinity;
+                if (item.quantity > available) {
+                    outOfStockItems.push({
+                        title: item.title,
+                        requested: item.quantity,
+                        available: Math.max(0, available),
+                    });
                 }
             }
         } catch (error) {
@@ -103,17 +119,25 @@ export async function action({ request }: ActionFunctionArgs) {
         shippingAddress
     } = await request.json() as PaymentIntentRequest;
 
-    const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
+    const env = context.cloudflare.env as { STRIPE_SECRET_KEY: string; MEDUSA_BACKEND_URL?: string; MEDUSA_PUBLISHABLE_KEY?: string };
+    const STRIPE_SECRET_KEY = env.STRIPE_SECRET_KEY;
+    const medusaBackendUrl = env.MEDUSA_BACKEND_URL || "http://localhost:9000";
+    const publishableKey = env.MEDUSA_PUBLISHABLE_KEY;
 
     if (!STRIPE_SECRET_KEY) {
         console.error("STRIPE_SECRET_KEY environment variable is not set");
         return data({ message: "Payment service not configured" }, { status: 500 });
     }
 
+    if (!publishableKey) {
+        console.error("MEDUSA_PUBLISHABLE_KEY environment variable is not set");
+        return data({ message: "Medusa API key not configured" }, { status: 500 });
+    }
+
     try {
         // Validate stock availability before creating PaymentIntent
         if (cartItems && cartItems.length > 0) {
-            const stockValidation = await validateStock(cartItems);
+            const stockValidation = await validateStock(cartItems, medusaBackendUrl, publishableKey);
             if (!stockValidation.valid) {
                 const itemMessages = stockValidation.outOfStockItems
                     .map(item => `${item.title}: only ${item.available} available (requested ${item.requested})`)
@@ -132,7 +156,7 @@ export async function action({ request }: ActionFunctionArgs) {
         const totalAmount = amount + (shipping || 0);
 
         const body = new URLSearchParams();
-        body.append("amount", Math.round(totalAmount * 100).toString());
+        body.append("amount", toCents(totalAmount).toString());
         body.append("currency", currency || "usd");
         body.append("automatic_payment_methods[enabled]", "true");
 

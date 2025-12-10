@@ -1,0 +1,115 @@
+# Docker Compose for Grace Stowel Test Environment (CI-optimized)
+# Usage: docker-compose -f docker-compose.test.yml up -d
+
+services:
+  # PostgreSQL Database (Test)
+  postgres:
+    image: postgres:16-alpine
+    container_name: gracestowel-postgres-test
+    environment:
+      POSTGRES_USER: medusa_test
+      POSTGRES_PASSWORD: medusa_test
+      POSTGRES_DB: medusa_test
+    ports:
+      - "5433:5432"
+    # No volumes - ephemeral for tests, backend seeds data on startup
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U medusa_test -d medusa_test"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Redis Cache (Test)
+  redis:
+    image: redis:7-alpine
+    container_name: gracestowel-redis-test
+    ports:
+      - "6380:6379"
+    # No volumes - ephemeral for tests
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Medusa Backend (Test)
+  backend:
+    build:
+      context: ./apps/backend
+      dockerfile: Dockerfile
+      target: test
+    container_name: gracestowel-backend-test
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://medusa_test:medusa_test@postgres:5432/medusa_test
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: test-secret
+      COOKIE_SECRET: test-secret
+      STORE_CORS: http://localhost:5174,https://localhost:5174
+      ADMIN_CORS: http://localhost:7002
+      AUTH_CORS: http://localhost:5174,https://localhost:5174
+      NODE_ENV: production
+      DATABASE_SSL: "false"
+      DISABLE_MEDUSA_ADMIN: "true"
+    ports:
+      - "9001:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # Storefront (Test)
+  storefront:
+    build:
+      context: ./apps/storefront
+      dockerfile: Dockerfile
+      target: test
+    container_name: gracestowel-storefront-test
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      MEDUSA_BACKEND_URL: http://backend:8080
+      MEDUSA_PUBLISHABLE_KEY: ${MEDUSA_PUBLISHABLE_KEY}
+      NODE_ENV: development
+      CI: "true"
+      CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE: postgresql://medusa_test:medusa_test@postgres:5432/medusa_test
+    ports:
+      - "5174:5173"
+    command: npm run test:server
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:5173/ -o /dev/null || exit 1"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+      start_period: 30s
+
+  # Playwright Test Runner
+  playwright:
+    image: mcr.microsoft.com/playwright:v1.49.0-jammy
+    container_name: gracestowel-playwright
+    depends_on:
+      storefront:
+        condition: service_healthy
+    environment:
+      STOREFRONT_URL: http://storefront:5173
+      CI: "true"
+    volumes:
+      - ./apps/e2e:/app
+      - ./apps/e2e/node_modules:/app/node_modules:ro
+      - ./apps/e2e/test-results:/app/test-results
+      - ./apps/e2e/playwright-report:/app/playwright-report
+    working_dir: /app
+    command: npx playwright test --project=chromium --reporter=html
+
+networks:
+  default:
+    name: gracestowel-test-network

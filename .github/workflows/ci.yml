@@ -15,7 +15,6 @@ concurrency:
 
 env:
   NODE_VERSION: "24"
-  PNPM_VERSION: "8"
 
 jobs:
   # ============================================
@@ -45,28 +44,31 @@ jobs:
           exit-code: "1"
           severity: "CRITICAL,HIGH"
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: "npm"
+          cache: "pnpm"
+
+      - name: Cache turbo
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: ${{ runner.os }}-turbo-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-turbo-
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
-      - name: Lint
-        run: npm run lint --if-present
-
-      - name: Type check (Backend)
-        working-directory: apps/backend
-        run: npx tsc --noEmit
-
-      - name: Type check (Storefront)
-        working-directory: apps/storefront
-        run: npx tsc --noEmit
+      - name: Lint & Typecheck
+        run: pnpm turbo run lint typecheck
 
       - name: Security audit
-        run: npm audit --audit-level=high
+        run: pnpm audit --audit-level=high
         continue-on-error: true
 
   # ============================================
@@ -76,27 +78,35 @@ jobs:
     name: Backend Unit Tests
     runs-on: ubuntu-latest
     needs: validate
-    # No services needed - unit tests use mocks
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: "npm"
+          cache: "pnpm"
+
+      - name: Cache turbo
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: ${{ runner.os }}-turbo-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-turbo-
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Run backend unit tests
-        working-directory: apps/backend
         env:
-          # Test mode env vars (no real services needed)
           NODE_ENV: test
           RESEND_API_KEY: re_test_ci_placeholder_key
-        run: npm test -- --coverage
+        run: pnpm turbo run test --filter=@gracestowel/backend -- --coverage
 
       - name: Upload coverage
         uses: codecov/codecov-action@v5
@@ -114,18 +124,28 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: "npm"
+          cache: "pnpm"
+
+      - name: Cache turbo
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: ${{ runner.os }}-turbo-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-turbo-
 
       - name: Install dependencies
-        run: rm -rf node_modules package-lock.json && npm install
+        run: pnpm install --frozen-lockfile
 
       - name: Run storefront tests
-        working-directory: apps/storefront
-        run: npm test -- --coverage
+        run: pnpm turbo run test --filter=apps-storefront -- --coverage
 
       - name: Upload coverage
         uses: codecov/codecov-action@v5
@@ -136,7 +156,7 @@ jobs:
           fail_ci_if_error: false
 
   # ============================================
-  # Stage 3: E2E Tests (ACTIVE - debugging)
+  # Stage 3: E2E Tests (Paused)
   # ============================================
   e2e:
     name: E2E Tests
@@ -148,14 +168,25 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: "npm"
+          cache: "pnpm"
+
+      - name: Cache turbo
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: ${{ runner.os }}-turbo-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-turbo-
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Start backend and database
         run: docker compose -f docker-compose.test.yml up -d postgres redis backend
@@ -173,7 +204,6 @@ jobs:
       - name: Get publishable API key from seeded database
         id: get-api-key
         run: |
-          # Query the publishable API key from the test database
           API_KEY=$(docker compose -f docker-compose.test.yml exec -T postgres psql -U medusa_test -d medusa_test -t -c "SELECT token FROM api_key WHERE type = 'publishable' LIMIT 1;" | tr -d '[:space:]')
           echo "MEDUSA_PUBLISHABLE_KEY=pk_${API_KEY}" >> $GITHUB_OUTPUT
           echo "Retrieved API key: pk_${API_KEY:0:10}..."
@@ -249,7 +279,7 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
-          context: ./apps/backend
+          context: .
           file: apps/backend/Dockerfile
           push: true
           tags: |
@@ -274,7 +304,7 @@ jobs:
         run: npm i -g @railway/cli
 
       - name: Deploy to Railway Staging
-        working-directory: apps/backend
+        working-directory: .
         run: railway up --service ${{ vars.RAILWAY_SERVICE_NAME }} --environment staging --detach
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
@@ -292,7 +322,7 @@ jobs:
         run: npm i -g @railway/cli
 
       - name: Deploy to Railway Production
-        working-directory: apps/backend
+        working-directory: .
         run: railway up --service ${{ vars.RAILWAY_SERVICE_NAME }} --environment production --detach
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
@@ -301,30 +331,39 @@ jobs:
     name: Deploy Staging
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/staging'
-    needs: [validate, test-backend, test-storefront] # e2e paused
+    needs: [validate, test-backend, test-storefront]
     environment: staging
     steps:
       - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: "npm"
+          cache: "pnpm"
+
+      - name: Cache turbo
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: ${{ runner.os }}-turbo-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-turbo-
 
       - name: Install dependencies
-        run: rm -rf node_modules package-lock.json && npm install
+        run: pnpm install --frozen-lockfile
 
       - name: Build Storefront
-        working-directory: apps/storefront
-        run: npm run build
+        run: pnpm turbo run build --filter=apps-storefront
 
       - name: Patch wrangler config for staging
         working-directory: apps/storefront
         env:
           HYPERDRIVE_ID: ${{ secrets.HYPERDRIVE_ID }}
         run: |
-          # Patch the generated wrangler.json with staging worker name and Hyperdrive
           node -e "
             const fs = require('fs');
             const config = JSON.parse(fs.readFileSync('build/server/wrangler.json', 'utf8'));
@@ -345,30 +384,39 @@ jobs:
     name: Deploy Production
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
-    needs: [validate, test-backend, test-storefront, deploy-backend-production] # e2e paused
+    needs: [validate, test-backend, test-storefront, deploy-backend-production]
     environment: production
     steps:
       - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: "npm"
+          cache: "pnpm"
+
+      - name: Cache turbo
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: ${{ runner.os }}-turbo-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-turbo-
 
       - name: Install dependencies
-        run: rm -rf node_modules package-lock.json && npm install
+        run: pnpm install --frozen-lockfile
 
       - name: Build Storefront
-        working-directory: apps/storefront
-        run: npm run build
+        run: pnpm turbo run build --filter=apps-storefront
 
       - name: Patch wrangler config for production
         working-directory: apps/storefront
         env:
           HYPERDRIVE_ID: ${{ secrets.HYPERDRIVE_ID }}
         run: |
-          # Patch the generated wrangler.json with production worker name and Hyperdrive
           node -e "
             const fs = require('fs');
             const config = JSON.parse(fs.readFileSync('build/server/wrangler.json', 'utf8'));

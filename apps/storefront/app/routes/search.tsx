@@ -1,6 +1,6 @@
 import type { Route } from "./+types/search";
 import { ProductCard } from "../components/ProductCard";
-import { getMedusaClient } from "../lib/medusa.server";
+import { getMedusaClient, castToMedusaProduct } from "../lib/medusa";
 import { getProductPrice, type MedusaProduct } from "../lib/medusa";
 import { getProductsFromDB, isHyperdriveAvailable } from "../lib/products.server";
 import { Search } from "lucide-react";
@@ -16,26 +16,30 @@ export async function loader({ context, request }: Route.LoaderArgs) {
 
     let response: { products: MedusaProduct[] } = { products: [] };
 
+    let usedHyperdrive = false;
+
     // Try Hyperdrive first for faster search
     if (isHyperdriveAvailable(context)) {
         try {
             const startTime = Date.now();
             response = await getProductsFromDB(context, { limit: 50, search: query });
             console.log(`✅ Hyperdrive search: Found ${response.products.length} products in ${Date.now() - startTime}ms`);
+            usedHyperdrive = true;
         } catch (error) {
             console.warn("⚠️ Hyperdrive search failed, falling back to Medusa:", error);
         }
     }
 
-    // Fallback to Medusa API
-    if (response.products.length === 0) {
+    // Fallback to Medusa API only if Hyperdrive was not used (unavailable or failed)
+    // If Hyperdrive ran successfully and returned 0 results, we trust it and don't fallback
+    if (!usedHyperdrive) {
         try {
             const medusa = getMedusaClient(context);
-            const medusaResponse = await medusa.getProducts({ limit: 50 });
+            const { products } = await medusa.store.product.list({ limit: 50, fields: "+variants,+variants.prices,+variants.inventory_quantity,+options,+options.values,+images,+categories,+metadata" });
 
             // Filter products by search query (title, description, or handle)
             const searchLower = query.toLowerCase();
-            response.products = medusaResponse.products.filter((product: MedusaProduct) => {
+            response.products = products.map(castToMedusaProduct).filter((product: MedusaProduct) => {
                 return (
                     product.title.toLowerCase().includes(searchLower) ||
                     product.handle.toLowerCase().includes(searchLower) ||

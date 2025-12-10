@@ -1,0 +1,35 @@
+{
+  "repository_type": "monorepo",
+  "parts": [
+    {
+      "id": "storefront",
+      "name": "Grace's Towel Storefront",
+      "root": "apps/storefront",
+      "type": "web",
+      "technology": "React Router v7",
+      "description": "High-performance edge-rendered storefront."
+    },
+    {
+      "id": "backend",
+      "name": "Medusa Backend",
+      "root": "apps/backend",
+      "type": "backend",
+      "technology": "Medusa v2 / Node.js",
+      "description": "E-commerce engine and API."
+    }
+  ],
+  "integration_points": [
+    {
+      "from": "storefront",
+      "to": "backend",
+      "type": "REST API",
+      "details": "Medusa JS SDK calls to Store API"
+    },
+    {
+      "from": "backend",
+      "to": "storefront",
+      "type": "Event / Webhook",
+      "details": "Revalidation triggers (if applicable)"
+    }
+  ]
+}

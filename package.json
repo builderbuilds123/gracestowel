@@ -2,18 +2,46 @@
   "name": "gracestowel-monorepo",
   "version": "0.0.0",
   "private": true,
-  "workspaces": [
-    "apps/*"
-  ],
+  "packageManager": "pnpm@9.15.2",
   "scripts": {
-    "dev:storefront": "npm run dev --workspace=apps/storefront",
-    "deploy:storefront": "npm run deploy --workspace=apps/storefront",
-    "dev:api": "npm run dev --workspace=apps/api",
-    "deploy:api": "npm run deploy --workspace=apps/api",
-    "dev:background": "npm run dev --workspace=apps/background",
-    "deploy:background": "npm run deploy --workspace=apps/background"
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "dev:storefront": "pnpm --filter apps-storefront dev",
+    "deploy:storefront": "pnpm --filter apps-storefront deploy",
+    "dev:api": "pnpm --filter @gracestowel/api dev",
+    "deploy:api": "pnpm --filter @gracestowel/api deploy",
+    "dev:background": "pnpm --filter @gracestowel/background dev",
+    "deploy:background": "pnpm --filter @gracestowel/background deploy",
+    "test": "turbo run test",
+    "test:storefront": "pnpm --filter apps-storefront test",
+    "test:backend": "pnpm --filter @gracestowel/backend test:integration",
+    "test:e2e": "pnpm --filter @gracestowel/e2e test",
+    "test:e2e:ui": "pnpm --filter @gracestowel/e2e test:ui",
+    "test:e2e:headed": "pnpm --filter @gracestowel/e2e test:headed",
+    "test:resilience": "pnpm --filter @gracestowel/e2e test:resilience",
+    "test:e2e:ci": "docker compose -f docker-compose.test.yml up --build --abort-on-container-exit --exit-code-from playwright 2>&1 | tee e2e-ci.log",
+    "test:e2e:ci:logs": "docker compose -f docker-compose.test.yml logs -f",
+    "test:e2e:ci:logs:backend": "docker compose -f docker-compose.test.yml logs -f backend",
+    "test:e2e:ci:logs:storefront": "docker compose -f docker-compose.test.yml logs -f storefront",
+    "test:e2e:ci:logs:playwright": "docker compose -f docker-compose.test.yml logs -f playwright",
+    "test:e2e:ci:down": "docker compose -f docker-compose.test.yml down -v"
   },
   "dependencies": {
-    "@railway/cli": "^4.11.1"
+    "@railway/cli": "^4.12.0"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "pnpm": {
+    "overrides": {
+      "jws": "3.2.3"
+    }
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^4.0.14",
+    "turbo": "^2.5.0",
+    "vitest": "^4.0.14"
   }
 }
+

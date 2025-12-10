@@ -92,11 +92,14 @@ export default async function seedDemoData({ container }: ExecArgs) {
       store_id: store.id,
       supported_currencies: [
         {
-          currency_code: "eur",
+          currency_code: "cad",
           is_default: true,
         },
         {
           currency_code: "usd",
+        },
+        {
+          currency_code: "eur",
         },
       ],
     },
@@ -115,9 +118,15 @@ export default async function seedDemoData({ container }: ExecArgs) {
     input: {
       regions: [
         {
-          name: "North America",
+          name: "Canada",
+          currency_code: "cad",
+          countries: ["ca"],
+          payment_providers: ["pp_system_default"],
+        },
+        {
+          name: "United States",
           currency_code: "usd",
-          countries: ["us", "ca"],
+          countries: ["us"],
           payment_providers: ["pp_system_default"],
         },
         {
@@ -129,8 +138,9 @@ export default async function seedDemoData({ container }: ExecArgs) {
       ],
     },
   });
-  const regionNA = regionResult[0];
-  const regionEU = regionResult[1];
+  const regionCA = regionResult[0];
+  const regionUS = regionResult[1];
+  const regionEU = regionResult[2];
   logger.info("Finished seeding regions.");
 
   logger.info("Seeding tax regions...");
@@ -282,7 +292,7 @@ export default async function seedDemoData({ container }: ExecArgs) {
             amount: 8.95,
           },
           {
-            region_id: regionNA.id,
+            region_id: regionUS.id,
             amount: 8.95,
           },
         ],
@@ -316,7 +326,7 @@ export default async function seedDemoData({ container }: ExecArgs) {
             amount: 14.95,
           },
           {
-            region_id: regionNA.id,
+            region_id: regionUS.id,
             amount: 14.95,
           },
         ],

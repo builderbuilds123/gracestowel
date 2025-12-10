@@ -3,13 +3,10 @@
 /node_modules/
 *.tsbuildinfo
 
-# React Router
-/.react-router/
+# React Router build output
 /build/
 
 # Cloudflare
-.mf
 .wrangler
-.dev.vars*
-worker-configuration.d.ts
+.dev.vars
 

@@ -1,0 +1,52 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+.cache/
+.turbo/
+
+# Environment files
+
+.env
+
+.env.local
+
+.env.*.local
+
+apps/storefront/.env.test
+
+.dev.vars
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# TypeScript
+*.tsbuildinfo
+
+# Vite
+vite.config.ts.timestamp-*
+
+# Medusa
+.medusa/
+
+# Reports
+*-report.json
+trivy_report.txt
+repomix-output.xml
+
+# Playwright
+apps/e2e/playwright-report/
+apps/e2e/test-results/

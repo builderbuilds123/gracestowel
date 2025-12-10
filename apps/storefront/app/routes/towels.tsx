@@ -2,8 +2,7 @@ import type { Route } from "./+types/towels";
 import { useState, useMemo } from "react";
 import { ProductCard } from "../components/ProductCard";
 import { ProductFilters } from "../components/ProductFilters";
-import { getMedusaClient } from "../lib/medusa.server";
-import { getProductPrice, type MedusaProduct } from "../lib/medusa";
+import { getMedusaClient, castToMedusaProduct, type MedusaProduct } from "../lib/medusa";
 import { productList } from "../data/products";
 import { SlidersHorizontal, X } from "lucide-react";
 
@@ -39,57 +38,27 @@ interface ProductWithFilters {
 export async function loader({ context }: Route.LoaderArgs) {
     try {
         const medusa = getMedusaClient(context);
-        const response = await medusa.getProducts({ limit: 50 });
+        const { products } = await medusa.store.product.list({ limit: 50, fields: "+variants,+variants.prices,+variants.inventory_quantity,+options,+options.values,+images,+categories,+metadata" });
 
-        // Transform Medusa products with color options
-        const products: ProductWithFilters[] = response.products.map((product: MedusaProduct) => {
-            const priceData = getProductPrice(product, "usd");
-            // Extract color options from product variants
-            const colorOption = product.options?.find(o => o.title.toLowerCase() === 'color');
-            const colors = colorOption?.values?.map(v => v.value) || [];
-
-            return {
-                id: product.id,
-                handle: product.handle,
-                title: product.title,
-                price: priceData?.formatted || "$0.00",
-                priceAmount: priceData?.amount || 0,
-                image: product.images?.[0]?.url || product.thumbnail || "/placeholder.jpg",
-                description: product.description || "",
-                colors,
-            };
-        });
+        // Transform Medusa products using centralized transformer
+        // Use safe casting to ensure type safety matching our MedusaProduct interface
+        const safeProducts = products.map(castToMedusaProduct);
+        const transformedProducts = transformToListItems(safeProducts);
 
         // Extract all unique colors
-        const allColors = [...new Set(products.flatMap(p => p.colors))].sort();
+        const allColors = [...new Set(transformedProducts.flatMap(p => p.colors))].sort();
 
         // Get price range
-        const prices = products.map(p => p.priceAmount).filter(p => p > 0);
+        const prices = transformedProducts.map(p => p.priceAmount).filter(p => p > 0);
         const priceRange = {
             min: Math.floor(Math.min(...prices, 0)),
             max: Math.ceil(Math.max(...prices, 200)),
         };
 
-        return { products, allColors, priceRange, error: null };
+        return { products: transformedProducts, allColors, priceRange, error: null };
     } catch (error) {
         console.error("Failed to fetch products from Medusa:", error);
-        // Fallback to static products
-        const products: ProductWithFilters[] = productList.map((product) => ({
-            id: String(product.id),
-            handle: product.handle,
-            title: product.title,
-            price: product.formattedPrice,
-            priceAmount: product.price,
-            image: product.images[0],
-            description: product.description,
-            colors: product.colors || [],
-        }));
-        return {
-            products,
-            allColors: ["Cream", "Sage", "Blush", "Stone"],
-            priceRange: { min: 0, max: 200 },
-            error: "Using cached products"
-        };
+        throw new Response("Failed to load products from backend", { status: 500 });
     }
 }
 

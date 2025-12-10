@@ -72,7 +72,7 @@ export function useMedusaProducts(): UseMedusaProductsResult {
                 throw new Error(`Failed to fetch products: ${response.status}`);
             }
 
-            const data = await response.json();
+            const data = (await response.json()) as { products: MedusaProduct[] };
             setProducts(data.products || []);
         } catch (err) {
             setError(err instanceof Error ? err : new Error("Unknown error"));
@@ -121,7 +121,7 @@ export function useMedusaProduct(handle: string): UseMedusaProductResult {
                 throw new Error(`Failed to fetch product: ${response.status}`);
             }
 
-            const data = await response.json();
+            const data = (await response.json()) as { products: MedusaProduct[] };
             setProduct(data.products?.[0] || null);
         } catch (err) {
             setError(err instanceof Error ? err : new Error("Unknown error"));

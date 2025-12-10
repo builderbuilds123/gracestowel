@@ -1,0 +1,28 @@
+# BMAD Core Module Configuration
+# This file defines installation questions and module configuration values
+
+code: "core"
+name: "BMAD Core"
+default_selected: true
+
+# Welcome message shown during installation
+prompt:
+  - "Installing BMAD Core module..."
+  - "Essential BMAD platform components and workflows"
+
+# Core config values are automatically inherited from installer:
+## user_name
+## communication_language
+## document_output_language
+## output_folder
+
+# ============================================================================
+# CONFIGURATION FIELDS
+# ============================================================================
+
+# STATIC values for core module:
+module_version:
+  result: "6.0.0-alpha.14"
+
+data_path:
+  result: "{project-root}/.bmad/core/data"

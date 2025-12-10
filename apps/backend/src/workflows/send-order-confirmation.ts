@@ -8,6 +8,7 @@ import { sendNotificationStep } from "./steps/send-notification"
 
 type SendOrderConfirmationInput = {
   id: string
+  modification_token?: string
 }
 
 export const sendOrderConfirmationWorkflow = createWorkflow(
@@ -64,12 +65,15 @@ export const sendOrderConfirmationWorkflow = createWorkflow(
         },
       }
 
-      sendNotificationStep([
+      sendNotificationStep(transform({ orderData, input }, ({ orderData, input }) => [
         {
           to: order.email,
           channel: "email",
           template: "order-placed",
-          data: emailData,
+          data: { 
+            order: orderData,
+            modification_token: input.modification_token,
+          },
         },
       ])
     })

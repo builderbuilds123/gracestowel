@@ -16,4 +16,8 @@ export default defineConfig({
     reactRouter(),
     tsconfigPaths(),
   ].filter(Boolean),
+  esbuild: {
+    jsx: "automatic",
+  },
 });
+

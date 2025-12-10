@@ -1,15 +1,35 @@
 import { ArrowLeft } from 'lucide-react';
-import { Link } from 'react-router';
-import { useState, useEffect } from 'react';
-import { Elements, ExpressCheckoutElement } from '@stripe/react-stripe-js';
+import { Link, useLoaderData } from 'react-router';
+import type { LoaderFunctionArgs } from 'react-router';
+import { useState, useEffect, useRef } from 'react';
+import { Elements } from '@stripe/react-stripe-js';
 import { useCart } from '../context/CartContext';
 import { useLocale } from '../context/LocaleContext';
 import { useCustomer, getAuthToken } from '../context/CustomerContext';
-import { getStripe } from '../lib/stripe';
+import { initStripe, getStripe } from '../lib/stripe';
 import { CheckoutForm, type ShippingOption } from '../components/CheckoutForm';
 import { OrderSummary } from '../components/OrderSummary';
 
+interface LoaderData {
+    stripePublishableKey: string;
+}
+
+export async function loader({ context }: LoaderFunctionArgs): Promise<LoaderData> {
+    const env = context.cloudflare.env as { STRIPE_PUBLISHABLE_KEY: string };
+    return {
+        stripePublishableKey: env.STRIPE_PUBLISHABLE_KEY,
+    };
+}
+
 export default function Checkout() {
+    const { stripePublishableKey } = useLoaderData<LoaderData>();
+
+    // Initialize Stripe with key from loader (runs once)
+    useEffect(() => {
+        if (stripePublishableKey) {
+            initStripe(stripePublishableKey);
+        }
+    }, [stripePublishableKey]);
     const { items, cartTotal, updateQuantity, removeFromCart } = useCart();
     const { currency } = useLocale();
     const { customer, isAuthenticated } = useCustomer();
@@ -26,8 +46,30 @@ export default function Checkout() {
         return total + originalPrice * item.quantity;
     }, 0);
 
-    const shippingCost = selectedShipping?.amount || 0;
+    const shippingCostCents = selectedShipping?.amount ?? 0;
+    const shippingCost = shippingCostCents / 100;
     const finalTotal = cartTotal + shippingCost;
+
+    const hasFiredCheckoutStarted = useRef(false);
+    // Track checkout started event in PostHog
+    useEffect(() => {
+        if (cartTotal > 0 && typeof window !== 'undefined' && !hasFiredCheckoutStarted.current) {
+            import('../utils/posthog').then(({ default: posthog }) => {
+                posthog.capture('checkout_started', {
+                    cart_total: cartTotal,
+                    item_count: items.length,
+                    currency,
+                    items: items.map(item => ({
+                        product_id: item.id,
+                        product_name: item.title,
+                        quantity: item.quantity,
+                        price: item.price,
+                    })),
+                });
+            });
+            hasFiredCheckoutStarted.current = true;
+        }
+    }, [cartTotal, items, currency]); // Run when cart updates, but use ref to fire only once
 
     useEffect(() => {
         if (cartTotal <= 0) return;
@@ -55,8 +97,8 @@ export default function Checkout() {
             }),
         })
             .then((res) => res.json())
-            .then((data: { clientSecret: string }) => setClientSecret(data.clientSecret));
-    }, [cartTotal, currency, items, isAuthenticated, customer]); // Include customer in dependencies
+            .then((data) => setClientSecret((data as { clientSecret: string }).clientSecret));
+    }, [cartTotal, currency, items, isAuthenticated, customer?.id]); // Depend on ID, not object reference
 
     // Separate effect to update PaymentIntent when shipping changes
     useEffect(() => {
@@ -70,7 +112,7 @@ export default function Checkout() {
             body: JSON.stringify({
                 amount: cartTotal,
                 currency: currency.toLowerCase(),
-                shipping: selectedShipping.amount,
+                shipping: shippingCost,
                 customerId: isAuthenticated ? customer?.id : undefined,
                 customerEmail: isAuthenticated ? customer?.email : undefined,
                 cartItems: items.map(item => ({
@@ -85,11 +127,11 @@ export default function Checkout() {
             }),
         })
             .then((res) => res.json())
-            .then((data: { clientSecret: string }) => {
+            .then((data) => {
                 // Update client secret with new PaymentIntent
-                setClientSecret(data.clientSecret);
+                setClientSecret((data as { clientSecret: string }).clientSecret);
             });
-    }, [selectedShipping, items, isAuthenticated, customer]); // Include customer in dependencies
+    }, [selectedShipping, items, isAuthenticated, customer?.id]); // Depend on ID, not object reference
 
     // Re-fetch shipping rates when cart total changes (for dynamic free shipping)
     useEffect(() => {
@@ -234,16 +276,6 @@ export default function Checkout() {
                         {clientSecret && (
                             <Elements options={options} stripe={getStripe()}>
                                 <div className="bg-white p-6 lg:p-8 rounded-lg shadow-sm border border-card-earthy/20">
-                                    <div className="mb-8">
-                                        <ExpressCheckoutElement onConfirm={() => { }} options={{ buttonType: { applePay: 'check-out', googlePay: 'checkout', paypal: 'checkout' } }} />
-                                    </div>
-
-                                    <div className="relative flex py-5 items-center">
-                                        <div className="flex-grow border-t border-gray-200"></div>
-                                        <span className="flex-shrink-0 mx-4 text-gray-400 text-sm">Or</span>
-                                        <div className="flex-grow border-t border-gray-200"></div>
-                                    </div>
-
                                     <CheckoutForm
                                         items={items}
                                         cartTotal={cartTotal}

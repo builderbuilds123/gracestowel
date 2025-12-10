@@ -1,3 +1,13 @@
+import Medusa from "@medusajs/js-sdk"
+
+export const createMedusaClient = (backendUrl: string, publishableKey: string) => {
+  return new Medusa({
+    baseUrl: backendUrl,
+    debug: process.env.NODE_ENV === "development",
+    publishableKey
+  })
+}
+
 /**
  * Client-safe Medusa types and helper functions
  * These can be used in both server and client code
@@ -47,6 +57,37 @@ export interface MedusaProductsResponse {
 
 export interface MedusaProductResponse {
     product: MedusaProduct;
+}
+
+/**
+ * Validates and casts an API response item to MedusaProduct
+ * Ensures critical fields exist before casting to prevent runtime errors
+ */
+export function validateMedusaProduct(item: unknown): MedusaProduct | null {
+    if (!item || typeof item !== 'object') return null;
+    
+    // Check for critical identifying fields
+    const p = item as any;
+    if (typeof p.id !== 'string' || typeof p.handle !== 'string') {
+        console.warn('Invalid product data: missing id or handle', p);
+        return null;
+    }
+
+    // Checking for v2 Store API shape compatibility
+    // We trust the API to return the correct shape for nested objects if ID/Handle match
+    return item as MedusaProduct;
+}
+
+/**
+ * Safely casts a generic item to MedusaProduct, ensuring types match.
+ * Useful for mapping lists from the SDK.
+ */
+export function castToMedusaProduct(item: unknown): MedusaProduct {
+    const validated = validateMedusaProduct(item);
+    if (!validated) {
+        throw new Error(`Invalid product data encountered: ${JSON.stringify(item)}`);
+    }
+    return validated;
 }
 
 /**
@@ -139,3 +180,83 @@ export function getStockStatusDisplay(status: StockStatus): {
     }
 }
 
+// Add global type for window.ENV
+declare global {
+  interface Window {
+    ENV?: {
+      MEDUSA_BACKEND_URL?: string;
+      MEDUSA_PUBLISHABLE_KEY?: string;
+    };
+  }
+}
+
+/**
+ * Get the backend URL from context or environment variables
+ * Centralizes the backend URL resolution logic
+ */
+export function getBackendUrl(context?: { cloudflare?: { env?: { MEDUSA_BACKEND_URL?: string } } }): string {
+    // 1. Check Cloudflare context (server-side)
+    if (context?.cloudflare?.env?.MEDUSA_BACKEND_URL) {
+        return context.cloudflare.env.MEDUSA_BACKEND_URL;
+    }
+
+    // 2. Check window.ENV (client-side hydration)
+    if (typeof window !== "undefined" && window.ENV?.MEDUSA_BACKEND_URL) {
+        return window.ENV.MEDUSA_BACKEND_URL;
+    }
+
+    // 3. Check process.env (build-time or Node.js)
+    return process.env.VITE_MEDUSA_BACKEND_URL || "http://localhost:9000";
+}
+
+/**
+ * Create a Medusa client instance using environment variables from context or process
+ * Uses a WeakMap to cache instances per context object to prevent multiple instantiations
+ * during a single request flow (e.g. loader + helpers).
+ */
+const clientCache = new WeakMap<object, Medusa>();
+
+// Singleton for client-side usage to avoid recreating client on every render
+let clientSideInstance: Medusa | null = null;
+
+export function getMedusaClient(context?: { cloudflare?: { env?: { MEDUSA_BACKEND_URL?: string, MEDUSA_PUBLISHABLE_KEY?: string } } }) {
+    // If context is provided, try to use it for caching
+    if (context && typeof context === 'object') {
+        if (clientCache.has(context)) {
+            return clientCache.get(context)!;
+        }
+    }
+
+    // Return singleton on client-side if no context or strictly client-side
+    if (!context && typeof window !== "undefined" && clientSideInstance) {
+        return clientSideInstance;
+    }
+
+    const backendUrl = getBackendUrl(context);
+
+    // Prioritize context key, then window.ENV, then process env
+    let publishableKey = context?.cloudflare?.env?.MEDUSA_PUBLISHABLE_KEY;
+    
+    if (!publishableKey && typeof window !== "undefined") {
+        publishableKey = window.ENV?.MEDUSA_PUBLISHABLE_KEY;
+    }
+
+    if (!publishableKey) {
+        publishableKey = process.env.MEDUSA_PUBLISHABLE_KEY;
+    }
+
+    if (!publishableKey) {
+        throw new Error("Medusa publishable key is not configured. Set MEDUSA_PUBLISHABLE_KEY environment variable.");
+    }
+
+    const client = createMedusaClient(backendUrl, publishableKey);
+
+    // Cache the client if we have a context object
+    if (context && typeof context === 'object') {
+        clientCache.set(context, client);
+    } else if (typeof window !== "undefined") {
+        clientSideInstance = client;
+    }
+
+    return client;
+}

@@ -44,8 +44,10 @@ export function Header() {
 
                 {/* Left: Mobile Menu & Desktop Navigation */}
                 <div className="flex items-center gap-4 md:gap-8">
-                    <button className={`md:hidden p-2 transition-colors ${showSolidHeader ? 'text-text-earthy' : 'text-white'
-                        }`}>
+                    <button 
+                        className={`md:hidden p-2 transition-colors ${showSolidHeader ? 'text-text-earthy' : 'text-white'}`}
+                        aria-label="Open menu"
+                    >
                         <Menu className="w-6 h-6" />
                     </button>
 
@@ -100,6 +102,7 @@ export function Header() {
                         to="/wishlist"
                         className={`p-2 hover:text-accent-earthy transition-colors relative ${showSolidHeader ? 'text-text-earthy' : 'text-white'}`}
                         title="Wishlist"
+                        aria-label="Wishlist"
                     >
                         <Heart className="w-5 h-5" />
                         {wishlistCount > 0 && (
@@ -115,6 +118,7 @@ export function Header() {
                             to={isAuthenticated ? "/account" : "/account/login"}
                             className={`p-2 hover:text-accent-earthy transition-colors relative ${showSolidHeader ? 'text-text-earthy' : 'text-white'}`}
                             title={isAuthenticated ? `Hi, ${customer?.first_name || 'Account'}` : 'Sign In'}
+                            aria-label={isAuthenticated ? "Account" : "Sign In"}
                         >
                             <User className="w-5 h-5" />
                             {isAuthenticated && (
@@ -127,6 +131,7 @@ export function Header() {
                         onClick={toggleCart}
                         className={`p-2 hover:text-accent-earthy transition-colors relative cursor-pointer ${showSolidHeader ? 'text-text-earthy' : 'text-white'
                             }`}
+                        aria-label="Open cart"
                     >
                         <Towel size={20} weight="regular" />
                         {itemCount > 0 && (

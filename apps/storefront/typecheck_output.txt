@@ -1,0 +1,137 @@
+
+> typecheck
+> npm run cf-typegen && react-router typegen && tsc -b
+
+
+> cf-typegen
+> wrangler types
+
+
+ ⛅️ wrangler 4.51.0 (update available 4.53.0)
+─────────────────────────────────────────────
+Generating project types...
+
+declare namespace Cloudflare {
+	interface GlobalProps {
+		mainModule: typeof import("./workers/app");
+	}
+	interface Env {
+		MEDUSA_BACKEND_URL: "http://localhost:9000";
+		ENVIRONMENT: "staging" | "production";
+		DATABASE_URL: string;
+		CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE: string;
+		MEDUSA_PUBLISHABLE_KEY: string;
+		HYPERDRIVE: Hyperdrive;
+	}
+}
+interface Env extends Cloudflare.Env {}
+type StringifyValues<EnvType extends Record<string, unknown>> = {
+	[Binding in keyof EnvType]: EnvType[Binding] extends string ? EnvType[Binding] : string;
+};
+declare namespace NodeJS {
+	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "MEDUSA_BACKEND_URL" | "ENVIRONMENT" | "DATABASE_URL" | "CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE" | "MEDUSA_PUBLISHABLE_KEY">> {}
+}
+
+Generating runtime types...
+
+Runtime types generated.
+
+
+✨ Types written to worker-configuration.d.ts
+
+📖 Read about runtime types
+https://developers.cloudflare.com/workers/languages/typescript/#generate-types
+📣 Remember to rerun 'wrangler types' after you change your wrangler.json file.
+
+app/components/__tests__/CancelOrderDialog.test.tsx(17,17): error TS2741: Property 'orderNumber' is missing in type '{ isOpen: false; onClose: Mock<Procedure>; onConfirm: Mock<Procedure>; }' but required in type 'CancelOrderDialogProps'.
+app/components/__tests__/CancelOrderDialog.test.tsx(23,17): error TS2741: Property 'orderNumber' is missing in type '{ isOpen: boolean; onClose: Mock<Procedure>; onConfirm: Mock<Procedure>; }' but required in type 'CancelOrderDialogProps'.
+app/components/__tests__/CancelOrderDialog.test.tsx(33,17): error TS2741: Property 'orderNumber' is missing in type '{ onClose: Mock<Procedure>; isOpen: boolean; onConfirm: Mock<Procedure>; }' but required in type 'CancelOrderDialogProps'.
+app/components/__tests__/CancelOrderDialog.test.tsx(43,17): error TS2741: Property 'orderNumber' is missing in type '{ onConfirm: Mock<Procedure>; isOpen: boolean; onClose: Mock<Procedure>; }' but required in type 'CancelOrderDialogProps'.
+app/components/__tests__/CancelOrderDialog.test.tsx(57,17): error TS2741: Property 'orderNumber' is missing in type '{ isOpen: boolean; onClose: Mock<Procedure>; onConfirm: Mock<Procedure>; }' but required in type 'CancelOrderDialogProps'.
+app/components/__tests__/CancelOrderDialog.test.tsx(63,17): error TS2741: Property 'orderNumber' is missing in type '{ isOpen: boolean; onClose: Mock<Procedure>; onConfirm: Mock<Procedure>; }' but required in type 'CancelOrderDialogProps'.
+app/components/ProductActions.tsx(226,17): error TS2322: Type '(data: EmbroideryData) => void' is not assignable to type '(embroideryData: EmbroideryData | null) => void'.
+  Types of parameters 'data' and 'embroideryData' are incompatible.
+    Type 'EmbroideryData | null' is not assignable to type 'EmbroideryData'.
+      Type 'null' is not assignable to type 'EmbroideryData'.
+app/components/ProductCard.simple.test.tsx(34,49): error TS2339: Property 'toBeInTheDocument' does not exist on type 'Assertion<HTMLElement>'.
+app/components/ProductCard.simple.test.tsx(45,19): error TS2339: Property 'toBeInTheDocument' does not exist on type 'Assertion<HTMLElement>'.
+app/components/ProductCard.simple.test.tsx(46,19): error TS2339: Property 'toHaveAttribute' does not exist on type 'Assertion<HTMLElement>'.
+app/components/ProductCard.simple.test.tsx(47,19): error TS2339: Property 'toHaveAttribute' does not exist on type 'Assertion<HTMLElement>'.
+app/components/ProductCard.simple.test.tsx(57,49): error TS2339: Property 'toBeInTheDocument' does not exist on type 'Assertion<HTMLElement>'.
+app/components/ProductCard.simple.test.tsx(67,48): error TS2339: Property 'toBeInTheDocument' does not exist on type 'Assertion<HTMLElement>'.
+app/components/ProductCard.test.tsx(11,37): error TS6307: File '/Users/leonliang/Github Repo/gracestowel/apps/storefront/tests/test-utils.tsx' is not listed within the file list of project '/Users/leonliang/Github Repo/gracestowel/apps/storefront/tsconfig.cloudflare.json'. Projects must list all files or use an 'include' pattern.
+app/components/ProductCard.test.tsx(34,51): error TS2339: Property 'toBeInTheDocument' does not exist on type 'Assertion<HTMLElement>'.
+app/components/ProductCard.test.tsx(38,21): error TS2339: Property 'toBeInTheDocument' does not exist on type 'Assertion<HTMLElement>'.
+app/components/ProductCard.test.tsx(39,21): error TS2339: Property 'toHaveAttribute' does not exist on type 'Assertion<HTMLElement>'.
+app/components/ProductCard.test.tsx(42,42): error TS2339: Property 'toBeInTheDocument' does not exist on type 'Assertion<HTMLElement>'.
+app/components/ProductCard.test.tsx(53,27): error TS2339: Property 'toBeInTheDocument' does not exist on type 'Assertion<HTMLElement | undefined>'.
+app/components/ProductCard.test.tsx(54,27): error TS2339: Property 'toHaveAttribute' does not exist on type 'Assertion<HTMLElement | undefined>'.
+app/components/ProductCard.test.tsx(64,21): error TS2339: Property 'toHaveAttribute' does not exist on type 'Assertion<HTMLElement>'.
+app/components/ProductCard.test.tsx(79,25): error TS2339: Property 'toBeInTheDocument' does not exist on type 'Assertion<HTMLElement>'.
+app/components/ProductCard.test.tsx(88,25): error TS2339: Property 'toHaveAttribute' does not exist on type 'Assertion<HTMLAnchorElement | null>'.
+app/components/ProductCard.test.tsx(100,25): error TS2339: Property 'toHaveAttribute' does not exist on type 'Assertion<HTMLAnchorElement | null>'.
+app/components/ProductCard.test.tsx(116,25): error TS2339: Property 'toBeInTheDocument' does not exist on type 'Assertion<HTMLElement>'.
+app/components/ProductCard.test.tsx(127,23): error TS2339: Property 'toHaveNoViolations' does not exist on type 'Assertion<AxeResults>'.
+app/components/ProductCard.test.tsx(134,25): error TS2339: Property 'toHaveAttribute' does not exist on type 'Assertion<HTMLElement>'.
+app/components/ProductCard.test.tsx(141,21): error TS2339: Property 'toHaveAccessibleName' does not exist on type 'Assertion<HTMLElement>'.
+app/components/ProductCard.test.tsx(151,20): error TS2339: Property 'toBeInTheDocument' does not exist on type 'Assertion<Element | null>'.
+app/components/ProductCard.test.tsx(155,33): error TS2339: Property 'toBeInTheDocument' does not exist on type 'Assertion<Element | null | undefined>'.
+app/components/ProductCard.test.tsx(162,25): error TS2339: Property 'toBeInTheDocument' does not exist on type 'Assertion<HTMLElement>'.
+app/components/ProductCard.test.tsx(166,19): error TS2339: Property 'toBeInTheDocument' does not exist on type 'Assertion<SVGSVGElement | null>'.
+app/components/ProductCard.test.tsx(175,21): error TS2339: Property 'toHaveClass' does not exist on type 'Assertion<HTMLElement>'.
+app/components/ProductCard.test.tsx(186,20): error TS2339: Property 'toHaveClass' does not exist on type 'Assertion<Element | null>'.
+app/components/ProductCard.test.tsx(196,21): error TS2339: Property 'toBeInTheDocument' does not exist on type 'Assertion<HTMLElement>'.
+app/components/ProductCard.test.tsx(204,42): error TS2339: Property 'toBeInTheDocument' does not exist on type 'Assertion<HTMLElement>'.
+app/components/ProductCard.test.tsx(218,9): error TS2339: Property 'toBeInTheDocument' does not exist on type 'Assertion<HTMLElement>'.
+app/context/CustomerContext.tsx(84,29): error TS18046: 'data' is of type 'unknown'.
+app/context/CustomerContext.tsx(87,54): error TS18046: 'data' is of type 'unknown'.
+app/context/CustomerContext.tsx(89,42): error TS18046: 'data' is of type 'unknown'.
+app/context/CustomerContext.tsx(90,36): error TS18046: 'data' is of type 'unknown'.
+app/context/CustomerContext.tsx(91,41): error TS18046: 'data' is of type 'unknown'.
+app/context/CustomerContext.tsx(92,40): error TS18046: 'data' is of type 'unknown'.
+app/context/CustomerContext.tsx(93,41): error TS18046: 'data' is of type 'unknown'.
+app/context/CustomerContext.tsx(95,67): error TS18046: 'data' is of type 'unknown'.
+app/context/CustomerContext.tsx(122,49): error TS18046: 'error' is of type 'unknown'.
+app/context/CustomerContext.tsx(125,21): error TS2339: Property 'token' does not exist on type 'unknown'.
+app/context/CustomerContext.tsx(154,49): error TS18046: 'error' is of type 'unknown'.
+app/context/CustomerContext.tsx(157,21): error TS2339: Property 'token' does not exist on type 'unknown'.
+app/context/CustomerContext.tsx(175,49): error TS18046: 'error' is of type 'unknown'.
+app/hooks/useMedusaProducts.ts(76,25): error TS18046: 'data' is of type 'unknown'.
+app/hooks/useMedusaProducts.ts(125,24): error TS18046: 'data' is of type 'unknown'.
+app/lib/db.server.ts(1,24): error TS7016: Could not find a declaration file for module 'pg'. '/Users/leonliang/Github Repo/gracestowel/apps/storefront/node_modules/pg/esm/index.mjs' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/pg` if it exists or add a new declaration (.d.ts) file containing `declare module 'pg';`
+app/lib/products.server.ts(13,24): error TS7016: Could not find a declaration file for module 'pg'. '/Users/leonliang/Github Repo/gracestowel/apps/storefront/node_modules/pg/esm/index.mjs' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/pg` if it exists or add a new declaration (.d.ts) file containing `declare module 'pg';`
+app/lib/products.server.ts(186,41): error TS7006: Parameter 'p' implicitly has an 'any' type.
+app/lib/products.server.ts(215,67): error TS7006: Parameter 'product' implicitly has an 'any' type.
+app/lib/products.server.ts(366,47): error TS7006: Parameter 'v' implicitly has an 'any' type.
+app/lib/products.server.ts(367,49): error TS7006: Parameter '_' implicitly has an 'any' type.
+app/lib/products.server.ts(367,52): error TS7006: Parameter 'i' implicitly has an 'any' type.
+app/lib/products.server.ts(388,35): error TS7006: Parameter 'variant' implicitly has an 'any' type.
+app/lib/products.server.ts(390,41): error TS7006: Parameter 'p' implicitly has an 'any' type.
+app/lib/products.server.ts(391,50): error TS7006: Parameter 'o' implicitly has an 'any' type.
+app/lib/products.server.ts(431,45): error TS7006: Parameter 'o' implicitly has an 'any' type.
+app/lib/products.server.ts(432,47): error TS7006: Parameter '_' implicitly has an 'any' type.
+app/lib/products.server.ts(432,50): error TS7006: Parameter 'i' implicitly has an 'any' type.
+app/lib/products.server.ts(441,34): error TS7006: Parameter 'option' implicitly has an 'any' type.
+app/lib/products.server.ts(443,41): error TS7006: Parameter 'v' implicitly has an 'any' type.
+app/routes/account.tsx(62,31): error TS18046: 'data' is of type 'unknown'.
+app/routes/api.test-hyperdrive.ts(58,9): error TS18046: 'result.tests' is of type 'unknown'.
+app/routes/api.test-hyperdrive.ts(67,9): error TS18046: 'result.tests' is of type 'unknown'.
+app/routes/api.test-hyperdrive.ts(79,9): error TS18046: 'result.tests' is of type 'unknown'.
+app/routes/api.test-hyperdrive.ts(90,9): error TS18046: 'result.tests' is of type 'unknown'.
+app/routes/api.test-hyperdrive.ts(107,9): error TS18046: 'result.tests' is of type 'unknown'.
+app/routes/api.test-hyperdrive.ts(112,9): error TS18046: 'result.tests' is of type 'unknown'.
+app/routes/checkout.tsx(76,19): error TS2345: Argument of type '(data: { clientSecret: string; }) => void' is not assignable to parameter of type '(value: unknown) => void | PromiseLike<void>'.
+  Types of parameters 'data' and 'value' are incompatible.
+    Type 'unknown' is not assignable to type '{ clientSecret: string; }'.
+app/routes/checkout.tsx(106,19): error TS2345: Argument of type '(data: { clientSecret: string; }) => void' is not assignable to parameter of type '(value: unknown) => void | PromiseLike<void>'.
+  Types of parameters 'data' and 'value' are incompatible.
+    Type 'unknown' is not assignable to type '{ clientSecret: string; }'.
+npm error Lifecycle script `typecheck` failed with error:
+npm error code 2
+npm error path /Users/leonliang/Github Repo/gracestowel/apps/storefront
+npm error workspace apps-storefront
+npm error location /Users/leonliang/Github Repo/gracestowel/apps/storefront
+npm error command failed
+npm error command sh -c npm run cf-typegen && react-router typegen && tsc -b

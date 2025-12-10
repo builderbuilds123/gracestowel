@@ -1,0 +1,42 @@
+# Historical leaks that have been fixed in the codebase
+9cff9c134ecf17a09f909c879aa475d7b93f0a9a:apps/e2e/playwright.config.ts:generic-api-key:72
+9af987faa11c264349349c100a0ebae0ddc70a94:apps/e2e/playwright.config.ts:generic-api-key:72
+9af987faa11c264349349c100a0ebae0ddc70a94:apps/e2e/test-results/results.json:generic-api-key:145
+9af987faa11c264349349c100a0ebae0ddc70a94:docker-compose.test.yml:generic-api-key:81
+96b97f621d20a54055411118571471530a2a1b20:apps/storefront/app/routes/api.checkout-session.ts:stripe-access-token:14
+96b97f621d20a54055411118571471530a2a1b20:apps/storefront/app/routes/api.shipping-rates.ts:stripe-access-token:3
+e015c302a63b39c403c1613983857cf71b9ef91f:gitleaks-report.json:stripe-access-token:94
+e015c302a63b39c403c1613983857cf71b9ef91f:gitleaks-report.json:stripe-access-token:115
+e015c302a63b39c403c1613983857cf71b9ef91f:gitleaks-report.json:stripe-access-token:136
+e015c302a63b39c403c1613983857cf71b9ef91f:gitleaks-report.json:stripe-access-token:157
+e015c302a63b39c403c1613983857cf71b9ef91f:gitleaks-report.json:stripe-access-token:178
+e015c302a63b39c403c1613983857cf71b9ef91f:gitleaks-report.json:stripe-access-token:199
+e015c302a63b39c403c1613983857cf71b9ef91f:gitleaks-report.json:stripe-access-token:220
+e015c302a63b39c403c1613983857cf71b9ef91f:gitleaks-report.json:stripe-access-token:241
+e015c302a63b39c403c1613983857cf71b9ef91f:gitleaks-report.json:generic-api-key:9
+e015c302a63b39c403c1613983857cf71b9ef91f:gitleaks-report.json:generic-api-key:10
+e015c302a63b39c403c1613983857cf71b9ef91f:gitleaks-report.json:generic-api-key:30
+e015c302a63b39c403c1613983857cf71b9ef91f:gitleaks-report.json:generic-api-key:31
+e015c302a63b39c403c1613983857cf71b9ef91f:gitleaks-report.json:generic-api-key:51
+e015c302a63b39c403c1613983857cf71b9ef91f:gitleaks-report.json:generic-api-key:52
+e015c302a63b39c403c1613983857cf71b9ef91f:gitleaks-report.json:generic-api-key:72
+e015c302a63b39c403c1613983857cf71b9ef91f:gitleaks-report.json:generic-api-key:73
+17bbfbca346e6e31de89dc6cb56cbb0b8269e79c:repomix-output.xml:stripe-access-token:30613
+17bbfbca346e6e31de89dc6cb56cbb0b8269e79c:repomix-output.xml:stripe-access-token:30910
+cf6d1047bc457159c1b782e820f3164fe2fa9112:repomix-output.xml:stripe-access-token:16844
+cf6d1047bc457159c1b782e820f3164fe2fa9112:repomix-output.xml:stripe-access-token:17144
+14d7c96ea8879e9d444bc6461a37490430264e20:repomix-output.xml:stripe-access-token:25180
+14d7c96ea8879e9d444bc6461a37490430264e20:repomix-output.xml:stripe-access-token:25429
+31c19795aa812840107abaa60809552dae09735f:apps/storefront/wrangler.jsonc:generic-api-key:14
+# Test file mock client_secrets (not real secrets)
+ddf62774c9caf8caf9affa46441dcc88e5b0d25a:apps/storefront/app/routes/api.payment-intent.test.ts:generic-api-key:55
+ddf62774c9caf8caf9affa46441dcc88e5b0d25a:apps/storefront/app/routes/api.payment-intent.test.ts:generic-api-key:76
+
+# BMAD framework documentation hashes (false positives - SHA256 file hashes misidentified as API keys)
+ece141cc9e78ba37232e3e083426053fd534b3aa:.bmad/_cfg/files-manifest.csv:generic-api-key:167
+ece141cc9e78ba37232e3e083426053fd534b3aa:.bmad/_cfg/files-manifest.csv:generic-api-key:170
+ece141cc9e78ba37232e3e083426053fd534b3aa:.bmad/_cfg/files-manifest.csv:generic-api-key:200
+
+# Test file mock JWT tokens (not real secrets - fake tokens for unit tests)
+434d365f5fdc14bbeb2afadfe09da7d57b5ec802:apps/backend/integration-tests/emails/order-placed.unit.spec.ts:generic-api-key:91
+434d365f5fdc14bbeb2afadfe09da7d57b5ec802:apps/backend/integration-tests/emails/order-placed.unit.spec.ts:generic-api-key:132

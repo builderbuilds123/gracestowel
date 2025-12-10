@@ -1,3 +1,9 @@
+---
+title: Medusa Backend Configuration
+description: Configuration guide for Medusa V2 backend on Railway.
+last-updated: 2025-12-02
+---
+
 # Medusa Backend Configuration
 
 This document explains how the Medusa V2 backend is configured for both local development and Railway deployment.
@@ -44,8 +50,8 @@ REDIS_URL=${{Redis.REDIS_PRIVATE_URL}}
    ```
 
    The backend will be available at:
-   - **API:** http://localhost:9000
-   - **Admin Dashboard:** http://localhost:9000/app
+   - **API:** http://localhost:8080
+   - **Admin Dashboard:** http://localhost:8080/app
 
 ## Deploying to Railway
 
@@ -103,7 +109,7 @@ The Medusa Admin Dashboard is enabled and accessible at `/app` when the backend 
 
 ### Accessing the Admin Dashboard
 
-- **Local Development:** http://localhost:9000/app
+- **Local Development:** http://localhost:8080/app
 - **Production:** https://your-backend-url.railway.app/app
 
 ### Admin Features

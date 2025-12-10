@@ -1,18 +1,16 @@
 import type { Route } from "./+types/products.$handle";
-import { Link, useFetcher } from "react-router";
-import { useState, useCallback } from "react";
-import { useCart } from "../context/CartContext";
-import { useLocale } from "../context/LocaleContext";
-import { Star, Truck, ShieldCheck, Sparkles, MessageSquarePlus } from "lucide-react";
-import { Towel } from "@phosphor-icons/react";
-import { EmbroideryCustomizer } from "../components/EmbroideryCustomizer";
-import { WishlistButton } from "../components/WishlistButton";
+import { useState, useEffect, useCallback, Suspense } from "react";
+import { MessageSquarePlus } from "lucide-react";
+import { Await, useLoaderData } from "react-router";
 import { ReviewSection, type Review, type ReviewStats } from "../components/ReviewSection";
 import { ReviewForm } from "../components/ReviewForm";
-import { getMedusaClient } from "../lib/medusa.server";
-import { getProductPrice, getStockStatus, getStockStatusDisplay, type MedusaProduct } from "../lib/medusa";
-import { products as staticProducts } from "../data/products";
-import { getProductByHandleFromDB, getProductsFromDB, isHyperdriveAvailable } from "../lib/products.server";
+import { ProductImageGallery } from "../components/ProductImageGallery";
+import { ProductInfo } from "../components/ProductInfo";
+import { ProductActions } from "../components/ProductActions";
+import { ProductDetails } from "../components/ProductDetails";
+import { RelatedProducts } from "../components/RelatedProducts";
+import { getMedusaClient, castToMedusaProduct, type MedusaProduct, getBackendUrl, getStockStatus, validateMedusaProduct } from "../lib/medusa";
+import { transformToDetail, transformToListItem, type ProductDetail, type ProductListItem } from "../lib/product-transformer";
 
 // SEO Meta tags for product pages
 export function meta({ data }: Route.MetaArgs) {
@@ -48,52 +46,6 @@ export function meta({ data }: Route.MetaArgs) {
     ];
 }
 
-// Transform Medusa product to the format expected by the component
-function transformMedusaProduct(product: MedusaProduct) {
-    const priceData = getProductPrice(product, "usd");
-    const metadata = product.metadata || {};
-
-    // Parse features and care instructions from metadata
-    let features: string[] = [];
-    let careInstructions: string[] = [];
-
-    try {
-        if (metadata.features) {
-            features = typeof metadata.features === 'string'
-                ? JSON.parse(metadata.features)
-                : metadata.features as string[];
-        }
-        if (metadata.care_instructions) {
-            careInstructions = typeof metadata.care_instructions === 'string'
-                ? JSON.parse(metadata.care_instructions)
-                : metadata.care_instructions as string[];
-        }
-    } catch (e) {
-        console.error("Error parsing product metadata:", e);
-    }
-
-    // Extract colors from variants
-    const colors = product.variants
-        ?.map(v => v.options?.find(o => o.value)?.value)
-        .filter((c): c is string => !!c) || [];
-
-    return {
-        id: product.id,
-        handle: product.handle,
-        title: product.title,
-        price: priceData?.amount || 0,
-        formattedPrice: priceData?.formatted || "$0.00",
-        description: product.description || "",
-        images: product.images?.map(img => img.url) || [product.thumbnail || "/placeholder.jpg"],
-        features,
-        dimensions: (metadata.dimensions as string) || "",
-        careInstructions,
-        colors,
-        disableEmbroidery: metadata.disable_embroidery === "true",
-        variants: product.variants,
-    };
-}
-
 // Fetch reviews from the backend
 async function fetchReviews(productId: string, backendUrl: string, sort = "newest") {
     try {
@@ -114,92 +66,51 @@ export async function loader({ params, context }: Route.LoaderArgs) {
         throw new Response("Product not found", { status: 404 });
     }
 
-    const backendUrl = (context as { cloudflare?: { env?: { MEDUSA_BACKEND_URL?: string } } })?.cloudflare?.env?.MEDUSA_BACKEND_URL || "http://localhost:9000";
+    const medusa = getMedusaClient(context);
+    const backendUrl = getBackendUrl(context);
 
-    // Strategy: Try Hyperdrive (direct DB) first for fastest response,
-    // then fall back to Medusa API, then to static products
     let medusaProduct: MedusaProduct | null = null;
-    let allProducts: { products: MedusaProduct[] } = { products: [] };
-    let dataSource: "hyperdrive" | "medusa" | "static" = "static";
+    let dataSource: "hyperdrive" | "medusa" = "medusa";
 
-    // 1. Try Hyperdrive (direct PostgreSQL via connection pooling)
-    if (isHyperdriveAvailable(context)) {
-        try {
-            const startTime = Date.now();
-            const [productResult, productsResult] = await Promise.all([
-                getProductByHandleFromDB(context, handle),
-                getProductsFromDB(context, { limit: 10 }),
-            ]);
-
-            if (productResult) {
-                medusaProduct = productResult;
-                allProducts = productsResult;
-                dataSource = "hyperdrive";
-                console.log(`✅ Hyperdrive: Fetched product in ${Date.now() - startTime}ms`);
-            }
-        } catch (error) {
-            console.warn("⚠️ Hyperdrive failed, falling back to Medusa API:", error);
-        }
+    try {
+        // Fetch product (Blocking)
+        const { products } = await medusa.store.product.list({ handle, limit: 1, fields: "+variants,+variants.prices,+variants.inventory_quantity,+options,+options.values,+images,+categories,+metadata" });
+        medusaProduct = validateMedusaProduct(products[0]);
+    } catch (error: any) {
+        console.error("Failed to fetch product from Medusa:", error);
     }
 
-    // 2. Fall back to Medusa API if Hyperdrive didn't work
     if (!medusaProduct) {
-        try {
-            const startTime = Date.now();
-            const medusa = getMedusaClient(context);
-            medusaProduct = await medusa.getProductByHandle(handle);
-
-            if (medusaProduct) {
-                allProducts = await medusa.getProducts({ limit: 10 });
-                dataSource = "medusa";
-                console.log(`✅ Medusa API: Fetched product in ${Date.now() - startTime}ms`);
-            }
-        } catch (error) {
-            console.error("Failed to fetch product from Medusa:", error);
-        }
-    }
-
-    // 3. Return Medusa/Hyperdrive product if found
-    if (medusaProduct) {
-        const product = transformMedusaProduct(medusaProduct);
-
-        // Fetch reviews from Medusa backend (reviews require API, not direct DB)
-        const reviewData = await fetchReviews(medusaProduct.id, backendUrl);
-
-        const relatedProducts = allProducts.products
-            .filter(p => p.handle !== handle)
-            .slice(0, 3)
-            .map(transformMedusaProduct);
-
-        return {
-            product,
-            relatedProducts,
-            reviews: reviewData.reviews,
-            reviewStats: reviewData.stats,
-            backendUrl,
-            error: null,
-            _dataSource: dataSource, // For debugging
-        };
-    }
-
-    // 4. Final fallback to static products
-    const staticProduct = staticProducts[handle];
-    if (!staticProduct) {
         throw new Response("Product not found", { status: 404 });
     }
 
-    const relatedProducts = Object.values(staticProducts)
-        .filter(p => p.handle !== handle)
-        .slice(0, 3);
+    const product = transformToDetail(medusaProduct);
+
+    // Fetch related products (Deferred)
+    // We start the promise but don't await it
+    const relatedProductsPromise = (async () => {
+        try {
+            const res = await medusa.store.product.list({ limit: 4, fields: "+variants.prices,+images" });
+            return (res.products as unknown[]).map(castToMedusaProduct)
+                .filter(p => p.id !== medusaProduct!.id)
+                .slice(0, 3)
+                .map(p => transformToDetail(p)); // Use transformToDetail to satisfy RelatedProducts props
+        } catch (e) {
+            console.error("Failed to fetch related products", e);
+            return [] as ProductDetail[];
+        }
+    })();
+
+    // Fetch reviews (Blocking, to allow simpler state management in component)
+    const reviewsData = (await fetchReviews(medusaProduct.id, backendUrl)) as { reviews: Review[]; stats: ReviewStats };
 
     return {
-        product: { ...staticProduct, variants: [] },
-        relatedProducts: relatedProducts.map(p => ({ ...p, variants: [] })),
-        reviews: [] as Review[],
-        reviewStats: { average: 0, count: 0, distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 } } as ReviewStats,
+        product,
+        relatedProducts: relatedProductsPromise,
+        reviews: reviewsData.reviews,
+        reviewStats: reviewsData.stats,
         backendUrl,
-        error: "Using cached product",
-        _dataSource: "static" as const,
+        _dataSource: dataSource,
     };
 }
 
@@ -208,9 +119,7 @@ export default function ProductDetail({ loaderData }: Route.ComponentProps) {
     const { addToCart } = useCart();
     const { formatPrice, t } = useLocale();
 
-    const [quantity, setQuantity] = useState(1);
-    const [selectedColor, setSelectedColor] = useState(product.colors[0] || "");
-    const [isEmbroideryOpen, setIsEmbroideryOpen] = useState(false);
+    // Review state initialized with blocking data
     const [isReviewFormOpen, setIsReviewFormOpen] = useState(false);
     const [reviews, setReviews] = useState<Review[]>(initialReviews || []);
     const [reviewStats, setReviewStats] = useState<ReviewStats>(initialStats || { average: 0, count: 0, distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 } });
@@ -233,21 +142,27 @@ export default function ProductDetail({ loaderData }: Route.ComponentProps) {
     const stockDisplay = getStockStatusDisplay(stockStatus);
     const isOutOfStock = stockStatus === "out_of_stock";
 
-    const handleQuantityChange = (delta: number) => {
-        setQuantity(prev => Math.max(1, prev + delta));
-    };
-
-    const handleEmbroideryConfirm = (data: typeof embroideryData) => {
-        setEmbroideryData(data);
-        setIsEmbroideryOpen(false);
-    };
+    // Track product view in PostHog
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            import('../utils/posthog').then(({ default: posthog }) => {
+                posthog.capture('product_viewed', {
+                    product_id: product.id,
+                    product_name: product.title,
+                    product_price: product.price,
+                    product_handle: product.handle,
+                    stock_status: stockStatus,
+                });
+            });
+        }
+    }, [product.id, product.handle, product.title, product.price, stockStatus]);
 
     const handleSortChange = useCallback(async (sort: string) => {
         setReviewSort(sort);
         try {
             const response = await fetch(`${backendUrl}/store/products/${product.id}/reviews?sort=${sort}&limit=10`);
             if (response.ok) {
-                const data = await response.json();
+                const data = (await response.json()) as { reviews: Review[] };
                 setReviews(data.reviews);
             }
         } catch (error) {
@@ -264,7 +179,7 @@ export default function ProductDetail({ loaderData }: Route.ComponentProps) {
                 body: JSON.stringify(reviewData),
             });
             if (!response.ok) {
-                const error = await response.json();
+                const error = (await response.json()) as { message?: string };
                 throw new Error(error.message || "Failed to submit review");
             }
             setIsReviewFormOpen(false);
@@ -590,30 +505,23 @@ export default function ProductDetail({ loaderData }: Route.ComponentProps) {
                     />
                 </div>
 
-                {/* Complete the Set Section */}
-                <section className="mt-24 mb-12">
-                    <h2 className="text-3xl font-serif text-text-earthy mb-8 text-center">Complete the Set</h2>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
-                        {relatedProducts.map((relatedProduct) => (
-                            <div key={relatedProduct.id} className="group">
-                                <div className="relative overflow-hidden rounded mb-3 bg-card-earthy/20 aspect-[4/5]">
-                                    <Link to={`/products/${relatedProduct.handle}`}>
-                                        <img
-                                            src={relatedProduct.images[0]}
-                                            alt={relatedProduct.title}
-                                            className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-500 ease-out"
-                                            loading="lazy"
-                                            width="400"
-                                            height="500"
-                                        />
-                                    </Link>
-                                </div>
-                                <h4 className="text-lg font-medium text-text-earthy mb-1">{relatedProduct.title}</h4>
-                                <span className="text-accent-earthy font-medium">{formatPrice(relatedProduct.price)}</span>
-                            </div>
-                        ))}
+                {/* Related Products - Deferred/Suspended */}
+                <Suspense fallback={
+                    <div className="mt-16 pt-16 border-t border-gray-200">
+                         <h2 className="text-2xl font-serif text-text-earthy mb-8">You May Also Like</h2>
+                         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                            {[1, 2, 3].map(i => (
+                                <div key={i} className="aspect-[3/4] bg-gray-100 rounded-lg animate-pulse" />
+                            ))}
+                         </div>
                     </div>
-                </section>
+                }>
+                    <Await resolve={relatedProducts} errorElement={null}>
+                         {(resolvedRelated) => (
+                             <RelatedProducts products={resolvedRelated} />
+                         )}
+                    </Await>
+                </Suspense>
             </main>
 
             {/* Embroidery Customizer Modal */}

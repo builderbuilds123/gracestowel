@@ -1,5 +1,6 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import Stripe from "stripe";
+import { getStripeClient } from "../../../utils/stripe";
 import { createOrderFromStripeWorkflow } from "../../../workflows/create-order-from-stripe";
 
 /**
@@ -11,16 +12,20 @@ import { createOrderFromStripeWorkflow } from "../../../workflows/create-order-f
  * Endpoint: POST /webhooks/stripe
  */
 
-// Initialize Stripe client
-const getStripeClient = () => {
-    const secretKey = process.env.STRIPE_SECRET_KEY;
-    if (!secretKey) {
-        throw new Error("STRIPE_SECRET_KEY is not configured");
-    }
-    return new Stripe(secretKey, {
-        apiVersion: "2025-09-30.clover",
+// Stripe client imported from ../../../utils/stripe
+
+/**
+ * Helper to read raw body from request stream
+ * Required because bodyParser is disabled for this route via middlewares.ts
+ */
+async function getRawBody(req: MedusaRequest): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const chunks: Buffer[] = [];
+        req.on("data", (chunk: Buffer) => chunks.push(chunk));
+        req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+        req.on("error", reject);
     });
-};
+}
 
 export async function POST(
     req: MedusaRequest,
@@ -37,7 +42,7 @@ export async function POST(
 
     // Get the raw body for signature verification
     const sig = req.headers["stripe-signature"] as string;
-    
+
     if (!sig) {
         console.error("No Stripe signature found in request");
         res.status(400).json({ error: "No signature provided" });
@@ -45,14 +50,14 @@ export async function POST(
     }
 
     let event: Stripe.Event;
+    let rawBody: string;
 
     try {
-        // Verify the webhook signature
-        // Note: req.body should be the raw body for signature verification
-        const rawBody = typeof req.body === "string" 
-            ? req.body 
-            : JSON.stringify(req.body);
-        
+        // Read the raw body from the request stream
+        // bodyParser is disabled for this route via middlewares.ts
+        rawBody = await getRawBody(req);
+
+        // Verify the webhook signature with the exact raw body
         event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
     } catch (err) {
         const message = err instanceof Error ? err.message : "Unknown error";
@@ -127,6 +132,16 @@ async function handlePaymentIntentSucceeded(
     }
 
     try {
+        console.log("[webhook] Starting order creation from PaymentIntent", {
+            payment_intent_id: paymentIntent.id,
+            currency: paymentIntent.currency,
+            amount: paymentIntent.amount,
+            amount_capturable: paymentIntent.amount_capturable,
+            status: paymentIntent.status,
+            has_cart: !!cartData,
+            has_shipping: !!shippingAddress,
+        });
+
         // Create order in Medusa using workflow
         const { result: order } = await createOrderFromStripeWorkflow(req.scope).run({
             input: {
@@ -141,7 +156,14 @@ async function handlePaymentIntentSucceeded(
 
         console.log(`Order created successfully: ${order.id}`);
     } catch (error) {
-        console.error("Failed to create order:", error);
+        console.error("[webhook] Failed to create order", {
+            payment_intent_id: paymentIntent.id,
+            currency: paymentIntent.currency,
+            amount: paymentIntent.amount,
+            amount_capturable: paymentIntent.amount_capturable,
+            status: paymentIntent.status,
+            cart_metadata_present: !!cartData,
+        }, error);
         // Don't throw - we still want to return 200 to Stripe
     }
 }
