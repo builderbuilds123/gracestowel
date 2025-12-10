@@ -1,4 +1,3 @@
-// @ts-nocheck
 jest.mock('../../src/services/modification-token', () => ({
     modificationTokenService: {
         validateToken: jest.fn(),
@@ -6,14 +5,12 @@ jest.mock('../../src/services/modification-token', () => ({
     }
 }));
 
+import { MedusaRequest, MedusaResponse } from '@medusajs/framework/http';
 import { GET } from '../../src/api/store/orders/[id]/guest-view/route';
 import { modificationTokenService } from '../../src/services/modification-token';
 
 // Mock Dependencies
 const mockGraph = jest.fn();
-const mockQueryService = {
-    graph: mockGraph
-};
 
 jest.mock('@medusajs/framework', () => ({
     MedusaRequest: jest.fn(),
@@ -21,26 +18,36 @@ jest.mock('@medusajs/framework', () => ({
 }));
 
 const mockResolve = jest.fn((key: string) => {
-    if (key === 'query') return mockQueryService;
+    if (key === 'query') return { graph: mockGraph };
     return null;
 });
 
-const mockReq = {
-    scope: { resolve: mockResolve },
-    query: {},
-    headers: {},
-    params: { id: 'order_123' }
-} as any;
-
-const mockRes = {
-    json: jest.fn(),
-    status: jest.fn().mockReturnThis(),
-    setHeader: jest.fn()
-} as any;
+let mockReq: Partial<MedusaRequest>;
+let mockRes: Partial<MedusaResponse>;
+let jsonMock: jest.Mock;
+let statusMock: jest.Mock;
+let setHeaderMock: jest.Mock;
 
 describe('GET /store/orders/:id/guest-view', () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        
+        jsonMock = jest.fn();
+        statusMock = jest.fn().mockReturnThis();
+        setHeaderMock = jest.fn();
+        
+        mockReq = {
+            scope: { resolve: mockResolve } as any,
+            query: {},
+            headers: {},
+            params: { id: 'order_123' }
+        };
+        
+        mockRes = {
+            json: jsonMock,
+            status: statusMock,
+            setHeader: setHeaderMock
+        };
     });
 
     it('returns 401 if token is missing', async () => {
@@ -120,5 +127,175 @@ describe('GET /store/orders/:id/guest-view', () => {
         
         expect(responseData.modification_window).toHaveProperty('server_time');
         expect(responseData.modification_window).toHaveProperty('expires_at');
+    });
+
+    // Story 4-2: Additional Security Tests
+    it('accepts token from x-modification-token header', async () => {
+        const reqWithHeader = {
+            ...mockReq,
+            headers: { 'x-modification-token': 'header_token' },
+            query: {} // No query param
+        };
+        
+        (modificationTokenService.validateToken as any).mockReturnValue({ 
+            valid: true, 
+            payload: { order_id: 'order_123' }
+        });
+        (modificationTokenService.getRemainingTime as any).mockReturnValue(3600);
+        
+        mockGraph.mockResolvedValue({
+            data: [{
+                id: 'order_123',
+                email: 'test@example.com',
+                status: 'pending',
+                currency_code: 'usd',
+                total: 10000,
+                subtotal: 9000,
+                tax_total: 500,
+                shipping_total: 500,
+                created_at: new Date().toISOString(),
+                shipping_address: { last_name: 'Doe', country_code: 'US' },
+                items: []
+            }]
+        });
+
+        await GET(reqWithHeader, mockRes);
+
+        expect(mockRes.status).toHaveBeenCalledWith(200);
+        expect(modificationTokenService.validateToken).toHaveBeenCalledWith('header_token');
+    });
+
+    it('returns 401 with TOKEN_INVALID for invalid signature', async () => {
+        mockReq.query = { token: 'invalid_signature_token' };
+        (modificationTokenService.validateToken as any).mockReturnValue({ 
+            valid: false, 
+            expired: false, 
+            error: "Invalid token" 
+        });
+
+        await GET(mockReq, mockRes);
+
+        expect(mockRes.status).toHaveBeenCalledWith(401);
+        expect(mockRes.json).toHaveBeenCalledWith(expect.objectContaining({ 
+            code: 'TOKEN_INVALID'
+        }));
+    });
+
+    it('returns 403 with TOKEN_MISMATCH when order ID does not match', async () => {
+        mockReq.query = { token: 'valid_but_wrong_order_token' };
+        (modificationTokenService.validateToken as any).mockReturnValue({ 
+            valid: true, 
+            payload: { order_id: 'order_different' } // Different from mockReq.params.id
+        });
+
+        await GET(mockReq, mockRes);
+
+        expect(mockRes.status).toHaveBeenCalledWith(403);
+        expect(mockRes.json).toHaveBeenCalledWith(expect.objectContaining({ 
+            code: 'TOKEN_MISMATCH',
+            error: 'Token does not match this order'
+        }));
+    });
+
+    // Security Headers Tests (Story 4-2 AC3)
+    it('sets Cache-Control header to no-store, private', async () => {
+        mockReq.query = { token: 'any_token' };
+        (modificationTokenService.validateToken as any).mockReturnValue({ valid: false });
+
+        await GET(mockReq, mockRes);
+
+        expect(mockRes.setHeader).toHaveBeenCalledWith('Cache-Control', 'no-store, private');
+    });
+
+    it('sets X-Content-Type-Options header to nosniff', async () => {
+        mockReq.query = { token: 'any_token' };
+        (modificationTokenService.validateToken as any).mockReturnValue({ valid: false });
+
+        await GET(mockReq, mockRes);
+
+        expect(mockRes.setHeader).toHaveBeenCalledWith('X-Content-Type-Options', 'nosniff');
+    });
+
+    it('does not include phone number in response (PII masking)', async () => {
+        mockReq.query = { token: 'valid_token' };
+        (modificationTokenService.validateToken as any).mockReturnValue({ 
+            valid: true, 
+            payload: { order_id: 'order_123' }
+        });
+        (modificationTokenService.getRemainingTime as any).mockReturnValue(3600);
+        
+        mockGraph.mockResolvedValue({
+            data: [{
+                id: 'order_123',
+                email: 'test@example.com',
+                status: 'pending',
+                currency_code: 'usd',
+                total: 10000,
+                subtotal: 9000,
+                tax_total: 500,
+                shipping_total: 500,
+                created_at: new Date().toISOString(),
+                shipping_address: {
+                    first_name: 'John',
+                    last_name: 'Doe',
+                    address_1: '123 Main St',
+                    city: 'New York',
+                    country_code: 'US',
+                    phone: '555-0123'
+                },
+                items: []
+            }]
+        });
+
+        await GET(mockReq, mockRes);
+
+        const responseData = mockRes.json.mock.calls[0][0];
+        const address = responseData.order.shipping_address;
+        
+        // Verify phone is NOT included
+        expect(address).not.toHaveProperty('phone');
+        // Verify full address not included
+        expect(address).not.toHaveProperty('address_1');
+        expect(address).not.toHaveProperty('first_name');
+        expect(address).not.toHaveProperty('city');
+    });
+
+    // Code Review Fix: Test short email masking edge cases
+    it('masks short emails correctly (1-char and 2-char local parts)', async () => {
+        const testCases = [
+            { input: 'a@example.com', expected: '*@example.com' },
+            { input: 'ab@example.com', expected: 'a*@example.com' },
+            { input: 'abc@example.com', expected: 'ab***@example.com' }
+        ];
+        
+        for (const testCase of testCases) {
+            mockReq.query = { token: 'valid_token' };
+            (modificationTokenService.validateToken as any).mockReturnValue({ 
+                valid: true, 
+                payload: { order_id: 'order_123' }
+            });
+            (modificationTokenService.getRemainingTime as any).mockReturnValue(3600);
+            
+            mockGraph.mockResolvedValue({
+                data: [{
+                    id: 'order_123',
+                    email: testCase.input,
+                    status: 'pending',
+                    currency_code: 'usd',
+                    total: 10000,
+                    subtotal: 9000,
+                    tax_total: 500,
+                    shipping_total: 500,
+                    created_at: new Date().toISOString(),
+                    shipping_address: { last_name: 'Doe', country_code: 'US' },
+                    items: []
+                }]
+            });
+
+            await GET(mockReq, mockRes);
+
+            const responseData = mockRes.json.mock.calls[mockRes.json.mock.calls.length - 1][0];
+            expect(responseData.order.email).toBe(testCase.expected);
+        }
     });
 });

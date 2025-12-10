@@ -48,13 +48,17 @@ export async function loader({ params, request, context }: LoaderFunctionArgs) {
     });
 
     if (response.status === 401 || response.status === 403) {
-        // Token expired or invalid
+        // Token expired, invalid, or mismatched
         const errorResp = await response.json() as any;
         if (errorResp.code === "TOKEN_EXPIRED") {
-             // We could render a specific "Request new link" page here, or handle it in component
-             // For now, return error state to component
-             return data({ error: "TOKEN_EXPIRED", message: errorResp.message } as ErrorData, { status: 403 });
+             // Render "Request new link" UI
+             return data({ error: "TOKEN_EXPIRED", message: "This link has expired" } as ErrorData, { status: 403 });
         }
+        if (errorResp.code === "TOKEN_MISMATCH") {
+             // Token is for a different order - redirect to error (prevent order enumeration)
+             throw new Response("Invalid Access Link", { status: 403 });
+        }
+        // TOKEN_INVALID or other 401/403 errors
         throw new Response("Unauthorized", { status: 401 });
     }
 

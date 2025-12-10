@@ -25,6 +25,8 @@ export async function GET(
 
     // SECURITY: No-Store to prevent browser caching of PII/Token state
     res.setHeader("Cache-Control", "no-store, private");
+    // SECURITY: Prevent MIME type sniffing (AC3 requirement)
+    res.setHeader("X-Content-Type-Options", "nosniff");
 
     if (!token) {
         res.status(401).json({
@@ -109,7 +111,28 @@ export async function GET(
             // OMIT: first_name, city, address_1, address_2, phone, postal_code, province
         } : null;
 
-        const maskedEmail = order.email.replace(/(.{2})(.*)(@.*)/, "$1***$3");
+        /**
+         * PII Masking: Email masking that handles edge cases
+         * - 1 char local: a@example.com → *@example.com
+         * - 2 char local: ab@example.com → a*@example.com  
+         * - 3+ char local: abc@example.com → ab***@example.com
+         */
+        const maskEmail = (email: string): string => {
+            const atIndex = email.indexOf('@');
+            if (atIndex === -1) return email; // Invalid email, return as-is
+            
+            const localPart = email.substring(0, atIndex);
+            const domain = email.substring(atIndex);
+            
+            if (localPart.length === 1) {
+                return '*' + domain;
+            } else if (localPart.length === 2) {
+                return localPart[0] + '*' + domain;
+            } else {
+                return localPart.substring(0, 2) + '***' + domain;
+            }
+        };
+        const maskedEmail = maskEmail(order.email);
 
         res.status(200).json({
             order: {
