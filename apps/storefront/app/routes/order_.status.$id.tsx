@@ -183,7 +183,7 @@ export async function action({ params, request, context }: ActionFunctionArgs) {
             const response = await fetch(`${medusaBackendUrl}/store/orders/${id}/line-items`, {
                 method: "POST",
                 headers,
-                body: JSON.stringify({ token, items }),
+                body: JSON.stringify({ items }),
             });
 
             if (!response.ok) {
