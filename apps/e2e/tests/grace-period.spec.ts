@@ -32,9 +32,13 @@ const EXPIRED_TOKEN = JWT_SECRET
     )
   : "";
 
-// Invalid token: wrong signature (for testing invalid signature path)
-const INVALID_SIGNATURE_TOKEN =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJvcmRlcl9pZCI6Im9yZGVyXzAxSkVGVEVTVCIsImV4cCI6OTk5OTk5OTk5OX0.wrong_signature";
+// Invalid token: signed with wrong secret (for testing invalid signature path)
+// Generate a token signed with a different secret than what backend uses
+const INVALID_SIGNATURE_TOKEN = jwt.sign(
+  { order_id: TEST_ORDER_ID, payment_intent_id: "pi_test", exp: 9999999999 },
+  "wrong-secret-not-matching-backend",
+  { algorithm: "HS256" }
+);
 
 test.describe("AC1: Timer Visibility & Expiration", () => {
   test("should display timer element with role='timer' during grace period", async ({
