@@ -80,7 +80,8 @@ export function OrderModificationDialogs({
                 setError(fetcher.data.error);
             }
         }
-    }, [fetcher.data, onOrderCanceled, onAddressUpdated, onOrderUpdated]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [fetcher.data]);
 
     // Submit handlers using fetcher (no client-side fetch)
     const handleCancelOrder = async () => {
