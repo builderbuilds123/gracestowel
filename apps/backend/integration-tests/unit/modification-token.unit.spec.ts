@@ -175,11 +175,11 @@ describe('ModificationTokenService', () => {
         });
 
         it('should expose original error details', () => {
-             const service = new ModificationTokenService();
-             const result = service.validateToken("invalid.token");
-             
-             expect(result.valid).toBe(false);
-             expect(result.originalError).toBeDefined();
+            const service = new ModificationTokenService();
+            const result = service.validateToken("invalid.token");
+            
+            expect(result.valid).toBe(false);
+            expect(result.originalError).toBeDefined();
         });
     });
 });
