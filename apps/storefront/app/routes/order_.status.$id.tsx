@@ -1,10 +1,11 @@
 import { data } from "react-router";
 import { useLoaderData, useRevalidator } from "react-router";
-import type { LoaderFunctionArgs } from "react-router";
+import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { useState, useCallback } from "react";
 import { CheckCircle2, MapPin, Package, Truck, AlertCircle } from "lucide-react";
 import { OrderTimer } from "../components/order/OrderTimer";
 import { OrderModificationDialogs } from "../components/order/OrderModificationDialogs";
+import { getGuestToken, setGuestToken, clearGuestToken } from "../utils/guest-session.server";
 
 interface LoaderData {
     order: any;
@@ -14,9 +15,6 @@ interface LoaderData {
         server_time: string;
         remaining_seconds: number;
     };
-    token: string;
-    medusaBackendUrl: string;
-    medusaPublishableKey: string;
     env: {
         STRIPE_PUBLISHABLE_KEY: string;
     }
@@ -29,37 +27,52 @@ interface ErrorData {
 
 export async function loader({ params, request, context }: LoaderFunctionArgs) {
     const { id } = params;
-    const url = new URL(request.url);
-    const token = url.searchParams.get("token");
     const env = context.cloudflare.env as any;
     const medusaBackendUrl = env.MEDUSA_BACKEND_URL;
     const medusaPublishableKey = env.MEDUSA_PUBLISHABLE_KEY;
 
+    // Story 4-3: Cookie-first token retrieval
+    const { token, source } = await getGuestToken(request, id!);
+
     if (!token) {
-        // No token? Maybe redirect to login or show generic lookup
+        // No token in cookie or URL
         throw new Response("Missing Access Token", { status: 401 });
     }
 
-    // specific guest-view endpoint
-    const response = await fetch(`${medusaBackendUrl}/store/orders/${id}/guest-view?token=${token}`, {
+    // Call backend with token in header (preferred method per Story 4-2)
+    const response = await fetch(`${medusaBackendUrl}/store/orders/${id}/guest-view`, {
         headers: {
             "x-publishable-api-key": medusaPublishableKey,
+            "x-modification-token": token,
         }
     });
 
     if (response.status === 401 || response.status === 403) {
-        // Token expired, invalid, or mismatched
+        // Token expired, invalid, or mismatched - clear cookie
+        const clearCookieHeader = await clearGuestToken(id!);
         const errorResp = await response.json() as any;
+        
         if (errorResp.code === "TOKEN_EXPIRED") {
-             // Render "Request new link" UI
-             return data({ error: "TOKEN_EXPIRED", message: "This link has expired" } as ErrorData, { status: 403 });
+            // Return error data with Clear-Cookie header
+            return data(
+                { error: "TOKEN_EXPIRED", message: "This link has expired" } as ErrorData,
+                { 
+                    status: 403,
+                    headers: { "Set-Cookie": clearCookieHeader }
+                }
+            );
         }
         if (errorResp.code === "TOKEN_MISMATCH") {
-             // Token is for a different order - redirect to error (prevent order enumeration)
-             throw new Response("Invalid Access Link", { status: 403 });
+            throw new Response("Invalid Access Link", { 
+                status: 403,
+                headers: { "Set-Cookie": clearCookieHeader }
+            });
         }
         // TOKEN_INVALID or other 401/403 errors
-        throw new Response("Unauthorized", { status: 401 });
+        throw new Response("Unauthorized", { 
+            status: 401,
+            headers: { "Set-Cookie": clearCookieHeader }
+        });
     }
 
     if (!response.ok) {
@@ -68,16 +81,131 @@ export async function loader({ params, request, context }: LoaderFunctionArgs) {
 
     const responseData = await response.json() as { order: any; modification_window: any };
 
+    // Build response headers
+    const responseHeaders: HeadersInit = {};
+    
+    // Story 4-3: Set cookie if token came from URL (first visit via magic link)
+    if (source === 'url') {
+        responseHeaders["Set-Cookie"] = await setGuestToken(token, id!);
+    }
+
     return data({
         order: responseData.order,
         modification_window: responseData.modification_window,
-        token,
-        medusaBackendUrl,
-        medusaPublishableKey,
         env: {
             STRIPE_PUBLISHABLE_KEY: env.STRIPE_PUBLISHABLE_KEY
         }
-    } as LoaderData);
+    } as LoaderData, { headers: responseHeaders });
+}
+
+/**
+ * Remix Action: Handle order modifications server-side
+ * Token is read from HttpOnly cookie (not passed from client)
+ * 
+ * Intents:
+ * - CANCEL_ORDER: Cancel the order
+ * - UPDATE_ADDRESS: Update shipping address
+ * - ADD_ITEMS: Add line items (future)
+ */
+export async function action({ params, request, context }: ActionFunctionArgs) {
+    const { id } = params;
+    const env = context.cloudflare.env as any;
+    const medusaBackendUrl = env.MEDUSA_BACKEND_URL;
+    const medusaPublishableKey = env.MEDUSA_PUBLISHABLE_KEY;
+
+    // Get token from HttpOnly cookie (secure - not accessible to client JS)
+    const { token } = await getGuestToken(request, id!);
+
+    if (!token) {
+        return data({ success: false, error: "Session expired" }, { status: 401 });
+    }
+
+    const formData = await request.formData();
+    const intent = formData.get("intent") as string;
+
+    const headers = {
+        "Content-Type": "application/json",
+        "x-publishable-api-key": medusaPublishableKey,
+        "x-modification-token": token,
+    };
+
+    try {
+        if (intent === "CANCEL_ORDER") {
+            const reason = formData.get("reason") as string || "Customer requested cancellation";
+            
+            const response = await fetch(`${medusaBackendUrl}/store/orders/${id}/cancel`, {
+                method: "POST",
+                headers,
+                body: JSON.stringify({ token, reason }),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json() as any;
+                // Clear cookie on auth errors
+                if (response.status === 401 || response.status === 403) {
+                    return data(
+                        { success: false, error: errorData.message || "Authorization failed" },
+                        { status: response.status, headers: { "Set-Cookie": await clearGuestToken(id!) } }
+                    );
+                }
+                return data({ success: false, error: errorData.message || "Failed to cancel order" }, { status: 400 });
+            }
+
+            return data({ success: true, action: "canceled" });
+        }
+
+        if (intent === "UPDATE_ADDRESS") {
+            const address = JSON.parse(formData.get("address") as string);
+            
+            const response = await fetch(`${medusaBackendUrl}/store/orders/${id}/address`, {
+                method: "POST",
+                headers,
+                body: JSON.stringify({ token, address }),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json() as any;
+                if (response.status === 401 || response.status === 403) {
+                    return data(
+                        { success: false, error: errorData.message || "Authorization failed" },
+                        { status: response.status, headers: { "Set-Cookie": await clearGuestToken(id!) } }
+                    );
+                }
+                return data({ success: false, error: errorData.message || "Failed to update address" }, { status: 400 });
+            }
+
+            return data({ success: true, action: "address_updated", address });
+        }
+
+        if (intent === "ADD_ITEMS") {
+            const items = JSON.parse(formData.get("items") as string);
+            
+            const response = await fetch(`${medusaBackendUrl}/store/orders/${id}/line-items`, {
+                method: "POST",
+                headers,
+                body: JSON.stringify({ token, items }),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json() as any;
+                if (response.status === 401 || response.status === 403) {
+                    return data(
+                        { success: false, error: errorData.message || "Authorization failed" },
+                        { status: response.status, headers: { "Set-Cookie": await clearGuestToken(id!) } }
+                    );
+                }
+                return data({ success: false, error: errorData.message || "Failed to add items" }, { status: 400 });
+            }
+
+            const result = await response.json() as any;
+            return data({ success: true, action: "items_added", new_total: result.new_total });
+        }
+
+        return data({ success: false, error: "Unknown intent" }, { status: 400 });
+    } catch (error) {
+        console.error("Action error:", error);
+        return data({ success: false, error: "An unexpected error occurred" }, { status: 500 });
+    }
 }
 
 export default function OrderStatus() {
@@ -107,7 +235,7 @@ export default function OrderStatus() {
          );
     }
     
-    const { order, modification_window, token, medusaBackendUrl, medusaPublishableKey } = loaderData as LoaderData;
+    const { order, modification_window } = loaderData as LoaderData;
     const [orderDetails, setOrderDetails] = useState(order);
     const [shippingAddress, setShippingAddress] = useState(order.shipping_address);
     const isModificationActive = modification_window.status === "active";
@@ -147,12 +275,9 @@ export default function OrderStatus() {
                          </div>
                          <OrderModificationDialogs 
                             orderId={orderDetails.id}
-                            token={token}
                             orderNumber={orderDetails.display_id}
                             currencyCode={orderDetails.currency_code}
                             currentAddress={shippingAddress}
-                            medusaBackendUrl={medusaBackendUrl}
-                            medusaPublishableKey={medusaPublishableKey}
                             onOrderUpdated={handleOrderUpdate}
                             onAddressUpdated={setShippingAddress}
                             onOrderCanceled={() => window.location.reload()}
