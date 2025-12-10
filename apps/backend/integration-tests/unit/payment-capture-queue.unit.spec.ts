@@ -399,5 +399,49 @@ describe("payment-capture-queue", () => {
             await schedulePaymentCapture("ord_1", "pi_1");
             expect(mockQueueAdd).toHaveBeenCalled();
         });
+
+        it("should verify wiring from schedule to process (AC5)", async () => {
+            // 1. Schedule
+            await schedulePaymentCapture("ord_wiring", "pi_wiring");
+            
+            // Verify what was added to queue matches what worker expects
+            expect(mockQueueAdd).toHaveBeenCalledWith(
+                "capture-ord_wiring",
+                expect.objectContaining({
+                    orderId: "ord_wiring",
+                    paymentIntentId: "pi_wiring"
+                }),
+                expect.objectContaining({
+                    delay: expect.any(Number) // Verified in config test
+                })
+            );
+
+            // 2. Simulate Worker processing the exact payload we just scheduled
+            const scheduledData = mockQueueAdd.mock.calls[mockQueueAdd.mock.calls.length - 1][1];
+            const mockJob = { data: scheduledData } as Job;
+
+            // Setup mocks for successful processing
+            mockStripeRetrieve.mockResolvedValue({ status: "requires_capture", amount: 1000, currency: "usd" });
+            mockQueryGraph.mockResolvedValue({
+                data: [{ id: "ord_wiring", total: 1000, currency_code: "usd", status: "pending" }]
+            });
+            mockStripeCapture.mockResolvedValue({ status: "succeeded" });
+
+            // Initialize worker/container
+            startPaymentCaptureWorker(mockContainer);
+
+            // Run process
+            await processPaymentCapture(mockJob);
+
+            // 3. Verify Metadata set (End of flow)
+            expect((global as any).mockUpdateOrders).toHaveBeenCalledWith([
+                expect.objectContaining({
+                    id: "ord_wiring",
+                    metadata: expect.objectContaining({
+                        payment_captured_at: expect.any(String)
+                    })
+                })
+            ]);
+        });
     });
 });

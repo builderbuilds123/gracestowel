@@ -2,7 +2,7 @@
   "config": {
     "configFile": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/playwright.config.ts",
     "rootDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/tests",
-    "forbidOnly": false,
+    "forbidOnly": true,
     "fullyParallel": true,
     "globalSetup": null,
     "globalTeardown": null,
@@ -10,7 +10,9 @@
     "grep": {},
     "grepInvert": null,
     "maxFailures": 0,
-    "metadata": {},
+    "metadata": {
+      "actualWorkers": 1
+    },
     "preserveOutput": "always",
     "reporter": [
       [
@@ -26,7 +28,7 @@
         }
       ],
       [
-        "list",
+        "github",
         null
       ]
     ],
@@ -39,7 +41,7 @@
       {
         "outputDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results",
         "repeatEach": 1,
-        "retries": 0,
+        "retries": 2,
         "metadata": {},
         "id": "chromium",
         "name": "chromium",
@@ -53,7 +55,7 @@
       {
         "outputDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results",
         "repeatEach": 1,
-        "retries": 0,
+        "retries": 2,
         "metadata": {},
         "id": "firefox",
         "name": "firefox",
@@ -67,7 +69,7 @@
       {
         "outputDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results",
         "repeatEach": 1,
-        "retries": 0,
+        "retries": 2,
         "metadata": {},
         "id": "webkit",
         "name": "webkit",
@@ -81,7 +83,7 @@
       {
         "outputDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results",
         "repeatEach": 1,
-        "retries": 0,
+        "retries": 2,
         "metadata": {},
         "id": "Mobile Chrome",
         "name": "Mobile Chrome",
@@ -95,7 +97,7 @@
       {
         "outputDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results",
         "repeatEach": 1,
-        "retries": 0,
+        "retries": 2,
         "metadata": {},
         "id": "Mobile Safari",
         "name": "Mobile Safari",
@@ -109,7 +111,7 @@
       {
         "outputDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results",
         "repeatEach": 1,
-        "retries": 0,
+        "retries": 2,
         "metadata": {},
         "id": "resilience",
         "name": "resilience",
@@ -125,26 +127,427 @@
     "updateSnapshots": "missing",
     "version": "1.49.0",
     "workers": 1,
-    "webServer": {
-      "command": "cd ../.. && MEDUSA_PUBLISHABLE_KEY=undefined CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE='undefined' npm run dev --workspace=apps/storefront",
-      "url": "https://localhost:5173",
-      "reuseExistingServer": true,
-      "ignoreHTTPSErrors": true,
-      "timeout": 120000
-    }
+    "webServer": null
   },
-  "suites": [],
-  "errors": [
+  "suites": [
     {
-      "message": "Error: Process from config.webServer was not able to start. Exit code: 1",
-      "stack": "Error: Process from config.webServer was not able to start. Exit code: 1"
+      "title": "grace-period.spec.ts",
+      "file": "grace-period.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "AC1: Timer Visibility & Expiration",
+          "file": "grace-period.spec.ts",
+          "line": 25,
+          "column": 6,
+          "specs": [
+            {
+              "title": "should display timer element with role='timer' during grace period",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Requires TEST_MODIFICATION_TOKEN env var"
+                    }
+                  ],
+                  "expectedStatus": "skipped",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "status": "skipped",
+                      "duration": 229,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-10T07:37:59.607Z",
+                      "attachments": []
+                    }
+                  ],
+                  "status": "skipped"
+                }
+              ],
+              "id": "cfa8594a2ce329853a65-bbfcc8357c0b5c9e8283",
+              "file": "grace-period.spec.ts",
+              "line": 27,
+              "column": 9
+            },
+            {
+              "title": "should display edit/cancel options during active grace period",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Requires TEST_MODIFICATION_TOKEN env var"
+                    }
+                  ],
+                  "expectedStatus": "skipped",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "status": "skipped",
+                      "duration": 70,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-10T07:38:00.065Z",
+                      "attachments": []
+                    }
+                  ],
+                  "status": "skipped"
+                }
+              ],
+              "id": "cfa8594a2ce329853a65-44ccaa59d9613fcc69df",
+              "file": "grace-period.spec.ts",
+              "line": 41,
+              "column": 9
+            },
+            {
+              "title": "should hide edit options when grace period expires (short TTL)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Requires TEST_MODIFICATION_TOKEN env var"
+                    }
+                  ],
+                  "expectedStatus": "skipped",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "status": "skipped",
+                      "duration": 66,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-10T07:38:00.137Z",
+                      "attachments": []
+                    }
+                  ],
+                  "status": "skipped"
+                }
+              ],
+              "id": "cfa8594a2ce329853a65-c4a8dc650e2cbac3ac94",
+              "file": "grace-period.spec.ts",
+              "line": 53,
+              "column": 9
+            }
+          ]
+        },
+        {
+          "title": "AC2 & AC3: Magic Link & Cookie Persistence",
+          "file": "grace-period.spec.ts",
+          "line": 79,
+          "column": 6,
+          "specs": [
+            {
+              "title": "should show 'Link Expired' page for expired token",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Requires MEDUSA_BACKEND_URL env var (backend must be running)"
+                    }
+                  ],
+                  "expectedStatus": "skipped",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "status": "skipped",
+                      "duration": 64,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-10T07:38:00.206Z",
+                      "attachments": []
+                    }
+                  ],
+                  "status": "skipped"
+                }
+              ],
+              "id": "cfa8594a2ce329853a65-8e886773d1be745d6a5e",
+              "file": "grace-period.spec.ts",
+              "line": 81,
+              "column": 9
+            },
+            {
+              "title": "should set guest_order cookie with correct attributes",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Requires TEST_MODIFICATION_TOKEN env var"
+                    }
+                  ],
+                  "expectedStatus": "skipped",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "status": "skipped",
+                      "duration": 66,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-10T07:38:00.271Z",
+                      "attachments": []
+                    }
+                  ],
+                  "status": "skipped"
+                }
+              ],
+              "id": "cfa8594a2ce329853a65-ee8b0fcd556f59bdd47d",
+              "file": "grace-period.spec.ts",
+              "line": 98,
+              "column": 9
+            },
+            {
+              "title": "should persist session via cookie (no token in URL on reload)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Requires TEST_MODIFICATION_TOKEN env var"
+                    }
+                  ],
+                  "expectedStatus": "skipped",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "status": "skipped",
+                      "duration": 65,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-10T07:38:00.339Z",
+                      "attachments": []
+                    }
+                  ],
+                  "status": "skipped"
+                }
+              ],
+              "id": "cfa8594a2ce329853a65-7c3ea29eb79896dc5798",
+              "file": "grace-period.spec.ts",
+              "line": 119,
+              "column": 9
+            },
+            {
+              "title": "should have cookie path scoped to specific order",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Requires TEST_MODIFICATION_TOKEN env var"
+                    }
+                  ],
+                  "expectedStatus": "skipped",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "status": "skipped",
+                      "duration": 63,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-10T07:38:00.406Z",
+                      "attachments": []
+                    }
+                  ],
+                  "status": "skipped"
+                }
+              ],
+              "id": "cfa8594a2ce329853a65-dc57816c92ef390b3875",
+              "file": "grace-period.spec.ts",
+              "line": 137,
+              "column": 9
+            }
+          ]
+        },
+        {
+          "title": "AC4 & AC6: Order Cancellation",
+          "file": "grace-period.spec.ts",
+          "line": 152,
+          "column": 6,
+          "specs": [
+            {
+              "title": "should allow cancelling order during grace period",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Requires TEST_MODIFICATION_TOKEN env var"
+                    }
+                  ],
+                  "expectedStatus": "skipped",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "status": "skipped",
+                      "duration": 66,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-10T07:38:00.471Z",
+                      "attachments": []
+                    }
+                  ],
+                  "status": "skipped"
+                }
+              ],
+              "id": "cfa8594a2ce329853a65-d3415a8300a2e39cf3bc",
+              "file": "grace-period.spec.ts",
+              "line": 154,
+              "column": 9
+            },
+            {
+              "title": "should hide cancel button after grace period expires",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Requires TEST_MODIFICATION_TOKEN env var"
+                    }
+                  ],
+                  "expectedStatus": "skipped",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "status": "skipped",
+                      "duration": 65,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-10T07:38:00.539Z",
+                      "attachments": []
+                    }
+                  ],
+                  "status": "skipped"
+                }
+              ],
+              "id": "cfa8594a2ce329853a65-02a4e54541797d49dd15",
+              "file": "grace-period.spec.ts",
+              "line": 180,
+              "column": 9
+            }
+          ]
+        },
+        {
+          "title": "AC5: Backend Capture Workflow (Smoke Test)",
+          "file": "grace-period.spec.ts",
+          "line": 197,
+          "column": 6,
+          "specs": [
+            {
+              "title": "should complete order capture after grace period",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Requires TEST_MODIFICATION_TOKEN env var"
+                    }
+                  ],
+                  "expectedStatus": "skipped",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "status": "skipped",
+                      "duration": 65,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-10T07:38:00.606Z",
+                      "attachments": []
+                    }
+                  ],
+                  "status": "skipped"
+                }
+              ],
+              "id": "cfa8594a2ce329853a65-e9440998ce1ec8a6c0d7",
+              "file": "grace-period.spec.ts",
+              "line": 199,
+              "column": 9
+            }
+          ]
+        }
+      ]
     }
   ],
+  "errors": [],
   "stats": {
-    "startTime": "2025-12-08T02:19:31.982Z",
-    "duration": 1470.7939999999999,
+    "startTime": "2025-12-10T07:37:59.362Z",
+    "duration": 1334.2649999999999,
     "expected": 0,
-    "skipped": 0,
+    "skipped": 10,
     "unexpected": 0,
     "flaky": 0
   }
