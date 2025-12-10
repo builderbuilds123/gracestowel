@@ -203,7 +203,8 @@ export async function action({ params, request, context }: ActionFunctionArgs) {
 
         return data({ success: false, error: "Unknown intent" }, { status: 400 });
     } catch (error) {
-        console.error("Action error:", error);
+        // Structured logging - only log error message, not full object
+        console.error("Action error:", error instanceof Error ? error.message : "Unknown error");
         return data({ success: false, error: "An unexpected error occurred" }, { status: 500 });
     }
 }
