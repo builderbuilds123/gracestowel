@@ -25,8 +25,9 @@ export interface TokenValidationResult {
 /**
  * Configuration for the modification token
  */
-const MODIFICATION_WINDOW_SECONDS = process.env.PAYMENT_CAPTURE_DELAY_MS 
-    ? Math.floor(parseInt(process.env.PAYMENT_CAPTURE_DELAY_MS) / 1000) 
+const delayMs = parseInt(process.env.PAYMENT_CAPTURE_DELAY_MS || '', 10);
+const MODIFICATION_WINDOW_SECONDS = !isNaN(delayMs)
+    ? Math.floor(delayMs / 1000)
     : 60 * 60; // 1 hour
 
 /**
