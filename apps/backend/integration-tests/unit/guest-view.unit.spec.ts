@@ -261,41 +261,41 @@ describe('GET /store/orders/:id/guest-view', () => {
     });
 
     // Code Review Fix: Test short email masking edge cases
-    it('masks short emails correctly (1-char and 2-char local parts)', async () => {
-        const testCases = [
-            { input: 'a@example.com', expected: '*@example.com' },
-            { input: 'ab@example.com', expected: 'a*@example.com' },
-            { input: 'abc@example.com', expected: 'ab***@example.com' }
-        ];
+    it.each([
+        { description: '1-char local part', input: 'a@example.com', expected: '*@example.com' },
+        { description: '2-char local part', input: 'ab@example.com', expected: 'a*@example.com' },
+        { description: '3+ char local part', input: 'abc@example.com', expected: 'ab***@example.com' }
+    ])('masks email correctly for $description', async ({ input, expected }) => {
+        // Clear mocks for each test case to ensure isolation
+        jsonMock.mockClear();
+        mockGraph.mockClear();
+
+        mockReq.query = { token: 'valid_token' };
+        (modificationTokenService.validateToken as any).mockReturnValue({
+            valid: true,
+            payload: { order_id: 'order_123' }
+        });
+        (modificationTokenService.getRemainingTime as any).mockReturnValue(3600);
         
-        for (const testCase of testCases) {
-            mockReq.query = { token: 'valid_token' };
-            (modificationTokenService.validateToken as any).mockReturnValue({ 
-                valid: true, 
-                payload: { order_id: 'order_123' }
-            });
-            (modificationTokenService.getRemainingTime as any).mockReturnValue(3600);
-            
-            mockGraph.mockResolvedValue({
-                data: [{
-                    id: 'order_123',
-                    email: testCase.input,
-                    status: 'pending',
-                    currency_code: 'usd',
-                    total: 10000,
-                    subtotal: 9000,
-                    tax_total: 500,
-                    shipping_total: 500,
-                    created_at: new Date().toISOString(),
-                    shipping_address: { last_name: 'Doe', country_code: 'US' },
-                    items: []
-                }]
-            });
+        mockGraph.mockResolvedValue({
+            data: [{
+                id: 'order_123',
+                email: input,
+                status: 'pending',
+                currency_code: 'usd',
+                total: 10000,
+                subtotal: 9000,
+                tax_total: 500,
+                shipping_total: 500,
+                created_at: new Date().toISOString(),
+                shipping_address: { last_name: 'Doe', country_code: 'US' },
+                items: []
+            }]
+        });
 
-            await GET(mockReq, mockRes);
+        await GET(mockReq, mockRes);
 
-            const responseData = mockRes.json.mock.calls[mockRes.json.mock.calls.length - 1][0];
-            expect(responseData.order.email).toBe(testCase.expected);
-        }
+        const responseData = jsonMock.mock.calls[0][0];
+        expect(responseData.order.email).toBe(expected);
     });
 });
