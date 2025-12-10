@@ -1,6 +1,6 @@
 # Story 4.2: Guest Auth Middleware
 
-Status: Ready for Review
+Status: Done
 
 ## Story
 
