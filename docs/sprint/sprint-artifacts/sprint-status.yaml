@@ -170,11 +170,19 @@ development_status:
     meta: "Enable E2E tests in CI - remove test.skip(), add order seeding, overhaul existing tests for recent changes"
   pi-epic-5-retrospective: optional
 
-  pi-epic-6: backlog
-  6-1-webhook-validation-retry: backlog
-  6-2-redis-connection-failure-handling: backlog
-  6-3-race-condition-handling: backlog
-  6-4-increment-fallback-flow: backlog
+  pi-epic-6: in-progress
+  6-1-webhook-validation-retry:
+    path: docs/sprint/sprint-artifacts/6-1-webhook-validation-retry.md
+    status: ready-for-dev
+  6-2-redis-connection-failure-handling:
+    path: docs/sprint/sprint-artifacts/6-2-redis-connection-failure-handling.md
+    status: ready-for-dev
+  6-3-race-condition-handling:
+    path: docs/sprint/sprint-artifacts/6-3-race-condition-handling.md
+    status: ready-for-dev
+  6-4-increment-fallback-flow:
+    path: docs/sprint/sprint-artifacts/6-4-increment-fallback-flow.md
+    status: ready-for-dev
   pi-epic-6-retrospective: optional
 
   pi-epic-7: backlog
