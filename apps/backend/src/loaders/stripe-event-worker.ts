@@ -2,6 +2,32 @@ import { MedusaContainer } from "@medusajs/framework/types";
 import Stripe from "stripe";
 import { startStripeEventWorker } from "../lib/stripe-event-queue";
 import { createOrderFromStripeWorkflow } from "../workflows/create-order-from-stripe";
+import { z } from "zod";
+
+const CartItemSchema = z.object({
+  variantId: z.string().optional(),
+  sku: z.string().optional(),
+  title: z.string(),
+  price: z.string(),
+  quantity: z.number(),
+  color: z.string().optional(),
+});
+
+const CartDataSchema = z.object({
+  items: z.array(CartItemSchema),
+});
+
+const ShippingAddressSchema = z.object({
+  firstName: z.string(),
+  lastName: z.string(),
+  address1: z.string(),
+  address2: z.string().nullish().transform(v => v || undefined),
+  city: z.string(),
+  state: z.string().nullish().transform(v => v || undefined),
+  postalCode: z.string(),
+  countryCode: z.string(),
+  phone: z.string().nullish().transform(v => v || undefined),
+});
 
 /**
  * Stripe Event Worker Loader - Story 6.1
@@ -124,10 +150,45 @@ async function createOrderFromPaymentIntent(
     container: MedusaContainer
 ): Promise<void> {
     const metadata = paymentIntent.metadata || {};
-    const cartData = metadata.cart_data ? JSON.parse(metadata.cart_data) : null;
+    
+    // Validate cart_data using Zod
+    let cartData: z.infer<typeof CartDataSchema> | null = null;
+    if (metadata.cart_data) {
+        try {
+             // Parse JSON first, then validate
+            const rawCart = JSON.parse(metadata.cart_data);
+            const parsed = CartDataSchema.safeParse(rawCart);
+            if (parsed.success) {
+                cartData = parsed.data;
+            } else {
+                console.error("[StripeEventWorker] Invalid cart_data schema:", parsed.error);
+                // Fail safe - do not process invalid cart data
+                return;
+            }
+        } catch (e) {
+            console.error("[StripeEventWorker] Failed to parse cart_data JSON:", e);
+            return;
+        }
+    }
+
     const customerEmail = metadata.customer_email || paymentIntent.receipt_email;
 
-    let shippingAddress = metadata.shipping_address ? JSON.parse(metadata.shipping_address) : null;
+    let shippingAddress: z.infer<typeof ShippingAddressSchema> | undefined = undefined;
+
+    if (metadata.shipping_address) {
+        try {
+            const rawAddress = JSON.parse(metadata.shipping_address);
+            const parsed = ShippingAddressSchema.safeParse(rawAddress);
+            if (parsed.success) {
+                shippingAddress = parsed.data;
+            } else {
+                console.warn("[StripeEventWorker] Invalid shipping_address schema, falling back to Stripe data:", parsed.error);
+                // Fallback to undefined will trigger Stripe data usage below
+            }
+        } catch (e) {
+            console.warn("[StripeEventWorker] Failed to parse shipping_address JSON, falling back to Stripe data:", e);
+        }
+    }
 
     if (!shippingAddress && paymentIntent.shipping) {
         const stripeShipping = paymentIntent.shipping;
@@ -135,12 +196,12 @@ async function createOrderFromPaymentIntent(
             firstName: stripeShipping.name?.split(' ')[0] || '',
             lastName: stripeShipping.name?.split(' ').slice(1).join(' ') || '',
             address1: stripeShipping.address?.line1 || '',
-            address2: stripeShipping.address?.line2 || '',
+            address2: stripeShipping.address?.line2 || undefined,
             city: stripeShipping.address?.city || '',
-            state: stripeShipping.address?.state || '',
+            state: stripeShipping.address?.state || undefined,
             postalCode: stripeShipping.address?.postal_code || '',
             countryCode: stripeShipping.address?.country || 'US',
-            phone: stripeShipping.phone || '',
+            phone: stripeShipping.phone || undefined,
         };
     }
 

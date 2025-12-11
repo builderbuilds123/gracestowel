@@ -214,7 +214,10 @@ describe("Stripe Webhook POST - Story 6.1", () => {
 
             // Should return 500 to trigger Stripe retry
             expect(res.status).toHaveBeenCalledWith(500);
-            expect(res.json).toHaveBeenCalledWith({ error: "Internal Server Error" });
+            expect(res.json).toHaveBeenCalledWith({ 
+                error: "Internal Server Error",
+                eventId: "evt_fail_queue", // Included for correlation in logs
+            });
             expect(console.error).toHaveBeenCalled();
         });
 

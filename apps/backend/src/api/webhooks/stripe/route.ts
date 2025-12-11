@@ -31,6 +31,20 @@ async function getRawBody(req: MedusaRequest): Promise<string> {
     });
 }
 
+/**
+ * Check if an error indicates a duplicate job in BullMQ
+ * Encapsulated to isolate brittle string matching and make updates easier
+ * if BullMQ error messages change in future versions.
+ */
+function isDuplicateJobError(err: any, eventId: string): boolean {
+    // Ideal: BullMQ provides a specific error class
+    if (err?.name === "JobIdAlreadyExistsError") return true;
+    
+    const message = err?.message || "";
+    return message.includes("already exists") || 
+           (message.includes("Job") && message.includes(eventId));
+}
+
 export async function POST(
     req: MedusaRequest,
     res: MedusaResponse
@@ -86,23 +100,27 @@ export async function POST(
         await queueStripeEvent(event);
         console.log(`[Webhook] Queued event ${event.id}`);
     } catch (err: any) {
-        // BullMQ throws error with name "Error" and message containing job ID when duplicate
-        // Check for duplicate job error (job already exists in queue)
-        const isDuplicateJob = 
-            err?.message?.includes("already exists") || 
-            err?.message?.includes("Job") && err?.message?.includes(event.id) ||
-            err?.name === "JobIdAlreadyExistsError";
-            
-        if (isDuplicateJob) {
+        // Check for duplicate job (already queued, being processed)
+        if (isDuplicateJobError(err, event.id)) {
             console.log(`[Webhook] Event ${event.id} already queued (job exists), acknowledging`);
             res.status(200).json({ received: true, alreadyQueued: true });
             return;
         }
 
-        console.error(`[Webhook] Failed to queue event ${event.id}:`, err);
-        // We return 500 here so Stripe retries sending the webhook
-        // This protects against Redis/Queue infrastructure failures
-        res.status(500).json({ error: "Internal Server Error" });
+        // Log with correlation context for production debugging
+        const errorContext = {
+            eventId: event.id,
+            eventType: event.type,
+            errorName: err?.name,
+            errorMessage: err?.message,
+        };
+        console.error(`[Webhook][CRITICAL] Failed to queue event:`, errorContext);
+        
+        // Return 500 to trigger Stripe retry (protects against infrastructure failures)
+        res.status(500).json({ 
+            error: "Internal Server Error",
+            eventId: event.id, // Include for correlation in logs
+        });
         return;
     }
 
