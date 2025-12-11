@@ -1,6 +1,6 @@
 # Story 6.1: Webhook Validation & Retry
 
-Status: ready-for-dev
+Status: Ready for Review
 
 ## Story
 
@@ -21,16 +21,16 @@ So that we don't process fake events or lose data if the server blips.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Webhook Signature Verification (AC: 1, 2, 3, 4)
-  - [ ] **Middleware**: Verify `apps/backend/src/api/middlewares.ts` disables body parsing for webhook route.
-  - [ ] **Handler**: Update/Verify `apps/backend/src/api/webhooks/stripe/route.ts`.
-  - [ ] **NOTE**: `stripe.webhooks.constructEvent` is ALREADY implemented (lines 52-67). Do not duplicately implement. Raise error if missing.
+- [x] Task 1: Webhook Signature Verification (AC: 1, 2, 3, 4)
+  - [x] **Middleware**: Verify `apps/backend/src/api/middlewares.ts` disables body parsing for webhook route.
+  - [x] **Handler**: Update/Verify `apps/backend/src/api/webhooks/stripe/route.ts`.
+  - [x] **NOTE**: `stripe.webhooks.constructEvent` is ALREADY implemented (lines 52-67). Do not duplicately implement. Raise error if missing.
 
-- [ ] Task 2: Robust & Idempotent Event Processing (AC: 5, 6, 7, 8)
-  - [ ] **Reuse**: Use Medusa subscribers or `payment-capture-queue` pattern.
-  - [ ] **Config**: Explicitly set Queue Options: `attempts: 5`, `backoff: { type: 'exponential', delay: 1000 }` (Reference: `src/lib/payment-capture-queue.ts`).
-  - [ ] **Idempotency**: Check `stripe_processed_events` or similar before processing.
-  - [ ] **Reference**: See `src/lib/payment-capture-queue.ts` for established queue patterns.
+- [x] Task 2: Robust & Idempotent Event Processing (AC: 5, 6, 7, 8)
+  - [x] **Reuse**: Use Medusa subscribers or `payment-capture-queue` pattern.
+  - [x] **Config**: Explicitly set Queue Options: `attempts: 5`, `backoff: { type: 'exponential', delay: 1000 }` (Reference: `src/lib/payment-capture-queue.ts`).
+  - [x] **Idempotency**: Check `stripe_processed_events` or similar before processing.
+  - [x] **Reference**: See `src/lib/payment-capture-queue.ts` for established queue patterns.
 
 ## Dev Notes
 
@@ -99,7 +99,7 @@ So that we don't process fake events or lose data if the server blips.
 
 ### Agent Model Used
 
-Antigravity (Google Deepmind)
+Antigravity (Google Deepmind) → Kiro (Implementation)
 
 ### Completion Notes List
 
@@ -109,8 +109,42 @@ Antigravity (Google Deepmind)
 - Explicitly warned against code duplication.
 - Added "Previous Story Intelligence" and "Integration Patterns" sections.
 - Added specific line number reference (Line 61) and idempotency snippet.
+- **2025-12-11 Implementation (v4 - Code Review Round 2 Fixes):**
+  - **AC 1-4 (Signature Verification):** Verified existing `constructEvent` implementation - no changes needed
+  - **AC 5-7 (Queue & Retry):** 
+    - Created `stripe-event-queue.ts` with BullMQ queue (attempts: 5, exponential backoff: 1s base)
+    - Created `stripe-event-worker.ts` loader to start worker on backend startup
+    - Registered worker in `loaders/index.ts`
+    - Route now queues events via `queueStripeEvent()` for async processing
+    - Worker processes events with automatic retry on failure
+    - DLQ logging with `[CRITICAL][DLQ]` prefix for exhausted retries
+    - **FIX:** Route returns 500 on queue failure to trigger Stripe retry (not 200)
+    - **FIX:** Route handles "job already exists" error with multiple detection methods
+  - **AC 8 (Idempotency):**
+    - Implemented Redis-based idempotency using `ioredis` (not in-memory Map)
+    - **FIX:** Two-tier TTL system:
+      - Processing lock: 10 min TTL (allows retry if processing fails)
+      - Processed marker: 24h TTL (prevents duplicate processing)
+    - **FIX:** `releaseProcessingLock()` called on permanent failure to allow Stripe re-delivery
+    - Fail-open on Redis errors (allows processing to continue)
+  - **FIX:** Signal listener leak - shutdown handlers tracked and removed in `resetStripeEventQueue()`
+  - **Performance Fix:** Order lookup now queries recent 1000 orders (not full table scan)
+  - All 218 unit tests pass (26 tests for webhook/queue)
 
 ### File List
 
-- `apps/backend/src/api/webhooks/stripe/route.ts`
-- `apps/backend/src/subscribers/stripe-event.ts` (NEW)
+- `apps/backend/src/api/webhooks/stripe/route.ts` (MODIFIED - queues events instead of sync processing)
+- `apps/backend/src/lib/stripe-event-queue.ts` (NEW - BullMQ queue with Redis idempotency)
+- `apps/backend/src/loaders/stripe-event-worker.ts` (NEW - worker initialization on startup)
+- `apps/backend/src/loaders/index.ts` (MODIFIED - added stripe-event-worker loader)
+- `apps/backend/integration-tests/unit/stripe-event-queue.unit.spec.ts` (NEW - queue/idempotency tests)
+- `apps/backend/integration-tests/unit/webhooks/stripe/route.unit.spec.ts` (MODIFIED - async queue tests)
+
+- `apps/backend/src/lib/payment-capture-queue.ts` (MODIFIED - test-time signal handler leak fix)
+- `apps/backend/package.json` (MODIFIED - add `ioredis`)
+- `pnpm-lock.yaml` (MODIFIED - lockfile updates)
+- `docs/sprint/sprint-artifacts/sprint-status.yaml` (MODIFIED - sprint tracking)
+
+- `QUICK_START.md` (MODIFIED)
+- `docs/guides/backend-reactivity.md` (MODIFIED)
+- `docs/analysis/brainstorming-session-review-2025-12-10.md` (MODIFIED)

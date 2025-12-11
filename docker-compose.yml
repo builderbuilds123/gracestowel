@@ -80,7 +80,7 @@ services:
     volumes:
       - ./apps/storefront:/app
       - /app/node_modules
-    command: npm run dev
+    command: sh -c "pnpm install --no-frozen-lockfile && pnpm run dev -- --host 0.0.0.0 --port 5173"
 
 volumes:
   postgres_data:
