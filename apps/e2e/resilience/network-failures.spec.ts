@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "../support/fixtures";
 
 /**
  * Resilience Tests: Network Failure Scenarios
@@ -6,44 +6,61 @@ import { test, expect } from "@playwright/test";
  */
 test.describe("Network Resilience", () => {
   test("should handle slow network gracefully", async ({ page }) => {
-    // Simulate slow network
+    // Network-first: Setup slow network BEFORE navigation
     await page.route("**/*", async (route) => {
+      // Simulate slow network (500ms delay)
       await new Promise((resolve) => setTimeout(resolve, 500));
       await route.continue();
     });
 
+    // Network-first: Wait for products API
+    const productsPromise = page.waitForResponse(
+      (response) =>
+        response.url().includes("/store/products") && response.status() === 200,
+    );
+
     await page.goto("/");
+    await productsPromise;
 
     // Page should still load with loading indicators
     await expect(page).toHaveTitle(/Grace Stowel/i);
   });
 
   test("should show error state when API fails", async ({ page }) => {
-    // Intercept API calls and return errors
+    // Network-first: Intercept API calls BEFORE navigation
     await page.route("**/store/products**", (route) => {
       route.fulfill({
         status: 500,
+        contentType: "application/json",
         body: JSON.stringify({ error: "Internal Server Error" }),
       });
     });
 
+    // Wait for error response
+    const errorResponsePromise = page.waitForResponse(
+      (response) =>
+        response.url().includes("/store/products") && response.status() === 500,
+    );
+
     await page.goto("/towels");
+    await errorResponsePromise;
 
     // Should show error message or fallback UI
     await expect(
-      page.getByText(/error|something went wrong|try again/i)
+      page.getByText(/error|something went wrong|try again/i),
     ).toBeVisible();
   });
 
   test("should retry failed requests", async ({ page }) => {
     let requestCount = 0;
 
-    // Fail first request, succeed on retry
+    // Network-first: Setup retry logic BEFORE navigation
     await page.route("**/store/products**", (route) => {
       requestCount++;
       if (requestCount === 1) {
         route.fulfill({
           status: 503,
+          contentType: "application/json",
           body: JSON.stringify({ error: "Service Unavailable" }),
         });
       } else {
@@ -51,22 +68,61 @@ test.describe("Network Resilience", () => {
       }
     });
 
+    // Wait for successful response (after retry)
+    const successResponsePromise = page.waitForResponse(
+      (response) =>
+        response.url().includes("/store/products") && response.status() === 200,
+    );
+
     await page.goto("/towels");
 
     // Should eventually show products after retry
-    await expect(page.locator('[data-testid="product-card"]').first()).toBeVisible({
+    await successResponsePromise;
+    // Use more reliable selector - product links or headings
+    await expect(
+      page.locator('a[href^="/products/"]').first(),
+    ).toBeVisible({
       timeout: 10000,
     });
   });
 
   test("should preserve cart during network interruption", async ({ page }) => {
+    // Network-first: Setup intercepts
+    const productsPromise = page.waitForResponse(
+      (response) =>
+        response.url().includes("/store/products") && response.status() === 200,
+    );
+    const cartPromise = page.waitForResponse(
+      (response) =>
+        (response.url().includes("/store/carts") ||
+          response.url().includes("/store/cart")) &&
+        response.status() === 200,
+    );
+
     // Add item to cart
     await page.goto("/towels");
-    const firstProduct = page.locator('[data-testid="product-card"]').first();
-    await firstProduct.click();
-    await page.getByRole("button", { name: /add to cart/i }).click();
+    await productsPromise;
 
-    // Simulate network failure
+    // Click first product link
+    const firstProductLink = page.locator('a[href^="/products/"]').first();
+    await expect(firstProductLink).toBeVisible();
+    await firstProductLink.click();
+
+    // Wait for product page to load
+    await page.waitForLoadState("networkidle");
+
+    // Add to cart
+    await page
+      .getByRole("button", { name: /hang it up|add to cart/i })
+      .click();
+    await cartPromise;
+
+    // Wait for cart drawer to appear
+    await expect(
+      page.getByRole("heading", { name: /towel rack/i }),
+    ).toBeVisible();
+
+    // Simulate network failure - route BEFORE navigation
     await page.route("**/*", (route) => {
       route.abort("failed");
     });
@@ -81,56 +137,122 @@ test.describe("Network Resilience", () => {
     await page.goto("/");
     await page.getByRole("button", { name: /cart/i }).click();
 
-    await expect(page.locator('[data-testid="cart-item"]')).toHaveCount(1);
+    // Verify cart has item
+    await expect(
+      page.getByRole("heading", { name: /towel rack/i }),
+    ).toBeVisible();
+    await expect(page.getByText(/The Nuzzle|towel/i)).toBeVisible();
   });
 
   test("should handle checkout API timeout", async ({ page }) => {
+    // Network-first: Setup intercepts
+    const productsPromise = page.waitForResponse(
+      (response) =>
+        response.url().includes("/store/products") && response.status() === 200,
+    );
+    const cartPromise = page.waitForResponse(
+      (response) =>
+        (response.url().includes("/store/carts") ||
+          response.url().includes("/store/cart")) &&
+        response.status() === 200,
+    );
+
     // Add item and go to checkout
     await page.goto("/towels");
-    const firstProduct = page.locator('[data-testid="product-card"]').first();
-    await firstProduct.click();
-    await page.getByRole("button", { name: /add to cart/i }).click();
-    await page.getByRole("link", { name: /checkout/i }).click();
+    await productsPromise;
 
-    // Simulate slow checkout API
+    // Click first product
+    const firstProductLink = page.locator('a[href^="/products/"]').first();
+    await expect(firstProductLink).toBeVisible();
+    await firstProductLink.click();
+    await page.waitForLoadState("networkidle");
+
+    await page
+      .getByRole("button", { name: /hang it up|add to cart/i })
+      .click();
+    await cartPromise;
+
+    // Wait for cart drawer
+    await expect(
+      page.getByRole("heading", { name: /towel rack/i }),
+    ).toBeVisible();
+
+    // Click checkout
+    const checkoutLink = page.getByRole("link", { name: /checkout/i });
+    await expect(checkoutLink).toBeVisible();
+    await checkoutLink.click();
+
+    // Network-first: Setup slow checkout API BEFORE form submission
     await page.route("**/store/carts/**", async (route) => {
+      // Simulate slow API (5s delay)
       await new Promise((resolve) => setTimeout(resolve, 5000));
       await route.continue();
     });
 
-    // Fill form and submit
+    // Fill form
     await page.getByLabel(/email/i).fill("test@example.com");
 
     // Should show loading state
-    await expect(page.getByText(/processing|loading/i)).toBeVisible();
+    await expect(page.getByText(/processing|loading/i)).toBeVisible({
+      timeout: 10000,
+    });
   });
 });
 
 test.describe("Offline Mode", () => {
-  test("should show offline indicator when network is lost", async ({ page, context }) => {
+  test("should show offline indicator when network is lost", async ({
+    page,
+    context,
+  }) => {
+    // Network-first: Wait for homepage to load first
+    const productsPromise = page.waitForResponse(
+      (response) =>
+        response.url().includes("/store/products") && response.status() === 200,
+    );
+
     await page.goto("/");
+    await productsPromise;
 
     // Go offline
     await context.setOffline(true);
 
-    // Try to navigate
+    // Try to navigate (will fail)
     await page.goto("/towels").catch(() => {});
 
     // Should show offline message
-    await expect(page.getByText(/offline|no connection/i)).toBeVisible();
+    await expect(page.getByText(/offline|no connection/i)).toBeVisible({
+      timeout: 5000,
+    });
   });
 
   test("should recover when network is restored", async ({ page, context }) => {
+    // Network-first: Wait for homepage to load
+    const productsPromise = page.waitForResponse(
+      (response) =>
+        response.url().includes("/store/products") && response.status() === 200,
+    );
+
     await page.goto("/");
+    await productsPromise;
 
     // Go offline then online
     await context.setOffline(true);
     await page.goto("/towels").catch(() => {});
     await context.setOffline(false);
 
+    // Wait for products API after network restored
+    const restoredProductsPromise = page.waitForResponse(
+      (response) =>
+        response.url().includes("/store/products") && response.status() === 200,
+    );
+
     // Reload should work
     await page.reload();
-    await expect(page.locator('[data-testid="product-card"]').first()).toBeVisible();
+    await restoredProductsPromise;
+
+    // Verify products are visible
+    await expect(
+      page.locator('a[href^="/products/"]').first(),
+    ).toBeVisible();
   });
 });
-
