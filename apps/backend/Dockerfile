@@ -72,7 +72,8 @@ COPY --from=builder --chown=node:node /deploy/package.json ./package.json
 # Copy built app artifacts
 COPY --from=builder --chown=node:node /repo/apps/backend/.medusa ./.medusa
 COPY --from=builder --chown=node:node /repo/apps/backend/.medusa/server/public ./public
-COPY --from=builder --chown=node:node /repo/apps/backend/medusa-config.ts ./medusa-config.ts
+# Copy compiled medusa-config.js (CLI looks for medusa-config without extension)
+COPY --from=builder --chown=node:node /repo/apps/backend/.medusa/server/medusa-config.js ./medusa-config.js
 COPY --from=builder --chown=node:node /repo/apps/backend/tsconfig.json ./tsconfig.json
 COPY --from=builder --chown=node:node /repo/apps/backend/src ./src
 
