@@ -318,4 +318,124 @@ describe("Stripe Event Queue - Story 6.1", () => {
             expect(mockRedisDel).not.toHaveBeenCalled();
         });
     });
+
+    describe("Retry Exhaustion / DLQ Behavior (AC 5-7)", () => {
+        let capturedFailedHandler: ((job: any, err: Error) => Promise<void>) | null = null;
+        
+        beforeEach(() => {
+            jest.resetModules();
+            
+            // Spy on console methods for this describe block
+            jest.spyOn(console, "log").mockImplementation(() => {});
+            jest.spyOn(console, "error").mockImplementation(() => {});
+            jest.spyOn(console, "warn").mockImplementation(() => {});
+            
+            // Mock Worker to capture the 'failed' event handler
+            const mockWorkerOn = jest.fn().mockImplementation((event: string, handler: any) => {
+                if (event === "failed") {
+                    capturedFailedHandler = handler;
+                }
+            });
+            
+            jest.doMock("bullmq", () => ({
+                Queue: jest.fn().mockImplementation(() => ({
+                    add: mockQueueAdd,
+                    close: mockQueueClose,
+                })),
+                Worker: jest.fn().mockImplementation(() => ({
+                    on: mockWorkerOn,
+                    close: jest.fn(),
+                })),
+            }));
+        });
+        
+        it("should log CRITICAL error and release lock when job exhausts all retries", async () => {
+            // Re-import to get fresh module with our mock
+            const { startStripeEventWorker, releaseProcessingLock: releaseLock } = require("../../src/lib/stripe-event-queue");
+            
+            // Setup mocks for lock release
+            mockRedisGet.mockResolvedValue("processing");
+            mockRedisDel.mockResolvedValue(1);
+            
+            const mockContainer = { resolve: jest.fn() };
+            const mockHandler = jest.fn();
+            
+            // Start worker to register event handlers
+            startStripeEventWorker(mockContainer, mockHandler);
+            
+            // Verify we captured the failed handler
+            expect(capturedFailedHandler).not.toBeNull();
+            
+            // Create a mock job that has exhausted all retries
+            const exhaustedJob = {
+                id: "job_evt_exhausted",
+                attemptsMade: 5,
+                opts: { attempts: 5 },
+                data: {
+                    eventId: "evt_exhausted_123",
+                    eventType: "payment_intent.succeeded",
+                },
+            };
+            
+            const testError = new Error("Permanent failure after 5 attempts");
+            
+            // Invoke the failed handler directly
+            await capturedFailedHandler!(exhaustedJob, testError);
+            
+            // Verify CRITICAL DLQ log was emitted
+            expect(console.error).toHaveBeenCalledWith(
+                expect.stringContaining("[CRITICAL][DLQ]"),
+                expect.any(Error)
+            );
+            
+            // Verify METRIC log was emitted
+            expect(console.log).toHaveBeenCalledWith(
+                expect.stringContaining("[METRIC] webhook_processing_failure_rate")
+            );
+            
+            // Verify lock was released to allow Stripe re-delivery
+            expect(mockRedisDel).toHaveBeenCalledWith("stripe:processed:evt_exhausted_123");
+        });
+        
+        it("should only warn and not release lock for intermediate failures", async () => {
+            const { startStripeEventWorker } = require("../../src/lib/stripe-event-queue");
+            
+            const mockContainer = { resolve: jest.fn() };
+            const mockHandler = jest.fn();
+            
+            startStripeEventWorker(mockContainer, mockHandler);
+            
+            expect(capturedFailedHandler).not.toBeNull();
+            
+            // Create a mock job that still has retries remaining
+            const retryableJob = {
+                id: "job_evt_retryable",
+                attemptsMade: 2, // Only 2 attempts made, max is 5
+                opts: { attempts: 5 },
+                data: {
+                    eventId: "evt_retryable_123",
+                    eventType: "payment_intent.succeeded",
+                },
+            };
+            
+            const testError = new Error("Temporary failure");
+            
+            await capturedFailedHandler!(retryableJob, testError);
+            
+            // Should NOT log CRITICAL
+            expect(console.error).not.toHaveBeenCalledWith(
+                expect.stringContaining("[CRITICAL][DLQ]"),
+                expect.anything()
+            );
+            
+            // Should log warning instead
+            expect(console.warn).toHaveBeenCalledWith(
+                expect.stringContaining("will retry"),
+                expect.any(Error)
+            );
+            
+            // Should NOT release lock (allow BullMQ to retry)
+            expect(mockRedisDel).not.toHaveBeenCalled();
+        });
+    });
 });
