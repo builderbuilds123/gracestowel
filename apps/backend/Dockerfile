@@ -45,6 +45,9 @@ COPY apps/backend ./apps/backend
 WORKDIR /repo/apps/backend
 RUN pnpm run build
 
+# Create a self-contained deployment (resolves all symlinks)
+RUN pnpm --filter @gracestowel/backend deploy --prod /deploy
+
 # Test stage
 FROM builder AS test
 WORKDIR /repo/apps/backend
@@ -62,18 +65,17 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
 
-# Copy backend node_modules (contains @medusajs/cli and other deps)
-COPY --from=builder --chown=node:node /repo/apps/backend/node_modules ./node_modules
-# Copy built app
+# Copy self-contained deployment from pnpm deploy (no symlinks)
+COPY --from=builder --chown=node:node /deploy/node_modules ./node_modules
+COPY --from=builder --chown=node:node /deploy/package.json ./package.json
+# Copy built app artifacts
 COPY --from=builder --chown=node:node /repo/apps/backend/.medusa ./.medusa
 COPY --from=builder --chown=node:node /repo/apps/backend/.medusa/server/public ./public
 COPY --from=builder --chown=node:node /repo/apps/backend/medusa-config.ts ./medusa-config.ts
-COPY --from=builder --chown=node:node /repo/apps/backend/package.json ./package.json
 COPY --from=builder --chown=node:node /repo/apps/backend/tsconfig.json ./tsconfig.json
 COPY --from=builder --chown=node:node /repo/apps/backend/src ./src
 
 USER node
 
 # Railway sets PORT=8080 by default, which the app uses via ${PORT:-8080}
-# Invoke medusa CLI directly via node to avoid pnpm bin symlink path issues
 CMD ["sh", "-c", "node node_modules/@medusajs/cli/cli.js db:migrate && node node_modules/@medusajs/cli/cli.js start"]
