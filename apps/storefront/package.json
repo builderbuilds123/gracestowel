@@ -7,7 +7,7 @@
     "cf-typegen": "wrangler types",
     "deploy": "pnpm run build && wrangler deploy",
     "dev": "react-router dev",
-    "postinstall": "node -e \"process.env.CI || require('child_process').execSync('npm run cf-typegen', {stdio: 'inherit'})\"",
+    "postinstall": "node -e \"(process.env.CI || process.env.CF_PAGES === '1') ? null : require('child_process').execSync('pnpm run cf-typegen', {stdio: 'inherit'})\"",
     "preview": "vite preview",
     "lint": "echo 'Lint not configured for storefront'",
     "typecheck": "node -e \"process.env.CI ? null : require('child_process').execSync('npm run cf-typegen && react-router typegen', {stdio: 'inherit'})\" && tsc -b",
