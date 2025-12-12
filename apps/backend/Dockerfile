@@ -46,7 +46,8 @@ WORKDIR /repo/apps/backend
 RUN pnpm run build
 
 # Create a self-contained deployment (resolves all symlinks)
-RUN pnpm --filter @gracestowel/backend deploy --prod /deploy
+# --legacy required for pnpm v10+ without inject-workspace-packages
+RUN pnpm --filter @gracestowel/backend deploy --prod --legacy /deploy
 
 # Test stage
 FROM builder AS test
