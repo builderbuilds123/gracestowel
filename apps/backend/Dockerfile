@@ -69,13 +69,11 @@ ENV HOST=0.0.0.0
 # Copy self-contained deployment from pnpm deploy (no symlinks)
 COPY --from=builder --chown=node:node /deploy/node_modules ./node_modules
 COPY --from=builder --chown=node:node /deploy/package.json ./package.json
-# Copy built app artifacts
+# Copy built app artifacts from .medusa/server (all compiled JS)
 COPY --from=builder --chown=node:node /repo/apps/backend/.medusa ./.medusa
 COPY --from=builder --chown=node:node /repo/apps/backend/.medusa/server/public ./public
-# Copy compiled medusa-config.js (CLI looks for medusa-config without extension)
 COPY --from=builder --chown=node:node /repo/apps/backend/.medusa/server/medusa-config.js ./medusa-config.js
-COPY --from=builder --chown=node:node /repo/apps/backend/tsconfig.json ./tsconfig.json
-COPY --from=builder --chown=node:node /repo/apps/backend/src ./src
+COPY --from=builder --chown=node:node /repo/apps/backend/.medusa/server/src ./src
 
 USER node
 
