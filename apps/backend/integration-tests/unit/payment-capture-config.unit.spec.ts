@@ -30,10 +30,12 @@ describe("PAYMENT_CAPTURE_DELAY_MS Configuration", () => {
         expect(PAYMENT_CAPTURE_DELAY_MS).toBe(10000);
     });
 
-    it("should default to 1 hour in payment-capture-queue if not set", () => {
+    it("should default to 59:30 (3570000ms) in payment-capture-queue if not set (Story 6.3)", () => {
         delete process.env.PAYMENT_CAPTURE_DELAY_MS;
+        delete process.env.CAPTURE_BUFFER_SECONDS;
         const { PAYMENT_CAPTURE_DELAY_MS } = require("../../src/lib/payment-capture-queue");
-        expect(PAYMENT_CAPTURE_DELAY_MS).toBe(3600000);
+        // Story 6.3: Default is 60*60 - 30 = 3570 seconds = 3570000ms (30s buffer)
+        expect(PAYMENT_CAPTURE_DELAY_MS).toBe(3570000);
     });
 
     it("should respect PAYMENT_CAPTURE_DELAY_MS in ModificationTokenService", () => {

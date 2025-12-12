@@ -13,6 +13,7 @@ import {
     VariantNotFoundError,
     PaymentIntentMissingError,
     PriceNotFoundError,
+    OrderLockedError,
 } from "../../../../../workflows/add-item-to-order";
 
 /**
@@ -121,6 +122,15 @@ export async function POST(
         });
     } catch (error) {
         // FIX: Use proper error type checks instead of string matching
+
+        // 409 Conflict - Order locked for capture (Story 6.3)
+        if (error instanceof OrderLockedError) {
+            res.status(409).json({
+                code: error.code,
+                message: error.message,
+            });
+            return;
+        }
 
         // 409 Conflict - Stock issues
         if (error instanceof InsufficientStockError) {

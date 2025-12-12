@@ -50,9 +50,17 @@ const getRedisConnection = () => {
 // Queue name for payment capture
 export const PAYMENT_CAPTURE_QUEUE = "payment-capture";
 
-// Delay for payment capture - configurable via env, defaults to 1 hour (3600000ms)
+// Story 6.3: Capture buffer - start capture 30s before grace period ends (59:30)
+// This prevents race conditions where edits arrive just as capture starts
+export const CAPTURE_BUFFER_SECONDS = parseInt(
+    process.env.CAPTURE_BUFFER_SECONDS || "30",
+    10
+);
+
+// Delay for payment capture - configurable via env, defaults to 59:30 (3570000ms)
+// Story 6.3: Uses 30s buffer before full hour to prevent edit/capture race
 export const PAYMENT_CAPTURE_DELAY_MS = parseInt(
-    process.env.PAYMENT_CAPTURE_DELAY_MS || String(60 * 60 * 1000),
+    process.env.PAYMENT_CAPTURE_DELAY_MS || String((60 * 60 - CAPTURE_BUFFER_SECONDS) * 1000),
     10
 );
 
@@ -240,6 +248,67 @@ export async function fetchOrderTotal(orderId: string): Promise<{ totalCents: nu
 }
 
 /**
+ * Story 6.3: Set order edit_status for race condition handling
+ * 
+ * Uses optimistic locking pattern:
+ * 1. Read current state
+ * 2. Verify expected state (for lock acquisition)
+ * 3. Update with new state and timestamp
+ * 
+ * Note: This is not a true database-level atomic operation (no FOR UPDATE).
+ * The 30s capture buffer (CAPTURE_BUFFER_SECONDS) provides the primary race
+ * condition protection. This lock is a secondary guard.
+ * 
+ * @param orderId - The Medusa order ID
+ * @param editStatus - The edit status to set (locked_for_capture, idle, editable)
+ * @param expectCurrentStatus - Optional: only update if current status matches
+ */
+async function setOrderEditStatus(
+    orderId: string, 
+    editStatus: "locked_for_capture" | "idle" | "editable",
+    expectCurrentStatus?: "editable" | "idle" | undefined
+): Promise<void> {
+    if (!containerRef) {
+        console.error("[PaymentCapture] Container not initialized - cannot set edit status");
+        return;
+    }
+
+    try {
+        // Optimistic locking: check current state if expected status specified
+        if (expectCurrentStatus !== undefined) {
+            const query = containerRef.resolve("query");
+            const { data: orders } = await query.graph({
+                entity: "order",
+                fields: ["id", "metadata"],
+                filters: { id: orderId },
+            });
+
+            if (orders.length > 0) {
+                const currentStatus = (orders[0].metadata as any)?.edit_status;
+                // Allow lock if status is undefined, editable, or idle (not already locked)
+                if (currentStatus === "locked_for_capture") {
+                    console.warn(`[PaymentCapture] Order ${orderId}: Already locked, skipping lock acquisition`);
+                    return;
+                }
+            }
+        }
+
+        const orderService = containerRef.resolve("order");
+        await orderService.updateOrders([{
+            id: orderId,
+            metadata: {
+                edit_status: editStatus,
+                edit_status_updated_at: new Date().toISOString(),
+            },
+        }]);
+        console.log(`[PaymentCapture] Order ${orderId}: edit_status set to ${editStatus}`);
+    } catch (error) {
+        console.error(`[PaymentCapture] Error setting edit_status for order ${orderId}:`, error);
+        throw error;
+    }
+}
+
+/**
  * Update order metadata to track payment capture status in Medusa
  * Uses metadata since payment_status is not in UpdateOrderDTO
  * @param orderId - The Medusa order ID
@@ -271,6 +340,7 @@ async function updateOrderAfterCapture(orderId: string, amountCaptured: number):
 /**
  * Process a payment capture job
  * Story 2.3: Enhanced to capture dynamic order total instead of static PaymentIntent amount
+ * Story 6.3: Added edit_status locking for race condition handling
  * Exported for unit testing
  */
 export async function processPaymentCapture(job: Job<PaymentCaptureJobData>): Promise<void> {
@@ -280,7 +350,14 @@ export async function processPaymentCapture(job: Job<PaymentCaptureJobData>): Pr
     
     const stripe = getStripeClient();
     
+    // Story 6.3: Track if we acquired the lock so we know to release it
+    let lockAcquired = false;
+    
     try {
+        // Story 6.3 AC 1, 3: Set edit_status to locked_for_capture BEFORE any capture logic
+        await setOrderEditStatus(orderId, "locked_for_capture");
+        lockAcquired = true;
+        
         // Step 1: Get the current state of the payment intent
         const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
         
@@ -366,8 +443,12 @@ export async function processPaymentCapture(job: Job<PaymentCaptureJobData>): Pr
             console.log(`[PaymentCapture] Order ${orderId}: Captured ${totalCents} cents (${captured.status})`);
         }
 
-        // Step 5: Update Medusa order with capture metadata
+        // Step 5: Update Medusa order with capture metadata and release lock
         await updateOrderAfterCapture(orderId, totalCents);
+        
+        // Story 6.3: Release lock after successful capture
+        await setOrderEditStatus(orderId, "idle");
+        lockAcquired = false; // Mark as released so finally doesn't double-release
 
     } catch (error: any) {
         // Handle specific Stripe errors using property checks (more robust than instanceof)
@@ -382,6 +463,15 @@ export async function processPaymentCapture(job: Job<PaymentCaptureJobData>): Pr
         }
         
         throw error; // Re-throw to trigger retry
+    } finally {
+        // Story 6.3 AC 8: Always release lock in finally block to prevent stuck locks
+        if (lockAcquired) {
+            try {
+                await setOrderEditStatus(orderId, "idle");
+            } catch (releaseError) {
+                console.error(`[PaymentCapture][CRITICAL] Failed to release lock for order ${orderId}:`, releaseError);
+            }
+        }
     }
 }
 

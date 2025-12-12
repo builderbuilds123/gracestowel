@@ -173,13 +173,13 @@ development_status:
   pi-epic-6: in-progress
   6-1-webhook-validation-retry:
     path: docs/sprint/sprint-artifacts/6-1-webhook-validation-retry.md
-    status: review
+    status: done
   6-2-redis-connection-failure-handling:
     path: docs/sprint/sprint-artifacts/6-2-redis-connection-failure-handling.md
     status: done
   6-3-race-condition-handling:
     path: docs/sprint/sprint-artifacts/6-3-race-condition-handling.md
-    status: ready-for-dev
+    status: done
   6-4-increment-fallback-flow:
     path: docs/sprint/sprint-artifacts/6-4-increment-fallback-flow.md
     status: ready-for-dev
