@@ -182,7 +182,7 @@ development_status:
     status: done
   6-4-increment-fallback-flow:
     path: docs/sprint/sprint-artifacts/6-4-increment-fallback-flow.md
-    status: review
+    status: done
   pi-epic-6-retrospective: optional
 
   pi-epic-7: backlog
