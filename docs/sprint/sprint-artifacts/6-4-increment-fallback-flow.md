@@ -148,7 +148,7 @@ Antigravity (Google Deepmind)
 ### Change Log
 
 - 2025-12-12: Implemented Story 6.4 Increment Fallback Flow
-  - Added `DECLINE_CODE_MESSAGES` mapping for 11 Stripe decline codes
+  - Added `DECLINE_CODE_MESSAGES` mapping for 13 Stripe decline codes
   - Added `RETRYABLE_DECLINE_CODES` set for UX guidance
   - Added `mapDeclineCodeToUserMessage()` function
   - Enhanced `CardDeclinedError` with `code`, `type`, `userMessage`, `retryable` properties
