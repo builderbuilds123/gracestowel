@@ -62,8 +62,11 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
 
-# Copy built app and dependencies
-COPY --from=builder --chown=node:node /repo/apps/backend/node_modules ./node_modules
+# Copy root node_modules (contains hoisted deps like @medusajs/cli)
+COPY --from=builder --chown=node:node /repo/node_modules ./node_modules
+# Copy backend-specific node_modules (symlinked packages resolve from here)
+COPY --from=builder --chown=node:node /repo/apps/backend/node_modules ./apps/backend/node_modules
+# Copy built app
 COPY --from=builder --chown=node:node /repo/apps/backend/.medusa ./.medusa
 COPY --from=builder --chown=node:node /repo/apps/backend/.medusa/server/public ./public
 COPY --from=builder --chown=node:node /repo/apps/backend/medusa-config.ts ./medusa-config.ts
@@ -74,4 +77,4 @@ COPY --from=builder --chown=node:node /repo/apps/backend/src ./src
 USER node
 
 # Railway sets PORT=8080 by default, which the app uses via ${PORT:-8080}
-CMD ["sh", "-c", "echo 'Current NODE_ENV: $NODE_ENV'; if [ -f public/admin/index.html ]; then echo 'FOUND index.html'; else echo 'MISSING index.html at public/admin/index.html'; echo 'Listing directories:'; ls -R public; exit 1; fi; pnpm run migrate && pnpm run start"]
+CMD ["sh", "-c", "pnpm run migrate && pnpm run start"]
