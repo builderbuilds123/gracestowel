@@ -45,7 +45,7 @@ describe("Story 6.4: Increment Fallback Flow", () => {
 
     describe("Task 1: Error Handling - Decline Code Mapping (AC 1-4)", () => {
         it("should map insufficient_funds to user-friendly message", () => {
-            const { CardDeclinedError, mapDeclineCodeToUserMessage } = require("../../src/workflows/add-item-to-order");
+            const { mapDeclineCodeToUserMessage } = require("../../src/workflows/add-item-to-order");
             
             const message = mapDeclineCodeToUserMessage("insufficient_funds");
             expect(message).toBe("Insufficient funds.");
