@@ -25,6 +25,13 @@ jest.mock("../../src/utils/posthog", () => ({
 }))
 
 describe("orderPlacedHandler", () => {
+  // Mock logger for structured logging tests
+  const mockLogger = {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+  }
+
   const mockQuery = {
     graph: jest.fn().mockResolvedValue({
       data: [{
@@ -41,6 +48,7 @@ describe("orderPlacedHandler", () => {
   const mockContainer = {
     resolve: jest.fn((key: string) => {
       if (key === "query") return mockQuery
+      if (key === "logger" || key === "LOGGER" || key.includes("LOGGER")) return mockLogger
       return undefined
     }),
   }
@@ -141,8 +149,6 @@ describe("orderPlacedHandler", () => {
     })
 
     it("should log order placed event", async () => {
-      const consoleSpy = jest.spyOn(console, "log")
-      
       const mockEvent = {
         data: { id: "order_test_456" },
       }
@@ -152,9 +158,9 @@ describe("orderPlacedHandler", () => {
         container: mockContainer,
       } as any)
 
-      expect(consoleSpy).toHaveBeenCalledWith(
-        "Order placed event received:",
-        "order_test_456"
+      // Verify logger.info was called with order placed message
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.stringContaining("Order placed event received: order_test_456")
       )
     })
 
@@ -181,6 +187,86 @@ describe("orderPlacedHandler", () => {
 
       expect(consoleSpy).toHaveBeenCalledWith(
         "Failed to send order confirmation email:",
+        expect.any(Error)
+      )
+    })
+  })
+
+  describe("Redis connection failure handling (Story 6.2)", () => {
+    it("should flag order for recovery when Redis connection fails", async () => {
+      const { schedulePaymentCapture } = require("../../src/lib/payment-capture-queue")
+      
+      // Simulate Redis connection error
+      const redisError = new Error("Redis connection refused")
+      ;(redisError as any).code = "ECONNREFUSED"
+      schedulePaymentCapture.mockRejectedValueOnce(redisError)
+      
+      const mockOrderService = {
+        updateOrders: jest.fn().mockResolvedValue([{}]),
+      }
+      
+      const testContainer = {
+        resolve: jest.fn((key: string) => {
+          if (key === "logger" || key === "LOGGER" || key.includes("LOGGER")) return mockLogger
+          if (key === "query") return mockQuery
+          if (key === "order") return mockOrderService
+          return undefined
+        }),
+      }
+
+      const mockEvent = {
+        data: { id: "order_redis_fail" },
+      }
+
+      // Should not throw
+      await expect(
+        orderPlacedHandler({
+          event: mockEvent,
+          container: testContainer,
+        } as any)
+      ).resolves.not.toThrow()
+
+      // Verify CRITICAL log using structured logger
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining("[CRITICAL][DLQ]"),
+        expect.any(Error)
+      )
+
+      // Verify order service was called to update metadata
+      expect(testContainer.resolve).toHaveBeenCalledWith("order")
+      expect(mockOrderService.updateOrders).toHaveBeenCalledWith([{
+        id: "order_redis_fail",
+        metadata: expect.objectContaining({
+          needs_recovery: true,
+          recovery_reason: "redis_failure"
+        })
+      }])
+    })
+
+    it("should re-throw non-Redis errors", async () => {
+      const { schedulePaymentCapture } = require("../../src/lib/payment-capture-queue")
+      
+      // Simulate non-Redis error (no ECONNREFUSED code)
+      const otherError = new Error("Some other error")
+      schedulePaymentCapture.mockRejectedValueOnce(otherError)
+      
+      const consoleSpy = jest.spyOn(console, "error")
+
+      const mockEvent = {
+        data: { id: "order_other_error" },
+      }
+
+      // Should not throw (outer catch handles it)
+      await expect(
+        orderPlacedHandler({
+          event: mockEvent,
+          container: mockContainer,
+        } as any)
+      ).resolves.not.toThrow()
+
+      // Verify generic error log (not CRITICAL)
+      expect(consoleSpy).toHaveBeenCalledWith(
+        "Failed to schedule payment capture:",
         expect.any(Error)
       )
     })

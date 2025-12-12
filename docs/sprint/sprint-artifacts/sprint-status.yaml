@@ -176,7 +176,7 @@ development_status:
     status: review
   6-2-redis-connection-failure-handling:
     path: docs/sprint/sprint-artifacts/6-2-redis-connection-failure-handling.md
-    status: ready-for-dev
+    status: review
   6-3-race-condition-handling:
     path: docs/sprint/sprint-artifacts/6-3-race-condition-handling.md
     status: ready-for-dev

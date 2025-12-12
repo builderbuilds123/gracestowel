@@ -53,6 +53,6 @@ To get the project running locally:
 
 1.  **Clone the repository.**
 2.  **Setup Environment:** Follow the [Development Guide](./development-guide.md).
-3.  **Install Dependencies:** `npm install` in root.
-4.  **Start Backend:** `cd apps/backend && npm run dev`
-5.  **Start Storefront:** `cd apps/storefront && npm run dev`
+3.  **Install Dependencies:** `pnpm install` in root.
+4.  **Start Backend:** `cd apps/backend && pnpm run dev`
+5.  **Start Storefront:** `cd apps/storefront && pnpm run dev`

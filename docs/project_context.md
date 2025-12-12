@@ -20,6 +20,7 @@ _This file contains critical rules and patterns that AI agents must follow when 
 - **Backend Framework:** Medusa v2.12.0
 - **Storefront Framework:** React Router v7.10.0 (SSR), React v19.1.1
 - **Language:** TypeScript v5.6+
+- **Package Manager:** pnpm (monorepo with workspaces)
 - **Database:** PostgreSQL (Railway), Redis (BullMQ/Cache)
 - **Infrastructure:** Cloudflare Workers (Hyperdrive for DB access from Edge)
 - **Key Libraries:** 
@@ -57,9 +58,9 @@ _This file contains critical rules and patterns that AI agents must follow when 
   - ✅ Use `v4` syntax (no `tailwind.config.js`, configuration in CSS).
 
 ### Testing Rules
-- **Backend:** `npm run test` (Jest). 
+- **Backend:** `pnpm run test` (Jest). 
   - ✅ Mock all external services (Payment, Fulfillment).
-- **Storefront:** `npm run test` (Vitest).
+- **Storefront:** `pnpm run test` (Vitest).
   - ✅ Use `happy-dom` for environment.
 
 ### Critical Anti-Patterns
@@ -85,4 +86,4 @@ _This file contains critical rules and patterns that AI agents must follow when 
 - Review quarterly for outdated rules
 - Remove rules that become obvious over time
 
-Last Updated: 2025-12-05
+Last Updated: 2025-12-11

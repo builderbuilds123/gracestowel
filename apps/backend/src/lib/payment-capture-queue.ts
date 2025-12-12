@@ -10,6 +10,7 @@ export interface PaymentCaptureJobData {
     orderId: string;
     paymentIntentId: string;
     scheduledAt: number;
+    source?: "normal" | "fallback" | "redis_recovery"; // Story 6.2: Track job origin
 }
 
 /**

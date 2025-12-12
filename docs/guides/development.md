@@ -9,7 +9,7 @@ last-updated: 2025-12-02
 ## Prerequisites
 
 - **Node.js**: >=20
-- **Package Manager**: npm (or pnpm/yarn)
+- **Package Manager**: pnpm
 - **Database**: PostgreSQL (v15+)
 - **Cache**: Redis (v7+)
 - **Cloudflare Wrangler**: (for Storefront)
@@ -38,17 +38,17 @@ last-updated: 2025-12-02
 
 ```bash
 cd apps/backend
-npm install
-npm run seed   # Seed database with initial data
-npm run dev    # Start Medusa server on port 9000
+pnpm install
+pnpm run seed   # Seed database with initial data
+pnpm run dev    # Start Medusa server on port 9000
 ```
 
 ### Storefront
 
 ```bash
 cd apps/storefront
-npm install
-npm run dev    # Start React Router dev server on port 5173
+pnpm install
+pnpm run dev    # Start React Router dev server on port 5173
 ```
 
 ## Testing
@@ -57,17 +57,17 @@ npm run dev    # Start React Router dev server on port 5173
 
 ```bash
 cd apps/backend
-npm run test              # Run all tests
-npm run test:unit         # Run unit tests
-npm run test:integration  # Run integration tests
+pnpm run test              # Run all tests
+pnpm run test:unit         # Run unit tests
+pnpm run test:integration  # Run integration tests
 ```
 
 ### Storefront
 
 ```bash
 cd apps/storefront
-npm run test              # Run Vitest
-npm run test:coverage     # Run tests with coverage
+pnpm run test              # Run Vitest
+pnpm run test:coverage     # Run tests with coverage
 ```
 
 ## Deployment
@@ -81,5 +81,5 @@ The backend is configured for deployment on Railway using the `railway.toml` fil
 ### Storefront (Cloudflare Workers)
 
 The storefront is deployed to Cloudflare Workers.
-- **Build**: `npm run build`
-- **Deploy**: `npm run deploy`
+- **Build**: `pnpm run build`
+- **Deploy**: `pnpm run deploy`
