@@ -26,6 +26,9 @@ importers:
       '@medusajs/admin-sdk':
         specifier: 2.12.0
         version: 2.12.0
+      '@medusajs/admin-shared':
+        specifier: 2.12.0
+        version: 2.12.0
       '@medusajs/auth-emailpass':
         specifier: 2.12.0
         version: 2.12.0(@medusajs/framework@2.12.0(@medusajs/cli@2.12.0(@types/node@20.19.25))(@types/node@20.19.25)(ioredis@5.8.2)(vite@5.4.21(@types/node@20.19.25)(lightningcss@1.30.2)))
@@ -55,7 +58,7 @@ importers:
         version: 2.12.0(@medusajs/cli@2.12.0(@types/node@20.19.25))(@types/node@20.19.25)(ioredis@5.8.2)(vite@5.4.21(@types/node@20.19.25)(lightningcss@1.30.2))
       '@medusajs/medusa':
         specifier: 2.12.0
-        version: 2.12.0(@medusajs/admin-sdk@2.12.0)(@medusajs/cli@2.12.0(@types/node@20.19.25))(@medusajs/framework@2.12.0(@medusajs/cli@2.12.0(@types/node@20.19.25))(@types/node@20.19.25)(ioredis@5.8.2)(vite@5.4.21(@types/node@20.19.25)(lightningcss@1.30.2)))(@medusajs/icons@2.12.0(react@18.3.1))(@medusajs/test-utils@2.12.0)(@medusajs/ui@4.0.28(@types/react-dom@18.3.7(@types/react@18.3.27))(@types/react@18.3.27)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3))(@swc/core@1.7.28(@swc/helpers@0.5.17))(@types/node@20.19.25)(@types/react-dom@18.3.7(@types/react@18.3.27))(@types/react@18.3.27)(awilix@8.0.1)(lightningcss@1.30.2)(posthog-node@5.14.1)(react-dom@18.3.1(react@18.3.1))(react-router-dom@6.20.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)(typescript@5.9.3)
+        version: 2.12.0(@medusajs/admin-sdk@2.12.0)(@medusajs/cli@2.12.0(@types/node@20.19.25))(@medusajs/framework@2.12.0(@medusajs/cli@2.12.0(@types/node@20.19.25))(@types/node@20.19.25)(ioredis@5.8.2)(vite@5.4.21(@types/node@20.19.25)(lightningcss@1.30.2)))(@medusajs/icons@2.12.0(react@18.3.1))(@medusajs/test-utils@2.12.0)(@medusajs/ui@4.0.28(@types/react-dom@18.3.7(@types/react@18.3.27))(@types/react@18.3.27)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3))(@swc/core@1.7.28(@swc/helpers@0.5.17))(@types/node@20.19.25)(@types/react-dom@18.3.7(@types/react@18.3.27))(@types/react@18.3.27)(awilix@8.0.1)(lightningcss@1.30.2)(picomatch@4.0.3)(posthog-node@5.14.1)(react-dom@18.3.1(react@18.3.1))(react-router-dom@6.20.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)(typescript@5.9.3)
       '@medusajs/types':
         specifier: 2.12.0
         version: 2.12.0(ioredis@5.8.2)(vite@5.4.21(@types/node@20.19.25)(lightningcss@1.30.2))
@@ -10695,10 +10698,10 @@ snapshots:
 
   '@js-sdsl/ordered-map@4.4.2': {}
 
-  '@medusajs/admin-bundler@2.12.0(@types/node@20.19.25)(@types/react-dom@18.3.7(@types/react@18.3.27))(@types/react@18.3.27)(lightningcss@1.30.2)(typescript@5.9.3)':
+  '@medusajs/admin-bundler@2.12.0(@types/node@20.19.25)(@types/react-dom@18.3.7(@types/react@18.3.27))(@types/react@18.3.27)(lightningcss@1.30.2)(picomatch@4.0.3)(typescript@5.9.3)':
     dependencies:
       '@medusajs/admin-shared': 2.12.0
-      '@medusajs/admin-vite-plugin': 2.12.0(vite@5.4.21(@types/node@20.19.25)(lightningcss@1.30.2))
+      '@medusajs/admin-vite-plugin': 2.12.0(picomatch@4.0.3)(vite@5.4.21(@types/node@20.19.25)(lightningcss@1.30.2))
       '@medusajs/dashboard': 2.12.0(@types/react-dom@18.3.7(@types/react@18.3.27))(@types/react@18.3.27)(typescript@5.9.3)
       '@vitejs/plugin-react': 4.7.0(vite@5.4.21(@types/node@20.19.25)(lightningcss@1.30.2))
       autoprefixer: 10.4.22(postcss@8.5.6)
@@ -10737,14 +10740,14 @@ snapshots:
 
   '@medusajs/admin-shared@2.12.0': {}
 
-  '@medusajs/admin-vite-plugin@2.12.0(vite@5.4.21(@types/node@20.19.25)(lightningcss@1.30.2))':
+  '@medusajs/admin-vite-plugin@2.12.0(picomatch@4.0.3)(vite@5.4.21(@types/node@20.19.25)(lightningcss@1.30.2))':
     dependencies:
       '@babel/parser': 7.25.6
       '@babel/traverse': 7.25.6
       '@babel/types': 7.25.6
       '@medusajs/admin-shared': 2.12.0
       chokidar: 3.6.0
-      fdir: 6.1.1
+      fdir: 6.1.1(picomatch@4.0.3)
       magic-string: 0.30.5
       outdent: 0.8.0
       picocolors: 1.1.1
@@ -11103,11 +11106,11 @@ snapshots:
     dependencies:
       '@medusajs/framework': 2.12.0(@medusajs/cli@2.12.0(@types/node@20.19.25))(@types/node@20.19.25)(ioredis@5.8.2)(vite@5.4.21(@types/node@20.19.25)(lightningcss@1.30.2))
 
-  '@medusajs/medusa@2.12.0(@medusajs/admin-sdk@2.12.0)(@medusajs/cli@2.12.0(@types/node@20.19.25))(@medusajs/framework@2.12.0(@medusajs/cli@2.12.0(@types/node@20.19.25))(@types/node@20.19.25)(ioredis@5.8.2)(vite@5.4.21(@types/node@20.19.25)(lightningcss@1.30.2)))(@medusajs/icons@2.12.0(react@18.3.1))(@medusajs/test-utils@2.12.0)(@medusajs/ui@4.0.28(@types/react-dom@18.3.7(@types/react@18.3.27))(@types/react@18.3.27)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3))(@swc/core@1.7.28(@swc/helpers@0.5.17))(@types/node@20.19.25)(@types/react-dom@18.3.7(@types/react@18.3.27))(@types/react@18.3.27)(awilix@8.0.1)(lightningcss@1.30.2)(posthog-node@5.14.1)(react-dom@18.3.1(react@18.3.1))(react-router-dom@6.20.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)(typescript@5.9.3)':
+  '@medusajs/medusa@2.12.0(@medusajs/admin-sdk@2.12.0)(@medusajs/cli@2.12.0(@types/node@20.19.25))(@medusajs/framework@2.12.0(@medusajs/cli@2.12.0(@types/node@20.19.25))(@types/node@20.19.25)(ioredis@5.8.2)(vite@5.4.21(@types/node@20.19.25)(lightningcss@1.30.2)))(@medusajs/icons@2.12.0(react@18.3.1))(@medusajs/test-utils@2.12.0)(@medusajs/ui@4.0.28(@types/react-dom@18.3.7(@types/react@18.3.27))(@types/react@18.3.27)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3))(@swc/core@1.7.28(@swc/helpers@0.5.17))(@types/node@20.19.25)(@types/react-dom@18.3.7(@types/react@18.3.27))(@types/react@18.3.27)(awilix@8.0.1)(lightningcss@1.30.2)(picomatch@4.0.3)(posthog-node@5.14.1)(react-dom@18.3.1(react@18.3.1))(react-router-dom@6.20.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)(typescript@5.9.3)':
     dependencies:
       '@inquirer/checkbox': 2.5.0
       '@inquirer/input': 2.3.0
-      '@medusajs/admin-bundler': 2.12.0(@types/node@20.19.25)(@types/react-dom@18.3.7(@types/react@18.3.27))(@types/react@18.3.27)(lightningcss@1.30.2)(typescript@5.9.3)
+      '@medusajs/admin-bundler': 2.12.0(@types/node@20.19.25)(@types/react-dom@18.3.7(@types/react@18.3.27))(@types/react@18.3.27)(lightningcss@1.30.2)(picomatch@4.0.3)(typescript@5.9.3)
       '@medusajs/analytics': 2.12.0(@medusajs/framework@2.12.0(@medusajs/cli@2.12.0(@types/node@20.19.25))(@types/node@20.19.25)(ioredis@5.8.2)(vite@5.4.21(@types/node@20.19.25)(lightningcss@1.30.2)))
       '@medusajs/analytics-local': 2.12.0(@medusajs/framework@2.12.0(@medusajs/cli@2.12.0(@types/node@20.19.25))(@types/node@20.19.25)(ioredis@5.8.2)(vite@5.4.21(@types/node@20.19.25)(lightningcss@1.30.2)))
       '@medusajs/analytics-posthog': 2.12.0(@medusajs/framework@2.12.0(@medusajs/cli@2.12.0(@types/node@20.19.25))(@types/node@20.19.25)(ioredis@5.8.2)(vite@5.4.21(@types/node@20.19.25)(lightningcss@1.30.2)))(posthog-node@5.14.1)
@@ -11334,7 +11337,7 @@ snapshots:
       get-port: 5.1.1
       ulid: 2.4.0
     optionalDependencies:
-      '@medusajs/medusa': 2.12.0(@medusajs/admin-sdk@2.12.0)(@medusajs/cli@2.12.0(@types/node@20.19.25))(@medusajs/framework@2.12.0(@medusajs/cli@2.12.0(@types/node@20.19.25))(@types/node@20.19.25)(ioredis@5.8.2)(vite@5.4.21(@types/node@20.19.25)(lightningcss@1.30.2)))(@medusajs/icons@2.12.0(react@18.3.1))(@medusajs/test-utils@2.12.0)(@medusajs/ui@4.0.28(@types/react-dom@18.3.7(@types/react@18.3.27))(@types/react@18.3.27)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3))(@swc/core@1.7.28(@swc/helpers@0.5.17))(@types/node@20.19.25)(@types/react-dom@18.3.7(@types/react@18.3.27))(@types/react@18.3.27)(awilix@8.0.1)(lightningcss@1.30.2)(posthog-node@5.14.1)(react-dom@18.3.1(react@18.3.1))(react-router-dom@6.20.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)(typescript@5.9.3)
+      '@medusajs/medusa': 2.12.0(@medusajs/admin-sdk@2.12.0)(@medusajs/cli@2.12.0(@types/node@20.19.25))(@medusajs/framework@2.12.0(@medusajs/cli@2.12.0(@types/node@20.19.25))(@types/node@20.19.25)(ioredis@5.8.2)(vite@5.4.21(@types/node@20.19.25)(lightningcss@1.30.2)))(@medusajs/icons@2.12.0(react@18.3.1))(@medusajs/test-utils@2.12.0)(@medusajs/ui@4.0.28(@types/react-dom@18.3.7(@types/react@18.3.27))(@types/react@18.3.27)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3))(@swc/core@1.7.28(@swc/helpers@0.5.17))(@types/node@20.19.25)(@types/react-dom@18.3.7(@types/react@18.3.27))(@types/react@18.3.27)(awilix@8.0.1)(lightningcss@1.30.2)(picomatch@4.0.3)(posthog-node@5.14.1)(react-dom@18.3.1(react@18.3.1))(react-router-dom@6.20.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)(typescript@5.9.3)
     transitivePeerDependencies:
       - debug
       - supports-color
@@ -16132,7 +16135,9 @@ snapshots:
     transitivePeerDependencies:
       - encoding
 
-  fdir@6.1.1: {}
+  fdir@6.1.1(picomatch@4.0.3):
+    optionalDependencies:
+      picomatch: 4.0.3
 
   fdir@6.5.0(picomatch@4.0.3):
     optionalDependencies:
