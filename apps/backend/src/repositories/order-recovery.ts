@@ -1,4 +1,10 @@
-import { EntityManager } from "typeorm";
+/**
+ * Interface for database manager that supports raw queries.
+ * Compatible with Medusa's internal query execution.
+ */
+export interface QueryExecutor {
+  query<T = any>(sql: string, params?: any[]): Promise<T>;
+}
 
 export interface RecoveryOrderRow {
   id: string;
@@ -12,7 +18,7 @@ export interface RecoveryOrderRow {
  * This pushes the JSONB predicate into the DB to avoid full-table scans in cron.
  */
 export async function getPendingRecoveryOrders(
-  manager: EntityManager,
+  manager: QueryExecutor,
   olderThan?: Date
 ): Promise<RecoveryOrderRow[]> {
   const params: any[] = [];
