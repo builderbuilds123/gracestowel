@@ -62,10 +62,8 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
 
-# Copy root node_modules (contains hoisted deps like @medusajs/cli)
-COPY --from=builder --chown=node:node /repo/node_modules ./node_modules
-# Copy backend-specific node_modules (symlinked packages resolve from here)
-COPY --from=builder --chown=node:node /repo/apps/backend/node_modules ./apps/backend/node_modules
+# Copy backend node_modules (contains @medusajs/cli and other deps)
+COPY --from=builder --chown=node:node /repo/apps/backend/node_modules ./node_modules
 # Copy built app
 COPY --from=builder --chown=node:node /repo/apps/backend/.medusa ./.medusa
 COPY --from=builder --chown=node:node /repo/apps/backend/.medusa/server/public ./public
@@ -77,4 +75,5 @@ COPY --from=builder --chown=node:node /repo/apps/backend/src ./src
 USER node
 
 # Railway sets PORT=8080 by default, which the app uses via ${PORT:-8080}
-CMD ["sh", "-c", "pnpm run migrate && pnpm run start"]
+# Invoke medusa CLI directly via node to avoid pnpm bin symlink path issues
+CMD ["sh", "-c", "node node_modules/@medusajs/cli/cli.js db:migrate && node node_modules/@medusajs/cli/cli.js start"]
