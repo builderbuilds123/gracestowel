@@ -203,6 +203,23 @@ export class PaymentIntentMissingError extends Error {
     }
 }
 
+/**
+ * Story 6.3: Order locked for capture error
+ * Thrown when attempting to edit an order that is currently being captured
+ * Returns 409 Conflict per AC 6, 7
+ */
+export class OrderLockedError extends Error {
+    public readonly code = "ORDER_LOCKED" as const;
+    public readonly httpStatus = 409;
+    public readonly orderId: string;
+
+    constructor(orderId: string) {
+        super(`Order is processing and cannot be edited`);
+        this.name = "OrderLockedError";
+        this.orderId = orderId;
+    }
+}
+
 export class PriceNotFoundError extends Error {
     public readonly code = "PRICE_NOT_FOUND" as const;
     public readonly variantId: string;
@@ -353,6 +370,13 @@ export async function validatePreconditionsHandler(
 
     if (paymentIntent.status !== "requires_capture") {
         throw new InvalidPaymentStateError(paymentIntentId, paymentIntent.status);
+    }
+
+    // Story 6.3: Check if order is locked for capture (race condition guard)
+    const editStatus = order.metadata?.edit_status;
+    if (editStatus === "locked_for_capture") {
+        console.warn(`[add-item-to-order] Edit rejected: Order ${input.orderId} is locked for capture`);
+        throw new OrderLockedError(input.orderId);
     }
 
     // 4. Check inventory - SUM stock across ALL locations (FIX: was only checking first)

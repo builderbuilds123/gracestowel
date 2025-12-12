@@ -1,6 +1,6 @@
 # Story 6.1: Webhook Validation & Retry
 
-Status: Ready for Review
+Status: Done
 
 ## Story
 
