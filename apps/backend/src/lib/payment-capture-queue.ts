@@ -262,15 +262,16 @@ export async function fetchOrderTotal(orderId: string): Promise<{ totalCents: nu
  * @param orderId - The Medusa order ID
  * @param editStatus - The edit status to set (locked_for_capture, idle, editable)
  * @param expectCurrentStatus - Optional: only update if current status matches
+ * @returns true if status was set, false if skipped (e.g., already locked)
  */
 async function setOrderEditStatus(
     orderId: string, 
     editStatus: "locked_for_capture" | "idle" | "editable",
     expectCurrentStatus?: "editable" | "idle" | undefined
-): Promise<void> {
+): Promise<boolean> {
     if (!containerRef) {
         console.error("[PaymentCapture] Container not initialized - cannot set edit status");
-        return;
+        return false;
     }
 
     try {
@@ -285,10 +286,11 @@ async function setOrderEditStatus(
 
             if (orders.length > 0) {
                 const currentStatus = (orders[0].metadata as any)?.edit_status;
-                // Allow lock if status is undefined, editable, or idle (not already locked)
+                // Only acquire lock if current status is editable, idle, or undefined
+                // Reject if already locked_for_capture
                 if (currentStatus === "locked_for_capture") {
-                    console.warn(`[PaymentCapture] Order ${orderId}: Already locked, skipping lock acquisition`);
-                    return;
+                    console.warn(`[PaymentCapture] Order ${orderId}: Already locked ('${currentStatus}'), skipping lock acquisition`);
+                    return false;
                 }
             }
         }
@@ -302,9 +304,10 @@ async function setOrderEditStatus(
             },
         }]);
         console.log(`[PaymentCapture] Order ${orderId}: edit_status set to ${editStatus}`);
+        return true;
     } catch (error) {
         console.error(`[PaymentCapture] Error setting edit_status for order ${orderId}:`, error);
-        throw error;
+        throw error; // Re-throw to trigger retry - errors should not be silently swallowed
     }
 }
 
@@ -355,8 +358,7 @@ export async function processPaymentCapture(job: Job<PaymentCaptureJobData>): Pr
     
     try {
         // Story 6.3 AC 1, 3: Set edit_status to locked_for_capture BEFORE any capture logic
-        await setOrderEditStatus(orderId, "locked_for_capture");
-        lockAcquired = true;
+        lockAcquired = await setOrderEditStatus(orderId, "locked_for_capture");
         
         // Step 1: Get the current state of the payment intent
         const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
