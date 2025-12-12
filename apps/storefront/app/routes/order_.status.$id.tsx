@@ -178,42 +178,51 @@ export async function action({ params, request, context }: ActionFunctionArgs) {
         }
 
         if (intent === "ADD_ITEMS") {
+            // Story 6.4 Fix: Add ONE item at a time to ensure atomicity
+            // If multiple items selected, only add the first one - user must re-add for more
+            // This prevents partial success where item A commits but item B fails
             const items = JSON.parse(formData.get("items") as string) as Array<{ variant_id: string; quantity: number }>;
             
-            // Backend expects single item per request, so we iterate
-            // Each item addition increments the authorization separately
-            let lastResult: any = null;
-            for (const item of items) {
-                const response = await fetch(`${medusaBackendUrl}/store/orders/${id}/line-items`, {
-                    method: "POST",
-                    headers,
-                    body: JSON.stringify({ variant_id: item.variant_id, quantity: item.quantity }),
-                });
-
-                if (!response.ok) {
-                    const errorData = await response.json() as any;
-                    if (response.status === 401 || response.status === 403) {
-                        return data(
-                            { success: false, error: errorData.message || "Authorization failed" },
-                            { status: response.status, headers: { "Set-Cookie": await clearGuestToken(id!) } }
-                        );
-                    }
-                    // Story 6.4: Handle payment declined errors with user-friendly message
-                    if (response.status === 402 && errorData.type === "payment_error") {
-                        return data({ 
-                            success: false, 
-                            error: errorData.message,
-                            retryable: errorData.retryable,
-                            errorType: "payment_error"
-                        }, { status: 402 });
-                    }
-                    return data({ success: false, error: errorData.message || "Failed to add items" }, { status: 400 });
-                }
-
-                lastResult = await response.json() as any;
+            if (items.length === 0) {
+                return data({ success: false, error: "No items to add" }, { status: 400 });
             }
 
-            return data({ success: true, action: "items_added", new_total: lastResult?.new_total });
+            // Only process first item - atomic single-item addition
+            const item = items[0];
+            const response = await fetch(`${medusaBackendUrl}/store/orders/${id}/line-items`, {
+                method: "POST",
+                headers,
+                body: JSON.stringify({ variant_id: item.variant_id, quantity: item.quantity }),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json() as any;
+                if (response.status === 401 || response.status === 403) {
+                    return data(
+                        { success: false, error: errorData.message || "Authorization failed" },
+                        { status: response.status, headers: { "Set-Cookie": await clearGuestToken(id!) } }
+                    );
+                }
+                // Story 6.4: Handle payment declined errors with user-friendly message
+                if (response.status === 402 && errorData.type === "payment_error") {
+                    return data({ 
+                        success: false, 
+                        error: errorData.message,
+                        retryable: errorData.retryable,
+                        errorType: "payment_error"
+                    }, { status: 402 });
+                }
+                return data({ success: false, error: errorData.message || "Failed to add item" }, { status: 400 });
+            }
+
+            const result = await response.json() as any;
+            // Backend returns order.total - use it for new_total
+            return data({ 
+                success: true, 
+                action: "items_added", 
+                new_total: result.order?.total,
+                items_remaining: items.length - 1  // Tell frontend how many items still need adding
+            });
         }
 
         return data({ success: false, error: "Unknown intent" }, { status: 400 });
@@ -258,10 +267,9 @@ export default function OrderStatus() {
 
     // Callbacks to update local state
     const handleOrderUpdate = (newTotal?: number) => {
-        if(newTotal) {
-             // In a real app we might revalidate to get fresh items
-             revalidator.revalidate();
-        }
+        // Story 6.4 Fix: Always revalidate after item add to refresh totals
+        // Even if newTotal is undefined, we need fresh data from server
+        revalidator.revalidate();
     };
     
     const handleExpire = useCallback(() => {
