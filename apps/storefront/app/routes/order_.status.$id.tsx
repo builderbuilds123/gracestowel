@@ -194,6 +194,15 @@ export async function action({ params, request, context }: ActionFunctionArgs) {
                         { status: response.status, headers: { "Set-Cookie": await clearGuestToken(id!) } }
                     );
                 }
+                // Story 6.4: Handle payment declined errors with user-friendly message
+                if (response.status === 402 && errorData.type === "payment_error") {
+                    return data({ 
+                        success: false, 
+                        error: errorData.message,
+                        retryable: errorData.retryable,
+                        errorType: "payment_error"
+                    }, { status: 402 });
+                }
                 return data({ success: false, error: errorData.message || "Failed to add items" }, { status: 400 });
             }
 

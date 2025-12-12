@@ -104,15 +104,74 @@ export class InvalidPaymentStateError extends Error {
     }
 }
 
+/**
+ * Story 6.4: Decline code to user-friendly message mapping
+ * Per story requirements - sanitized messages that don't expose sensitive info
+ */
+export const DECLINE_CODE_MESSAGES: Record<string, string> = {
+    // Generic declines
+    generic_decline: "Your card was declined.",
+    card_declined: "Your card was declined.",
+    do_not_honor: "Your card was declined.",
+    
+    // Specific issues with user-actionable messages
+    insufficient_funds: "Insufficient funds.",
+    expired_card: "Your card has expired.",
+    incorrect_cvc: "Your card's security code is incorrect.",
+    incorrect_number: "Your card number is incorrect.",
+    
+    // Security-sensitive codes - don't reveal card is lost/stolen
+    lost_card: "Your card was declined. Please try another.",
+    stolen_card: "Your card was declined. Please try another.",
+    fraudulent: "Your card was declined. Please try another.",
+    
+    // Processing errors
+    processing_error: "An error occurred while processing your card.",
+    card_not_supported: "Your card is not supported.",
+    currency_not_supported: "Your card does not support this currency.",
+};
+
+/**
+ * Story 6.4: Decline codes that are retryable (user can fix the issue)
+ */
+export const RETRYABLE_DECLINE_CODES = new Set([
+    "insufficient_funds",  // User can add funds
+    "incorrect_cvc",       // User can re-enter
+    "incorrect_number",    // User can re-enter
+    "processing_error",    // Transient, can retry
+]);
+
+/**
+ * Story 6.4: Map Stripe decline code to user-friendly message
+ * @param declineCode - The Stripe decline_code
+ * @returns Sanitized user-friendly message
+ */
+export function mapDeclineCodeToUserMessage(declineCode?: string): string {
+    if (!declineCode) {
+        return "Your card was declined.";
+    }
+    return DECLINE_CODE_MESSAGES[declineCode] || "Your card was declined.";
+}
+
+/**
+ * Story 6.4: Card declined error with user-friendly messaging
+ * Returns 402 Payment Required per frontend contract
+ */
 export class CardDeclinedError extends Error {
+    public readonly code = "PAYMENT_DECLINED" as const;
+    public readonly type = "payment_error" as const;
     public readonly stripeCode: string;
     public readonly declineCode?: string;
+    public readonly userMessage: string;
+    public readonly retryable: boolean;
 
     constructor(message: string, stripeCode: string, declineCode?: string) {
         super(message);
         this.name = "CardDeclinedError";
         this.stripeCode = stripeCode;
         this.declineCode = declineCode;
+        this.userMessage = mapDeclineCodeToUserMessage(declineCode);
+        this.retryable = declineCode ? RETRYABLE_DECLINE_CODES.has(declineCode) : false;
     }
 }
 

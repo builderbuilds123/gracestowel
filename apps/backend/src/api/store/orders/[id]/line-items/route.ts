@@ -165,12 +165,13 @@ export async function POST(
             return;
         }
 
-        // 402 Payment Required - Card declined
+        // 402 Payment Required - Card declined (Story 6.4)
         if (error instanceof CardDeclinedError) {
             res.status(402).json({
-                code: "card_declined",
-                message: error.message,
-                stripe_code: error.stripeCode,
+                code: error.code,
+                message: error.userMessage,
+                type: error.type,
+                retryable: error.retryable,
                 decline_code: error.declineCode,
             });
             return;
