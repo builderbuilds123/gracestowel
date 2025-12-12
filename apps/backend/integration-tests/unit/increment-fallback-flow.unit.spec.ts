@@ -11,7 +11,6 @@
  * - AC 7: UI revert (frontend responsibility, tested via error contract)
  */
 
-import Stripe from "stripe";
 
 // Mock Stripe client
 const mockStripeUpdate = jest.fn();
