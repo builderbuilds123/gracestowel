@@ -182,7 +182,18 @@ export async function action({ params, request, context }: ActionFunctionArgs) {
             // Each item is added sequentially to maintain order integrity
             // Note: If item N fails after items 1..N-1 succeed, partial state is committed
             // TODO: Backlog item for batch endpoint with atomic multi-item support
-            const items = JSON.parse(formData.get("items") as string) as Array<{ variant_id: string; quantity: number }>;
+            let items: Array<{ variant_id: string; quantity: number }>;
+            try {
+                const itemsData = JSON.parse(formData.get("items") as string);
+                if (!Array.isArray(itemsData) || !itemsData.every(item => 
+                    item && typeof item.variant_id === 'string' && typeof item.quantity === 'number'
+                )) {
+                    return data({ success: false, error: "Invalid items format." }, { status: 400 });
+                }
+                items = itemsData;
+            } catch {
+                return data({ success: false, error: "Invalid items format." }, { status: 400 });
+            }
             
             if (items.length === 0) {
                 return data({ success: false, error: "No items to add" }, { status: 400 });
