@@ -140,7 +140,7 @@ export async function action({ params, request, context }: ActionFunctionArgs) {
             });
 
             if (!response.ok) {
-                const errorData = await response.json() as any;
+                const errorData = await response.json() as { message?: string };
                 // Clear cookie on auth errors
                 if (response.status === 401 || response.status === 403) {
                     return data(
@@ -164,7 +164,7 @@ export async function action({ params, request, context }: ActionFunctionArgs) {
             });
 
             if (!response.ok) {
-                const errorData = await response.json() as any;
+                const errorData = await response.json() as { message?: string };
                 if (response.status === 401 || response.status === 403) {
                     return data(
                         { success: false, error: errorData.message || "Authorization failed" },
@@ -199,7 +199,7 @@ export async function action({ params, request, context }: ActionFunctionArgs) {
                 return data({ success: false, error: "No items to add" }, { status: 400 });
             }
 
-            let lastResult: any = null;
+            let lastResult: { order?: { total?: number } } | null = null;
             let itemsAdded = 0;
             
             for (const item of items) {
@@ -210,7 +210,7 @@ export async function action({ params, request, context }: ActionFunctionArgs) {
                 });
 
                 if (!response.ok) {
-                    const errorData = await response.json() as any;
+                    const errorData = await response.json() as { message?: string; type?: string; retryable?: boolean };
                     if (response.status === 401 || response.status === 403) {
                         return data(
                             { success: false, error: errorData.message || "Authorization failed", itemsAdded },
@@ -230,7 +230,7 @@ export async function action({ params, request, context }: ActionFunctionArgs) {
                     return data({ success: false, error: errorData.message || "Failed to add item", itemsAdded }, { status: 400 });
                 }
 
-                lastResult = await response.json() as any;
+                lastResult = await response.json() as { order?: { total?: number } };
                 itemsAdded++;
             }
 
