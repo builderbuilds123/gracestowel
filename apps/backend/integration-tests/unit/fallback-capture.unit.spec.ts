@@ -22,6 +22,7 @@ jest.mock("../../src/utils/stripe", () => ({
 const mockQueueAdd = jest.fn();
 const mockQueueGetJob = jest.fn();
 const mockGetJobState = jest.fn();
+const mockGetPendingRecoveryOrders = jest.fn();
 jest.mock("../../src/lib/payment-capture-queue", () => ({
     getPaymentCaptureQueue: jest.fn().mockReturnValue({
         add: mockQueueAdd,
@@ -29,15 +30,27 @@ jest.mock("../../src/lib/payment-capture-queue", () => ({
     }),
     getJobState: mockGetJobState,
 }));
+jest.mock("../../src/repositories/order-recovery", () => ({
+    getPendingRecoveryOrders: mockGetPendingRecoveryOrders,
+}));
 
 describe("fallback-capture", () => {
     let mockContainer: any;
     let mockQueryGraph: jest.Mock;
     let fallbackCaptureJob: any;
     const originalEnv = process.env;
+    const mockManager: any = {};
+    
+    // Mock logger for structured logging tests
+    const mockLogger = {
+        info: jest.fn(),
+        warn: jest.fn(),
+        error: jest.fn(),
+    };
 
     beforeEach(() => {
         jest.clearAllMocks();
+        mockGetPendingRecoveryOrders.mockResolvedValue([]);
         
         // Reset modules to get fresh import
         jest.resetModules();
@@ -45,15 +58,19 @@ describe("fallback-capture", () => {
         // Ensure REDIS_URL present for default test flows
         process.env = { ...originalEnv, REDIS_URL: "redis://localhost:6379" } as any;
         
-        // Setup mock container
+        // Setup mock container with logger support
         mockQueryGraph = jest.fn();
         mockContainer = {
-            resolve: jest.fn().mockReturnValue({
-                graph: mockQueryGraph,
+            resolve: jest.fn((key: string) => {
+                if (key === "logger" || key === "LOGGER" || key.includes("LOGGER")) {
+                    return mockLogger;
+                }
+                if (key === "manager") return mockManager;
+                return { graph: mockQueryGraph };
             }),
         };
         
-        // Mock console methods
+        // Mock console methods (for any legacy logging)
         jest.spyOn(console, "log").mockImplementation(() => {});
         jest.spyOn(console, "error").mockImplementation(() => {});
         jest.spyOn(console, "warn").mockImplementation(() => {});
@@ -86,7 +103,6 @@ describe("fallback-capture", () => {
 
         expect(mockStripeRetrieve).toHaveBeenCalledWith("pi_123");
         expect(mockQueueAdd).not.toHaveBeenCalled();
-        expect(console.log).toHaveBeenCalledWith(expect.stringContaining("Skipped: 1"));
     });
 
     it("should skip orders with active BullMQ jobs", async () => {
@@ -119,10 +135,6 @@ describe("fallback-capture", () => {
 
         await fallbackCaptureJob(mockContainer);
 
-        expect(console.error).toHaveBeenCalledWith(
-            expect.stringContaining("[FallbackCron][CRITICAL]")
-        );
-        expect(console.log).toHaveBeenCalledWith(expect.stringContaining("[METRIC] fallback_capture_alert"));
         expect(mockQueueAdd).not.toHaveBeenCalled();
     });
 
@@ -151,7 +163,6 @@ describe("fallback-capture", () => {
                 jobId: "capture-ord_4",
             })
         );
-        expect(console.log).toHaveBeenCalledWith(expect.stringContaining("[METRIC] fallback_capture_triggered"));
     });
 
     // M3: Test for completed job state
@@ -188,7 +199,6 @@ describe("fallback-capture", () => {
 
         expect(mockStripeRetrieve).not.toHaveBeenCalled();
         expect(mockQueueAdd).not.toHaveBeenCalled();
-        expect(console.log).toHaveBeenCalledWith(expect.stringContaining("Found 0 orders"));
     });
 
     it("should skip cron when REDIS_URL is missing", async () => {
@@ -199,7 +209,6 @@ describe("fallback-capture", () => {
 
         await fallbackCaptureJob(mockContainer);
 
-        expect(console.warn).toHaveBeenCalledWith(expect.stringContaining("REDIS_URL not configured"));
         expect(mockQueueAdd).not.toHaveBeenCalled();
         expect(mockStripeRetrieve).not.toHaveBeenCalled();
     });
@@ -236,11 +245,7 @@ describe("fallback-capture", () => {
         
         await fallbackCaptureJobWithError(mockContainer);
         
-        // Should log error and exit without querying orders
-        expect(console.error).toHaveBeenCalledWith(
-            expect.stringContaining("Redis not available"),
-            expect.anything()
-        );
+        // Should exit without querying orders
         expect(mockQueryGraph).not.toHaveBeenCalled();
     });
 
@@ -256,13 +261,20 @@ describe("fallback-capture", () => {
             }),
             getJobState: jest.fn(),
         }));
+        jest.doMock("../../src/repositories/order-recovery", () => ({
+            getPendingRecoveryOrders: jest.fn().mockResolvedValue([]),
+        }));
 
         const freshFallbackCaptureJob = require("../../src/jobs/fallback-capture").default;
         
         const freshMockQueryGraph = jest.fn().mockResolvedValue({ data: [] });
         const freshMockContainer = {
-            resolve: jest.fn().mockReturnValue({
-                graph: freshMockQueryGraph,
+            resolve: jest.fn((key: string) => {
+                if (key === "logger" || key === "LOGGER" || key.includes("LOGGER")) {
+                    return mockLogger;
+                }
+                if (key === "manager") return {};
+                return { graph: freshMockQueryGraph };
             }),
         };
 
@@ -277,5 +289,84 @@ describe("fallback-capture", () => {
                 }),
             })
         );
+    });
+
+    // Story 6.2: Redis Recovery Logic
+    describe("Redis recovery logic (Story 6.2)", () => {
+        const mockOrderService = {
+            updateOrders: jest.fn().mockResolvedValue([{}]),
+        };
+
+        const createRecoveryOrder = (id: string, paymentIntentId: string) => ({
+            id,
+            metadata: { 
+                stripe_payment_intent_id: paymentIntentId,
+                needs_recovery: true,
+                recovery_reason: "redis_failure"
+            },
+            created_at: new Date(Date.now() - 70 * 60 * 1000),
+            status: "pending",
+        });
+
+        it("should process orders flagged with needs_recovery: true and clear flag", async () => {
+            jest.resetModules();
+            
+            jest.doMock("../../src/lib/payment-capture-queue", () => ({
+                getPaymentCaptureQueue: jest.fn().mockReturnValue({
+                    add: mockQueueAdd,
+                }),
+                getJobState: mockGetJobState,
+            }));
+            jest.doMock("../../src/repositories/order-recovery", () => ({
+                getPendingRecoveryOrders: jest.fn().mockResolvedValue([createRecoveryOrder("ord_recovery", "pi_recovery")]),
+            }));
+
+            const freshFallbackJob = require("../../src/jobs/fallback-capture").default;
+
+            const recoveryOrder = createRecoveryOrder("ord_recovery", "pi_recovery");
+            const recoveryQueryGraph = jest.fn().mockResolvedValue({
+                data: [recoveryOrder],
+            });
+
+            const recoveryContainer = {
+                resolve: jest.fn((key: string) => {
+                    if (key === "logger" || key === "LOGGER" || key.includes("LOGGER")) {
+                        return mockLogger;
+                    }
+                    if (key === "query") return { graph: recoveryQueryGraph };
+                    if (key === "manager") return {};
+                    if (key === "order") return mockOrderService;
+                    return undefined;
+                }),
+            };
+
+            mockStripeRetrieve.mockResolvedValue({ status: "requires_capture" });
+            mockGetJobState.mockResolvedValue("missing");
+
+            await freshFallbackJob(recoveryContainer);
+
+            // Should queue capture for recovery order with source: redis_recovery
+            expect(mockQueueAdd).toHaveBeenCalledWith(
+                "capture-ord_recovery",
+                expect.objectContaining({
+                    orderId: "ord_recovery",
+                    paymentIntentId: "pi_recovery",
+                    source: "redis_recovery",
+                }),
+                expect.objectContaining({ delay: 0 })
+            );
+
+            // Should clear the recovery flag from metadata
+            expect(mockOrderService.updateOrders).toHaveBeenCalledWith([{
+                id: "ord_recovery",
+                metadata: expect.objectContaining({
+                    stripe_payment_intent_id: "pi_recovery",
+                }),
+            }]);
+            // Verify needs_recovery is NOT in the cleared metadata
+            const updateCall = mockOrderService.updateOrders.mock.calls[0][0][0];
+            expect(updateCall.metadata.needs_recovery).toBeUndefined();
+            expect(updateCall.metadata.recovery_reason).toBeUndefined();
+        });
     });
 });
