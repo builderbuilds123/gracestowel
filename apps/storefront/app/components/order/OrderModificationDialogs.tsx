@@ -23,6 +23,10 @@ interface ActionData {
     error?: string;
     address?: Address;
     new_total?: number;
+    // Story 6.4: Payment error handling
+    retryable?: boolean;
+    errorType?: string;
+    itemsAdded?: number;
 }
 
 interface OrderModificationDialogsProps {
@@ -56,6 +60,8 @@ export function OrderModificationDialogs({
     const [showEditAddressDialog, setShowEditAddressDialog] = useState(false);
     const [showAddItemsDialog, setShowAddItemsDialog] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [isRetryable, setIsRetryable] = useState<boolean>(false);
+    const [isPaymentError, setIsPaymentError] = useState<boolean>(false);
     
     const fetcher = useFetcher<ActionData>();
     const isSubmitting = fetcher.state !== "idle";
@@ -78,6 +84,9 @@ export function OrderModificationDialogs({
                 }
             } else if (fetcher.data.error) {
                 setError(fetcher.data.error);
+                // Story 6.4: Track retryable state for UX
+                setIsRetryable(fetcher.data.retryable ?? false);
+                setIsPaymentError(fetcher.data.errorType === "payment_error");
             }
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -110,10 +119,21 @@ export function OrderModificationDialogs({
 
     return (
         <>
-            {/* Error Display */}
+            {/* Error Display - Story 6.4: Different styling for payment errors */}
             {error && (
-                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-                    {error}
+                <div className={`mb-4 p-3 rounded-lg text-sm ${
+                    isPaymentError 
+                        ? 'bg-amber-50 border border-amber-200 text-amber-800'
+                        : 'bg-red-50 border border-red-200 text-red-700'
+                }`}>
+                    <p>{error}</p>
+                    {isPaymentError && (
+                        <p className="mt-2 font-medium">
+                            {isRetryable 
+                                ? "You can try again or use a different payment method."
+                                : "Please use a different card to continue."}
+                        </p>
+                    )}
                 </div>
             )}
 

@@ -182,7 +182,7 @@ development_status:
     status: done
   6-4-increment-fallback-flow:
     path: docs/sprint/sprint-artifacts/6-4-increment-fallback-flow.md
-    status: ready-for-dev
+    status: done
   pi-epic-6-retrospective: optional
 
   pi-epic-7: backlog
@@ -197,3 +197,8 @@ development_status:
   8-2-metrics-dashboard: backlog
   8-3-alerting: backlog
   pi-epic-8-retrospective: optional
+
+  # Backlog: Atomic batch item addition
+  batch-add-items-endpoint:
+    status: backlog
+    meta: "Create POST /store/orders/:id/line-items/batch for atomic multi-item add. Single Stripe increment call for total, all-or-nothing commit. Required for true AC6 compliance with multi-item UX."

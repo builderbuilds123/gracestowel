@@ -140,7 +140,7 @@ export async function action({ params, request, context }: ActionFunctionArgs) {
             });
 
             if (!response.ok) {
-                const errorData = await response.json() as any;
+                const errorData = await response.json() as { message?: string };
                 // Clear cookie on auth errors
                 if (response.status === 401 || response.status === 403) {
                     return data(
@@ -164,7 +164,7 @@ export async function action({ params, request, context }: ActionFunctionArgs) {
             });
 
             if (!response.ok) {
-                const errorData = await response.json() as any;
+                const errorData = await response.json() as { message?: string };
                 if (response.status === 401 || response.status === 403) {
                     return data(
                         { success: false, error: errorData.message || "Authorization failed" },
@@ -178,27 +178,76 @@ export async function action({ params, request, context }: ActionFunctionArgs) {
         }
 
         if (intent === "ADD_ITEMS") {
-            const items = JSON.parse(formData.get("items") as string);
-            
-            const response = await fetch(`${medusaBackendUrl}/store/orders/${id}/line-items`, {
-                method: "POST",
-                headers,
-                body: JSON.stringify({ items }),
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json() as any;
-                if (response.status === 401 || response.status === 403) {
-                    return data(
-                        { success: false, error: errorData.message || "Authorization failed" },
-                        { status: response.status, headers: { "Set-Cookie": await clearGuestToken(id!) } }
-                    );
+            // JIT logistics: Process all items for smooth UX
+            // Each item is added sequentially to maintain order integrity
+            // Note: If item N fails after items 1..N-1 succeed, partial state is committed
+            // TODO: Backlog item for batch endpoint with atomic multi-item support
+            let items: Array<{ variant_id: string; quantity: number }>;
+            try {
+                const itemsData = JSON.parse(formData.get("items") as string);
+                if (!Array.isArray(itemsData) || !itemsData.every(item => 
+                    item && typeof item.variant_id === 'string' && typeof item.quantity === 'number'
+                )) {
+                    return data({ success: false, error: "Invalid items format." }, { status: 400 });
                 }
-                return data({ success: false, error: errorData.message || "Failed to add items" }, { status: 400 });
+                items = itemsData;
+            } catch {
+                return data({ success: false, error: "Invalid items format." }, { status: 400 });
+            }
+            
+            if (items.length === 0) {
+                return data({ success: false, error: "No items to add" }, { status: 400 });
             }
 
-            const result = await response.json() as any;
-            return data({ success: true, action: "items_added", new_total: result.new_total });
+            let lastResult: { order?: { total?: number } } | null = null;
+            let itemsAdded = 0;
+            
+            for (const item of items) {
+                const response = await fetch(`${medusaBackendUrl}/store/orders/${id}/line-items`, {
+                    method: "POST",
+                    headers,
+                    body: JSON.stringify({ variant_id: item.variant_id, quantity: item.quantity }),
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json() as { message?: string; type?: string; retryable?: boolean };
+                    if (response.status === 401 || response.status === 403) {
+                        return data(
+                            { success: false, error: errorData.message || "Authorization failed", itemsAdded },
+                            { status: response.status, headers: { "Set-Cookie": await clearGuestToken(id!) } }
+                        );
+                    }
+                    // Story 6.4: Handle payment declined errors with user-friendly message
+                    // Note: itemsAdded > 0 means partial success - those items ARE committed
+                    if (response.status === 402 && errorData.type === "payment_error") {
+                        const partialNote = itemsAdded > 0 
+                            ? ` (${itemsAdded} item${itemsAdded > 1 ? 's' : ''} added successfully before this error)`
+                            : '';
+                        return data({ 
+                            success: false, 
+                            error: `${errorData.message}${partialNote}`,
+                            retryable: errorData.retryable,
+                            errorType: "payment_error",
+                            itemsAdded
+                        }, { status: 402 });
+                    }
+                    const partialNote = itemsAdded > 0 
+                        ? ` (${itemsAdded} item${itemsAdded > 1 ? 's' : ''} added successfully before this error)`
+                        : '';
+                    return data({ success: false, error: `${errorData.message || "Failed to add item"}${partialNote}`, itemsAdded }, { status: 400 });
+                }
+
+                lastResult = await response.json() as { order?: { total?: number } };
+                itemsAdded++;
+            }
+
+            // All items added successfully
+            return data({ 
+                success: true, 
+                action: "items_added", 
+                new_total: lastResult?.order?.total,
+                itemsAdded
+            });
         }
 
         return data({ success: false, error: "Unknown intent" }, { status: 400 });
@@ -243,10 +292,9 @@ export default function OrderStatus() {
 
     // Callbacks to update local state
     const handleOrderUpdate = (newTotal?: number) => {
-        if(newTotal) {
-             // In a real app we might revalidate to get fresh items
-             revalidator.revalidate();
-        }
+        // Story 6.4 Fix: Always revalidate after item add to refresh totals
+        // Even if newTotal is undefined, we need fresh data from server
+        revalidator.revalidate();
     };
     
     const handleExpire = useCallback(() => {

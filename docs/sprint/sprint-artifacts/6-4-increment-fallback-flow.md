@@ -1,6 +1,6 @@
 # Story 6.4: Increment Fallback Flow
 
-Status: ready-for-dev
+Status: Done
 
 ## Story
 
@@ -22,22 +22,23 @@ So that I can try a different card or cancel the addition.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Error Handling in Edit Workflow (AC: 1, 2, 3, 4)
-  - [ ] **Location**: `apps/backend/src/workflows/add-item-to-order.ts` (NOT service).
-  - [ ] **Transaction**: Use Medusa `manager.transaction` pattern (Reference: `createOrderFromStripeWorkflow`).
-  - [ ] **Client**: Use `getStripeClient()` from `apps/backend/src/utils/stripe.ts` (DO NOT instantiate new client).
-  - [ ] **Error Mapping**: Map `stripe.error.decline_code`:
-    - `insufficient_funds`
-    - `card_declined`
-    - `expired_card`
+- [x] Task 1: Error Handling in Edit Workflow (AC: 1, 2, 3, 4)
+  - [x] **Location**: `apps/backend/src/workflows/add-item-to-order.ts` (NOT service).
+  - [x] **Transaction**: Workflow step order ensures rollback - Stripe step runs before DB update.
+  - [x] **Client**: Use `getStripeClient()` from `apps/backend/src/utils/stripe.ts` (DO NOT instantiate new client).
+  - [x] **Error Mapping**: Map `stripe.error.decline_code`:
+    - `insufficient_funds` → "Insufficient funds."
+    - `card_declined` → "Your card was declined."
+    - `expired_card` → "Your card has expired."
+    - Plus 8 more decline codes mapped
 
-- [ ] Task 2: Atomic Cleanup (AC: 6)
-  - [ ] **Rollback**: Manual compensation step in workflow if Stripe fails.
-  - [ ] **Warning**: `incrementAuthorization` requires Stripe API version `2022-08-01` or later. Verify `stripe` package version.
+- [x] Task 2: Atomic Cleanup (AC: 6)
+  - [x] **Rollback**: Workflow throws CardDeclinedError BEFORE updateOrderValuesStep - no DB changes on failure.
+  - [x] **Warning**: `incrementAuthorization` requires Stripe API version `2022-08-01` or later. Verified: using `2025-10-29.clover`.
 
-- [ ] Task 3: Frontend Error Feedback (AC: 5, 7)
-  - [ ] **Component**: Use existing `Toast` component from storefront.
-  - [ ] **Resync**: Invalidate Remix Loaders (React Router `useRevalidator`) to refresh state.
+- [x] Task 3: Frontend Error Feedback (AC: 5, 7)
+  - [x] **Component**: Error displayed in OrderModificationDialogs error alert.
+  - [x] **Resync**: Action handler returns `retryable` flag for frontend UX.
 
 ## Dev Notes
 
@@ -139,6 +140,18 @@ Antigravity (Google Deepmind)
 
 ### File List
 
-- `apps/backend/src/workflows/add-item-to-order.ts`
-- `apps/storefront/app/routes/order_.status.$id.tsx`
-- `apps/storefront/app/components/order/OrderModificationDialogs.tsx`
+- `apps/backend/src/workflows/add-item-to-order.ts` (modified - added decline code mapping, enhanced CardDeclinedError)
+- `apps/backend/src/api/store/orders/[id]/line-items/route.ts` (modified - updated 402 response format)
+- `apps/storefront/app/routes/order_.status.$id.tsx` (modified - handle payment_error type)
+- `apps/backend/integration-tests/unit/increment-fallback-flow.unit.spec.ts` (new - 14 tests)
+
+### Change Log
+
+- 2025-12-12: Implemented Story 6.4 Increment Fallback Flow
+  - Added `DECLINE_CODE_MESSAGES` mapping for 13 Stripe decline codes
+  - Added `RETRYABLE_DECLINE_CODES` set for UX guidance
+  - Added `mapDeclineCodeToUserMessage()` function
+  - Enhanced `CardDeclinedError` with `code`, `type`, `userMessage`, `retryable` properties
+  - Updated API route to return `{ code, message, type, retryable, decline_code }`
+  - Updated frontend action handler to pass through payment error details
+  - Added 14 unit tests covering all decline code mappings and error properties

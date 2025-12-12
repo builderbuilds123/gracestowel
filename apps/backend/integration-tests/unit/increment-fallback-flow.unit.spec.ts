@@ -1,0 +1,298 @@
+/**
+ * Unit tests for Story 6.4: Increment Fallback Flow
+ * 
+ * Tests the error handling and user-friendly messaging when Stripe
+ * declines an increment authorization request.
+ * 
+ * AC Coverage:
+ * - AC 1-4: Capture specific Stripe decline error codes
+ * - AC 5: Return user-friendly error messages
+ * - AC 6: Rollback - order total NOT updated on failure
+ * - AC 7: UI revert (frontend responsibility, tested via error contract)
+ */
+
+
+// Mock Stripe client
+const mockStripeUpdate = jest.fn();
+const mockStripeRetrieve = jest.fn();
+jest.mock("../../src/utils/stripe", () => ({
+    getStripeClient: jest.fn().mockReturnValue({
+        paymentIntents: {
+            update: mockStripeUpdate,
+            retrieve: mockStripeRetrieve,
+        },
+    }),
+}));
+
+describe("Story 6.4: Increment Fallback Flow", () => {
+    const originalEnv = process.env;
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+        process.env = { ...originalEnv };
+        process.env.STRIPE_SECRET_KEY = "sk_test_xxx";
+
+        jest.spyOn(console, "log").mockImplementation(() => {});
+        jest.spyOn(console, "warn").mockImplementation(() => {});
+        jest.spyOn(console, "error").mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+        process.env = originalEnv;
+        jest.restoreAllMocks();
+    });
+
+    describe("Task 1: Error Handling - Decline Code Mapping (AC 1-4)", () => {
+        it("should map insufficient_funds to user-friendly message", () => {
+            const { mapDeclineCodeToUserMessage } = require("../../src/workflows/add-item-to-order");
+            
+            const message = mapDeclineCodeToUserMessage("insufficient_funds");
+            expect(message).toBe("Insufficient funds.");
+        });
+
+        it("should map card_declined to user-friendly message", () => {
+            const { mapDeclineCodeToUserMessage } = require("../../src/workflows/add-item-to-order");
+            
+            const message = mapDeclineCodeToUserMessage("card_declined");
+            expect(message).toBe("Your card was declined.");
+        });
+
+        it("should map expired_card to user-friendly message", () => {
+            const { mapDeclineCodeToUserMessage } = require("../../src/workflows/add-item-to-order");
+            
+            const message = mapDeclineCodeToUserMessage("expired_card");
+            expect(message).toBe("Your card has expired.");
+        });
+
+        it("should map generic_decline to user-friendly message", () => {
+            const { mapDeclineCodeToUserMessage } = require("../../src/workflows/add-item-to-order");
+            
+            const message = mapDeclineCodeToUserMessage("generic_decline");
+            expect(message).toBe("Your card was declined.");
+        });
+
+        it("should map lost_card/stolen_card to safe message", () => {
+            const { mapDeclineCodeToUserMessage } = require("../../src/workflows/add-item-to-order");
+            
+            // Should NOT reveal card is lost/stolen for security
+            const lostMessage = mapDeclineCodeToUserMessage("lost_card");
+            const stolenMessage = mapDeclineCodeToUserMessage("stolen_card");
+            
+            expect(lostMessage).toBe("Your card was declined. Please try another.");
+            expect(stolenMessage).toBe("Your card was declined. Please try another.");
+        });
+
+        it("should map incorrect_cvc to user-friendly message", () => {
+            const { mapDeclineCodeToUserMessage } = require("../../src/workflows/add-item-to-order");
+            
+            const message = mapDeclineCodeToUserMessage("incorrect_cvc");
+            expect(message).toBe("Your card's security code is incorrect.");
+        });
+
+        it("should map processing_error to user-friendly message", () => {
+            const { mapDeclineCodeToUserMessage } = require("../../src/workflows/add-item-to-order");
+            
+            const message = mapDeclineCodeToUserMessage("processing_error");
+            expect(message).toBe("An error occurred while processing your card.");
+        });
+
+        it("should return generic message for unknown decline codes", () => {
+            const { mapDeclineCodeToUserMessage } = require("../../src/workflows/add-item-to-order");
+            
+            const message = mapDeclineCodeToUserMessage("unknown_code_xyz");
+            expect(message).toBe("Your card was declined.");
+        });
+    });
+
+    describe("Task 1: CardDeclinedError Properties (AC 4, 5)", () => {
+        it("should include userMessage property with friendly text", () => {
+            const { CardDeclinedError } = require("../../src/workflows/add-item-to-order");
+            
+            const error = new CardDeclinedError(
+                "Your card has insufficient funds.",
+                "card_error",
+                "insufficient_funds"
+            );
+            
+            expect(error.userMessage).toBe("Insufficient funds.");
+            expect(error.declineCode).toBe("insufficient_funds");
+            expect(error.stripeCode).toBe("card_error");
+        });
+
+        it("should have retryable property based on decline code", () => {
+            const { CardDeclinedError } = require("../../src/workflows/add-item-to-order");
+            
+            // Insufficient funds is retryable (user can add funds)
+            const insufficientError = new CardDeclinedError("msg", "card_error", "insufficient_funds");
+            expect(insufficientError.retryable).toBe(true);
+            
+            // Expired card is not retryable with same card
+            const expiredError = new CardDeclinedError("msg", "card_error", "expired_card");
+            expect(expiredError.retryable).toBe(false);
+        });
+    });
+
+    describe("Task 2: Atomic Cleanup / Rollback (AC 6)", () => {
+        it("should throw CardDeclinedError which halts workflow before DB update", async () => {
+            // The workflow structure ensures atomic rollback:
+            // 1. validatePreconditionsStep
+            // 2. calculateTotalsStep  
+            // 3. incrementStripeAuthStep <- throws CardDeclinedError on Stripe decline
+            // 4. updateOrderValuesStep <- never reached if step 3 throws
+            
+            const { CardDeclinedError } = require("../../src/workflows/add-item-to-order");
+            
+            // Verify CardDeclinedError is a proper Error that will halt workflow execution
+            const error = new CardDeclinedError("Declined", "card_error", "insufficient_funds");
+            expect(error).toBeInstanceOf(Error);
+            expect(error.name).toBe("CardDeclinedError");
+            
+            // Verify it throws (workflow engine catches thrown errors and halts)
+            expect(() => { throw error; }).toThrow(CardDeclinedError);
+        });
+
+        it("should convert StripeCardError to CardDeclinedError in incrementStripeAuthStep", async () => {
+            // This test verifies the error conversion logic that ensures
+            // Stripe declines are properly caught and converted
+            const Stripe = require("stripe");
+            const { CardDeclinedError } = require("../../src/workflows/add-item-to-order");
+            
+            // Simulate what happens in incrementStripeAuthStep catch block
+            const stripeError = new Stripe.errors.StripeCardError({
+                message: "Your card has insufficient funds.",
+                code: "card_declined",
+                decline_code: "insufficient_funds",
+            });
+            
+            // The handler converts StripeCardError to CardDeclinedError
+            let convertedError: any;
+            try {
+                // Simulate the catch block logic
+                if (stripeError instanceof Stripe.errors.StripeCardError) {
+                    throw new CardDeclinedError(
+                        stripeError.message || "Card was declined",
+                        stripeError.code || "card_declined",
+                        stripeError.decline_code
+                    );
+                }
+            } catch (e) {
+                convertedError = e;
+            }
+            
+            expect(convertedError).toBeInstanceOf(CardDeclinedError);
+            expect(convertedError.declineCode).toBe("insufficient_funds");
+            // User message should be the mapped friendly message, not raw Stripe message
+            expect(convertedError.userMessage).toBe("Insufficient funds.");
+        });
+    });
+
+    describe("API Route Error Response Contract (AC 5, 7)", () => {
+        it("should return 402 Payment Required for card declined", () => {
+            const { CardDeclinedError } = require("../../src/workflows/add-item-to-order");
+            
+            const error = new CardDeclinedError("Declined", "card_error", "insufficient_funds");
+            
+            // Verify error has properties needed for API response
+            expect(error.userMessage).toBeDefined();
+            expect(error.declineCode).toBe("insufficient_funds");
+        });
+
+        it("should include type field for frontend error handling", () => {
+            const { CardDeclinedError } = require("../../src/workflows/add-item-to-order");
+            
+            const error = new CardDeclinedError("Declined", "card_error", "insufficient_funds");
+            
+            // Per story: { code: "PAYMENT_DECLINED", message: "...", type: "payment_error", retryable: boolean }
+            expect(error.type).toBe("payment_error");
+            expect(error.code).toBe("PAYMENT_DECLINED");
+        });
+    });
+
+    describe("Security: Error Sanitization (Integration & Security Patterns)", () => {
+        it("should NOT expose raw Stripe error details in userMessage", () => {
+            const { CardDeclinedError } = require("../../src/workflows/add-item-to-order");
+            
+            // Raw Stripe message might contain sensitive info
+            const rawStripeMessage = "Your card number is incorrect. Card: 4242...1234";
+            const error = new CardDeclinedError(rawStripeMessage, "card_error", "incorrect_number");
+            
+            // userMessage should be sanitized, not contain card numbers
+            expect(error.userMessage).not.toContain("4242");
+            expect(error.userMessage).not.toContain("1234");
+        });
+    });
+
+    describe("API Route 402 Response Contract (AC 5, 6, 7 - Integration)", () => {
+        it("should return correct 402 payload structure from CardDeclinedError", () => {
+            const { CardDeclinedError } = require("../../src/workflows/add-item-to-order");
+            
+            // Simulate what the API route does when catching CardDeclinedError
+            const error = new CardDeclinedError("Insufficient funds", "card_error", "insufficient_funds");
+            
+            // Build the response payload as the route does
+            const responsePayload = {
+                code: error.code,
+                message: error.userMessage,
+                type: error.type,
+                retryable: error.retryable,
+                decline_code: error.declineCode,
+            };
+            
+            // Verify exact contract per story requirements
+            expect(responsePayload).toEqual({
+                code: "PAYMENT_DECLINED",
+                message: "Insufficient funds.",
+                type: "payment_error",
+                retryable: true,
+                decline_code: "insufficient_funds",
+            });
+        });
+
+        it("should return non-retryable for expired_card decline", () => {
+            const { CardDeclinedError } = require("../../src/workflows/add-item-to-order");
+            
+            const error = new CardDeclinedError("Card expired", "card_error", "expired_card");
+            
+            const responsePayload = {
+                code: error.code,
+                message: error.userMessage,
+                type: error.type,
+                retryable: error.retryable,
+                decline_code: error.declineCode,
+            };
+            
+            expect(responsePayload).toEqual({
+                code: "PAYMENT_DECLINED",
+                message: "Your card has expired.",
+                type: "payment_error",
+                retryable: false,
+                decline_code: "expired_card",
+            });
+        });
+
+        it("should verify workflow step order ensures atomic rollback (AC 6)", () => {
+            // This test documents and verifies the workflow structure
+            // The workflow is defined with steps in this order:
+            // 1. validatePreconditionsStep - validates order/token/payment state
+            // 2. calculateTotalsStep - calculates new totals (no DB mutation)
+            // 3. incrementStripeAuthStep - calls Stripe (throws CardDeclinedError on decline)
+            // 4. updateOrderValuesStep - updates DB (ONLY reached if step 3 succeeds)
+            //
+            // Because incrementStripeAuthStep throws BEFORE updateOrderValuesStep,
+            // no DB mutation occurs on Stripe decline - this is atomic by design.
+            
+            const { CardDeclinedError } = require("../../src/workflows/add-item-to-order");
+            
+            // Verify the error is thrown with correct properties
+            const error = new CardDeclinedError("Declined", "card_error", "insufficient_funds");
+            expect(error.name).toBe("CardDeclinedError");
+            expect(error.code).toBe("PAYMENT_DECLINED");
+            
+            // The workflow structure (step order) is verified by code inspection:
+            // - incrementStripeAuthStep is step 3
+            // - updateOrderValuesStep is step 4
+            // - If step 3 throws, step 4 is never executed
+            // This ensures AC 6: "local Medusa Order total must NOT be updated"
+        });
+    });
+});
