@@ -218,16 +218,23 @@ export async function action({ params, request, context }: ActionFunctionArgs) {
                         );
                     }
                     // Story 6.4: Handle payment declined errors with user-friendly message
+                    // Note: itemsAdded > 0 means partial success - those items ARE committed
                     if (response.status === 402 && errorData.type === "payment_error") {
+                        const partialNote = itemsAdded > 0 
+                            ? ` (${itemsAdded} item${itemsAdded > 1 ? 's' : ''} added successfully before this error)`
+                            : '';
                         return data({ 
                             success: false, 
-                            error: errorData.message,
+                            error: `${errorData.message}${partialNote}`,
                             retryable: errorData.retryable,
                             errorType: "payment_error",
-                            itemsAdded  // Tell frontend how many succeeded before failure
+                            itemsAdded
                         }, { status: 402 });
                     }
-                    return data({ success: false, error: errorData.message || "Failed to add item", itemsAdded }, { status: 400 });
+                    const partialNote = itemsAdded > 0 
+                        ? ` (${itemsAdded} item${itemsAdded > 1 ? 's' : ''} added successfully before this error)`
+                        : '';
+                    return data({ success: false, error: `${errorData.message || "Failed to add item"}${partialNote}`, itemsAdded }, { status: 400 });
                 }
 
                 lastResult = await response.json() as { order?: { total?: number } };
