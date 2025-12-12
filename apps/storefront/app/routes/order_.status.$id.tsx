@@ -178,36 +178,42 @@ export async function action({ params, request, context }: ActionFunctionArgs) {
         }
 
         if (intent === "ADD_ITEMS") {
-            const items = JSON.parse(formData.get("items") as string);
+            const items = JSON.parse(formData.get("items") as string) as Array<{ variant_id: string; quantity: number }>;
             
-            const response = await fetch(`${medusaBackendUrl}/store/orders/${id}/line-items`, {
-                method: "POST",
-                headers,
-                body: JSON.stringify({ items }),
-            });
+            // Backend expects single item per request, so we iterate
+            // Each item addition increments the authorization separately
+            let lastResult: any = null;
+            for (const item of items) {
+                const response = await fetch(`${medusaBackendUrl}/store/orders/${id}/line-items`, {
+                    method: "POST",
+                    headers,
+                    body: JSON.stringify({ variant_id: item.variant_id, quantity: item.quantity }),
+                });
 
-            if (!response.ok) {
-                const errorData = await response.json() as any;
-                if (response.status === 401 || response.status === 403) {
-                    return data(
-                        { success: false, error: errorData.message || "Authorization failed" },
-                        { status: response.status, headers: { "Set-Cookie": await clearGuestToken(id!) } }
-                    );
+                if (!response.ok) {
+                    const errorData = await response.json() as any;
+                    if (response.status === 401 || response.status === 403) {
+                        return data(
+                            { success: false, error: errorData.message || "Authorization failed" },
+                            { status: response.status, headers: { "Set-Cookie": await clearGuestToken(id!) } }
+                        );
+                    }
+                    // Story 6.4: Handle payment declined errors with user-friendly message
+                    if (response.status === 402 && errorData.type === "payment_error") {
+                        return data({ 
+                            success: false, 
+                            error: errorData.message,
+                            retryable: errorData.retryable,
+                            errorType: "payment_error"
+                        }, { status: 402 });
+                    }
+                    return data({ success: false, error: errorData.message || "Failed to add items" }, { status: 400 });
                 }
-                // Story 6.4: Handle payment declined errors with user-friendly message
-                if (response.status === 402 && errorData.type === "payment_error") {
-                    return data({ 
-                        success: false, 
-                        error: errorData.message,
-                        retryable: errorData.retryable,
-                        errorType: "payment_error"
-                    }, { status: 402 });
-                }
-                return data({ success: false, error: errorData.message || "Failed to add items" }, { status: 400 });
+
+                lastResult = await response.json() as any;
             }
 
-            const result = await response.json() as any;
-            return data({ success: true, action: "items_added", new_total: result.new_total });
+            return data({ success: true, action: "items_added", new_total: lastResult?.new_total });
         }
 
         return data({ success: false, error: "Unknown intent" }, { status: 400 });

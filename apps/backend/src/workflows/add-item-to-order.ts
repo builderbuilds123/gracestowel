@@ -640,6 +640,8 @@ const incrementStripeAuthStep = createStep(
             });
         } catch (error) {
             if (error instanceof Stripe.errors.StripeCardError) {
+                // Story 6.4: Emit metric for decline tracking
+                console.log(`[METRIC] payment_increment_decline_count reason=${error.decline_code || 'unknown'} order=${input.orderId}`);
                 throw new CardDeclinedError(
                     error.message || "Card was declined",
                     error.code || "card_declined",
