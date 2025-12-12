@@ -3,8 +3,7 @@ node_modules/
 
 # Build outputs
 # --- Package manager drift prevention (single root pnpm-lock.yaml) ---
-# Allow the root lockfile, but ignore any nested lockfiles.
-!pnpm-lock.yaml
+# Root lockfile is allowed via negation after **/pnpm-lock.yaml pattern below
 
 # npm
 package-lock.json
@@ -16,8 +15,9 @@ npm-shrinkwrap.json
 yarn.lock
 **/yarn.lock
 
-# pnpm (nested lockfiles are forbidden)
+# pnpm (nested lockfiles are forbidden, but allow root lockfile)
 **/pnpm-lock.yaml
+!pnpm-lock.yaml
 
 dist/
 build/
