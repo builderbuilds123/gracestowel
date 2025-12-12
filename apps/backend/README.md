@@ -31,7 +31,7 @@ REDIS_URL=${{Redis.REDIS_PRIVATE_URL}}
 1. **Install dependencies:**
    ```bash
    cd apps/backend
-   npm install
+   pnpm install
    ```
 
 2. **Run database migrations:**
@@ -46,7 +46,7 @@ REDIS_URL=${{Redis.REDIS_PRIVATE_URL}}
 
 4. **Start the dev server:**
    ```bash
-   npm run dev
+   pnpm run dev
    ```
 
    The backend will be available at:

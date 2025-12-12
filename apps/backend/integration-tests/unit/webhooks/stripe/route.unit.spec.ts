@@ -162,6 +162,36 @@ describe("Stripe Webhook POST - Story 6.1", () => {
 
             expect(mockConstructEvent).toHaveBeenCalledWith(rawBody, "sig_valid", "whsec_test");
         });
+
+        it("should return 400 for malformed JSON body (poison message)", async () => {
+            // Poison message test: malformed JSON body with valid signature headers
+            // constructEvent will throw when parsing fails
+            mockConstructEvent.mockImplementationOnce(() => {
+                const error = new Error("Unexpected token in JSON");
+                (error as any).type = "StripeSignatureVerificationError";
+                throw error;
+            });
+
+            const req = createMockStreamRequest({
+                headers: { "stripe-signature": "sig_valid" },
+                body: "not-valid-json{{{malformed", // Malformed JSON
+            });
+
+            const res = {
+                status: jest.fn().mockReturnThis(),
+                json: jest.fn(),
+            } as any;
+
+            await POST(req, res);
+
+            // Should return 400 (no retry) for malformed payloads
+            expect(res.status).toHaveBeenCalledWith(400);
+            expect(res.json).toHaveBeenCalledWith({ 
+                error: expect.stringContaining("Webhook Error") 
+            });
+            // Should NOT queue the event
+            expect(queueStripeEvent).not.toHaveBeenCalled();
+        });
     });
 
     describe("Event Queueing (AC 5-7)", () => {
