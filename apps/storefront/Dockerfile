@@ -1,34 +1,51 @@
 # Base stage
 FROM node:24-slim AS base
-# RUN apk add --no-cache libc6-compat # Not needed for Debian-based slim image
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable
-WORKDIR /app
 
-# Dependencies stage
+WORKDIR /repo
+
+# Dependencies stage (pnpm workspace, single lockfile at repo root)
 FROM base AS deps
-WORKDIR /app
 
-# Copy package files and wrangler config (required for postinstall typegen)
-COPY package.json wrangler.jsonc ./
-# Set CI=true to skip wrangler types in postinstall (workerd binary incompatible with Alpine)
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY apps/storefront/package.json ./apps/storefront/package.json
+COPY apps/storefront/wrangler.jsonc ./apps/storefront/wrangler.jsonc
+
+# Skip typegen/postinstall in Docker builds
 ENV CI=true
-RUN npm install
+# Install only storefront deps (and their transitive deps), excluding workspace root.
+# This avoids pulling in repo-root tooling deps (e.g. @railway/cli) during image builds.
+RUN pnpm install --frozen-lockfile --filter apps-storefront... --filter '!gracestowel-monorepo'
+
+# Dev stage (for docker-compose)
+FROM deps AS dev
+
+# Do not treat runtime as CI
+ENV CI=false
+ENV NODE_ENV=development
+ENV HOST=0.0.0.0
+ENV PORT=5173
+
+COPY apps/storefront ./apps/storefront
+
+WORKDIR /repo/apps/storefront
+EXPOSE 5173
+CMD ["pnpm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "5173"]
 
 # Builder stage
 FROM base AS builder
-WORKDIR /app
 
-# Copy dependencies
-COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /repo/node_modules /repo/node_modules
+COPY --from=deps /repo/apps/storefront/node_modules /repo/apps/storefront/node_modules
 
-# Copy source code
-COPY . .
+COPY apps/storefront ./apps/storefront
 
-# Build the application
-RUN npm run build
+WORKDIR /repo/apps/storefront
+RUN pnpm run build
 
 # Test stage - uses builder output since wrangler dev needs the server build
 FROM base AS test
@@ -38,17 +55,15 @@ ENV NODE_ENV=development
 ENV PORT=5173
 ENV HOST=0.0.0.0
 
-# Copy built app and dependencies from builder
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/build ./build
-COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/public ./public
+COPY --from=builder /repo/apps/storefront/node_modules ./node_modules
+COPY --from=builder /repo/apps/storefront/dist ./dist
+COPY --from=builder /repo/apps/storefront/package.json ./package.json
+COPY --from=builder /repo/apps/storefront/public ./public
 
-# Create symlink so wrangler can be found from build/server directory
-RUN ln -s /app/node_modules /app/build/server/node_modules
+RUN ln -s /app/node_modules /app/dist/server/node_modules
 
 EXPOSE 5173
-CMD ["npm", "run", "test:server"]
+CMD ["pnpm", "run", "test:server"]
 
 # Production image
 FROM base AS runner
@@ -57,13 +72,12 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=5173
 
-# Copy built app and dependencies
-COPY --from=builder --chown=node:node /app/node_modules ./node_modules
-COPY --from=builder --chown=node:node /app/build ./build
-COPY --from=builder --chown=node:node /app/package.json ./package.json
-COPY --from=builder --chown=node:node /app/public ./public
+COPY --from=builder --chown=node:node /repo/apps/storefront/node_modules ./node_modules
+COPY --from=builder --chown=node:node /repo/apps/storefront/dist ./dist
+COPY --from=builder --chown=node:node /repo/apps/storefront/package.json ./package.json
+COPY --from=builder --chown=node:node /repo/apps/storefront/public ./public
 
 USER node
 
 EXPOSE 5173
-CMD ["npm", "run", "preview", "--", "--host", "0.0.0.0", "--port", "5173"]
+CMD ["pnpm", "run", "preview", "--", "--host", "0.0.0.0", "--port", "5173"]

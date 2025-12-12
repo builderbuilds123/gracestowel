@@ -39,8 +39,9 @@ services:
   # Medusa Backend
   backend:
     build:
-      context: ./apps/backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./apps/backend/Dockerfile
+      target: dev
     container_name: gracestowel-backend
     restart: unless-stopped
     depends_on:
@@ -59,15 +60,17 @@ services:
     ports:
       - "9000:9000"
     volumes:
-      - ./apps/backend:/app
-      - /app/node_modules
-    command: npm run dev
+      - ./apps/backend:/repo/apps/backend
+      - /repo/apps/backend/node_modules
+      - /repo/node_modules
+    command: pnpm run dev
 
   # Storefront (React Router / Remix on Cloudflare Workers)
   storefront:
     build:
-      context: ./apps/storefront
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./apps/storefront/Dockerfile
+      target: dev
     container_name: gracestowel-storefront
     restart: unless-stopped
     depends_on:
@@ -78,9 +81,10 @@ services:
     ports:
       - "5173:5173"
     volumes:
-      - ./apps/storefront:/app
-      - /app/node_modules
-    command: sh -c "pnpm install --no-frozen-lockfile && pnpm run dev -- --host 0.0.0.0 --port 5173"
+      - ./apps/storefront:/repo/apps/storefront
+      - /repo/apps/storefront/node_modules
+      - /repo/node_modules
+    command: pnpm run dev -- --host 0.0.0.0 --port 5173
 
 volumes:
   postgres_data:

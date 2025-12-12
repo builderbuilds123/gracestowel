@@ -37,8 +37,8 @@ services:
   # Medusa Backend (Test)
   backend:
     build:
-      context: ./apps/backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./apps/backend/Dockerfile
       target: test
     container_name: gracestowel-backend-test
     depends_on:
@@ -69,8 +69,8 @@ services:
   # Storefront (Test)
   storefront:
     build:
-      context: ./apps/storefront
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./apps/storefront/Dockerfile
       target: test
     container_name: gracestowel-storefront-test
     depends_on:
@@ -84,7 +84,7 @@ services:
       CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE: postgresql://medusa_test:medusa_test@postgres:5432/medusa_test
     ports:
       - "5174:5173"
-    command: npm run test:server
+    command: pnpm run test:server
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:5173/ -o /dev/null || exit 1"]
       interval: 5s

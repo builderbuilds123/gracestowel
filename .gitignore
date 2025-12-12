@@ -33,6 +33,11 @@ Thumbs.db
 *.log
 npm-debug.log*
 
+# Lockfiles (pnpm monorepo uses root pnpm-lock.yaml only)
+package-lock.json
+apps/**/package-lock.json
+apps/**/pnpm-lock.yaml
+
 # TypeScript
 *.tsbuildinfo
 

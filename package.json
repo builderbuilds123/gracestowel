@@ -28,7 +28,7 @@
     "test:e2e:ci:down": "docker compose -f docker-compose.test.yml down -v"
   },
   "dependencies": {
-    "@railway/cli": "^4.12.0"
+    
   },
   "engines": {
     "node": ">=24"

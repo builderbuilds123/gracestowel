@@ -5,17 +5,17 @@
   "scripts": {
     "build": "react-router build",
     "cf-typegen": "wrangler types",
-    "deploy": "npm run build && wrangler deploy",
+    "deploy": "pnpm run build && wrangler deploy",
     "dev": "react-router dev",
     "postinstall": "node -e \"process.env.CI || require('child_process').execSync('npm run cf-typegen', {stdio: 'inherit'})\"",
-    "preview": "npm run build && vite preview",
+    "preview": "vite preview",
     "lint": "echo 'Lint not configured for storefront'",
     "typecheck": "node -e \"process.env.CI ? null : require('child_process').execSync('npm run cf-typegen && react-router typegen', {stdio: 'inherit'})\" && tsc -b",
     "typecheck:ci": "tsc -b",
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
-    "test:server": "cd build/server && wrangler dev --port 5173 --ip 0.0.0.0"
+    "test:server": "cd dist/server && wrangler dev --port 5173 --ip 0.0.0.0"
   },
   "dependencies": {
     "@medusajs/js-sdk": "^2.12.1",

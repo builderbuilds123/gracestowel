@@ -9,6 +9,16 @@ const isProduction = process.env.NODE_ENV === "production" || process.env.CF_PAG
 const isCI = process.env.CI === "true";
 
 export default defineConfig({
+  // Avoid writing Vite caches under node_modules (can cause EXDEV issues in Docker/overlayfs)
+  cacheDir: ".vite",
+  // Ensure the SSR build lands where React Router expects it: <buildDirectory>/server
+  environments: {
+    ssr: {
+      build: {
+        outDir: "dist/server",
+      },
+    },
+  },
   plugins: [
     // Only use mkcert for local development (not in CI/production builds)
     !isProduction && !isCI && mkcert(),
