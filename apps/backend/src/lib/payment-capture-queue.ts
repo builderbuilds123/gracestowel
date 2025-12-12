@@ -64,6 +64,12 @@ export const PAYMENT_CAPTURE_WORKER_CONCURRENCY = parseInt(
 let queue: Queue<PaymentCaptureJobData> | null = null;
 let worker: Worker<PaymentCaptureJobData> | null = null;
 
+// Avoid accumulating process signal listeners during Jest runs.
+const IS_JEST = process.env.JEST_WORKER_ID !== undefined;
+
+// Track shutdown handler to prevent listener leaks in long-lived processes.
+let shutdownHandler: (() => Promise<void>) | null = null;
+
 // Store container reference for use in worker
 let containerRef: MedusaContainer | null = null;
 
@@ -430,13 +436,15 @@ export function startPaymentCaptureWorker(container?: MedusaContainer): Worker<P
 
     console.log("[PaymentCapture] Worker started");
 
-    // Graceful shutdown
-    const shutdown = async () => {
-        console.log("[PaymentCapture] Shutting down worker...");
-        await worker?.close();
-    };
-    process.on("SIGTERM", shutdown);
-    process.on("SIGINT", shutdown);
+    // Graceful shutdown (register once). Skip in Jest to avoid listener accumulation.
+    if (!shutdownHandler && !IS_JEST) {
+        shutdownHandler = async () => {
+            console.log("[PaymentCapture] Shutting down worker...");
+            await worker?.close();
+        };
+        process.on("SIGTERM", shutdownHandler);
+        process.on("SIGINT", shutdownHandler);
+    }
 
     return worker;
 }

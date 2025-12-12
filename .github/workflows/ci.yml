@@ -29,6 +29,17 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Lockfile drift guard
+        run: |
+          set -euo pipefail
+          forbidden=$(git ls-files | grep -E '(^|.*/)(package-lock\.json|yarn\.lock|npm-shrinkwrap\.json)$|(^.+/pnpm-lock\.yaml$)' || true)
+          forbidden=$(echo "$forbidden" | grep -v '^pnpm-lock\.yaml$' || true)
+          if [ -n "$forbidden" ]; then
+            echo "Forbidden lockfiles found in repo:" >&2
+            echo "$forbidden" >&2
+            exit 1
+          fi
+
       - name: Secrets Scanning (Gitleaks)
         uses: gitleaks/gitleaks-action@v2
         env:
@@ -63,6 +74,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Verify lockfile unchanged
+        run: git diff --exit-code pnpm-lock.yaml
 
       - name: Lint & Typecheck
         run: pnpm turbo run lint typecheck
@@ -101,6 +115,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Verify lockfile unchanged
+        run: git diff --exit-code pnpm-lock.yaml
 
       - name: Run backend unit tests
         env:
@@ -143,6 +160,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Verify lockfile unchanged
+        run: git diff --exit-code pnpm-lock.yaml
 
       - name: Run storefront tests
         run: pnpm turbo run test --filter=apps-storefront -- --coverage
@@ -300,14 +320,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Railway CLI
-        run: npm i -g @railway/cli
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
 
       - name: Deploy to Railway Staging
         working-directory: .
-        run: railway up --service ${{ vars.RAILWAY_SERVICE_NAME }} --environment staging --detach
         env:
+          RAILWAY_SERVICE_NAME: ${{ vars.RAILWAY_SERVICE_NAME }}
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: pnpm dlx @railway/cli@4.12.0 railway up --service "$RAILWAY_SERVICE_NAME" --environment staging --detach
 
   deploy-backend-production:
     name: Deploy Backend (Production)
@@ -318,14 +345,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Railway CLI
-        run: npm i -g @railway/cli
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
 
       - name: Deploy to Railway Production
         working-directory: .
-        run: railway up --service ${{ vars.RAILWAY_SERVICE_NAME }} --environment production --detach
         env:
+          RAILWAY_SERVICE_NAME: ${{ vars.RAILWAY_SERVICE_NAME }}
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: pnpm dlx @railway/cli@4.12.0 railway up --service "$RAILWAY_SERVICE_NAME" --environment production --detach
 
   deploy-staging:
     name: Deploy Staging
@@ -366,10 +400,10 @@ jobs:
         run: |
           node -e "
             const fs = require('fs');
-            const config = JSON.parse(fs.readFileSync('build/server/wrangler.json', 'utf8'));
+            const config = JSON.parse(fs.readFileSync('dist/server/wrangler.json', 'utf8'));
             config.name = 'gracestowelstorefront-staging';
             config.hyperdrive = [{ binding: 'HYPERDRIVE', id: process.env.HYPERDRIVE_ID }];
-            fs.writeFileSync('build/server/wrangler.json', JSON.stringify(config, null, 2));
+            fs.writeFileSync('dist/server/wrangler.json', JSON.stringify(config, null, 2));
           "
 
       - name: Deploy Storefront to Staging
@@ -419,10 +453,10 @@ jobs:
         run: |
           node -e "
             const fs = require('fs');
-            const config = JSON.parse(fs.readFileSync('build/server/wrangler.json', 'utf8'));
+            const config = JSON.parse(fs.readFileSync('dist/server/wrangler.json', 'utf8'));
             config.name = 'gracestowelstorefront';
             config.hyperdrive = [{ binding: 'HYPERDRIVE', id: process.env.HYPERDRIVE_ID }];
-            fs.writeFileSync('build/server/wrangler.json', JSON.stringify(config, null, 2));
+            fs.writeFileSync('dist/server/wrangler.json', JSON.stringify(config, null, 2));
           "
 
       - name: Deploy Storefront to Production
