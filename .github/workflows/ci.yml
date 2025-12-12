@@ -334,7 +334,7 @@ jobs:
         env:
           RAILWAY_SERVICE_NAME: ${{ vars.RAILWAY_SERVICE_NAME }}
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        run: pnpm dlx @railway/cli@4.12.0 railway up --service "$RAILWAY_SERVICE_NAME" --environment staging --detach
+        run: pnpm dlx @railway/cli@4.12.0 up --service "$RAILWAY_SERVICE_NAME" --environment staging --detach
 
   deploy-backend-production:
     name: Deploy Backend (Production)
@@ -359,7 +359,7 @@ jobs:
         env:
           RAILWAY_SERVICE_NAME: ${{ vars.RAILWAY_SERVICE_NAME }}
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        run: pnpm dlx @railway/cli@4.12.0 railway up --service "$RAILWAY_SERVICE_NAME" --environment production --detach
+        run: pnpm dlx @railway/cli@4.12.0 up --service "$RAILWAY_SERVICE_NAME" --environment production --detach
 
   deploy-staging:
     name: Deploy Staging
