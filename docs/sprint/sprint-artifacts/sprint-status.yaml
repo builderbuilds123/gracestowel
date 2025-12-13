@@ -192,8 +192,10 @@ development_status:
   7-4-csrf-protection: backlog
   pi-epic-7-retrospective: optional
 
-  pi-epic-8: backlog
-  8-1-structured-logging: backlog
+  pi-epic-8: in-progress
+  8-1-structured-logging:
+    status: ready-for-dev
+    meta: "Course correction 2025-12-12: Create logger utility with trace IDs for payment flow debugging. See sprint-change-proposal-2025-12-12-checkout-fixes.md"
   8-2-metrics-dashboard: backlog
   8-3-alerting: backlog
   pi-epic-8-retrospective: optional
@@ -202,3 +204,23 @@ development_status:
   batch-add-items-endpoint:
     status: backlog
     meta: "Create POST /store/orders/:id/line-items/batch for atomic multi-item add. Single Stripe increment call for total, all-or-nothing commit. Required for true AC6 compliance with multi-item UX."
+
+  # --- Course Correction: Checkout Payment Flow Fixes (2025-12-12) ---
+  checkout-payment-flow-fixes:
+    status: review
+    proposal: docs/sprint/proposals/sprint-change-proposal-2025-12-12-checkout-fixes.md
+    meta: "Critical fixes for PaymentIntent lifecycle, idempotency, order propagation, and structured logging"
+    completed: "2025-12-12"
+    changes:
+      - id: change-1-payment-intent-lifecycle
+        status: done
+        files: ["apps/storefront/app/routes/api.payment-intent.ts", "apps/storefront/app/routes/checkout.tsx"]
+        description: "Create once, update on changes pattern with server-side idempotency"
+      - id: change-2-structured-logging
+        status: done
+        files: ["apps/storefront/app/lib/logger.ts"]
+        description: "New logger utility with trace ID generation and propagation"
+      - id: change-3-backend-idempotency
+        status: done
+        files: ["apps/backend/src/loaders/stripe-event-worker.ts"]
+        description: "Idempotent order creation in webhook handler"

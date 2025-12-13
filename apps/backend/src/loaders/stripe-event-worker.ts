@@ -69,19 +69,68 @@ async function handleStripeEvent(event: Stripe.Event, container: MedusaContainer
 
 /**
  * Handle authorized payment intent (manual capture mode)
+ * Updated 2025-12-12: Added idempotency check and structured logging
  */
 async function handlePaymentIntentAuthorized(
     paymentIntent: Stripe.PaymentIntent,
     container: MedusaContainer
 ): Promise<void> {
-    console.log(`[StripeEventWorker] PaymentIntent authorized: ${paymentIntent.id}`);
+    const traceId = paymentIntent.metadata?.trace_id || `webhook_${paymentIntent.id}`;
+    
+    const log = (level: "info" | "warn" | "error", message: string, extra?: Record<string, unknown>) => {
+        const entry = JSON.stringify({
+            timestamp: new Date().toISOString(),
+            level,
+            message,
+            context: { traceId, paymentIntentId: paymentIntent.id, ...extra },
+        });
+        if (level === "error") console.error(entry);
+        else if (level === "warn") console.warn(entry);
+        else console.log(entry);
+    };
+
+    log("info", "PaymentIntent authorized webhook received", {
+        status: paymentIntent.status,
+        amount: paymentIntent.amount,
+        hasCartData: !!paymentIntent.metadata?.cart_data,
+    });
 
     if (paymentIntent.status !== "requires_capture") {
-        console.log(`[StripeEventWorker] Skipping - status is ${paymentIntent.status}, not requires_capture`);
+        log("info", "Skipping - not in requires_capture status", {
+            actualStatus: paymentIntent.status,
+        });
         return;
     }
 
-    await createOrderFromPaymentIntent(paymentIntent, container);
+    // IDEMPOTENCY CHECK: See if order already exists for this PaymentIntent
+    try {
+        const existingOrder = await findOrderByPaymentIntentId(paymentIntent.id, container);
+
+        if (existingOrder) {
+            log("info", "Order already exists for PaymentIntent - skipping creation", {
+                existingOrderId: existingOrder.id,
+            });
+            return;
+        }
+    } catch (checkError) {
+        log("warn", "Could not check for existing order - proceeding with creation", {
+            error: (checkError as Error).message,
+        });
+    }
+
+    // Proceed with order creation
+    try {
+        log("info", "Creating order from PaymentIntent");
+        await createOrderFromPaymentIntent(paymentIntent, container);
+        log("info", "Order created successfully");
+    } catch (error) {
+        log("error", "Failed to create order from PaymentIntent", {
+            cartData: paymentIntent.metadata?.cart_data ? "present" : "missing",
+            customerEmail: paymentIntent.metadata?.customer_email,
+            error: (error as Error).message,
+        });
+        throw error; // Re-throw so Stripe retries the webhook
+    }
 }
 
 /**

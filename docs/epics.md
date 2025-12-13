@@ -94,10 +94,25 @@ So that my payment information remains safe and PCI compliant.
 **And** it should support Card payments and BNPL (Klarna/Affirm) if configured
 **And** submitting the form should create a Payment Session in Medusa
 
+**Given** I am in the checkout flow
+**When** I modify my cart or shipping selection
+**Then** the system SHALL UPDATE the existing PaymentIntent rather than creating a new one
+**And** the `clientSecret` SHALL remain stable (not change) to prevent Stripe Elements from breaking
+
+**Given** a PaymentIntent is being created
+**When** the API request is made
+**Then** the system SHALL use a deterministic idempotency key based on cart contents
+**And** duplicate requests with the same cart SHALL return the same PaymentIntent
+
 **Technical Notes:**
 - Use `@stripe/react-stripe-js` in `apps/storefront`
 - Implement `PaymentElement` component
 - Ensure `return_url` is set to `/checkout/success`
+- **Updated 2025-12-12**: PaymentIntent lifecycle management per Course Correction
+  - `api.payment-intent.ts`: Accept `paymentIntentId` param for updates
+  - `checkout.tsx`: Store and reuse `paymentIntentId` in state
+  - Server generates idempotency key from cart hash for creates only
+  - Single `useEffect` manages create/update lifecycle
 
 ### Story 1.3: Express Checkout Element
 
@@ -523,7 +538,20 @@ I want logs to contain `order_id` and `trace_id` for the entire capture workflow
 So that I can debug issues easily.
 
 **Acceptance Criteria:**
-- Standardize log format for payment events using JSON structure.
+
+**Given** any payment-related operation occurs
+**When** the system logs the event
+**Then** the log entry SHALL be JSON-structured with fields: `timestamp`, `level`, `message`, `context`
+**And** the `context` SHALL include `traceId`, and optionally `orderId`, `paymentIntentId`, `customerId`
+**And** trace IDs SHALL be propagated via `x-trace-id` header from frontend to backend
+**And** error responses SHALL include `traceId` for customer support reference
+
+**Technical Notes:**
+- Create `apps/storefront/app/lib/logger.ts` utility
+- Generate trace IDs in format `gt_{timestamp}_{random}`
+- Use `createLogger()` factory with child logger support
+- Return `traceId` in error responses for support escalation
+- **Updated 2025-12-12**: Expanded scope per Course Correction proposal
 
 ### Story 8.2: Metrics Dashboard
 
