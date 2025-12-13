@@ -1,6 +1,6 @@
 # Story 2.2: Identify and Associate Logged-in Users with Events
 
-Status: Ready for Review
+Status: Done
 
 ## Story
 
