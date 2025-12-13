@@ -3,6 +3,7 @@ import Stripe from "stripe";
 import { startStripeEventWorker } from "../lib/stripe-event-queue";
 import { createOrderFromStripeWorkflow } from "../workflows/create-order-from-stripe";
 import { z } from "zod";
+import { logger } from "../utils/logger";
 
 const CartItemSchema = z.object({
   variantId: z.string().optional(),
@@ -43,7 +44,7 @@ const ShippingAddressSchema = z.object({
  * This contains the actual business logic for processing different event types
  */
 async function handleStripeEvent(event: Stripe.Event, container: MedusaContainer): Promise<void> {
-    console.log(`[StripeEventWorker] Handling event ${event.id} (${event.type})`);
+    logger.info("stripe-worker", "Processing event", { eventId: event.id, eventType: event.type });
 
     switch (event.type) {
         case "payment_intent.succeeded":
@@ -63,7 +64,7 @@ async function handleStripeEvent(event: Stripe.Event, container: MedusaContainer
             break;
 
         default:
-            console.log(`[StripeEventWorker] Unhandled event type: ${event.type}`);
+            logger.info("stripe-worker", "Unhandled event type", { eventType: event.type });
     }
 }
 
@@ -76,27 +77,22 @@ async function handlePaymentIntentAuthorized(
     container: MedusaContainer
 ): Promise<void> {
     const traceId = paymentIntent.metadata?.trace_id || `webhook_${paymentIntent.id}`;
-    
-    const log = (level: "info" | "warn" | "error", message: string, extra?: Record<string, unknown>) => {
-        const entry = JSON.stringify({
-            timestamp: new Date().toISOString(),
-            level,
-            message,
-            context: { traceId, paymentIntentId: paymentIntent.id, ...extra },
-        });
-        if (level === "error") console.error(entry);
-        else if (level === "warn") console.warn(entry);
-        else console.log(entry);
-    };
+    const piId = paymentIntent.id;
 
-    log("info", "PaymentIntent authorized webhook received", {
+    logger.info("stripe-worker", "PaymentIntent authorized - processing", {
+        paymentIntentId: piId,
+        traceId,
         status: paymentIntent.status,
         amount: paymentIntent.amount,
+        currency: paymentIntent.currency,
         hasCartData: !!paymentIntent.metadata?.cart_data,
+        hasShipping: !!paymentIntent.shipping,
+        customerEmail: paymentIntent.metadata?.customer_email || paymentIntent.receipt_email,
     });
 
     if (paymentIntent.status !== "requires_capture") {
-        log("info", "Skipping - not in requires_capture status", {
+        logger.info("stripe-worker", "Skipping - not in requires_capture status", {
+            paymentIntentId: piId,
             actualStatus: paymentIntent.status,
         });
         return;
@@ -107,27 +103,31 @@ async function handlePaymentIntentAuthorized(
         const existingOrder = await findOrderByPaymentIntentId(paymentIntent.id, container);
 
         if (existingOrder) {
-            log("info", "Order already exists for PaymentIntent - skipping creation", {
+            logger.info("stripe-worker", "Order already exists - skipping creation", {
+                paymentIntentId: piId,
                 existingOrderId: existingOrder.id,
             });
             return;
         }
     } catch (checkError) {
-        log("warn", "Could not check for existing order - proceeding with creation", {
+        logger.warn("stripe-worker", "Could not check for existing order - proceeding", {
+            paymentIntentId: piId,
             error: (checkError as Error).message,
         });
     }
 
     // Proceed with order creation
     try {
-        log("info", "Creating order from PaymentIntent");
+        logger.info("stripe-worker", "Creating order from PaymentIntent", { paymentIntentId: piId });
         await createOrderFromPaymentIntent(paymentIntent, container);
-        log("info", "Order created successfully");
+        logger.info("stripe-worker", "Order created successfully", { paymentIntentId: piId });
     } catch (error) {
-        log("error", "Failed to create order from PaymentIntent", {
+        logger.critical("stripe-worker", "Failed to create order from PaymentIntent", {
+            paymentIntentId: piId,
             cartData: paymentIntent.metadata?.cart_data ? "present" : "missing",
             customerEmail: paymentIntent.metadata?.customer_email,
             error: (error as Error).message,
+            stack: (error as Error).stack?.split("\n").slice(0, 3).join(" | "),
         });
         throw error; // Re-throw so Stripe retries the webhook
     }
@@ -140,13 +140,16 @@ async function handlePaymentIntentSucceeded(
     paymentIntent: Stripe.PaymentIntent,
     container: MedusaContainer
 ): Promise<void> {
-    console.log(`[StripeEventWorker] PaymentIntent succeeded: ${paymentIntent.id}`);
+    logger.info("stripe-worker", "PaymentIntent succeeded", { paymentIntentId: paymentIntent.id });
 
     // Check if order already exists - query by metadata filter (not O(n) scan)
     const existingOrder = await findOrderByPaymentIntentId(paymentIntent.id, container);
 
     if (existingOrder) {
-        console.log(`[StripeEventWorker] Order already exists for PaymentIntent ${paymentIntent.id}`);
+        logger.info("stripe-worker", "Order already exists for succeeded PI", {
+            paymentIntentId: paymentIntent.id,
+            orderId: existingOrder.id,
+        });
         return;
     }
 
@@ -182,10 +185,10 @@ async function findOrderByPaymentIntentId(
 
     if (!matchingOrder && recentOrders.length >= 1000) {
         // If we hit the limit and didn't find it, log warning
-        console.warn(
-            `[StripeEventWorker] Order lookup for PI ${paymentIntentId} may be incomplete - ` +
-            `checked 1000 recent orders. Consider adding indexed lookup.`
-        );
+        logger.warn("stripe-worker", "Order lookup may be incomplete - hit 1000 order limit", {
+            paymentIntentId,
+            ordersChecked: recentOrders.length,
+        });
     }
 
     return matchingOrder || null;
@@ -210,12 +213,17 @@ async function createOrderFromPaymentIntent(
             if (parsed.success) {
                 cartData = parsed.data;
             } else {
-                console.error("[StripeEventWorker] Invalid cart_data schema:", parsed.error);
+                logger.error("stripe-worker", "Invalid cart_data schema", {
+                    paymentIntentId: paymentIntent.id,
+                    zodError: parsed.error.message,
+                });
                 // Fail safe - do not process invalid cart data
                 return;
             }
         } catch (e) {
-            console.error("[StripeEventWorker] Failed to parse cart_data JSON:", e);
+            logger.error("stripe-worker", "Failed to parse cart_data JSON", {
+                paymentIntentId: paymentIntent.id,
+            }, e as Error);
             return;
         }
     }
@@ -231,11 +239,15 @@ async function createOrderFromPaymentIntent(
             if (parsed.success) {
                 shippingAddress = parsed.data;
             } else {
-                console.warn("[StripeEventWorker] Invalid shipping_address schema, falling back to Stripe data:", parsed.error);
+                logger.warn("stripe-worker", "Invalid shipping_address schema, using Stripe data", {
+                    paymentIntentId: paymentIntent.id,
+                });
                 // Fallback to undefined will trigger Stripe data usage below
             }
         } catch (e) {
-            console.warn("[StripeEventWorker] Failed to parse shipping_address JSON, falling back to Stripe data:", e);
+            logger.warn("stripe-worker", "Failed to parse shipping_address JSON, using Stripe data", {
+                paymentIntentId: paymentIntent.id,
+            });
         }
     }
 
@@ -255,9 +267,21 @@ async function createOrderFromPaymentIntent(
     }
 
     if (!cartData) {
-        console.log("[StripeEventWorker] No cart data - skipping order creation");
+        logger.warn("stripe-worker", "No cart data in PaymentIntent - skipping order creation", {
+            paymentIntentId: paymentIntent.id,
+            hasMetadata: !!metadata,
+            metadataKeys: Object.keys(metadata),
+        });
         return;
     }
+
+    logger.info("stripe-worker", "Invoking createOrderFromStripeWorkflow", {
+        paymentIntentId: paymentIntent.id,
+        itemCount: cartData.items.length,
+        hasShipping: !!shippingAddress,
+        amount: paymentIntent.amount,
+        currency: paymentIntent.currency,
+    });
 
     const { result: order } = await createOrderFromStripeWorkflow(container).run({
         input: {
@@ -270,22 +294,28 @@ async function createOrderFromPaymentIntent(
         }
     });
 
-    console.log(`[StripeEventWorker] Order created: ${order.id}`);
+    logger.info("stripe-worker", "Order created from PaymentIntent", {
+        paymentIntentId: paymentIntent.id,
+        orderId: order.id,
+    });
 }
 
 /**
  * Handle failed payment intent
  */
 async function handlePaymentIntentFailed(paymentIntent: Stripe.PaymentIntent): Promise<void> {
-    console.log(`[StripeEventWorker] PaymentIntent failed: ${paymentIntent.id}`);
-    console.log(`[StripeEventWorker] Failure reason: ${paymentIntent.last_payment_error?.message || "Unknown"}`);
+    logger.warn("stripe-worker", "PaymentIntent failed", {
+        paymentIntentId: paymentIntent.id,
+        failureReason: paymentIntent.last_payment_error?.message || "Unknown",
+        failureCode: paymentIntent.last_payment_error?.code,
+    });
 }
 
 /**
  * Handle completed checkout session
  */
 async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session): Promise<void> {
-    console.log(`[StripeEventWorker] Checkout session completed: ${session.id}`);
+    logger.info("stripe-worker", "Checkout session completed", { sessionId: session.id });
 }
 
 /**
@@ -294,15 +324,16 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session):
 export default async function stripeEventWorkerLoader(container: MedusaContainer): Promise<void> {
     // Only start worker if Redis is configured
     if (!process.env.REDIS_URL) {
-        console.warn("[StripeEventWorker] REDIS_URL not configured - worker not started");
+        logger.warn("stripe-worker", "REDIS_URL not configured - worker not started");
         return;
     }
 
     try {
+        logger.info("stripe-worker", "Starting Stripe event worker", { redisConfigured: true });
         startStripeEventWorker(container, handleStripeEvent);
-        console.log("[StripeEventWorker] Loader completed - worker is processing Stripe events");
+        logger.info("stripe-worker", "Worker started successfully - ready to process events");
     } catch (error) {
-        console.error("[StripeEventWorker] Failed to start worker:", error);
+        logger.critical("stripe-worker", "Failed to start worker", {}, error as Error);
         // Don't throw - allow backend to start even if worker fails
     }
 }
