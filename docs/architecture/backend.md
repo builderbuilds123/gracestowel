@@ -42,3 +42,9 @@ We implement a **Delayed Capture** pattern for payments to allow for a 1-hour cu
   - **Primary**: Redis expiration event listener triggers the capture of the standard Medusa order.
   - **Fallback**: Cron job runs periodically to capture any orders authorized > 65 minutes ago.
 - **Order Edits**: Modifications during the grace period update the order total. If the total increases, we trigger `increment_authorization` on Stripe.
+
+### Webhook Idempotency (Updated 2025-12-12)
+- **Order Creation**: Webhook handler checks for existing order with same `stripe_payment_intent_id` before creating
+- **Duplicate Prevention**: If order already exists, handler returns early without error
+- **Structured Logging**: All webhook operations logged with trace IDs for debugging
+- **Error Recovery**: Errors are re-thrown to trigger Stripe webhook retry mechanism

@@ -11,6 +11,7 @@ import type {
     StripeExpressCheckoutElementConfirmEvent,
     StripeExpressCheckoutElementShippingAddressChangeEvent,
     StripeExpressCheckoutElementShippingRateChangeEvent,
+    StripeAddressElementChangeEvent,
 } from '@stripe/stripe-js';
 import type { CartItem } from '../context/CartContext';
 
@@ -41,11 +42,12 @@ export interface CustomerData {
 export interface CheckoutFormProps {
     items: CartItem[];
     cartTotal: number;
-    onAddressChange?: (event: { value: { address: { country: string } } }) => void;
+    onAddressChange?: (event: StripeAddressElementChangeEvent) => void;
     shippingOptions: ShippingOption[];
     selectedShipping: ShippingOption | null;
     setSelectedShipping: (option: ShippingOption) => void;
     customerData?: CustomerData;
+    isCalculatingShipping?: boolean;
 }
 
 export function CheckoutForm({
@@ -56,6 +58,7 @@ export function CheckoutForm({
     selectedShipping,
     setSelectedShipping,
     customerData,
+    isCalculatingShipping = false,
 }: CheckoutFormProps) {
     const stripe = useStripe();
     const elements = useElements();
@@ -258,7 +261,11 @@ export function CheckoutForm({
                 />
 
                 {/* Shipping Method Selection */}
-                {shippingOptions.length > 0 && (
+                {isCalculatingShipping ? (
+                    <div className="mt-6 text-sm text-gray-500">
+                        Calculating shipping rates...
+                    </div>
+                ) : shippingOptions.length > 0 && (
                     <ShippingMethodSelector
                         options={shippingOptions}
                         selected={selectedShipping}
