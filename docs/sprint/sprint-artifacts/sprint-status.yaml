@@ -48,7 +48,9 @@ development_status:
     path: docs/sprint/sprint-artifacts/2-1-implement-server-side-tracking.md
     status: review
   2-2-identify-associate-logged-in-users: backlog
-  2-3-ensure-correct-user-id-server-side: backlog
+  2-3-ensure-correct-user-id-server-side:
+    path: docs/sprint/sprint-artifacts/2-3-ensure-correct-user-id-server-side.md
+    status: done
   epic-2-retrospective: optional
 
   epic-3: backlog
