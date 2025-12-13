@@ -42,11 +42,11 @@ export async function GET(
 
   // Check Redis connectivity and queue status
   try {
-    const { getStripeEventQueue, STRIPE_EVENT_QUEUE } = await import(
-      "../../../lib/stripe-event-queue"
+    const { getStripeEventQueue } = await import(
+      "../../../lib/stripe-event-queue.js"
     );
-    const { getPaymentCaptureQueue, PAYMENT_CAPTURE_QUEUE } = await import(
-      "../../../lib/payment-capture-queue"
+    const { getPaymentCaptureQueue } = await import(
+      "../../../lib/payment-capture-queue.js"
     );
 
     // Test Stripe Event Queue

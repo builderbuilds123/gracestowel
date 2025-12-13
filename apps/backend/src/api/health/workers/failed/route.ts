@@ -23,10 +23,10 @@ export async function GET(
 
   try {
     const { getStripeEventQueue } = await import(
-      "../../../../lib/stripe-event-queue"
+      "../../../../lib/stripe-event-queue.js"
     );
     const { getPaymentCaptureQueue } = await import(
-      "../../../../lib/payment-capture-queue"
+      "../../../../lib/payment-capture-queue.js"
     );
 
     // Get failed Stripe events
