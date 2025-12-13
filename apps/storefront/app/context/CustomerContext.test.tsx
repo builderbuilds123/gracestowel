@@ -22,13 +22,9 @@ const mockFetch = vi.fn();
 global.fetch = mockFetch;
 
 // Test component that uses the customer context
-function TestConsumer({ onCustomerChange }: { onCustomerChange?: (customer: any) => void }) {
+function TestConsumer() {
   const { customer, isAuthenticated, isLoading, login, logout } = useCustomer();
-  
-  if (onCustomerChange && customer) {
-    onCustomerChange(customer);
-  }
-  
+
   return (
     <div>
       <div data-testid="loading">{isLoading ? 'loading' : 'ready'}</div>
@@ -208,8 +204,8 @@ describe('CustomerContext PostHog Integration (Story 2.2)', () => {
         expect(screen.getByTestId('authenticated')).toHaveTextContent('yes');
       });
 
-      // Clear mocks to isolate logout behavior
-      mockPostHogReset.mockClear();
+      // Clear all mocks to isolate logout behavior
+      vi.clearAllMocks();
 
       // Trigger logout
       const logoutBtn = screen.getByTestId('logout-btn');
@@ -217,10 +213,11 @@ describe('CustomerContext PostHog Integration (Story 2.2)', () => {
         await userEvent.click(logoutBtn);
       });
 
-      // Verify posthog.reset was called
+      // Verify posthog.reset was called and identify was not
       await waitFor(() => {
-        expect(mockPostHogReset).toHaveBeenCalled();
+        expect(mockPostHogReset).toHaveBeenCalledTimes(1);
       });
+      expect(mockPostHogIdentify).not.toHaveBeenCalled();
     });
 
     it('should clear customer state and PostHog identification on logout', async () => {
