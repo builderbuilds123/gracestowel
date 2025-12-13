@@ -60,7 +60,9 @@ development_status:
   epic-3-retrospective: optional
 
   epic-4: backlog
-  4-1-implement-error-tracking-posthog: backlog
+  4-1-implement-error-tracking-posthog:
+    path: docs/sprint/sprint-artifacts/4-1-implement-error-tracking-posthog.md
+    status: done
   4-2-track-web-vitals-performance: backlog
   4-3-implement-backend-event-tracking: backlog
   4-4-create-posthog-monitoring-dashboards: backlog

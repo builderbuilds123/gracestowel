@@ -86,4 +86,68 @@ export function reportWebVitals() {
   });
 }
 
+/**
+ * Setup global error tracking for PostHog (Story 4.1)
+ * Captures unhandled errors and promise rejections
+ */
+export function setupErrorTracking() {
+  if (typeof window === 'undefined') return;
+
+  // Track unhandled JavaScript errors
+  window.onerror = (message, source, lineno, colno, error) => {
+    posthog.capture('$exception', {
+      $exception_type: error?.name || 'Error',
+      $exception_message: typeof message === 'string' ? message : 'Unknown error',
+      $exception_source: source,
+      $exception_lineno: lineno,
+      $exception_colno: colno,
+      $exception_stack_trace_raw: error?.stack,
+      $exception_handled: false,
+      $exception_synthetic: false,
+      url: window.location.href,
+      user_agent: navigator.userAgent,
+    });
+    
+    // Don't prevent default error handling
+    return false;
+  };
+
+  // Track unhandled promise rejections
+  window.onunhandledrejection = (event: PromiseRejectionEvent) => {
+    const error = event.reason;
+    const isError = error instanceof Error;
+    
+    posthog.capture('$exception', {
+      $exception_type: isError ? error.name : 'UnhandledPromiseRejection',
+      $exception_message: isError ? error.message : String(error),
+      $exception_stack_trace_raw: isError ? error.stack : undefined,
+      $exception_handled: false,
+      $exception_synthetic: false,
+      $exception_is_promise_rejection: true,
+      url: window.location.href,
+      user_agent: navigator.userAgent,
+    });
+  };
+
+  console.log('[PostHog] Error tracking initialized');
+}
+
+/**
+ * Capture a handled exception manually
+ * Use this to track errors that are caught but still significant
+ */
+export function captureException(error: Error, context?: Record<string, unknown>) {
+  if (typeof window === 'undefined') return;
+  
+  posthog.capture('$exception', {
+    $exception_type: error.name,
+    $exception_message: error.message,
+    $exception_stack_trace_raw: error.stack,
+    $exception_handled: true,
+    $exception_synthetic: false,
+    url: window.location.href,
+    ...context,
+  });
+}
+
 export default posthog;
