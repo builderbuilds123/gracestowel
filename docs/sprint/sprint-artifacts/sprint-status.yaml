@@ -194,8 +194,9 @@ development_status:
 
   pi-epic-8: in-progress
   8-1-structured-logging:
-    status: ready-for-dev
-    meta: "Course correction 2025-12-12: Create logger utility with trace IDs for payment flow debugging. See sprint-change-proposal-2025-12-12-checkout-fixes.md"
+    status: done
+    path: docs/sprint/sprint-artifacts/checkout-payment-flow-fixes.md
+    meta: "Implemented as part of checkout-payment-flow-fixes story. PR #55 merged 2025-12-13."
   8-2-metrics-dashboard: backlog
   8-3-alerting: backlog
   pi-epic-8-retrospective: optional
@@ -207,10 +208,11 @@ development_status:
 
   # --- Course Correction: Checkout Payment Flow Fixes (2025-12-12) ---
   checkout-payment-flow-fixes:
-    status: review
+    status: done
     proposal: docs/sprint/proposals/sprint-change-proposal-2025-12-12-checkout-fixes.md
-    meta: "Critical fixes for PaymentIntent lifecycle, idempotency, order propagation, and structured logging"
-    completed: "2025-12-12"
+    story: docs/sprint/sprint-artifacts/checkout-payment-flow-fixes.md
+    meta: "PR #55 merged 2025-12-13. PaymentIntent lifecycle, idempotency, structured logging."
+    completed: "2025-12-13"
     changes:
       - id: change-1-payment-intent-lifecycle
         status: done
