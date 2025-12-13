@@ -1,7 +1,8 @@
 /**
  * Unit tests for order-placed subscriber
- * Story 2.1: Fix Modification Token Flow
+ * Story 4.1: Modification Token Flow (pre-existing tests)
  * Story 2.1: Implement Server-Side Event Tracking for Key Order Events
+ * Story 6.2: Redis Connection Failure Handling
  */
 
 import orderPlacedHandler, { config } from "../../src/subscribers/order-placed"
@@ -52,6 +53,26 @@ describe("orderPlacedHandler", () => {
       if (key === "logger" || key === "LOGGER" || key.includes("LOGGER")) return mockLogger
       return undefined
     }),
+  }
+
+  /**
+   * Helper function to create mock container with custom order data
+   * Reduces code duplication across PostHog tracking tests (PR review feedback)
+   */
+  const createMockContainer = (orderData: Record<string, unknown>) => {
+    const testQuery = {
+      graph: jest.fn().mockResolvedValue({ data: [orderData] }),
+    }
+    return {
+      container: {
+        resolve: jest.fn((key: string) => {
+          if (key === "logger" || key === "LOGGER" || key.includes("LOGGER")) return mockLogger
+          if (key === "query") return testQuery
+          return undefined
+        }),
+      },
+      query: testQuery,
+    }
   }
 
   beforeEach(() => {
@@ -294,21 +315,11 @@ describe("orderPlacedHandler", () => {
         ],
       }
 
-      const testQuery = {
-        graph: jest.fn().mockResolvedValue({ data: [orderWithItems] }),
-      }
-
-      const testContainer = {
-        resolve: jest.fn((key: string) => {
-          if (key === "logger" || key === "LOGGER" || key.includes("LOGGER")) return mockLogger
-          if (key === "query") return testQuery
-          return undefined
-        }),
-      }
+      const { container } = createMockContainer(orderWithItems)
 
       await orderPlacedHandler({
         event: { data: { id: "order_posthog_test" } },
-        container: testContainer,
+        container,
       } as any)
 
       expect(mockCapture).toHaveBeenCalledWith({
@@ -336,21 +347,11 @@ describe("orderPlacedHandler", () => {
         items: [],
       }
 
-      const testQuery = {
-        graph: jest.fn().mockResolvedValue({ data: [authenticatedOrder] }),
-      }
-
-      const testContainer = {
-        resolve: jest.fn((key: string) => {
-          if (key === "logger" || key === "LOGGER" || key.includes("LOGGER")) return mockLogger
-          if (key === "query") return testQuery
-          return undefined
-        }),
-      }
+      const { container } = createMockContainer(authenticatedOrder)
 
       await orderPlacedHandler({
         event: { data: { id: "order_auth_user" } },
-        container: testContainer,
+        container,
       } as any)
 
       expect(mockCapture).toHaveBeenCalledWith(
@@ -371,21 +372,11 @@ describe("orderPlacedHandler", () => {
         items: [],
       }
 
-      const testQuery = {
-        graph: jest.fn().mockResolvedValue({ data: [guestOrder] }),
-      }
-
-      const testContainer = {
-        resolve: jest.fn((key: string) => {
-          if (key === "logger" || key === "LOGGER" || key.includes("LOGGER")) return mockLogger
-          if (key === "query") return testQuery
-          return undefined
-        }),
-      }
+      const { container } = createMockContainer(guestOrder)
 
       await orderPlacedHandler({
         event: { data: { id: "order_guest_checkout" } },
-        container: testContainer,
+        container,
       } as any)
 
       expect(mockCapture).toHaveBeenCalledWith(
@@ -410,21 +401,11 @@ describe("orderPlacedHandler", () => {
         ],
       }
 
-      const testQuery = {
-        graph: jest.fn().mockResolvedValue({ data: [multiItemOrder] }),
-      }
-
-      const testContainer = {
-        resolve: jest.fn((key: string) => {
-          if (key === "logger" || key === "LOGGER" || key.includes("LOGGER")) return mockLogger
-          if (key === "query") return testQuery
-          return undefined
-        }),
-      }
+      const { container } = createMockContainer(multiItemOrder)
 
       await orderPlacedHandler({
         event: { data: { id: "order_multi_items" } },
-        container: testContainer,
+        container,
       } as any)
 
       expect(mockCapture).toHaveBeenCalledWith(
@@ -451,21 +432,11 @@ describe("orderPlacedHandler", () => {
         items: undefined,
       }
 
-      const testQuery = {
-        graph: jest.fn().mockResolvedValue({ data: [emptyOrder] }),
-      }
-
-      const testContainer = {
-        resolve: jest.fn((key: string) => {
-          if (key === "logger" || key === "LOGGER" || key.includes("LOGGER")) return mockLogger
-          if (key === "query") return testQuery
-          return undefined
-        }),
-      }
+      const { container } = createMockContainer(emptyOrder)
 
       await orderPlacedHandler({
         event: { data: { id: "order_empty" } },
-        container: testContainer,
+        container,
       } as any)
 
       expect(mockCapture).toHaveBeenCalledWith(
@@ -491,23 +462,13 @@ describe("orderPlacedHandler", () => {
         items: [],
       }
 
-      const testQuery = {
-        graph: jest.fn().mockResolvedValue({ data: [orderData] }),
-      }
-
-      const testContainer = {
-        resolve: jest.fn((key: string) => {
-          if (key === "logger" || key === "LOGGER" || key.includes("LOGGER")) return mockLogger
-          if (key === "query") return testQuery
-          return undefined
-        }),
-      }
+      const { container } = createMockContainer(orderData)
 
       // Should not throw
       await expect(
         orderPlacedHandler({
           event: { data: { id: "order_no_posthog" } },
-          container: testContainer,
+          container,
         } as any)
       ).resolves.not.toThrow()
 
@@ -529,25 +490,14 @@ describe("orderPlacedHandler", () => {
         items: [],
       }
 
-      const testQuery = {
-        graph: jest.fn().mockResolvedValue({ data: [orderData] }),
-      }
-
-      const testContainer = {
-        resolve: jest.fn((key: string) => {
-          if (key === "logger" || key === "LOGGER" || key.includes("LOGGER")) return mockLogger
-          if (key === "query") return testQuery
-          return undefined
-        }),
-      }
-
+      const { container } = createMockContainer(orderData)
       const consoleSpy = jest.spyOn(console, "error")
 
       // Should not throw - errors are caught
       await expect(
         orderPlacedHandler({
           event: { data: { id: "order_ph_error" } },
-          container: testContainer,
+          container,
         } as any)
       ).resolves.not.toThrow()
 
@@ -555,6 +505,7 @@ describe("orderPlacedHandler", () => {
         "[PostHog] Failed to track order_placed event:",
         expect.any(Error)
       )
+      consoleSpy.mockRestore()
     })
 
     it("should log successful PostHog tracking", async () => {
@@ -567,28 +518,18 @@ describe("orderPlacedHandler", () => {
         items: [],
       }
 
-      const testQuery = {
-        graph: jest.fn().mockResolvedValue({ data: [orderData] }),
-      }
-
-      const testContainer = {
-        resolve: jest.fn((key: string) => {
-          if (key === "logger" || key === "LOGGER" || key.includes("LOGGER")) return mockLogger
-          if (key === "query") return testQuery
-          return undefined
-        }),
-      }
-
+      const { container } = createMockContainer(orderData)
       const consoleSpy = jest.spyOn(console, "log")
 
       await orderPlacedHandler({
         event: { data: { id: "order_log_success" } },
-        container: testContainer,
+        container,
       } as any)
 
       expect(consoleSpy).toHaveBeenCalledWith(
         "[PostHog] order_placed event tracked for order order_log_success"
       )
+      consoleSpy.mockRestore()
     })
   })
 })
