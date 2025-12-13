@@ -38,6 +38,7 @@
     "@medusajs/file-s3": "2.12.0",
     "@medusajs/framework": "2.12.0",
     "@medusajs/medusa": "2.12.0",
+    "@medusajs/notification": "2.12.0",
     "@medusajs/types": "2.12.0",
     "@react-email/components": "^1.0.1",
     "bullmq": "^5.65.0",
