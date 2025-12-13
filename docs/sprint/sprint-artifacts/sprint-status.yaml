@@ -44,7 +44,9 @@ development_status:
   epic-1-retrospective: optional
 
   epic-2: backlog
-  2-1-implement-server-side-tracking: backlog
+  2-1-implement-server-side-tracking:
+    path: docs/sprint/sprint-artifacts/2-1-implement-server-side-tracking.md
+    status: review
   2-2-identify-associate-logged-in-users: backlog
   2-3-ensure-correct-user-id-server-side: backlog
   epic-2-retrospective: optional
