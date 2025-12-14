@@ -18,7 +18,7 @@ So that I can monitor and optimize user experience.
 
 | AC | Given | When | Then |
 |----|-------|------|------|
-| 1 | A user visits a page on the storefront | The page loads and renders | Web Vitals metrics (LCP, CLS, TTFB) are captured and sent to PostHog |
+| 1 | A user visits a page on the storefront | The page loads and renders | Web Vitals metrics (LCP, CLS, INP, FCP, TTFB) are captured and sent to PostHog |
 | 2 | A metric is captured | The event is sent | Each metric includes a "rating" (good, needs-improvement, poor) |
 
 ---
@@ -80,9 +80,11 @@ posthog.capture('web_vitals', {
   metric_delta: 2500,           // Change since last measurement
   metric_id: 'v1-123',          // Unique metric instance ID
   navigation_type: 'navigate',  // Navigation type
-  url: 'https://...',           // Current page URL
+  url: 'https://...',           // Sanitized URL (sensitive params stripped)
 });
 ```
+
+**Security Note:** URLs are sanitized before sending to PostHog. Sensitive query parameters (token, auth, key, secret, password, jwt) are stripped to prevent leaking auth tokens.
 
 ---
 
@@ -123,3 +125,4 @@ Claude Opus 4.5 (via Cursor)
 ### Change Log
 
 - 2025-12-13: Enhanced reportWebVitals() with explicit types, property mapping, and rating capture. Added 7 unit tests. All ACs met.
+- 2025-12-14: PR review fixes - exported WebVitalMetric interface, replaced setTimeout with vi.dynamicImportSettled(), sanitized URLs to strip sensitive params (security fix), updated AC1 to list all 5 metrics.

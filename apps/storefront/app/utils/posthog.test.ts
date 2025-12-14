@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { initPostHog, getPostHog, setupErrorTracking, captureException, reportWebVitals } from './posthog';
+import { initPostHog, getPostHog, setupErrorTracking, captureException, reportWebVitals, WebVitalMetric } from './posthog';
 import posthog from 'posthog-js';
 
 // Mock posthog-js
@@ -15,8 +15,8 @@ vi.mock('posthog-js', () => {
   };
 });
 
-// Mock web-vitals callbacks storage
-let webVitalsCallbacks: Record<string, (metric: any) => void> = {};
+// Mock web-vitals callbacks storage (using exported WebVitalMetric type)
+let webVitalsCallbacks: Record<string, (metric: WebVitalMetric) => void> = {};
 
 vi.mock('web-vitals', () => ({
   onCLS: vi.fn((cb) => { webVitalsCallbacks['CLS'] = cb; }),
@@ -296,8 +296,8 @@ describe('PostHog Utilities', () => {
       
       reportWebVitals();
       
-      // Wait for dynamic import
-      await new Promise(resolve => setTimeout(resolve, 10));
+      // Wait for dynamic import to settle
+      await vi.dynamicImportSettled();
       
       expect(onCLS).toHaveBeenCalled();
       expect(onINP).toHaveBeenCalled();
@@ -309,8 +309,8 @@ describe('PostHog Utilities', () => {
     it('should capture web_vitals event with metric name and value (AC1)', async () => {
       reportWebVitals();
       
-      // Wait for dynamic import
-      await new Promise(resolve => setTimeout(resolve, 10));
+      // Wait for dynamic import to settle
+      await vi.dynamicImportSettled();
       
       // Simulate LCP metric callback
       const mockLCPMetric = {
@@ -333,7 +333,7 @@ describe('PostHog Utilities', () => {
 
     it('should include rating in web_vitals event (AC2)', async () => {
       reportWebVitals();
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await vi.dynamicImportSettled();
       
       // Test "good" rating
       webVitalsCallbacks['CLS']?.({
@@ -354,7 +354,7 @@ describe('PostHog Utilities', () => {
 
     it('should capture needs-improvement rating (AC2)', async () => {
       reportWebVitals();
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await vi.dynamicImportSettled();
       
       webVitalsCallbacks['LCP']?.({
         name: 'LCP',
@@ -373,7 +373,7 @@ describe('PostHog Utilities', () => {
 
     it('should capture poor rating (AC2)', async () => {
       reportWebVitals();
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await vi.dynamicImportSettled();
       
       webVitalsCallbacks['CLS']?.({
         name: 'CLS',
@@ -392,7 +392,7 @@ describe('PostHog Utilities', () => {
 
     it('should include URL in web_vitals event', async () => {
       reportWebVitals();
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await vi.dynamicImportSettled();
       
       webVitalsCallbacks['TTFB']?.({
         name: 'TTFB',
@@ -411,7 +411,7 @@ describe('PostHog Utilities', () => {
 
     it('should capture INP (replaces deprecated FID)', async () => {
       reportWebVitals();
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await vi.dynamicImportSettled();
       
       webVitalsCallbacks['INP']?.({
         name: 'INP',

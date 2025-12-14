@@ -1,6 +1,19 @@
 import posthog from 'posthog-js';
 
 /**
+ * Get sanitized URL (strips sensitive query params like tokens)
+ * Prevents leaking auth tokens to analytics
+ */
+function getSanitizedUrl(): string {
+  if (typeof window === 'undefined') return '';
+  const url = new URL(window.location.href);
+  // Remove sensitive query parameters
+  const sensitiveParams = ['token', 'auth', 'key', 'secret', 'password', 'jwt'];
+  sensitiveParams.forEach(param => url.searchParams.delete(param));
+  return url.toString();
+}
+
+/**
  * Initialize PostHog for client-side analytics and monitoring
  * Only active in production or when explicitly enabled via env var
  */
@@ -68,7 +81,7 @@ export function getPostHog() {
  * Web Vitals metric structure from web-vitals v5
  * @see https://github.com/GoogleChrome/web-vitals
  */
-interface WebVitalMetric {
+export interface WebVitalMetric {
   name: 'CLS' | 'INP' | 'LCP' | 'FCP' | 'TTFB';
   value: number;
   rating: 'good' | 'needs-improvement' | 'poor';
@@ -95,7 +108,7 @@ export function reportWebVitals() {
         metric_delta: metric.delta,
         metric_id: metric.id,
         navigation_type: metric.navigationType,
-        url: window.location.href,
+        url: getSanitizedUrl(),
       });
       
       // Debug log in development
@@ -138,7 +151,7 @@ export function setupErrorTracking() {
       $exception_stack_trace_raw: error?.stack,
       $exception_handled: false,
       $exception_synthetic: false,
-      url: window.location.href,
+      url: getSanitizedUrl(),
       user_agent: navigator.userAgent,
     });
     
@@ -163,7 +176,7 @@ export function setupErrorTracking() {
       $exception_handled: false,
       $exception_synthetic: false,
       $exception_is_promise_rejection: true,
-      url: window.location.href,
+      url: getSanitizedUrl(),
       user_agent: navigator.userAgent,
     });
     
@@ -192,7 +205,7 @@ export function captureException(error: Error, context?: Record<string, unknown>
     $exception_stack_trace_raw: error.stack,
     $exception_handled: true,
     $exception_synthetic: false,
-    url: window.location.href,
+    url: getSanitizedUrl(),
     user_agent: navigator.userAgent, // L2 fix: consistent with auto-captured exceptions
     ...context,
   });
