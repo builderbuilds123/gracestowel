@@ -587,3 +587,67 @@ All 10 Functional Requirements are covered. **2 implementation gaps identified**
 _For implementation: Use the `create-story` workflow to generate individual story implementation plans from this epic breakdown._
 
 _This document will be updated after UX Design and Architecture workflows to incorporate interaction details and technical details._
+
+---
+
+## Epic 5: Comprehensive Frontend Event Tracking
+
+**Goal:** Capture frontend behavior across API calls, navigation, scroll, engagement, and forms with privacy-safe PostHog events for storefront.
+
+### Story 5.1: Monitored Fetch & API Request Events (FR1, FR6)
+As a Developer, I want a monitored fetch wrapper that records `api_request` events with sanitized URL, method, status_code, duration_ms, success, error_message, and route context so API calls are consistently tracked.
+
+**Acceptance Criteria:**
+- All storefront fetch calls use the monitored wrapper.
+- `api_request` fires on success and failure with sanitized URLs (no tokens) and route.
+- Duration measured client-side; errors include message only, never body/payload.
+- Honor `respect_dnt`; flag rollout under `frontend-event-tracking` to enable safely per env.
+
+### Story 5.2: Navigation Tracking (FR2)
+As a User Researcher, I want navigation events on every route change so we know flow patterns and dwell time between pages.
+
+**Acceptance Criteria:**
+- Emit `navigation` with from_path, to_path, navigation_type (link, back, forward, direct), and time_on_previous_page_ms.
+- Works with React Router transitions and browser back/forward.
+
+### Story 5.3: Scroll Depth Tracking (FR3)
+As a PM, I want scroll depth milestones so we understand content engagement.
+
+**Acceptance Criteria:**
+- Emit `scroll_depth` at 25/50/75/100 with depth_percentage, page_path, page_height, time_to_depth_ms.
+- Uses debounced handling + requestAnimationFrame; no duplicate emissions per threshold per pageview.
+
+### Story 5.4: Engagement & Idle Tracking (FR4)
+As a PM, I want `page_engagement` data so we can measure engaged vs idle time.
+
+**Acceptance Criteria:**
+- Detect idle after 30s of no mouse/keyboard activity.
+- On unload/navigation, emit `page_engagement` with engaged_time_ms, idle_time_ms, total_time_ms, page_path.
+
+### Story 5.5: Form Interaction Tracking (FR5)
+As a UX Analyst, I want `form_interaction` events so we can spot form friction without capturing values.
+
+**Acceptance Criteria:**
+- Emit on focus, blur, submit, error with form_name, field_name (no values), interaction_type, error_message for validation only.
+- Exclude sensitive fields; never send values.
+- Honor `respect_dnt`; minimal payload, no PII.
+
+### Story 5.6: Integration & Tests (FR7)
+As a Developer, I want all tracking hooks wired in `root.tsx` with tests so tracking is reliable.
+
+**Acceptance Criteria:**
+- Hooks mounted globally (navigation, scroll, engagement, form, monitored fetch) and PostHog client respects `respect_dnt`.
+- 17 tests cover hooks and event payloads; events verified in PostHog test workspace.
+- Event handlers add <5ms median overhead; use rAF/debounce where needed; payloads are minimal and sanitized.
+
+### FR Coverage Matrix (Frontend Tracking)
+
+| FR | Requirement | Covered By |
+| :--- | :--- | :--- |
+| FR1 | Capture `api_request` with sanitized URL, method, status_code, duration_ms, success, error_message, route | Epic 5 / Story 5.1 |
+| FR2 | Capture `navigation` with from_path, to_path, navigation_type, time_on_previous_page_ms | Epic 5 / Story 5.2 |
+| FR3 | Capture `scroll_depth` at 25/50/75/100 with depth, page_path, page_height, time_to_depth_ms | Epic 5 / Story 5.3 |
+| FR4 | Capture `page_engagement` with engaged_time_ms, idle_time_ms, total_time_ms; idle after 30s | Epic 5 / Story 5.4 |
+| FR5 | Capture `form_interaction` with form_name, field_name (no values), interaction_type, error_message | Epic 5 / Story 5.5 |
+| FR6 | Monitored fetch wrapper attaches route context and is used by all fetch calls | Epic 5 / Story 5.1 |
+| FR7 | Integrate hooks in root.tsx and verify events/tests | Epic 5 / Story 5.6 |

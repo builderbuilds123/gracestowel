@@ -1,4 +1,4 @@
-# Story 5.1: Implement Comprehensive Frontend Event Tracking
+# Story 5.2: Implement Comprehensive Frontend Event Tracking
 
 Status: Done
 
@@ -106,6 +106,16 @@ Current implementation has:
   - [x] Verify events appear in PostHog
 
 ## Dev Notes
+
+### Privacy & Performance Constraints
+- Sanitize URLs (strip tokens/auth/query secrets) before emitting events; never include request/response bodies.
+- Do not capture form field values; exclude sensitive fields entirely (password, card, PII).
+- Honor `respect_dnt: true`; disable tracking when DNT is enabled.
+- Event handler overhead target: <5ms per event on median hardware; avoid blocking UI thread (use rAF/debounce where applicable).
+- Emit only minimal payloads; no personal identifiers beyond existing PostHog distinct_id/session.
+- Feature-flag rollout: gate new tracking under PostHog flag `frontend-event-tracking` for safe enablement per environment.
+
+### File Structure
 
 ### File Structure
 ```
