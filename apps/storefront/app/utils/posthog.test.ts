@@ -122,6 +122,39 @@ describe('PostHog Utilities', () => {
         expect(typeof window.onunhandledrejection).toBe('function');
       });
 
+      it('should chain with existing onerror handler (M1 fix)', () => {
+        const existingHandler = vi.fn().mockReturnValue(false);
+        window.onerror = existingHandler;
+        
+        setupErrorTracking();
+        
+        // Trigger the error handler
+        window.onerror!('Test error', 'script.js', 1, 1, new Error('Test'));
+        
+        // Both PostHog and existing handler should be called
+        expect(posthog.capture).toHaveBeenCalled();
+        expect(existingHandler).toHaveBeenCalled();
+      });
+
+      it('should chain with existing onunhandledrejection handler (M1 fix)', () => {
+        const existingHandler = vi.fn();
+        window.onunhandledrejection = existingHandler;
+        
+        setupErrorTracking();
+        
+        const mockEvent = {
+          type: 'unhandledrejection',
+          reason: new Error('Test rejection'),
+          promise: Promise.reject(new Error('Test')).catch(() => {}),
+        } as PromiseRejectionEvent;
+        
+        window.onunhandledrejection!(mockEvent);
+        
+        // Both PostHog and existing handler should be called
+        expect(posthog.capture).toHaveBeenCalled();
+        expect(existingHandler).toHaveBeenCalledWith(mockEvent);
+      });
+
       it('should capture unhandled errors with $exception event (AC1)', () => {
         setupErrorTracking();
         
@@ -211,6 +244,16 @@ describe('PostHog Utilities', () => {
           $exception_type: 'HandledError',
           $exception_message: 'Handled error',
           $exception_handled: true,
+        }));
+      });
+
+      it('should include user_agent for consistency with auto-captured exceptions (L2 fix)', () => {
+        const error = new Error('Test error');
+        
+        captureException(error);
+        
+        expect(posthog.capture).toHaveBeenCalledWith('$exception', expect.objectContaining({
+          user_agent: expect.any(String),
         }));
       });
 

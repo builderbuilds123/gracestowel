@@ -17,7 +17,8 @@ import { WishlistProvider } from "./context/WishlistContext";
 import { CartDrawer } from "./components/CartDrawer";
 import { Header } from "./components/Header";
 import { Footer } from "./components/Footer";
-import { initPostHog, reportWebVitals, setupErrorTracking } from "./utils/posthog";
+import { initPostHog, reportWebVitals, setupErrorTracking, captureException } from "./utils/posthog";
+import posthog from "posthog-js";
 import "./app.css";
 
 // Initialize PostHog on client-side only
@@ -137,22 +138,22 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   }
 
   // Capture error in PostHog using standard $exception format (Story 4.1)
+  // M2 fix: Use direct import instead of dynamic import to avoid missing errors
   if (typeof window !== 'undefined' && error) {
-    import('./utils/posthog').then(({ default: posthog }) => {
-      const isRouteError = isRouteErrorResponse(error);
-      const errorObj = error instanceof Error ? error : null;
-      
-      posthog.capture('$exception', {
-        $exception_type: isRouteError ? 'RouteError' : (errorObj?.name || 'Error'),
-        $exception_message: details,
-        $exception_stack_trace_raw: stack,
-        $exception_handled: true, // ErrorBoundary caught it
-        $exception_synthetic: false,
-        $exception_source: 'ErrorBoundary',
-        is_route_error: isRouteError,
-        route_status: isRouteError ? error.status : undefined,
-        url: window.location.href,
-      });
+    const isRouteError = isRouteErrorResponse(error);
+    const errorObj = error instanceof Error ? error : null;
+    
+    posthog.capture('$exception', {
+      $exception_type: isRouteError ? 'RouteError' : (errorObj?.name || 'Error'),
+      $exception_message: details,
+      $exception_stack_trace_raw: stack,
+      $exception_handled: true, // ErrorBoundary caught it
+      $exception_synthetic: false,
+      $exception_source: 'ErrorBoundary',
+      is_route_error: isRouteError,
+      route_status: isRouteError ? error.status : undefined,
+      url: window.location.href,
+      user_agent: navigator.userAgent,
     });
   }
 

@@ -89,9 +89,14 @@ export function reportWebVitals() {
 /**
  * Setup global error tracking for PostHog (Story 4.1)
  * Captures unhandled errors and promise rejections
+ * Chains with existing handlers to avoid clobbering other error trackers (M1 fix)
  */
 export function setupErrorTracking() {
   if (typeof window === 'undefined') return;
+
+  // Store existing handlers to chain them (M1: Don't clobber other error trackers)
+  const prevOnerror = window.onerror;
+  const prevOnunhandledrejection = window.onunhandledrejection;
 
   // Track unhandled JavaScript errors
   window.onerror = (message, source, lineno, colno, error) => {
@@ -107,6 +112,11 @@ export function setupErrorTracking() {
       url: window.location.href,
       user_agent: navigator.userAgent,
     });
+    
+    // Chain to previous handler if it exists
+    if (prevOnerror) {
+      return prevOnerror(message, source, lineno, colno, error);
+    }
     
     // Don't prevent default error handling
     return false;
@@ -127,9 +137,17 @@ export function setupErrorTracking() {
       url: window.location.href,
       user_agent: navigator.userAgent,
     });
+    
+    // Chain to previous handler if it exists
+    if (prevOnunhandledrejection) {
+      prevOnunhandledrejection(event);
+    }
   };
 
-  console.log('[PostHog] Error tracking initialized');
+  // Only log in development (L1 fix)
+  if (import.meta.env.MODE === 'development') {
+    console.log('[PostHog] Error tracking initialized');
+  }
 }
 
 /**
@@ -146,6 +164,7 @@ export function captureException(error: Error, context?: Record<string, unknown>
     $exception_handled: true,
     $exception_synthetic: false,
     url: window.location.href,
+    user_agent: navigator.userAgent, // L2 fix: consistent with auto-captured exceptions
     ...context,
   });
 }
