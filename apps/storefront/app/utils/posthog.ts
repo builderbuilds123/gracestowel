@@ -1,6 +1,19 @@
 import posthog from 'posthog-js';
 
 /**
+ * Get sanitized URL (strips sensitive query params like tokens)
+ * Prevents leaking auth tokens to analytics
+ */
+function getSanitizedUrl(): string {
+  if (typeof window === 'undefined') return '';
+  const url = new URL(window.location.href);
+  // Remove sensitive query parameters
+  const sensitiveParams = ['token', 'auth', 'key', 'secret', 'password', 'jwt'];
+  sensitiveParams.forEach(param => url.searchParams.delete(param));
+  return url.toString();
+}
+
+/**
  * Initialize PostHog for client-side analytics and monitoring
  * Only active in production or when explicitly enabled via env var
  */
@@ -65,24 +78,53 @@ export function getPostHog() {
 }
 
 /**
- * Report Web Vitals to PostHog
+ * Web Vitals metric structure from web-vitals v5
+ * @see https://github.com/GoogleChrome/web-vitals
+ */
+export interface WebVitalMetric {
+  name: 'CLS' | 'INP' | 'LCP' | 'FCP' | 'TTFB';
+  value: number;
+  rating: 'good' | 'needs-improvement' | 'poor';
+  delta: number;
+  id: string;
+  navigationType: string;
+  entries: PerformanceEntry[];
+}
+
+/**
+ * Report Web Vitals to PostHog (Story 4.2)
+ * Captures Core Web Vitals: LCP, CLS, INP (replaces FID), FCP, TTFB
+ * Each metric includes a rating (good, needs-improvement, poor)
  */
 export function reportWebVitals() {
   if (typeof window === 'undefined') return;
 
   import('web-vitals').then(({ onCLS, onINP, onLCP, onFCP, onTTFB }) => {
-    const sendToPostHog = (metric: any) => {
-      posthog.capture('$performance_event', {
-        ...metric,
-        url: window.location.href,
+    const sendToPostHog = (metric: WebVitalMetric) => {
+      posthog.capture('web_vitals', {
+        metric_name: metric.name,
+        metric_value: metric.value,
+        metric_rating: metric.rating, // AC2: good, needs-improvement, poor
+        metric_delta: metric.delta,
+        metric_id: metric.id,
+        navigation_type: metric.navigationType,
+        url: getSanitizedUrl(),
       });
+      
+      // Debug log in development
+      if (import.meta.env.MODE === 'development') {
+        console.log(`[WebVitals] ${metric.name}: ${metric.value.toFixed(2)} (${metric.rating})`);
+      }
     };
 
-    onCLS(sendToPostHog);
-    onINP(sendToPostHog);
-    onLCP(sendToPostHog);
-    onFCP(sendToPostHog);
-    onTTFB(sendToPostHog);
+    // Core Web Vitals
+    onCLS(sendToPostHog);  // Cumulative Layout Shift
+    onLCP(sendToPostHog);  // Largest Contentful Paint
+    onINP(sendToPostHog);  // Interaction to Next Paint (replaces FID)
+    
+    // Additional metrics
+    onFCP(sendToPostHog);  // First Contentful Paint
+    onTTFB(sendToPostHog); // Time to First Byte
   });
 }
 
@@ -109,7 +151,7 @@ export function setupErrorTracking() {
       $exception_stack_trace_raw: error?.stack,
       $exception_handled: false,
       $exception_synthetic: false,
-      url: window.location.href,
+      url: getSanitizedUrl(),
       user_agent: navigator.userAgent,
     });
     
@@ -134,7 +176,7 @@ export function setupErrorTracking() {
       $exception_handled: false,
       $exception_synthetic: false,
       $exception_is_promise_rejection: true,
-      url: window.location.href,
+      url: getSanitizedUrl(),
       user_agent: navigator.userAgent,
     });
     
@@ -163,7 +205,7 @@ export function captureException(error: Error, context?: Record<string, unknown>
     $exception_stack_trace_raw: error.stack,
     $exception_handled: true,
     $exception_synthetic: false,
-    url: window.location.href,
+    url: getSanitizedUrl(),
     user_agent: navigator.userAgent, // L2 fix: consistent with auto-captured exceptions
     ...context,
   });
