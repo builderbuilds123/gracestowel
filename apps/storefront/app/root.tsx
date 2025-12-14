@@ -28,31 +28,53 @@ import posthog from "posthog-js";
 import "./app.css";
 
 // Initialize PostHog on client-side only
+// Note: Must wait for window.ENV to be populated from loader
 if (typeof window !== 'undefined') {
-  // Debug PostHog config in development/staging
-  if (import.meta.env.MODE !== 'production') {
-    const apiKey = import.meta.env.VITE_POSTHOG_API_KEY;
-    console.log('[PostHog Init] API Key present:', !!apiKey);
-    console.log('[PostHog Init] API Key length:', apiKey ? apiKey.length : 0);
-    console.log('[PostHog Init] Host:', import.meta.env.VITE_POSTHOG_HOST || 'https://us.i.posthog.com');
-  }
-  
-  initPostHog();
-  reportWebVitals();
-  setupErrorTracking();
-  
-  // Verify initialization after a short delay
-  if (import.meta.env.MODE !== 'production') {
-    setTimeout(() => {
-      // @ts-expect-error - posthog might not be initialized
-      const ph = window.posthog;
-      if (ph && typeof ph.capture === 'function') {
-        console.log('[PostHog Init] ✅ Successfully initialized');
-        console.log('[PostHog Init] Distinct ID:', ph.get_distinct_id?.() || 'unknown');
-      } else {
-        console.error('[PostHog Init] ❌ PostHog NOT initialized - check API key');
-      }
-    }, 1000);
+  // Wait for window.ENV to be set (injected by EnvScript component)
+  const initPostHogWhenReady = () => {
+    const runtimeConfig = (window as any).ENV;
+    const buildTimeKey = import.meta.env.VITE_POSTHOG_API_KEY;
+    const apiKey = runtimeConfig?.POSTHOG_API_KEY || buildTimeKey;
+    
+    // Debug PostHog config in development/staging
+    if (import.meta.env.MODE !== 'production') {
+      console.log('[PostHog Init] Config check:', {
+        runtimeKey: !!runtimeConfig?.POSTHOG_API_KEY,
+        buildTimeKey: !!buildTimeKey,
+        finalKey: !!apiKey,
+        host: runtimeConfig?.POSTHOG_HOST || import.meta.env.VITE_POSTHOG_HOST || 'https://us.i.posthog.com',
+      });
+    }
+    
+    initPostHog();
+    reportWebVitals();
+    setupErrorTracking();
+    
+    // Verify initialization after a short delay
+    if (import.meta.env.MODE !== 'production') {
+      setTimeout(() => {
+        // @ts-expect-error - posthog might not be initialized
+        const ph = window.posthog;
+        if (ph && typeof ph.capture === 'function') {
+          console.log('[PostHog Init] ✅ Successfully initialized');
+          console.log('[PostHog Init] Distinct ID:', ph.get_distinct_id?.() || 'unknown');
+        } else {
+          console.error('[PostHog Init] ❌ PostHog NOT initialized - check API key');
+        }
+      }, 1000);
+    }
+  };
+
+  // If window.ENV is already set, initialize immediately
+  // Otherwise wait for DOMContentLoaded (when EnvScript runs)
+  if ((window as any).ENV) {
+    initPostHogWhenReady();
+  } else {
+    document.addEventListener('DOMContentLoaded', initPostHogWhenReady);
+    // Fallback: if DOMContentLoaded already fired, initialize immediately
+    if (document.readyState !== 'loading') {
+      initPostHogWhenReady();
+    }
   }
 }
 
@@ -94,10 +116,17 @@ export async function loader({ context }: Route.LoaderArgs) {
       console.error("❌ Failed to verify Medusa connection:", err);
   }
   
+  // Extract PostHog config from Cloudflare Workers env (runtime) or fallback to build-time
+  const posthogApiKey = (env as any).VITE_POSTHOG_API_KEY || import.meta.env.VITE_POSTHOG_API_KEY;
+  const posthogHost = (env as any).VITE_POSTHOG_HOST || import.meta.env.VITE_POSTHOG_HOST || 'https://us.i.posthog.com';
+  
   return { 
     env: { 
       MEDUSA_BACKEND_URL, 
-      MEDUSA_PUBLISHABLE_KEY 
+      MEDUSA_PUBLISHABLE_KEY,
+      // Include PostHog config for client-side initialization
+      POSTHOG_API_KEY: posthogApiKey,
+      POSTHOG_HOST: posthogHost,
     } 
   };
 }
