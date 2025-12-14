@@ -71,8 +71,11 @@ development_status:
   4-3-monitor-api-latency-error-rates:
     path: docs/sprint/sprint-artifacts/4-3-monitor-api-latency-error-rates.md
     status: done
-  4-4-create-posthog-monitoring-dashboards: backlog
-  4-5-set-up-basic-alerting: backlog
+  4-4-backend-error-tracking:
+    path: docs/sprint/sprint-artifacts/4-4-backend-error-tracking.md
+    status: done
+  4-5-health-check-monitoring: backlog
+  4-6-create-posthog-monitoring-dashboards: backlog
   epic-4-retrospective: optional
 
   # --- Cookie Policy Epics (from docs/product/epics/cookie-policy.md) ---

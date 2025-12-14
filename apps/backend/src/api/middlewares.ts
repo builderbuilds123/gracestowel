@@ -1,4 +1,44 @@
-import { defineMiddlewares } from "@medusajs/framework/http";
+import { 
+    defineMiddlewares, 
+    MedusaNextFunction,
+    type MedusaRequest, 
+    type MedusaResponse,
+} from "@medusajs/framework/http";
+import { MedusaError } from "@medusajs/framework/utils";
+import { captureBackendError } from "../utils/posthog";
+import { logger } from "../utils/logger";
+
+/**
+ * Global Error Handler Middleware (Story 4.4)
+ * 
+ * Captures unhandled errors to PostHog and logs them.
+ * Delegates to Medusa's default error handling for response.
+ */
+function errorHandlerMiddleware(
+    error: MedusaError | Error,
+    req: MedusaRequest,
+    res: MedusaResponse,
+    next: MedusaNextFunction
+) {
+    // Extract context from request (with explicit type cast for user/customer)
+    const { user, customer } = req as { user?: { id: string }; customer?: { id: string } };
+    const context = {
+        component: 'api',
+        path: req.path,
+        method: req.method,
+        userId: user?.id || customer?.id,
+    };
+
+    // Log the error
+    logger.error('api', `Unhandled error: ${error.message}`, context, error as Error);
+
+    // Capture to PostHog (async, don't await)
+    captureBackendError(error as Error, context);
+
+    // Let Medusa handle the response
+    // Pass to next error handler (Medusa's default)
+    next(error);
+}
 
 /**
  * Middleware configuration for custom API routes
@@ -15,5 +55,6 @@ export default defineMiddlewares({
             bodyParser: false,
         },
     ],
+    errorHandler: errorHandlerMiddleware,
 });
 
