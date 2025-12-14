@@ -46,7 +46,8 @@ interface StockValidationResult {
 
 /**
  * Generate deterministic idempotency key from cart contents
- * This ensures the same cart always produces the same key
+ * Uses FNV-1a hash for better distribution and includes timestamp bucket
+ * to allow retries within a time window while preventing rapid duplicates
  */
 function generateIdempotencyKey(
   amount: number,
@@ -56,20 +57,28 @@ function generateIdempotencyKey(
 ): string {
   const cartHash = cartItems
     ? cartItems
-        .map((i) => `${i.variantId}:${i.quantity}`)
+        .map((i) => `${i.variantId}:${i.quantity}:${i.price}`)
         .sort()
         .join("|")
     : "empty";
-  const raw = `pi_${customerId || "guest"}_${amount}_${currency}_${cartHash}`;
+  
+  // Include a 5-minute time bucket to allow new attempts after cache expires
+  // Stripe idempotency keys are valid for 24 hours, but we want to allow
+  // reasonable retries if parameters truly change
+  const timeBucket = Math.floor(Date.now() / (5 * 60 * 1000));
+  
+  const raw = `pi_${customerId || "guest"}_${amount}_${currency}_${cartHash}_${timeBucket}`;
 
-  // Simple hash
-  let hash = 0;
+  // FNV-1a hash - better distribution than simple hash
+  let hash = 2166136261; // FNV offset basis
   for (let i = 0; i < raw.length; i++) {
-    const char = raw.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash = hash & hash;
+    hash ^= raw.charCodeAt(i);
+    hash = Math.imul(hash, 16777619); // FNV prime
   }
-  return `pi_${Math.abs(hash).toString(36)}`;
+  
+  // Convert to base36 and ensure sufficient length
+  const hashStr = (hash >>> 0).toString(36).padStart(8, '0');
+  return `pi_${hashStr}_${amount}`;
 }
 
 /**
