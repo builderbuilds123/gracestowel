@@ -140,7 +140,7 @@ export function setupErrorTracking() {
     
     // Chain to previous handler if it exists
     if (prevOnunhandledrejection) {
-      prevOnunhandledrejection(event);
+      prevOnunhandledrejection.call(window, event);
     }
   };
 
