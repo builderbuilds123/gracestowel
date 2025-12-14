@@ -12,6 +12,7 @@ import { CheckoutForm, type ShippingOption } from "../components/CheckoutForm";
 import { OrderSummary } from "../components/OrderSummary";
 import { parsePrice } from "../lib/price";
 import { generateTraceId } from "../lib/logger";
+import { monitoredFetch } from "../utils/monitored-fetch";
 
 interface LoaderData {
   stripePublishableKey: string;
@@ -103,7 +104,7 @@ export default function Checkout() {
       try {
         setPaymentError(null);
 
-        const response = await fetch("/api/payment-intent", {
+        const response = await monitoredFetch("/api/payment-intent", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -129,6 +130,7 @@ export default function Checkout() {
             })),
             paymentIntentId: paymentIntentId, // Reuse if exists
           }),
+          label: paymentIntentId ? 'update-payment-intent' : 'create-payment-intent',
         });
 
         if (!response.ok) {
@@ -190,12 +192,13 @@ export default function Checkout() {
 
     const refetchShipping = async () => {
       try {
-        const response = await fetch("/api/shipping-rates", {
+        const response = await monitoredFetch("/api/shipping-rates", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             subtotal: cartTotal,
           }),
+          label: 'refetch-shipping-rates',
         });
 
         const data = (await response.json()) as { shippingOptions: ShippingOption[] };
@@ -226,12 +229,13 @@ export default function Checkout() {
 
     setIsCalculatingShipping(true);
     try {
-      const response = await fetch("/api/shipping-rates", {
+      const response = await monitoredFetch("/api/shipping-rates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           subtotal: cartTotal,
         }),
+        label: 'fetch-shipping-rates',
       });
 
       const data = (await response.json()) as { shippingOptions: ShippingOption[] };

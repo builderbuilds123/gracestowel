@@ -50,7 +50,9 @@ development_status:
   2-2-identify-associate-logged-in-users:
     path: docs/sprint/sprint-artifacts/2-2-identify-associate-logged-in-users.md
     status: done
-  2-3-ensure-correct-user-id-server-side: backlog
+  2-3-ensure-correct-user-id-server-side:
+    status: done
+    meta: "Pre-existing implementation verified. Server-side events use customer_id or guest_${order.id}."
   epic-2-retrospective: optional
 
   epic-3: backlog
@@ -66,7 +68,9 @@ development_status:
   4-2-track-web-vitals-performance:
     path: docs/sprint/sprint-artifacts/4-2-track-web-vitals-performance.md
     status: done
-  4-3-implement-backend-event-tracking: backlog
+  4-3-monitor-api-latency-error-rates:
+    path: docs/sprint/sprint-artifacts/4-3-monitor-api-latency-error-rates.md
+    status: done
   4-4-create-posthog-monitoring-dashboards: backlog
   4-5-set-up-basic-alerting: backlog
   epic-4-retrospective: optional
