@@ -29,9 +29,31 @@ import "./app.css";
 
 // Initialize PostHog on client-side only
 if (typeof window !== 'undefined') {
+  // Debug PostHog config in development/staging
+  if (import.meta.env.MODE !== 'production') {
+    const apiKey = import.meta.env.VITE_POSTHOG_API_KEY;
+    console.log('[PostHog Init] API Key present:', !!apiKey);
+    console.log('[PostHog Init] API Key length:', apiKey ? apiKey.length : 0);
+    console.log('[PostHog Init] Host:', import.meta.env.VITE_POSTHOG_HOST || 'https://us.i.posthog.com');
+  }
+  
   initPostHog();
   reportWebVitals();
   setupErrorTracking();
+  
+  // Verify initialization after a short delay
+  if (import.meta.env.MODE !== 'production') {
+    setTimeout(() => {
+      // @ts-expect-error - posthog might not be initialized
+      const ph = window.posthog;
+      if (ph && typeof ph.capture === 'function') {
+        console.log('[PostHog Init] ✅ Successfully initialized');
+        console.log('[PostHog Init] Distinct ID:', ph.get_distinct_id?.() || 'unknown');
+      } else {
+        console.error('[PostHog Init] ❌ PostHog NOT initialized - check API key');
+      }
+    }, 1000);
+  }
 }
 
 /**
