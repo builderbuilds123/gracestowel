@@ -89,40 +89,59 @@ export async function monitoredFetch(
   const { skipTracking = false, label, ...fetchOptions } = options;
   const method = (fetchOptions.method || 'GET').toUpperCase();
   const startTime = performance.now();
+  const { host, path } = parseUrl(url);
+  const sanitizedUrl = getSanitizedPath(url);
   
-  let response: Response;
-  let error: Error | null = null;
-  
-  try {
-    response = await fetch(url, fetchOptions);
-  } catch (e) {
-    error = e instanceof Error ? e : new Error(String(e));
-    throw e;
-  } finally {
+  // Helper to send tracking event
+  const trackRequest = async (
+    response: Response | null, 
+    networkError: Error | null
+  ) => {
+    if (skipTracking || typeof window === 'undefined' || !posthog) {
+      return;
+    }
+    
     const duration = Math.round(performance.now() - startTime);
     
-    // Only track if PostHog is available and tracking is not skipped
-    if (!skipTracking && typeof window !== 'undefined' && posthog) {
-      const { host, path } = parseUrl(url);
-      const sanitizedUrl = getSanitizedPath(url);
-      
+    // Build event data based on whether we have a network error or HTTP response
+    if (networkError) {
+      // Network error case - fetch itself threw
       const eventData: ApiRequestEvent = {
         url: sanitizedUrl,
         method,
-        status: error ? 0 : response!.status,
+        status: 0,
         duration_ms: duration,
-        success: !error && response!.ok,
+        success: false,
+        error_message: networkError.message,
         request_path: path,
         request_host: host,
       };
       
-      // Add error message for failed requests
-      if (error) {
-        eventData.error_message = error.message;
-      } else if (!response!.ok) {
-        // Try to get error message from response for non-ok status
+      if (label) {
+        eventData.label = label;
+      }
+      
+      posthog.capture('api_request', eventData);
+      
+      if (import.meta.env.MODE === 'development') {
+        console.log(`[API] ✗ ${method} ${path} - 0 (${duration}ms) ${networkError.message}`);
+      }
+    } else if (response) {
+      // HTTP response case - fetch succeeded, check status
+      const eventData: ApiRequestEvent = {
+        url: sanitizedUrl,
+        method,
+        status: response.status,
+        duration_ms: duration,
+        success: response.ok,
+        request_path: path,
+        request_host: host,
+      };
+      
+      // Try to extract error message for non-ok responses
+      if (!response.ok) {
         try {
-          const clonedResponse = response!.clone();
+          const clonedResponse = response.clone();
           const body = await clonedResponse.json() as { error?: string; message?: string };
           if (body.error || body.message) {
             eventData.error_message = body.error || body.message;
@@ -132,24 +151,29 @@ export async function monitoredFetch(
         }
       }
       
-      // Add label if provided
       if (label) {
         eventData.label = label;
       }
       
       posthog.capture('api_request', eventData);
       
-      // Log in development
       if (import.meta.env.MODE === 'development') {
         const statusIcon = eventData.success ? '✓' : '✗';
-        console.log(
-          `[API] ${statusIcon} ${method} ${path} - ${eventData.status} (${duration}ms)`
-        );
+        console.log(`[API] ${statusIcon} ${method} ${path} - ${eventData.status} (${duration}ms)`);
       }
     }
-  }
+  };
   
-  return response!;
+  // Execute fetch and track
+  try {
+    const response = await fetch(url, fetchOptions);
+    await trackRequest(response, null);
+    return response;
+  } catch (e) {
+    const error = e instanceof Error ? e : new Error(String(e));
+    await trackRequest(null, error);
+    throw e;
+  }
 }
 
 /**
@@ -164,8 +188,8 @@ export async function monitoredPost(
     ...options,
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json',
       ...options.headers,
+      'Content-Type': 'application/json', // Always JSON since we stringify body
     },
     body: JSON.stringify(body),
   });
