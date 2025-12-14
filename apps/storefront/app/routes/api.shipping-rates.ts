@@ -14,7 +14,14 @@ export async function action({ request, context }: ActionFunctionArgs) {
         subtotal: number;
     };
 
-    const env = context.cloudflare.env as { STRIPE_SECRET_KEY: string };
+    // Access full Cloudflare env to include PostHog config for monitoredFetch
+    const env = context.cloudflare.env as {
+      STRIPE_SECRET_KEY: string;
+      POSTHOG_API_KEY?: string;
+      POSTHOG_HOST?: string;
+      POSTHOG_SERVER_CAPTURE_ENABLED?: string | boolean;
+      [key: string]: unknown;
+    };
     const STRIPE_SECRET_KEY = env.STRIPE_SECRET_KEY;
 
     try {

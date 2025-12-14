@@ -46,16 +46,25 @@ function getServerPosthogConfig(cloudflareEnv?: CloudflareEnv): ServerPostHogCon
   if (!isServerCaptureEnabled(cloudflareEnv)) return null;
 
   // Priority 1: Cloudflare Workers env (context.cloudflare.env)
+  // This is the ONLY way to access env vars in Cloudflare Workers
   if (cloudflareEnv) {
     const apiKey = cloudflareEnv.POSTHOG_API_KEY;
     const host = cloudflareEnv.POSTHOG_HOST ?? 'https://us.i.posthog.com';
-    if (apiKey) {
+    if (apiKey && typeof apiKey === 'string') {
       return { apiKey, host };
     }
   }
 
-  // Priority 2: Check for injected ENV in browser or global scope
-  const globalEnv = (typeof window !== 'undefined' ? (window as any).ENV : (globalThis as any).ENV) as
+  // Priority 2: Fallback for non-Workers environments (e.g., Node.js SSR)
+  // Note: process.env and globalThis.ENV do NOT work in Cloudflare Workers
+  // This fallback is only for development/testing in non-Workers environments
+  if (typeof window !== 'undefined') {
+    // Browser environment - should not reach here in server-side code
+    return null;
+  }
+
+  // Node.js SSR fallback (only works outside Cloudflare Workers)
+  const globalEnv = (globalThis as any).ENV as
     | { POSTHOG_API_KEY?: string; POSTHOG_HOST?: string }
     | undefined;
 
