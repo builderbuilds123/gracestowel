@@ -82,11 +82,30 @@ development_status:
 
   # --- Enhanced Analytics (Growth Features from PRD) ---
   epic-5-enhanced-analytics: in-progress
-  5-1-comprehensive-frontend-tracking:
-    path: docs/sprint/sprint-artifacts/5-1-comprehensive-frontend-tracking.md
+  5-2-comprehensive-frontend-tracking:
+    path: docs/sprint/sprint-artifacts/5-2-comprehensive-frontend-tracking.md
     status: done
     meta: "PRD Growth Features: Track users' every move. API calls, navigation, scroll, engagement, forms."
     completed: "2025-12-14"
+  5-2-1-monitored-fetch-api-events:
+    path: docs/sprint/sprint-artifacts/5-2-1-monitored-fetch-api-events.md
+    status: done
+    completed: "2025-12-14"
+  5-2-2-navigation-tracking:
+    path: docs/sprint/sprint-artifacts/5-2-2-navigation-tracking.md
+    status: todo
+  5-2-3-scroll-depth-tracking:
+    path: docs/sprint/sprint-artifacts/5-2-3-scroll-depth-tracking.md
+    status: todo
+  5-2-4-engagement-idle-tracking:
+    path: docs/sprint/sprint-artifacts/5-2-4-engagement-idle-tracking.md
+    status: todo
+  5-2-5-form-interaction-tracking:
+    path: docs/sprint/sprint-artifacts/5-2-5-form-interaction-tracking.md
+    status: todo
+  5-2-6-integration-and-tests:
+    path: docs/sprint/sprint-artifacts/5-2-6-integration-and-tests.md
+    status: todo
   5-2-posthog-ci-env-fix:
     status: done
     meta: "Fixed VITE_POSTHOG_API_KEY and VITE_POSTHOG_HOST injection in CI/CD build step."

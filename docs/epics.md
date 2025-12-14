@@ -601,7 +601,7 @@ As a Developer, I want a monitored fetch wrapper that records `api_request` even
 - All storefront fetch calls use the monitored wrapper.
 - `api_request` fires on success and failure with sanitized URLs (no tokens) and route.
 - Duration measured client-side; errors include message only, never body/payload.
-- Honor `respect_dnt`; flag rollout under `frontend-event-tracking` to enable safely per env.
+- Rollout gated under `frontend-event-tracking`; DNT/opt-out is not offered.
 
 ### Story 5.2: Navigation Tracking (FR2)
 As a User Researcher, I want navigation events on every route change so we know flow patterns and dwell time between pages.
@@ -630,13 +630,13 @@ As a UX Analyst, I want `form_interaction` events so we can spot form friction w
 **Acceptance Criteria:**
 - Emit on focus, blur, submit, error with form_name, field_name (no values), interaction_type, error_message for validation only.
 - Exclude sensitive fields; never send values.
-- Honor `respect_dnt`; minimal payload, no PII.
+- Minimal payload, no PII; DNT/opt-out not offered.
 
 ### Story 5.6: Integration & Tests (FR7)
 As a Developer, I want all tracking hooks wired in `root.tsx` with tests so tracking is reliable.
 
 **Acceptance Criteria:**
-- Hooks mounted globally (navigation, scroll, engagement, form, monitored fetch) and PostHog client respects `respect_dnt`.
+- Hooks mounted globally (navigation, scroll, engagement, form, monitored fetch) with feature flag gating; DNT/opt-out not offered.
 - 17 tests cover hooks and event payloads; events verified in PostHog test workspace.
 - Event handlers add <5ms median overhead; use rAF/debounce where needed; payloads are minimal and sanitized.
 

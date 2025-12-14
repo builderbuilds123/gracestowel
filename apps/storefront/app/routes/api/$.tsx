@@ -1,4 +1,5 @@
 import { type LoaderFunctionArgs, type ActionFunctionArgs } from "react-router";
+import { monitoredFetch } from "../../utils/monitored-fetch";
 
 export async function loader({ request, context }: LoaderFunctionArgs) {
     return handleProxy(request, context);
@@ -26,12 +27,13 @@ async function handleProxy(request: Request, context: any) {
     // headers.set("Origin", MEDUSA_BACKEND_URL); 
 
     try {
-        const response = await fetch(targetUrl, {
+        const response = await monitoredFetch(targetUrl, {
             method: request.method,
             headers: headers,
             body: request.body,
             // Important: duplicate is needed to forward the body stream
             duplex: "half",
+            label: "proxy-forward",
         } as any);
 
         // Create new headers for the response to the client

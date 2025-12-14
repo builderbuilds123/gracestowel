@@ -6,6 +6,7 @@ import { CheckCircle2, MapPin, Package, Truck, AlertCircle } from "lucide-react"
 import { OrderTimer } from "../components/order/OrderTimer";
 import { OrderModificationDialogs } from "../components/order/OrderModificationDialogs";
 import { getGuestToken, setGuestToken, clearGuestToken } from "../utils/guest-session.server";
+import { monitoredFetch } from "../utils/monitored-fetch";
 
 interface LoaderData {
     order: any;
@@ -40,11 +41,13 @@ export async function loader({ params, request, context }: LoaderFunctionArgs) {
     }
 
     // Call backend with token in header (preferred method per Story 4-2)
-    const response = await fetch(`${medusaBackendUrl}/store/orders/${id}/guest-view`, {
+    const response = await monitoredFetch(`${medusaBackendUrl}/store/orders/${id}/guest-view`, {
+        method: "GET",
         headers: {
             "x-publishable-api-key": medusaPublishableKey,
             "x-modification-token": token,
-        }
+        },
+        label: "order-guest-view",
     });
 
     if (response.status === 401 || response.status === 403) {
@@ -133,10 +136,11 @@ export async function action({ params, request, context }: ActionFunctionArgs) {
         if (intent === "CANCEL_ORDER") {
             const reason = formData.get("reason") as string || "Customer requested cancellation";
             
-            const response = await fetch(`${medusaBackendUrl}/store/orders/${id}/cancel`, {
+            const response = await monitoredFetch(`${medusaBackendUrl}/store/orders/${id}/cancel`, {
                 method: "POST",
                 headers,
                 body: JSON.stringify({ reason }),
+                label: "order-cancel",
             });
 
             if (!response.ok) {
@@ -157,10 +161,11 @@ export async function action({ params, request, context }: ActionFunctionArgs) {
         if (intent === "UPDATE_ADDRESS") {
             const address = JSON.parse(formData.get("address") as string);
             
-            const response = await fetch(`${medusaBackendUrl}/store/orders/${id}/address`, {
+            const response = await monitoredFetch(`${medusaBackendUrl}/store/orders/${id}/address`, {
                 method: "POST",
                 headers,
                 body: JSON.stringify({ address }),
+                label: "order-address-update",
             });
 
             if (!response.ok) {
@@ -203,10 +208,11 @@ export async function action({ params, request, context }: ActionFunctionArgs) {
             let itemsAdded = 0;
             
             for (const item of items) {
-                const response = await fetch(`${medusaBackendUrl}/store/orders/${id}/line-items`, {
+                const response = await monitoredFetch(`${medusaBackendUrl}/store/orders/${id}/line-items`, {
                     method: "POST",
                     headers,
                     body: JSON.stringify({ variant_id: item.variant_id, quantity: item.quantity }),
+                    label: "order-add-line-item",
                 });
 
                 if (!response.ok) {

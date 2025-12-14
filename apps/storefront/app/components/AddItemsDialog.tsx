@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { X, Loader2, Plus, Minus, ShoppingBag } from "lucide-react";
+import { monitoredFetch } from "../utils/monitored-fetch";
 
 interface Product {
     id: string;
@@ -50,8 +51,14 @@ export function AddItemsDialog({ isOpen, onClose, onAdd, currencyCode }: AddItem
     const fetchProducts = async () => {
         setIsLoadingProducts(true);
         try {
-            const medusaUrl = import.meta.env.VITE_MEDUSA_BACKEND_URL || 'http://localhost:9000';
-            const response = await fetch(`${medusaUrl}/store/products?limit=20`);
+            const medusaUrl = typeof window !== 'undefined'
+                ? (window as unknown as { ENV?: { MEDUSA_BACKEND_URL?: string } }).ENV?.MEDUSA_BACKEND_URL || 'http://localhost:9000'
+                : 'http://localhost:9000';
+            
+            const response = await monitoredFetch(`${medusaUrl}/store/products?limit=20`, {
+                method: "GET",
+                label: "add-items-products",
+            });
             if (response.ok) {
                 const data = await response.json() as { products?: Product[] };
                 setProducts(data.products || []);

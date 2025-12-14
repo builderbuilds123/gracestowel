@@ -1,4 +1,5 @@
 import { type ActionFunctionArgs, data } from "react-router";
+import { monitoredFetch } from "../utils/monitored-fetch";
 
 export async function action({ request, context }: ActionFunctionArgs) {
     if (request.method !== "POST") {
@@ -35,13 +36,14 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
         console.log("Creating checkout session via fetch...");
 
-        const response = await fetch("https://api.stripe.com/v1/checkout/sessions", {
+        const response = await monitoredFetch("https://api.stripe.com/v1/checkout/sessions", {
             method: "POST",
             headers: {
                 "Authorization": `Bearer ${STRIPE_SECRET_KEY}`,
                 "Content-Type": "application/x-www-form-urlencoded",
             },
             body: body.toString(),
+            label: "stripe-checkout-session",
         });
 
         if (!response.ok) {

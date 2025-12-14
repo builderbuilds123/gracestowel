@@ -1,6 +1,7 @@
 import { type ActionFunctionArgs, data } from "react-router";
 import { toCents } from "../lib/price";
 import { createLogger, getTraceIdFromRequest } from "../lib/logger";
+import { monitoredFetch } from "../utils/monitored-fetch";
 
 interface CartItem {
   id: string | number;
@@ -102,9 +103,9 @@ async function validateStock(
         headers["x-publishable-api-key"] = publishableKey;
       }
 
-      const response = await fetch(
+      const response = await monitoredFetch(
         `${medusaBackendUrl}/store/variants/${item.variantId}`,
-        { headers }
+        { headers, method: "GET", label: "stock-variant" }
       );
 
       if (!response.ok) {
@@ -299,17 +300,19 @@ export async function action({ request, context }: ActionFunctionArgs) {
       amount: totalAmount,
     });
 
-    const response = await fetch(url, {
+    const response = await monitoredFetch(url, {
       method: "POST",
       headers,
       body: body.toString(),
+      label: isUpdate ? "stripe-payment-intent-update" : "stripe-payment-intent-create",
     });
 
     if (!response.ok) {
       const errorText = await response.text();
       logger.error("Stripe API error", new Error(errorText), {
+        status: response.status,
         paymentIntentId,
-        statusCode: response.status,
+        operation: isUpdate ? "update" : "create",
       });
       return data(
         { message: "Payment initialization failed", traceId },
