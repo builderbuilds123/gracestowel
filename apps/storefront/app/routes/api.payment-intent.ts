@@ -1,7 +1,7 @@
 import { type ActionFunctionArgs, data } from "react-router";
 import { toCents } from "../lib/price";
 import { createLogger, getTraceIdFromRequest } from "../lib/logger";
-import { monitoredFetch } from "../utils/monitored-fetch";
+import { monitoredFetch, type CloudflareEnv } from "../utils/monitored-fetch";
 
 interface CartItem {
   id: string | number;
@@ -89,7 +89,7 @@ async function validateStock(
   cartItems: CartItem[],
   medusaBackendUrl: string,
   publishableKey?: string,
-  cloudflareEnv?: any
+  cloudflareEnv?: CloudflareEnv
 ): Promise<StockValidationResult> {
   const outOfStockItems: StockValidationResult["outOfStockItems"] = [];
 
@@ -307,6 +307,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
       headers,
       body: body.toString(),
       label: isUpdate ? "stripe-payment-intent-update" : "stripe-payment-intent-create",
+      skipTracking: true,
       cloudflareEnv: env,
     });
 
