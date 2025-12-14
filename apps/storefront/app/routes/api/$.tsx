@@ -15,7 +15,8 @@ async function handleProxy(request: Request, context: any) {
     const query = url.search;
 
     // Get Medusa Backend URL from environment or default to localhost for dev
-    const MEDUSA_BACKEND_URL = context.env?.MEDUSA_BACKEND_URL || "http://localhost:9000";
+    const MEDUSA_BACKEND_URL = context.cloudflare?.env?.MEDUSA_BACKEND_URL || context.env?.MEDUSA_BACKEND_URL || "http://localhost:9000";
+    const cloudflareEnv = context.cloudflare?.env;
 
     const targetUrl = `${MEDUSA_BACKEND_URL}${path}${query}`;
 
@@ -34,6 +35,7 @@ async function handleProxy(request: Request, context: any) {
             // Important: duplicate is needed to forward the body stream
             duplex: "half",
             label: "proxy-forward",
+            cloudflareEnv: cloudflareEnv,
         } as any);
 
         // Create new headers for the response to the client

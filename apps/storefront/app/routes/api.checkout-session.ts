@@ -44,6 +44,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
             },
             body: body.toString(),
             label: "stripe-checkout-session",
+            cloudflareEnv: env,
         });
 
         if (!response.ok) {

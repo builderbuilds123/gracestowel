@@ -13,10 +13,29 @@ type ServerPostHogConfig = {
   host: string;
 };
 
+/**
+ * Cloudflare Workers environment context
+ * In Workers, env vars are accessed via context.cloudflare.env, not process.env
+ */
+export type CloudflareEnv = {
+  POSTHOG_API_KEY?: string;
+  POSTHOG_HOST?: string;
+  [key: string]: unknown;
+};
+
 let posthogPromise: Promise<PostHogLike> | null = null;
 
-function getServerPosthogConfig(): ServerPostHogConfig | null {
-  // Check for injected ENV in browser or global scope
+function getServerPosthogConfig(cloudflareEnv?: CloudflareEnv): ServerPostHogConfig | null {
+  // Priority 1: Cloudflare Workers env (context.cloudflare.env)
+  if (cloudflareEnv) {
+    const apiKey = cloudflareEnv.POSTHOG_API_KEY;
+    const host = cloudflareEnv.POSTHOG_HOST ?? 'https://us.i.posthog.com';
+    if (apiKey) {
+      return { apiKey, host };
+    }
+  }
+
+  // Priority 2: Check for injected ENV in browser or global scope
   const globalEnv = (typeof window !== 'undefined' ? (window as any).ENV : (globalThis as any).ENV) as
     | { POSTHOG_API_KEY?: string; POSTHOG_HOST?: string }
     | undefined;
@@ -41,9 +60,10 @@ function normalizePosthogHost(host: string): string {
 
 async function captureServerEvent(
   event: string,
-  properties: any
+  properties: any,
+  cloudflareEnv?: CloudflareEnv
 ): Promise<void> {
-  const cfg = getServerPosthogConfig();
+  const cfg = getServerPosthogConfig(cloudflareEnv);
   if (!cfg) return;
 
   try {
@@ -130,6 +150,8 @@ export interface MonitoredFetchOptions extends RequestInit {
   skipTracking?: boolean;
   /** Custom label for the request (e.g., "payment-intent-create") */
   label?: string;
+  /** Cloudflare Workers environment context (for server-side tracking) */
+  cloudflareEnv?: CloudflareEnv;
 }
 
 /**
@@ -206,7 +228,7 @@ export async function monitoredFetch(
   url: string,
   options: MonitoredFetchOptions = {}
 ): Promise<Response> {
-  const { skipTracking = false, label, ...fetchOptions } = options;
+  const { skipTracking = false, label, cloudflareEnv, ...fetchOptions } = options;
   const method = (fetchOptions.method || 'GET').toUpperCase();
   const startTime = nowMs();
   const { host, path } = parseUrl(url);
@@ -216,7 +238,7 @@ export async function monitoredFetch(
     if (skipTracking) return false;
 
     if (typeof window === 'undefined') {
-      return getServerPosthogConfig() !== null;
+      return getServerPosthogConfig(cloudflareEnv) !== null;
     }
 
     const posthog = await getPosthog();
@@ -257,7 +279,7 @@ export async function monitoredFetch(
         }
 
         if (typeof window === 'undefined') {
-          void captureServerEvent('api_request', eventData);
+          void captureServerEvent('api_request', eventData, cloudflareEnv);
           return;
         }
 
@@ -293,7 +315,7 @@ export async function monitoredFetch(
         }
 
         if (typeof window === 'undefined') {
-          void captureServerEvent('api_request', eventData);
+          void captureServerEvent('api_request', eventData, cloudflareEnv);
           return;
         }
 

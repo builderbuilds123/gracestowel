@@ -105,7 +105,7 @@ async function validateStock(
 
       const response = await monitoredFetch(
         `${medusaBackendUrl}/store/variants/${item.variantId}`,
-        { headers, method: "GET", label: "stock-variant" }
+        { headers, method: "GET", label: "stock-variant", cloudflareEnv: env }
       );
 
       if (!response.ok) {
@@ -305,6 +305,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
       headers,
       body: body.toString(),
       label: isUpdate ? "stripe-payment-intent-update" : "stripe-payment-intent-create",
+      cloudflareEnv: env,
     });
 
     if (!response.ok) {

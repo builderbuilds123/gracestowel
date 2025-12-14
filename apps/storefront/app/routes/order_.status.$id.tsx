@@ -48,6 +48,7 @@ export async function loader({ params, request, context }: LoaderFunctionArgs) {
             "x-modification-token": token,
         },
         label: "order-guest-view",
+        cloudflareEnv: env,
     });
 
     if (response.status === 401 || response.status === 403) {
@@ -141,6 +142,7 @@ export async function action({ params, request, context }: ActionFunctionArgs) {
                 headers,
                 body: JSON.stringify({ reason }),
                 label: "order-cancel",
+                cloudflareEnv: env,
             });
 
             if (!response.ok) {
@@ -166,6 +168,7 @@ export async function action({ params, request, context }: ActionFunctionArgs) {
                 headers,
                 body: JSON.stringify({ address }),
                 label: "order-address-update",
+                cloudflareEnv: env,
             });
 
             if (!response.ok) {
@@ -213,6 +216,7 @@ export async function action({ params, request, context }: ActionFunctionArgs) {
                     headers,
                     body: JSON.stringify({ variant_id: item.variant_id, quantity: item.quantity }),
                     label: "order-add-line-item",
+                    cloudflareEnv: env,
                 });
 
                 if (!response.ok) {
