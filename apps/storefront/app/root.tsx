@@ -35,17 +35,7 @@ if (typeof window !== 'undefined') {
     const runtimeConfig = (window as any).ENV;
     const buildTimeKey = import.meta.env.VITE_POSTHOG_API_KEY;
     const apiKey = runtimeConfig?.POSTHOG_API_KEY || buildTimeKey;
-    
-    // Debug PostHog config in development/staging
-    if (import.meta.env.MODE !== 'production') {
-      console.log('[PostHog Init] Config check:', {
-        runtimeKey: !!runtimeConfig?.POSTHOG_API_KEY,
-        buildTimeKey: !!buildTimeKey,
-        finalKey: !!apiKey,
-        host: runtimeConfig?.POSTHOG_HOST || import.meta.env.VITE_POSTHOG_HOST || 'https://us.i.posthog.com',
-      });
-    }
-    
+
     initPostHog();
     reportWebVitals();
     setupErrorTracking();
@@ -69,12 +59,10 @@ if (typeof window !== 'undefined') {
   // Otherwise wait for DOMContentLoaded (when EnvScript runs)
   if ((window as any).ENV) {
     initPostHogWhenReady();
-  } else {
+  } else if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initPostHogWhenReady);
-    // Fallback: if DOMContentLoaded already fired, initialize immediately
-    if (document.readyState !== 'loading') {
-      initPostHogWhenReady();
-    }
+  } else {
+    initPostHogWhenReady();
   }
 }
 

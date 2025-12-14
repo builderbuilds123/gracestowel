@@ -59,9 +59,6 @@ export function initPostHog() {
     
     // Enable autocapture for clicks and form submissions
     autocapture: true,
-    
-    // Respect user privacy
-    respect_dnt: true,
 
     // Explicitly enable persistence (localStorage+cookie) as per architecture policy
     persistence: 'localStorage+cookie',

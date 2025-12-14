@@ -20,12 +20,31 @@ type ServerPostHogConfig = {
 export type CloudflareEnv = {
   POSTHOG_API_KEY?: string;
   POSTHOG_HOST?: string;
+  POSTHOG_SERVER_CAPTURE_ENABLED?: string | boolean;
   [key: string]: unknown;
 };
 
 let posthogPromise: Promise<PostHogLike> | null = null;
 
+function parseBoolean(val: unknown): boolean {
+  if (typeof val === 'boolean') return val;
+  if (typeof val === 'string') {
+    return ['1', 'true', 'yes', 'on'].includes(val.toLowerCase());
+  }
+  return false;
+}
+
+function isServerCaptureEnabled(cloudflareEnv?: CloudflareEnv): boolean {
+  const envValue =
+    cloudflareEnv?.POSTHOG_SERVER_CAPTURE_ENABLED ??
+    (typeof process !== 'undefined' ? process.env.POSTHOG_SERVER_CAPTURE_ENABLED : undefined);
+
+  return parseBoolean(envValue);
+}
+
 function getServerPosthogConfig(cloudflareEnv?: CloudflareEnv): ServerPostHogConfig | null {
+  if (!isServerCaptureEnabled(cloudflareEnv)) return null;
+
   // Priority 1: Cloudflare Workers env (context.cloudflare.env)
   if (cloudflareEnv) {
     const apiKey = cloudflareEnv.POSTHOG_API_KEY;

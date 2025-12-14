@@ -27,6 +27,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
                         "Authorization": `Bearer ${STRIPE_SECRET_KEY}`,
                     },
                     label: "stripe-shipping-rate",
+                    skipTracking: true,
                     cloudflareEnv: env,
                 });
 
