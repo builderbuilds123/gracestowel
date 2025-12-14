@@ -65,24 +65,53 @@ export function getPostHog() {
 }
 
 /**
- * Report Web Vitals to PostHog
+ * Web Vitals metric structure from web-vitals v5
+ * @see https://github.com/GoogleChrome/web-vitals
+ */
+interface WebVitalMetric {
+  name: 'CLS' | 'INP' | 'LCP' | 'FCP' | 'TTFB';
+  value: number;
+  rating: 'good' | 'needs-improvement' | 'poor';
+  delta: number;
+  id: string;
+  navigationType: string;
+  entries: PerformanceEntry[];
+}
+
+/**
+ * Report Web Vitals to PostHog (Story 4.2)
+ * Captures Core Web Vitals: LCP, CLS, INP (replaces FID), FCP, TTFB
+ * Each metric includes a rating (good, needs-improvement, poor)
  */
 export function reportWebVitals() {
   if (typeof window === 'undefined') return;
 
   import('web-vitals').then(({ onCLS, onINP, onLCP, onFCP, onTTFB }) => {
-    const sendToPostHog = (metric: any) => {
-      posthog.capture('$performance_event', {
-        ...metric,
+    const sendToPostHog = (metric: WebVitalMetric) => {
+      posthog.capture('web_vitals', {
+        metric_name: metric.name,
+        metric_value: metric.value,
+        metric_rating: metric.rating, // AC2: good, needs-improvement, poor
+        metric_delta: metric.delta,
+        metric_id: metric.id,
+        navigation_type: metric.navigationType,
         url: window.location.href,
       });
+      
+      // Debug log in development
+      if (import.meta.env.MODE === 'development') {
+        console.log(`[WebVitals] ${metric.name}: ${metric.value.toFixed(2)} (${metric.rating})`);
+      }
     };
 
-    onCLS(sendToPostHog);
-    onINP(sendToPostHog);
-    onLCP(sendToPostHog);
-    onFCP(sendToPostHog);
-    onTTFB(sendToPostHog);
+    // Core Web Vitals
+    onCLS(sendToPostHog);  // Cumulative Layout Shift
+    onLCP(sendToPostHog);  // Largest Contentful Paint
+    onINP(sendToPostHog);  // Interaction to Next Paint (replaces FID)
+    
+    // Additional metrics
+    onFCP(sendToPostHog);  // First Contentful Paint
+    onTTFB(sendToPostHog); // Time to First Byte
   });
 }
 

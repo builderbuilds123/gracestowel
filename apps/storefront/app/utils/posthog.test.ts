@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { initPostHog, getPostHog, setupErrorTracking, captureException } from './posthog';
+import { initPostHog, getPostHog, setupErrorTracking, captureException, reportWebVitals } from './posthog';
 import posthog from 'posthog-js';
 
 // Mock posthog-js
@@ -14,6 +14,17 @@ vi.mock('posthog-js', () => {
     },
   };
 });
+
+// Mock web-vitals callbacks storage
+let webVitalsCallbacks: Record<string, (metric: any) => void> = {};
+
+vi.mock('web-vitals', () => ({
+  onCLS: vi.fn((cb) => { webVitalsCallbacks['CLS'] = cb; }),
+  onINP: vi.fn((cb) => { webVitalsCallbacks['INP'] = cb; }),
+  onLCP: vi.fn((cb) => { webVitalsCallbacks['LCP'] = cb; }),
+  onFCP: vi.fn((cb) => { webVitalsCallbacks['FCP'] = cb; }),
+  onTTFB: vi.fn((cb) => { webVitalsCallbacks['TTFB'] = cb; }),
+}));
 
 describe('PostHog Utilities', () => {
   beforeEach(() => {
@@ -271,6 +282,152 @@ describe('PostHog Utilities', () => {
           http_status: 500,
         }));
       });
+    });
+  });
+
+  describe('Web Vitals Tracking (Story 4.2)', () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+      webVitalsCallbacks = {};
+    });
+
+    it('should register callbacks for all Core Web Vitals metrics (AC1)', async () => {
+      const { onCLS, onINP, onLCP, onFCP, onTTFB } = await import('web-vitals');
+      
+      reportWebVitals();
+      
+      // Wait for dynamic import
+      await new Promise(resolve => setTimeout(resolve, 10));
+      
+      expect(onCLS).toHaveBeenCalled();
+      expect(onINP).toHaveBeenCalled();
+      expect(onLCP).toHaveBeenCalled();
+      expect(onFCP).toHaveBeenCalled();
+      expect(onTTFB).toHaveBeenCalled();
+    });
+
+    it('should capture web_vitals event with metric name and value (AC1)', async () => {
+      reportWebVitals();
+      
+      // Wait for dynamic import
+      await new Promise(resolve => setTimeout(resolve, 10));
+      
+      // Simulate LCP metric callback
+      const mockLCPMetric = {
+        name: 'LCP',
+        value: 2500,
+        rating: 'good',
+        delta: 2500,
+        id: 'v1-123',
+        navigationType: 'navigate',
+        entries: [],
+      };
+      
+      webVitalsCallbacks['LCP']?.(mockLCPMetric);
+      
+      expect(posthog.capture).toHaveBeenCalledWith('web_vitals', expect.objectContaining({
+        metric_name: 'LCP',
+        metric_value: 2500,
+      }));
+    });
+
+    it('should include rating in web_vitals event (AC2)', async () => {
+      reportWebVitals();
+      await new Promise(resolve => setTimeout(resolve, 10));
+      
+      // Test "good" rating
+      webVitalsCallbacks['CLS']?.({
+        name: 'CLS',
+        value: 0.05,
+        rating: 'good',
+        delta: 0.05,
+        id: 'v1-456',
+        navigationType: 'navigate',
+        entries: [],
+      });
+      
+      expect(posthog.capture).toHaveBeenCalledWith('web_vitals', expect.objectContaining({
+        metric_name: 'CLS',
+        metric_rating: 'good',
+      }));
+    });
+
+    it('should capture needs-improvement rating (AC2)', async () => {
+      reportWebVitals();
+      await new Promise(resolve => setTimeout(resolve, 10));
+      
+      webVitalsCallbacks['LCP']?.({
+        name: 'LCP',
+        value: 3000,
+        rating: 'needs-improvement',
+        delta: 3000,
+        id: 'v1-789',
+        navigationType: 'navigate',
+        entries: [],
+      });
+      
+      expect(posthog.capture).toHaveBeenCalledWith('web_vitals', expect.objectContaining({
+        metric_rating: 'needs-improvement',
+      }));
+    });
+
+    it('should capture poor rating (AC2)', async () => {
+      reportWebVitals();
+      await new Promise(resolve => setTimeout(resolve, 10));
+      
+      webVitalsCallbacks['CLS']?.({
+        name: 'CLS',
+        value: 0.3,
+        rating: 'poor',
+        delta: 0.3,
+        id: 'v1-abc',
+        navigationType: 'navigate',
+        entries: [],
+      });
+      
+      expect(posthog.capture).toHaveBeenCalledWith('web_vitals', expect.objectContaining({
+        metric_rating: 'poor',
+      }));
+    });
+
+    it('should include URL in web_vitals event', async () => {
+      reportWebVitals();
+      await new Promise(resolve => setTimeout(resolve, 10));
+      
+      webVitalsCallbacks['TTFB']?.({
+        name: 'TTFB',
+        value: 200,
+        rating: 'good',
+        delta: 200,
+        id: 'v1-def',
+        navigationType: 'navigate',
+        entries: [],
+      });
+      
+      expect(posthog.capture).toHaveBeenCalledWith('web_vitals', expect.objectContaining({
+        url: expect.any(String),
+      }));
+    });
+
+    it('should capture INP (replaces deprecated FID)', async () => {
+      reportWebVitals();
+      await new Promise(resolve => setTimeout(resolve, 10));
+      
+      webVitalsCallbacks['INP']?.({
+        name: 'INP',
+        value: 150,
+        rating: 'good',
+        delta: 150,
+        id: 'v1-inp',
+        navigationType: 'navigate',
+        entries: [],
+      });
+      
+      expect(posthog.capture).toHaveBeenCalledWith('web_vitals', expect.objectContaining({
+        metric_name: 'INP',
+        metric_value: 150,
+        metric_rating: 'good',
+      }));
     });
   });
 });
