@@ -1,4 +1,5 @@
 import { PostHog } from 'posthog-node';
+import { logger } from './logger';
 
 let posthogClient: PostHog | null = null;
 
@@ -36,7 +37,7 @@ export function initPostHog() {
       flushInterval: 0,
     });
 
-    console.log('[PostHog] Server-side tracking initialized');
+    logger.info('posthog', 'Server-side tracking initialized');
   }
 
   return posthogClient;
@@ -61,7 +62,7 @@ export async function shutdownPostHog() {
   if (posthogClient) {
     await posthogClient.shutdown();
     posthogClient = null;
-    console.log('[PostHog] Client shutdown');
+    logger.info('posthog', 'Client shutdown');
   }
 }
 
@@ -99,14 +100,17 @@ export function captureBackendError(error: Error, context: ErrorContext = {}) {
       order_id: context.orderId,
       payment_intent_id: context.paymentIntentId,
       
-      // Additional context
+      // Additional context (filter out reserved keys to prevent overwrites)
       ...Object.fromEntries(
         Object.entries(context).filter(([key]) => 
-          !['component', 'path', 'method', 'userId', 'orderId', 'paymentIntentId'].includes(key)
+          ![
+            'component', 'path', 'method', 'userId', 'orderId', 'paymentIntentId',
+            'environment', 'timestamp' // M1 fix: prevent overwriting system fields
+          ].includes(key)
         )
       ),
       
-      // Environment
+      // Environment (always set by system, not user context)
       environment: process.env.NODE_ENV || 'development',
       timestamp: new Date().toISOString(),
     },
