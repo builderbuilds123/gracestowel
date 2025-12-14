@@ -74,7 +74,9 @@ development_status:
   4-4-backend-error-tracking:
     path: docs/sprint/sprint-artifacts/4-4-backend-error-tracking.md
     status: done
-  4-5-health-check-monitoring: backlog
+  4-5-health-check-monitoring:
+    path: docs/sprint/sprint-artifacts/4-5-health-check-monitoring.md
+    status: done
   4-6-create-posthog-monitoring-dashboards: backlog
   epic-4-retrospective: optional
 
