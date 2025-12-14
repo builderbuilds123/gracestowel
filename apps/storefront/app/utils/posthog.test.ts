@@ -66,13 +66,13 @@ describe('PostHog Utilities', () => {
 
     it('should use default host if not provided', () => {
         vi.stubEnv('VITE_POSTHOG_API_KEY', 'ph_test_key');
-        // No host
+        vi.stubEnv('VITE_POSTHOG_HOST', ''); // Explicitly empty to test default
         vi.stubEnv('MODE', 'development');
 
           initPostHog();
 
           expect(posthog.init).toHaveBeenCalledWith('ph_test_key', expect.objectContaining({
-            api_host: 'https://app.posthog.com',
+            api_host: 'https://us.i.posthog.com',
           }));
     });
   });
