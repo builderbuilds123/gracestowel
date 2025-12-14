@@ -1,5 +1,5 @@
 /**
- * Monitored Fetch Utility (Story 4.3)
+ * Monitored Fetch Utility (Story 4.3, Enhanced in Story 5.1)
  * Wraps fetch calls to track API latency and errors in PostHog
  */
 
@@ -18,6 +18,15 @@ export interface ApiRequestEvent {
   request_path: string;
   request_host: string;
   label?: string;
+  route?: string; // Current page route (Story 5.1)
+}
+
+/**
+ * Get current route path (for tracking context)
+ */
+function getCurrentRoute(): string {
+  if (typeof window === 'undefined') return '';
+  return window.location.pathname;
 }
 
 /**
@@ -103,6 +112,8 @@ export async function monitoredFetch(
     
     const duration = Math.round(performance.now() - startTime);
     
+    const route = getCurrentRoute();
+    
     // Build event data based on whether we have a network error or HTTP response
     if (networkError) {
       // Network error case - fetch itself threw
@@ -115,6 +126,7 @@ export async function monitoredFetch(
         error_message: networkError.message,
         request_path: path,
         request_host: host,
+        route,
       };
       
       if (label) {
@@ -136,6 +148,7 @@ export async function monitoredFetch(
         success: response.ok,
         request_path: path,
         request_host: host,
+        route,
       };
       
       // Try to extract error message for non-ok responses
