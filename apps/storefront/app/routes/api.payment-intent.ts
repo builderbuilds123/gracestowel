@@ -88,7 +88,8 @@ function generateIdempotencyKey(
 async function validateStock(
   cartItems: CartItem[],
   medusaBackendUrl: string,
-  publishableKey?: string
+  publishableKey?: string,
+  cloudflareEnv?: any
 ): Promise<StockValidationResult> {
   const outOfStockItems: StockValidationResult["outOfStockItems"] = [];
 
@@ -105,7 +106,7 @@ async function validateStock(
 
       const response = await monitoredFetch(
         `${medusaBackendUrl}/store/variants/${item.variantId}`,
-        { headers, method: "GET", label: "stock-variant", cloudflareEnv: env }
+        { headers, method: "GET", label: "stock-variant", cloudflareEnv }
       );
 
       if (!response.ok) {
@@ -200,7 +201,8 @@ export async function action({ request, context }: ActionFunctionArgs) {
       const stockValidation = await validateStock(
         cartItems,
         medusaBackendUrl,
-        publishableKey
+        publishableKey,
+        env
       );
       if (!stockValidation.valid) {
         const itemMessages = stockValidation.outOfStockItems
