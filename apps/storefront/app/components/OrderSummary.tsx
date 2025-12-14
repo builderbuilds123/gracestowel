@@ -15,13 +15,6 @@ export interface OrderSummaryProps {
     onRemoveFromCart: (id: ProductId, color?: string) => void;
 }
 
-const FREE_GIFT_COLOR = 'Free Gift';
-const DRYER_BALL_ID = 4;
-
-function isFreeGift(item: CartItem): boolean {
-    return item.color === FREE_GIFT_COLOR;
-}
-
 export function OrderSummary({
     items,
     cartTotal,
@@ -110,9 +103,7 @@ interface OrderItemProps {
 }
 
 function OrderItem({ item, onUpdateQuantity, onRemove }: OrderItemProps) {
-    const isGift = isFreeGift(item);
-    const isDryerBall = item.id === DRYER_BALL_ID;
-    const isFreeItem = isDryerBall && item.price === '$0.00';
+    const isFree = item.price === '$0.00' || item.price === '0.00';
 
     return (
         <div className="flex gap-4">
@@ -123,46 +114,37 @@ function OrderItem({ item, onUpdateQuantity, onRemove }: OrderItemProps) {
                 <div className="flex justify-between items-start">
                     <div>
                         <h3 className="font-medium text-text-earthy truncate">{item.title}</h3>
-                        {item.color && !isDryerBall && (
+                        {item.color && (
                             <p className="text-xs text-text-earthy/60 mt-1">Color: {item.color}</p>
                         )}
                     </div>
-                    {!isGift && (
-                        <button
-                            onClick={() => onRemove(item.id, item.color)}
-                            className="text-text-earthy/40 hover:text-red-500 transition-colors cursor-pointer"
-                        >
-                            <X className="w-4 h-4" />
-                        </button>
-                    )}
+                    <button
+                        onClick={() => onRemove(item.id, item.color)}
+                        className="text-text-earthy/40 hover:text-red-500 transition-colors cursor-pointer"
+                    >
+                        <X className="w-4 h-4" />
+                    </button>
                 </div>
 
                 <div className="flex justify-between items-end mt-2">
                     <div className="flex items-center gap-3">
-                        {isFreeItem ? (
-                            <span className="text-sm text-text-earthy/60">Qty: {item.quantity}</span>
-                        ) : (
-                            <>
-                                <button
-                                    onClick={() => onUpdateQuantity(item.id, item.quantity - 1)}
-                                    className="p-1 rounded-full hover:bg-gray-100 border border-gray-200 transition-colors cursor-pointer"
-                                >
-                                    <Minus className="w-3 h-3" />
-                                </button>
-                                <span className="w-4 text-center text-sm">{item.quantity}</span>
-                                <button
-                                    onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
-                                    className="p-1 rounded-full hover:bg-gray-100 border border-gray-200 transition-colors cursor-pointer"
-                                >
-                                    <Plus className="w-3 h-3" />
-                                </button>
-                            </>
-                        )}
+                        <button
+                            onClick={() => onUpdateQuantity(item.id, item.quantity - 1)}
+                            className="p-1 rounded-full hover:bg-gray-100 border border-gray-200 transition-colors cursor-pointer"
+                        >
+                            <Minus className="w-3 h-3" />
+                        </button>
+                        <span className="w-4 text-center text-sm">{item.quantity}</span>
+                        <button
+                            onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
+                            className="p-1 rounded-full hover:bg-gray-100 border border-gray-200 transition-colors cursor-pointer"
+                        >
+                            <Plus className="w-3 h-3" />
+                        </button>
                     </div>
                     <ProductPrice
                         price={item.price}
                         originalPrice={item.originalPrice}
-                        showFreeLabel={isGift}
                     />
                 </div>
             </div>

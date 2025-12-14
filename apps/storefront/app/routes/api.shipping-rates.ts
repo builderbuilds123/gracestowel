@@ -1,86 +1,71 @@
 import { type ActionFunctionArgs, data } from "react-router";
-import { SITE_CONFIG } from "../config/site";
 import { monitoredFetch } from "../utils/monitored-fetch";
-
-// Get shipping configuration from centralized config
-const { rateIds: SHIPPING_RATES, groundShippingId: GROUND_SHIPPING_ID, freeThreshold: FREE_SHIPPING_THRESHOLD } = SITE_CONFIG.shipping;
 
 export async function action({ request, context }: ActionFunctionArgs) {
     if (request.method !== "POST") {
         return data({ message: "Method not allowed" }, { status: 405 });
     }
 
-    const { subtotal } = await request.json() as {
-        subtotal: number;
+    // Access full Cloudflare env
+    const env = context.cloudflare.env as {
+        MEDUSA_BACKEND_URL?: string;
+        MEDUSA_PUBLISHABLE_KEY?: string;
+        [key: string]: unknown;
     };
 
-    // Access full Cloudflare env to include PostHog config for monitoredFetch
-    const env = context.cloudflare.env as {
-      STRIPE_SECRET_KEY: string;
-      POSTHOG_API_KEY?: string;
-      POSTHOG_HOST?: string;
-      POSTHOG_SERVER_CAPTURE_ENABLED?: string | boolean;
-      [key: string]: unknown;
-    };
-    const STRIPE_SECRET_KEY = env.STRIPE_SECRET_KEY;
+    const medusaBackendUrl = env.MEDUSA_BACKEND_URL || "http://localhost:9000";
+    const medusaPublishableKey = env.MEDUSA_PUBLISHABLE_KEY || "";
 
     try {
-        // Fetch shipping rates from Stripe
-        const shippingOptions = await Promise.all(
-            SHIPPING_RATES.map(async (rateId) => {
-                const response = await monitoredFetch(`https://api.stripe.com/v1/shipping_rates/${rateId}`, {
-                    method: "GET",
-                    headers: {
-                        "Authorization": `Bearer ${STRIPE_SECRET_KEY}`,
-                    },
-                    label: "stripe-shipping-rate",
-                    skipTracking: true,
-                    cloudflareEnv: env,
-                });
+        // 1. Get Regions (to find default currency/region)
+        // In a real app, this should come from the user's session or selection
+        const regionsResponse = await monitoredFetch(`${medusaBackendUrl}/store/regions`, {
+            method: "GET",
+            headers: {
+                "x-publishable-api-key": medusaPublishableKey,
+            },
+            label: "medusa-regions",
+        });
 
-                if (!response.ok) {
-                    throw new Error(`Failed to fetch shipping rate ${rateId}`);
-                }
+        if (!regionsResponse.ok) {
+            throw new Error("Failed to fetch regions");
+        }
 
-                const rate = await response.json() as {
-                    id: string;
-                    display_name: string;
-                    fixed_amount: { amount: number; currency: string };
-                    delivery_estimate?: { maximum?: { unit: string; value: number }; minimum?: { unit: string; value: number } };
-                };
+        const { regions } = await regionsResponse.json() as { regions: any[] };
+        const region = regions[0]; // Default to first region
 
-                // Apply free shipping logic for ground shipping
-                const isGroundShipping = rateId === GROUND_SHIPPING_ID;
-                const isFreeShipping = isGroundShipping && subtotal >= FREE_SHIPPING_THRESHOLD;
+        if (!region) {
+            throw new Error("No regions found");
+        }
 
-                // Stripe returns fixed_amount.amount in cents (smallest currency unit)
-                // Keep it in cents for consistency with display components
-                const originalAmountCents = rate.fixed_amount.amount;
-                const amountCents = isFreeShipping ? 0 : originalAmountCents;
+        // 2. Fetch Shipping Options for the region
+        const optionsResponse = await monitoredFetch(`${medusaBackendUrl}/store/shipping-options?region_id=${region.id}`, {
+            method: "GET",
+            headers: {
+                "x-publishable-api-key": medusaPublishableKey,
+            },
+            label: "medusa-shipping-options",
+        });
 
-                console.log(`Shipping rate ${rate.display_name}:`, {
-                    isGroundShipping,
-                    subtotal,
-                    threshold: FREE_SHIPPING_THRESHOLD,
-                    isFreeShipping,
-                    originalAmountCents,
-                    finalAmountCents: amountCents
-                });
+        if (!optionsResponse.ok) {
+            throw new Error("Failed to fetch shipping options");
+        }
 
-                return {
-                    id: rate.id,
-                    displayName: rate.display_name,
-                    amount: amountCents,
-                    originalAmount: originalAmountCents, // Always include original price in cents
-                    deliveryEstimate: rate.delivery_estimate ?
-                        `${rate.delivery_estimate.minimum?.value || ''}-${rate.delivery_estimate.maximum?.value || ''} ${rate.delivery_estimate.maximum?.unit || 'days'}` :
-                        null,
-                    isFree: isFreeShipping
-                };
-            })
-        );
+        const { shipping_options } = await optionsResponse.json() as { shipping_options: any[] };
 
-        return { shippingOptions };
+        // 3. Map to frontend format
+        // We do NOT apply any client-side price overrides. We trust Medusa.
+        const formattedOptions = shipping_options.map((option) => ({
+            id: option.id,
+            displayName: option.name,
+            amount: option.amount, // Medusa returns amount in cents (usually)
+            originalAmount: option.amount,
+            deliveryEstimate: null, // Medusa doesn't standardly return this, could be in metadata
+            isFree: option.amount === 0,
+        }));
+
+        return { shippingOptions: formattedOptions };
+
     } catch (error: any) {
         console.error("Error fetching shipping rates:", error);
         return data({ message: `Error fetching shipping rates: ${error.message || error}` }, { status: 500 });

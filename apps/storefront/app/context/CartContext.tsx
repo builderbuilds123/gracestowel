@@ -1,9 +1,7 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { productList } from '../data/products';
-import { parsePrice, calculateTotal } from '../lib/price';
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { calculateTotal } from '../lib/price';
 import type { ProductId, CartItem, EmbroideryData } from '../types/product';
 import { productIdsEqual } from '../types/product';
-import { SITE_CONFIG } from '../config/site';
 
 // Re-export CartItem for backwards compatibility
 export type { CartItem, EmbroideryData } from '../types/product';
@@ -37,54 +35,6 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     useEffect(() => {
         localStorage.setItem('cart', JSON.stringify(items));
     }, [items]);
-
-    // Free gift configuration from centralized site config
-    const { freeGift } = SITE_CONFIG.cart;
-    const FREE_GIFT_CONFIG = {
-        legacyId: freeGift.legacyId as ProductId,
-        handle: freeGift.handle as ProductId,
-        threshold: freeGift.threshold,
-        giftColor: freeGift.label,
-    };
-
-    // Helper to check if an item is the free gift
-    const isFreeGiftItem = useCallback((item: CartItem): boolean => {
-        return (
-            (productIdsEqual(item.id, FREE_GIFT_CONFIG.legacyId) ||
-             productIdsEqual(item.id, FREE_GIFT_CONFIG.handle)) &&
-            item.color === FREE_GIFT_CONFIG.giftColor
-        );
-    }, []);
-
-    // Auto-add Free Wool Dryer Ball
-    useEffect(() => {
-        const { legacyId, threshold, giftColor } = FREE_GIFT_CONFIG;
-
-        // Get product info from centralized data (fallback for static products)
-        const giftProduct = productList.find(p => p.id === legacyId);
-        if (!giftProduct) return;
-
-        // Calculate total excluding the free gift using the new price utility
-        const qualifyingItems = items.filter(item => !isFreeGiftItem(item));
-        const qualifyingTotal = calculateTotal(qualifyingItems);
-
-        const hasFreeGift = items.some(isFreeGiftItem);
-
-        if (qualifyingTotal >= threshold && !hasFreeGift) {
-            addToCart({
-                id: legacyId,
-                title: giftProduct.title,
-                price: "$0.00",
-                originalPrice: giftProduct.formattedPrice,
-                image: giftProduct.images[0],
-                quantity: 1,
-                color: giftColor,
-                embroidery: undefined
-            });
-        } else if (qualifyingTotal < threshold && hasFreeGift) {
-            removeFromCart(legacyId, giftColor);
-        }
-    }, [items, isFreeGiftItem]);
 
     const addToCart = (newItem: Omit<CartItem, 'quantity'> & { quantity?: number }) => {
         setItems(prevItems => {
