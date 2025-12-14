@@ -86,4 +86,87 @@ export function reportWebVitals() {
   });
 }
 
+/**
+ * Setup global error tracking for PostHog (Story 4.1)
+ * Captures unhandled errors and promise rejections
+ * Chains with existing handlers to avoid clobbering other error trackers (M1 fix)
+ */
+export function setupErrorTracking() {
+  if (typeof window === 'undefined') return;
+
+  // Store existing handlers to chain them (M1: Don't clobber other error trackers)
+  const prevOnerror = window.onerror;
+  const prevOnunhandledrejection = window.onunhandledrejection;
+
+  // Track unhandled JavaScript errors
+  window.onerror = (message, source, lineno, colno, error) => {
+    posthog.capture('$exception', {
+      $exception_type: error?.name || 'Error',
+      $exception_message: typeof message === 'string' ? message : 'Unknown error',
+      $exception_source: source,
+      $exception_lineno: lineno,
+      $exception_colno: colno,
+      $exception_stack_trace_raw: error?.stack,
+      $exception_handled: false,
+      $exception_synthetic: false,
+      url: window.location.href,
+      user_agent: navigator.userAgent,
+    });
+    
+    // Chain to previous handler if it exists
+    if (prevOnerror) {
+      return prevOnerror(message, source, lineno, colno, error);
+    }
+    
+    // Don't prevent default error handling
+    return false;
+  };
+
+  // Track unhandled promise rejections
+  window.onunhandledrejection = (event: PromiseRejectionEvent) => {
+    const error = event.reason;
+    const isError = error instanceof Error;
+    
+    posthog.capture('$exception', {
+      $exception_type: isError ? error.name : 'UnhandledPromiseRejection',
+      $exception_message: isError ? error.message : String(error),
+      $exception_stack_trace_raw: isError ? error.stack : undefined,
+      $exception_handled: false,
+      $exception_synthetic: false,
+      $exception_is_promise_rejection: true,
+      url: window.location.href,
+      user_agent: navigator.userAgent,
+    });
+    
+    // Chain to previous handler if it exists
+    if (prevOnunhandledrejection) {
+      prevOnunhandledrejection.call(window, event);
+    }
+  };
+
+  // Only log in development (L1 fix)
+  if (import.meta.env.MODE === 'development') {
+    console.log('[PostHog] Error tracking initialized');
+  }
+}
+
+/**
+ * Capture a handled exception manually
+ * Use this to track errors that are caught but still significant
+ */
+export function captureException(error: Error, context?: Record<string, unknown>) {
+  if (typeof window === 'undefined') return;
+  
+  posthog.capture('$exception', {
+    $exception_type: error.name,
+    $exception_message: error.message,
+    $exception_stack_trace_raw: error.stack,
+    $exception_handled: true,
+    $exception_synthetic: false,
+    url: window.location.href,
+    user_agent: navigator.userAgent, // L2 fix: consistent with auto-captured exceptions
+    ...context,
+  });
+}
+
 export default posthog;

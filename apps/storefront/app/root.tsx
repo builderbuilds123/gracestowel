@@ -17,13 +17,15 @@ import { WishlistProvider } from "./context/WishlistContext";
 import { CartDrawer } from "./components/CartDrawer";
 import { Header } from "./components/Header";
 import { Footer } from "./components/Footer";
-import { initPostHog, reportWebVitals } from "./utils/posthog";
+import { initPostHog, reportWebVitals, setupErrorTracking, captureException } from "./utils/posthog";
+import posthog from "posthog-js";
 import "./app.css";
 
 // Initialize PostHog on client-side only
 if (typeof window !== 'undefined') {
   initPostHog();
   reportWebVitals();
+  setupErrorTracking();
 }
 
 export async function loader({ context }: Route.LoaderArgs) {
@@ -135,19 +137,23 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
     stack = error.stack;
   }
 
-  // Capture error in PostHog
+  // Capture error in PostHog using standard $exception format (Story 4.1)
+  // M2 fix: Use direct import instead of dynamic import to avoid missing errors
   if (typeof window !== 'undefined' && error) {
-    import('./utils/posthog').then(({ default: posthog }) => {
-      posthog.capture('exception', {
-        properties: {
-          message: message,
-          details: details,
-          stack: stack,
-          is_route_error: isRouteErrorResponse(error),
-          status: isRouteErrorResponse(error) ? error.status : undefined,
-          url: window.location.href,
-        }
-      });
+    const isRouteError = isRouteErrorResponse(error);
+    const errorObj = error instanceof Error ? error : null;
+    
+    posthog.capture('$exception', {
+      $exception_type: isRouteError ? 'RouteError' : (errorObj?.name || 'Error'),
+      $exception_message: details,
+      $exception_stack_trace_raw: stack,
+      $exception_handled: true, // ErrorBoundary caught it
+      $exception_synthetic: false,
+      $exception_source: 'ErrorBoundary',
+      is_route_error: isRouteError,
+      route_status: isRouteError ? error.status : undefined,
+      url: window.location.href,
+      user_agent: navigator.userAgent,
     });
   }
 
