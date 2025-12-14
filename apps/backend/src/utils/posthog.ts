@@ -80,7 +80,18 @@ export function captureBackendError(error: Error, context: ErrorContext = {}) {
   const client = getPostHog();
   if (!client) return;
 
-  const distinctId = context.userId || 'system';
+  // Destructure known keys, collect rest for additional context
+  const {
+    userId,
+    component,
+    path,
+    method,
+    orderId,
+    paymentIntentId,
+    ...restOfContext
+  } = context;
+
+  const distinctId = userId || 'system';
 
   client.capture({
     distinctId,
@@ -92,25 +103,18 @@ export function captureBackendError(error: Error, context: ErrorContext = {}) {
       $exception_stack_trace_raw: error.stack,
       
       // Context
-      component: context.component || 'unknown',
-      path: context.path,
-      method: context.method,
+      component: component || 'unknown',
+      path,
+      method,
       
       // Business context (if available)
-      order_id: context.orderId,
-      payment_intent_id: context.paymentIntentId,
+      order_id: orderId,
+      payment_intent_id: paymentIntentId,
       
-      // Additional context (filter out reserved keys to prevent overwrites)
-      ...Object.fromEntries(
-        Object.entries(context).filter(([key]) => 
-          ![
-            'component', 'path', 'method', 'userId', 'orderId', 'paymentIntentId',
-            'environment', 'timestamp' // M1 fix: prevent overwriting system fields
-          ].includes(key)
-        )
-      ),
+      // Additional context (rest params exclude known keys automatically)
+      ...restOfContext,
       
-      // Environment (always set by system, not user context)
+      // Environment (always set by system, overwrites any user-provided values)
       environment: process.env.NODE_ENV || 'development',
       timestamp: new Date().toISOString(),
     },

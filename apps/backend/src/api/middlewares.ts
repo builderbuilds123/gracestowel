@@ -20,12 +20,13 @@ function errorHandlerMiddleware(
     res: MedusaResponse,
     next: MedusaNextFunction
 ) {
-    // Extract context from request
+    // Extract context from request (with explicit type cast for user/customer)
+    const { user, customer } = req as { user?: { id: string }; customer?: { id: string } };
     const context = {
         component: 'api',
         path: req.path,
         method: req.method,
-        userId: (req as any).user?.id || (req as any).customer?.id,
+        userId: user?.id || customer?.id,
     };
 
     // Log the error
