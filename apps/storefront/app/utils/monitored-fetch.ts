@@ -17,6 +17,7 @@ export interface ApiRequestEvent {
   error_message?: string;
   request_path: string;
   request_host: string;
+  label?: string;
 }
 
 /**
@@ -133,7 +134,7 @@ export async function monitoredFetch(
       
       // Add label if provided
       if (label) {
-        (eventData as any).label = label;
+        eventData.label = label;
       }
       
       posthog.capture('api_request', eventData);
