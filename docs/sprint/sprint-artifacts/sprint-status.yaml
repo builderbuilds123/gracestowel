@@ -84,8 +84,9 @@ development_status:
   epic-5-enhanced-analytics: in-progress
   5-1-comprehensive-frontend-tracking:
     path: docs/sprint/sprint-artifacts/5-1-comprehensive-frontend-tracking.md
-    status: ready-for-dev
+    status: done
     meta: "PRD Growth Features: Track users' every move. API calls, navigation, scroll, engagement, forms."
+    completed: "2025-12-14"
   5-2-posthog-ci-env-fix:
     status: done
     meta: "Fixed VITE_POSTHOG_API_KEY and VITE_POSTHOG_HOST injection in CI/CD build step."
