@@ -11,6 +11,7 @@ import { ProductDetails } from "../components/ProductDetails";
 import { RelatedProducts } from "../components/RelatedProducts";
 import { getMedusaClient, castToMedusaProduct, type MedusaProduct, getBackendUrl, getStockStatus, validateMedusaProduct } from "../lib/medusa";
 import { transformToDetail, transformToListItem, type ProductDetail, type ProductListItem } from "../lib/product-transformer";
+import { monitoredFetch } from "../utils/monitored-fetch";
 
 // SEO Meta tags for product pages
 export function meta({ data }: Route.MetaArgs) {
@@ -49,7 +50,10 @@ export function meta({ data }: Route.MetaArgs) {
 // Fetch reviews from the backend
 async function fetchReviews(productId: string, backendUrl: string, sort = "newest") {
     try {
-        const response = await fetch(`${backendUrl}/store/products/${productId}/reviews?sort=${sort}&limit=10`);
+        const response = await monitoredFetch(`${backendUrl}/store/products/${productId}/reviews?sort=${sort}&limit=10`, {
+            method: "GET",
+            label: "product-reviews",
+        });
         if (response.ok) {
             return await response.json();
         }
@@ -147,7 +151,10 @@ export default function ProductDetail({ loaderData }: Route.ComponentProps) {
     const handleSortChange = useCallback(async (sort: string) => {
         setReviewSort(sort);
         try {
-            const response = await fetch(`${backendUrl}/store/products/${product.id}/reviews?sort=${sort}&limit=10`);
+            const response = await monitoredFetch(`${backendUrl}/store/products/${product.id}/reviews?sort=${sort}&limit=10`, {
+                method: "GET",
+                label: "product-reviews",
+            });
             if (response.ok) {
                 const data = (await response.json()) as { reviews: Review[] };
                 setReviews(data.reviews);
@@ -160,10 +167,11 @@ export default function ProductDetail({ loaderData }: Route.ComponentProps) {
     const handleSubmitReview = async (reviewData: { rating: number; title: string; content: string; customer_name: string; customer_email?: string }) => {
         setIsSubmittingReview(true);
         try {
-            const response = await fetch(`${backendUrl}/store/products/${product.id}/reviews`, {
+            const response = await monitoredFetch(`${backendUrl}/store/products/${product.id}/reviews`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(reviewData),
+                label: "product-review-submit",
             });
             if (!response.ok) {
                 const error = (await response.json()) as { message?: string };

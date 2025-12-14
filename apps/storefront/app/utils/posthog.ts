@@ -16,6 +16,9 @@ function getSanitizedUrl(): string {
 /**
  * Initialize PostHog for client-side analytics and monitoring
  * Only active in production or when explicitly enabled via env var
+ * 
+ * Supports both build-time (VITE_*) and runtime (window.ENV) configuration
+ * Runtime config from Cloudflare Workers takes precedence
  */
 export function initPostHog() {
   // Only initialize in browser environment
@@ -23,12 +26,19 @@ export function initPostHog() {
     return;
   }
 
-  const apiKey = import.meta.env.VITE_POSTHOG_API_KEY;
-  const host = import.meta.env.VITE_POSTHOG_HOST || 'https://us.i.posthog.com';
+  // Try runtime config first (from Cloudflare Workers via window.ENV)
+  // Fallback to build-time config (VITE_* env vars)
+  const runtimeConfig = (window as any).ENV;
+  const apiKey = runtimeConfig?.POSTHOG_API_KEY || import.meta.env.VITE_POSTHOG_API_KEY;
+  const host = runtimeConfig?.POSTHOG_HOST || import.meta.env.VITE_POSTHOG_HOST || 'https://us.i.posthog.com';
   
   // Only initialize if API key is provided
   if (!apiKey) {
     console.warn('[PostHog] API key not configured. Skipping initialization.');
+    console.warn('[PostHog] Checked:', {
+      runtime: !!runtimeConfig?.POSTHOG_API_KEY,
+      buildTime: !!import.meta.env.VITE_POSTHOG_API_KEY,
+    });
     return;
   }
 
@@ -49,9 +59,6 @@ export function initPostHog() {
     
     // Enable autocapture for clicks and form submissions
     autocapture: true,
-    
-    // Respect user privacy
-    respect_dnt: true,
 
     // Explicitly enable persistence (localStorage+cookie) as per architecture policy
     persistence: 'localStorage+cookie',

@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
+import { monitoredFetch } from "../utils/monitored-fetch";
 
 /**
  * Medusa API configuration
- * Uses environment variable or falls back to localhost for development
+ * Uses global ENV injected by server or falls back to localhost
  */
-const MEDUSA_API_URL = typeof process !== 'undefined' 
-    ? (process.env.MEDUSA_BACKEND_URL || "http://localhost:9000")
-    : "http://localhost:9000";
+const MEDUSA_API_URL = typeof window !== 'undefined'
+    ? (window as unknown as { ENV?: { MEDUSA_BACKEND_URL?: string } }).ENV?.MEDUSA_BACKEND_URL || "http://localhost:9000"
+    : (typeof process !== 'undefined' ? process.env.MEDUSA_BACKEND_URL : "http://localhost:9000");
 
 /**
  * Product type matching Medusa's store API response
@@ -61,11 +62,12 @@ export function useMedusaProducts(): UseMedusaProductsResult {
         setError(null);
         
         try {
-            const response = await fetch(`${MEDUSA_API_URL}/store/products`, {
+            const response = await monitoredFetch(`${MEDUSA_API_URL}/store/products`, {
                 headers: {
                     "Content-Type": "application/json",
                 },
                 credentials: "include",
+                label: "medusa-products",
             });
 
             if (!response.ok) {
@@ -107,13 +109,14 @@ export function useMedusaProduct(handle: string): UseMedusaProductResult {
         setError(null);
 
         try {
-            const response = await fetch(
+            const response = await monitoredFetch(
                 `${MEDUSA_API_URL}/store/products?handle=${encodeURIComponent(handle)}`,
                 {
                     headers: {
                         "Content-Type": "application/json",
                     },
                     credentials: "include",
+                    label: "medusa-product-by-handle",
                 }
             );
 

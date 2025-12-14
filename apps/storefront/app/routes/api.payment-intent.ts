@@ -1,6 +1,7 @@
 import { type ActionFunctionArgs, data } from "react-router";
 import { toCents } from "../lib/price";
 import { createLogger, getTraceIdFromRequest } from "../lib/logger";
+import { monitoredFetch, type CloudflareEnv } from "../utils/monitored-fetch";
 
 interface CartItem {
   id: string | number;
@@ -87,7 +88,8 @@ function generateIdempotencyKey(
 async function validateStock(
   cartItems: CartItem[],
   medusaBackendUrl: string,
-  publishableKey?: string
+  publishableKey?: string,
+  cloudflareEnv?: CloudflareEnv
 ): Promise<StockValidationResult> {
   const outOfStockItems: StockValidationResult["outOfStockItems"] = [];
 
@@ -102,9 +104,9 @@ async function validateStock(
         headers["x-publishable-api-key"] = publishableKey;
       }
 
-      const response = await fetch(
+      const response = await monitoredFetch(
         `${medusaBackendUrl}/store/variants/${item.variantId}`,
-        { headers }
+        { headers, method: "GET", label: "stock-variant", cloudflareEnv }
       );
 
       if (!response.ok) {
@@ -165,10 +167,15 @@ export async function action({ request, context }: ActionFunctionArgs) {
     paymentIntentId,
   } = (await request.json()) as PaymentIntentRequest;
 
+  // Access full Cloudflare env to include PostHog config for monitoredFetch
   const env = context.cloudflare.env as {
     STRIPE_SECRET_KEY: string;
     MEDUSA_BACKEND_URL?: string;
     MEDUSA_PUBLISHABLE_KEY?: string;
+    POSTHOG_API_KEY?: string;
+    POSTHOG_HOST?: string;
+    POSTHOG_SERVER_CAPTURE_ENABLED?: string | boolean;
+    [key: string]: unknown;
   };
   const STRIPE_SECRET_KEY = env.STRIPE_SECRET_KEY;
   const medusaBackendUrl = env.MEDUSA_BACKEND_URL || "http://localhost:9000";
@@ -199,7 +206,8 @@ export async function action({ request, context }: ActionFunctionArgs) {
       const stockValidation = await validateStock(
         cartItems,
         medusaBackendUrl,
-        publishableKey
+        publishableKey,
+        env
       );
       if (!stockValidation.valid) {
         const itemMessages = stockValidation.outOfStockItems
@@ -299,17 +307,21 @@ export async function action({ request, context }: ActionFunctionArgs) {
       amount: totalAmount,
     });
 
-    const response = await fetch(url, {
+    const response = await monitoredFetch(url, {
       method: "POST",
       headers,
       body: body.toString(),
+      label: isUpdate ? "stripe-payment-intent-update" : "stripe-payment-intent-create",
+      skipTracking: true,
+      cloudflareEnv: env,
     });
 
     if (!response.ok) {
       const errorText = await response.text();
       logger.error("Stripe API error", new Error(errorText), {
+        status: response.status,
         paymentIntentId,
-        statusCode: response.status,
+        operation: isUpdate ? "update" : "create",
       });
       return data(
         { message: "Payment initialization failed", traceId },

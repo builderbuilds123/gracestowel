@@ -1,4 +1,5 @@
 import { type ActionFunctionArgs, data } from "react-router";
+import { monitoredFetch } from "../utils/monitored-fetch";
 
 export async function action({ request, context }: ActionFunctionArgs) {
     if (request.method !== "POST") {
@@ -11,7 +12,14 @@ export async function action({ request, context }: ActionFunctionArgs) {
         items: Array<{ title: string; price: string; quantity: number; image: string }>;
     };
 
-    const env = context.cloudflare.env as { STRIPE_SECRET_KEY: string };
+    // Access full Cloudflare env to include PostHog config for monitoredFetch
+    const env = context.cloudflare.env as {
+      STRIPE_SECRET_KEY: string;
+      POSTHOG_API_KEY?: string;
+      POSTHOG_HOST?: string;
+      POSTHOG_SERVER_CAPTURE_ENABLED?: string | boolean;
+      [key: string]: unknown;
+    };
     const STRIPE_SECRET_KEY = env.STRIPE_SECRET_KEY;
 
     try {
@@ -35,13 +43,16 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
         console.log("Creating checkout session via fetch...");
 
-        const response = await fetch("https://api.stripe.com/v1/checkout/sessions", {
+        const response = await monitoredFetch("https://api.stripe.com/v1/checkout/sessions", {
             method: "POST",
             headers: {
                 "Authorization": `Bearer ${STRIPE_SECRET_KEY}`,
                 "Content-Type": "application/x-www-form-urlencoded",
             },
             body: body.toString(),
+            label: "stripe-checkout-session",
+            skipTracking: true,
+            cloudflareEnv: env,
         });
 
         if (!response.ok) {

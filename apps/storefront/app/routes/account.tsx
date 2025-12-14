@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { useCustomer, getAuthToken } from '../context/CustomerContext';
+import { monitoredFetch } from '../utils/monitored-fetch';
 import { Package, MapPin, User, LogOut, ChevronRight } from 'lucide-react';
 
 export function meta() {
@@ -50,11 +51,13 @@ export default function AccountPage() {
             if (!token) return;
 
             try {
-                const response = await fetch(`${MEDUSA_BACKEND_URL}/store/orders`, {
+                const response = await monitoredFetch(`${MEDUSA_BACKEND_URL}/store/orders`, {
+                    method: 'GET',
                     headers: {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${token}`,
                     },
+                    label: 'account-orders',
                 });
 
                 if (response.ok) {
