@@ -24,7 +24,7 @@ export function initPostHog() {
   }
 
   const apiKey = import.meta.env.VITE_POSTHOG_API_KEY;
-  const host = import.meta.env.VITE_POSTHOG_HOST || 'https://app.posthog.com';
+  const host = import.meta.env.VITE_POSTHOG_HOST || 'https://us.i.posthog.com';
   
   // Only initialize if API key is provided
   if (!apiKey) {

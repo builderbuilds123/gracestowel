@@ -353,6 +353,9 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build Storefront
+        env:
+          VITE_POSTHOG_API_KEY: ${{ secrets.VITE_POSTHOG_API_KEY }}
+          VITE_POSTHOG_HOST: https://us.i.posthog.com
         run: pnpm turbo run build --filter=apps-storefront
 
       - name: Patch wrangler config for staging
@@ -406,6 +409,9 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build Storefront
+        env:
+          VITE_POSTHOG_API_KEY: ${{ secrets.VITE_POSTHOG_API_KEY }}
+          VITE_POSTHOG_HOST: https://us.i.posthog.com
         run: pnpm turbo run build --filter=apps-storefront
 
       - name: Patch wrangler config for production

@@ -80,6 +80,17 @@ development_status:
   4-6-create-posthog-monitoring-dashboards: backlog
   epic-4-retrospective: optional
 
+  # --- Enhanced Analytics (Growth Features from PRD) ---
+  epic-5-enhanced-analytics: in-progress
+  5-1-comprehensive-frontend-tracking:
+    path: docs/sprint/sprint-artifacts/5-1-comprehensive-frontend-tracking.md
+    status: ready-for-dev
+    meta: "PRD Growth Features: Track users' every move. API calls, navigation, scroll, engagement, forms."
+  5-2-posthog-ci-env-fix:
+    status: done
+    meta: "Fixed VITE_POSTHOG_API_KEY and VITE_POSTHOG_HOST injection in CI/CD build step."
+  epic-5-retrospective: optional
+
   # --- Cookie Policy Epics (from docs/product/epics/cookie-policy.md) ---
   cp-epic-1: backlog
   cp-1-1-create-cookie-policy-popup: backlog
