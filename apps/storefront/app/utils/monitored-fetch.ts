@@ -18,6 +18,8 @@ type ServerPostHogConfig = {
  * In Workers, env vars are accessed via context.cloudflare.env, not process.env
  */
 export type CloudflareEnv = {
+  VITE_POSTHOG_API_KEY?: string;
+  VITE_POSTHOG_HOST?: string;
   POSTHOG_API_KEY?: string;
   POSTHOG_HOST?: string;
   POSTHOG_SERVER_CAPTURE_ENABLED?: string | boolean;
@@ -48,8 +50,8 @@ function getServerPosthogConfig(cloudflareEnv?: CloudflareEnv): ServerPostHogCon
   // Priority 1: Cloudflare Workers env (context.cloudflare.env)
   // This is the ONLY way to access env vars in Cloudflare Workers
   if (cloudflareEnv) {
-    const apiKey = cloudflareEnv.POSTHOG_API_KEY;
-    const host = cloudflareEnv.POSTHOG_HOST ?? 'https://us.i.posthog.com';
+    const apiKey = cloudflareEnv.VITE_POSTHOG_API_KEY || cloudflareEnv.POSTHOG_API_KEY;
+    const host = cloudflareEnv.VITE_POSTHOG_HOST || cloudflareEnv.POSTHOG_HOST || 'https://us.i.posthog.com';
     if (apiKey && typeof apiKey === 'string') {
       return { apiKey, host };
     }
@@ -65,16 +67,18 @@ function getServerPosthogConfig(cloudflareEnv?: CloudflareEnv): ServerPostHogCon
 
   // Node.js SSR fallback (only works outside Cloudflare Workers)
   const globalEnv = (globalThis as any).ENV as
-    | { POSTHOG_API_KEY?: string; POSTHOG_HOST?: string }
+    | { VITE_POSTHOG_API_KEY?: string; VITE_POSTHOG_HOST?: string; POSTHOG_API_KEY?: string; POSTHOG_HOST?: string }
     | undefined;
 
   const apiKey =
+    globalEnv?.VITE_POSTHOG_API_KEY ??
     globalEnv?.POSTHOG_API_KEY ??
-    (typeof process !== 'undefined' ? process.env.POSTHOG_API_KEY : undefined);
+    (typeof process !== 'undefined' ? (process.env.VITE_POSTHOG_API_KEY || process.env.POSTHOG_API_KEY) : undefined);
 
   const host =
+    globalEnv?.VITE_POSTHOG_HOST ??
     globalEnv?.POSTHOG_HOST ??
-    (typeof process !== 'undefined' ? process.env.POSTHOG_HOST : undefined) ??
+    (typeof process !== 'undefined' ? (process.env.VITE_POSTHOG_HOST || process.env.POSTHOG_HOST) : undefined) ??
     'https://us.i.posthog.com';
 
   if (!apiKey) return null;

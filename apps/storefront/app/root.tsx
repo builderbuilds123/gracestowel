@@ -34,7 +34,7 @@ if (typeof window !== 'undefined') {
   const initPostHogWhenReady = () => {
     const runtimeConfig = (window as any).ENV;
     const buildTimeKey = import.meta.env.VITE_POSTHOG_API_KEY;
-    const apiKey = runtimeConfig?.POSTHOG_API_KEY || buildTimeKey;
+    const apiKey = runtimeConfig?.VITE_POSTHOG_API_KEY || runtimeConfig?.POSTHOG_API_KEY || buildTimeKey;
 
     initPostHog();
     reportWebVitals();
@@ -105,14 +105,18 @@ export async function loader({ context }: Route.LoaderArgs) {
   }
   
   // Extract PostHog config from Cloudflare Workers env (runtime) or fallback to build-time
-  const posthogApiKey = (env as any).VITE_POSTHOG_API_KEY || import.meta.env.VITE_POSTHOG_API_KEY;
-  const posthogHost = (env as any).VITE_POSTHOG_HOST || import.meta.env.VITE_POSTHOG_HOST || 'https://us.i.posthog.com';
+  // Prioritize VITE_ prefixed vars as per policy
+  const posthogApiKey = (env as any).VITE_POSTHOG_API_KEY || (env as any).POSTHOG_API_KEY || import.meta.env.VITE_POSTHOG_API_KEY;
+  const posthogHost = (env as any).VITE_POSTHOG_HOST || (env as any).POSTHOG_HOST || import.meta.env.VITE_POSTHOG_HOST || 'https://us.i.posthog.com';
   
   return { 
     env: { 
       MEDUSA_BACKEND_URL, 
       MEDUSA_PUBLISHABLE_KEY,
       // Include PostHog config for client-side initialization
+      VITE_POSTHOG_API_KEY: posthogApiKey,
+      VITE_POSTHOG_HOST: posthogHost,
+      // Keep legacy for compat if needed, but VITE_ is primary
       POSTHOG_API_KEY: posthogApiKey,
       POSTHOG_HOST: posthogHost,
     } 

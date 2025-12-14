@@ -15,6 +15,8 @@ export async function action({ request, context }: ActionFunctionArgs) {
     // Access full Cloudflare env to include PostHog config for monitoredFetch
     const env = context.cloudflare.env as {
       STRIPE_SECRET_KEY: string;
+      VITE_POSTHOG_API_KEY?: string;
+      VITE_POSTHOG_HOST?: string;
       POSTHOG_API_KEY?: string;
       POSTHOG_HOST?: string;
       POSTHOG_SERVER_CAPTURE_ENABLED?: string | boolean;
