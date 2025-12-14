@@ -7,6 +7,7 @@ const mockRedisInstance = {
   connect: jest.fn().mockResolvedValue(undefined),
   ping: jest.fn().mockResolvedValue('PONG'),
   quit: jest.fn().mockResolvedValue(undefined),
+  disconnect: jest.fn(),
 };
 
 jest.mock('ioredis', () => ({
@@ -34,6 +35,36 @@ describe('Health Check Endpoint (Story 4.5)', () => {
   let mockQuery: jest.Mock;
   let mockReq: any;
   let mockRes: any;
+
+  /**
+   * Helper to reset modules and re-mock dependencies for fresh imports.
+   * Reduces repetition across tests that need module isolation.
+   */
+  const loadGetHandler = async (customMocks?: {
+    loggerInfo?: jest.Mock;
+  }) => {
+    jest.resetModules();
+    
+    // Re-mock ioredis
+    jest.mock('ioredis', () => ({
+      Redis: jest.fn().mockImplementation(() => mockRedisInstance),
+    }));
+    
+    // Re-mock dependencies
+    jest.mock('../../src/utils/posthog', () => ({
+      getPostHog: jest.fn(() => ({ capture: mockCapture })),
+    }));
+    jest.mock('../../src/utils/logger', () => ({
+      logger: { 
+        info: customMocks?.loggerInfo ?? jest.fn(), 
+        warn: jest.fn(), 
+        error: jest.fn() 
+      },
+    }));
+
+    const { GET } = await import('../../src/api/health/route');
+    return GET;
+  };
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -107,17 +138,7 @@ describe('Health Check Endpoint (Story 4.5)', () => {
     it('should report unhealthy status when database fails (AC3)', async () => {
       mockQuery.mockRejectedValueOnce(new Error('Connection refused'));
       
-      // Need to re-import to get fresh module
-      jest.resetModules();
-      jest.mock('../../src/utils/posthog', () => ({
-        getPostHog: jest.fn(() => ({ capture: mockCapture })),
-      }));
-      jest.mock('../../src/utils/logger', () => ({
-        logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
-      }));
-      
-      const { GET } = await import('../../src/api/health/route');
-      
+      const GET = await loadGetHandler();
       await GET(mockReq, mockRes);
 
       expect(mockRes.status).toHaveBeenCalledWith(503);
@@ -148,16 +169,7 @@ describe('Health Check Endpoint (Story 4.5)', () => {
     it('should include error details in PostHog event when unhealthy (AC3)', async () => {
       mockQuery.mockRejectedValueOnce(new Error('DB Error'));
       
-      jest.resetModules();
-      jest.mock('../../src/utils/posthog', () => ({
-        getPostHog: jest.fn(() => ({ capture: mockCapture })),
-      }));
-      jest.mock('../../src/utils/logger', () => ({
-        logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
-      }));
-      
-      const { GET } = await import('../../src/api/health/route');
-      
+      const GET = await loadGetHandler();
       await GET(mockReq, mockRes);
 
       expect(mockCapture).toHaveBeenCalledWith(expect.objectContaining({
@@ -174,16 +186,7 @@ describe('Health Check Endpoint (Story 4.5)', () => {
     it('should handle Redis not configured gracefully', async () => {
       delete process.env.REDIS_URL;
       
-      jest.resetModules();
-      jest.mock('../../src/utils/posthog', () => ({
-        getPostHog: jest.fn(() => ({ capture: mockCapture })),
-      }));
-      jest.mock('../../src/utils/logger', () => ({
-        logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
-      }));
-      
-      const { GET } = await import('../../src/api/health/route');
-      
+      const GET = await loadGetHandler();
       await GET(mockReq, mockRes);
 
       expect(mockRes.json).toHaveBeenCalledWith(expect.objectContaining({
@@ -198,18 +201,8 @@ describe('Health Check Endpoint (Story 4.5)', () => {
     });
 
     it('should log health check results', async () => {
-      // Re-setup mocks after previous test resets
-      jest.resetModules();
-      
       const mockLoggerInfo = jest.fn();
-      jest.mock('../../src/utils/logger', () => ({
-        logger: { info: mockLoggerInfo, warn: jest.fn(), error: jest.fn() },
-      }));
-      jest.mock('../../src/utils/posthog', () => ({
-        getPostHog: jest.fn(() => ({ capture: jest.fn() })),
-      }));
-      
-      const { GET } = await import('../../src/api/health/route');
+      const GET = await loadGetHandler({ loggerInfo: mockLoggerInfo });
       
       await GET(mockReq, mockRes);
 

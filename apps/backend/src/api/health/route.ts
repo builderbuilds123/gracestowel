@@ -50,10 +50,11 @@ async function checkRedis(): Promise<{ status: 'ok' | 'error' | 'not_configured'
   }
 
   const start = performance.now();
+  let client: InstanceType<typeof import('ioredis').Redis> | undefined;
   try {
     // Dynamic import ioredis (used by Medusa)
     const { Redis } = await import('ioredis');
-    const client = new Redis(redisUrl, { 
+    client = new Redis(redisUrl, { 
       maxRetriesPerRequest: 1,
       connectTimeout: 5000,
       lazyConnect: true,
@@ -63,6 +64,11 @@ async function checkRedis(): Promise<{ status: 'ok' | 'error' | 'not_configured'
     await client.quit();
     return { status: 'ok', latency_ms: Math.round(performance.now() - start) };
   } catch (error) {
+    // Ensure connection is closed on failure to prevent resource leaks
+    // disconnect() is immediate and doesn't wait for a server reply
+    if (client) {
+      client.disconnect();
+    }
     return { 
       status: 'error', 
       latency_ms: Math.round(performance.now() - start),
