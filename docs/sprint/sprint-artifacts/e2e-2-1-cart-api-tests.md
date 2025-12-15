@@ -1,7 +1,7 @@
 # Story 2-1: Create Cart API Test Suite
 
 **Epic:** Epic 2 - Cart Flow Testing  
-**Status:** drafted  
+**Status:** done
 **Created:** 2025-12-14  
 **Requirements:** FR2.2, FR12.1
 
@@ -198,14 +198,14 @@ test.describe('Cart Persistence', () => {
 
 ## Definition of Done
 
-- [ ] Cart creation API test passes
-- [ ] Add item to cart API test passes
-- [ ] Update item quantity API test passes
-- [ ] Remove item from cart API test passes
-- [ ] Multiple items in cart test passes
-- [ ] Cart persistence across reload test passes
-- [ ] All tests use DataFactory for cleanup
-- [ ] Tests run in parallel without conflicts
+- [x] Cart creation API test passes
+- [x] Add item to cart API test passes
+- [x] Update item quantity API test passes
+- [x] Remove item from cart API test passes
+- [x] Multiple items in cart test passes
+- [x] Cart persistence across reload test passes
+- [x] All tests use DataFactory for cleanup
+- [x] Tests run in parallel without conflicts
 
 ---
 

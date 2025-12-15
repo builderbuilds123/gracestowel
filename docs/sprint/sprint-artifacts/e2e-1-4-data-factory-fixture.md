@@ -1,7 +1,7 @@
 # Story 1-4: Create Data Factory Fixture for Test Isolation
 
 **Epic:** Epic 1 - Test Infrastructure Foundation  
-**Status:** drafted  
+**Status:** done
 **Created:** 2025-12-14  
 **Requirements:** FR3.2, FR3.3, FR11.3
 
@@ -123,6 +123,12 @@ export interface TestCustomer {
   email: string;
   first_name: string;
   last_name: string;
+  address_1: string;
+  city: string;
+  province: string;
+  postal_code: string;
+  country_code: string;
+  phone: string;
 }
 
 export interface TestAddress {
@@ -397,14 +403,14 @@ MEDUSA_URL=http://localhost:9000
 
 ## Definition of Done
 
-- [ ] `generateTestId()` creates unique IDs with timestamps and UUIDs
-- [ ] `generateTestEmail()` creates unique test emails
-- [ ] `DataFactory.getAvailableProducts()` fetches products from store
-- [ ] `DataFactory.createCart()` creates carts with items
-- [ ] `DataFactory.cleanup()` removes created test resources
-- [ ] Playwright fixture auto-cleans after each test
-- [ ] Combined fixtures export available for all tests
-- [ ] Parallel tests don't have data collisions
+- [x] `generateTestId()` creates unique IDs with timestamps and UUIDs
+- [x] `generateTestEmail()` creates unique test emails
+- [x] `DataFactory.getAvailableProducts()` fetches products from store
+- [x] `DataFactory.createCart()` creates carts with items
+- [x] `DataFactory.cleanup()` removes created test resources
+- [x] Playwright fixture auto-cleans after each test
+- [x] Combined fixtures export available for all tests
+- [x] Parallel tests don't have data collisions
 
 ---
 

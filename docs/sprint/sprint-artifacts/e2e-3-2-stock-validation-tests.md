@@ -1,7 +1,7 @@
 # Story 3-2: Create Stock Validation Test Suite
 
 **Epic:** Epic 3 - Payment Intent Flow Testing  
-**Status:** drafted  
+**Status:** done
 **Created:** 2025-12-14  
 **Requirements:** FR12.8
 
@@ -246,13 +246,13 @@ test.describe('Stock Race Conditions', () => {
 
 ## Definition of Done
 
-- [ ] Single item stock error displays correctly
-- [ ] Multiple items stock error lists all affected items
-- [ ] Stock validation happens before PaymentIntent creation
-- [ ] UI displays user-friendly error messages
-- [ ] Users can fix quantity and proceed
-- [ ] Race condition handling is tested
-- [ ] All tests clean up created data
+- [x] Single item stock error displays correctly
+- [x] Multiple items stock error lists all affected items
+- [x] Stock validation happens before PaymentIntent creation
+- [x] UI displays user-friendly error messages
+- [x] Users can fix quantity and proceed
+- [x] Race condition handling is tested
+- [x] All tests clean up created data
 
 ---
 
