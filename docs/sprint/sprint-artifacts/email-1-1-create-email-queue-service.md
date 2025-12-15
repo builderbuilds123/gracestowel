@@ -1,6 +1,6 @@
 # Story 1.1: Create Email Queue Service
 
-Status: Drafted
+Status: done
 
 ## Story
 
@@ -100,12 +100,12 @@ export async function enqueueEmail(payload: EmailJobPayload): Promise<Job | null
 
 ## Tasks / Subtasks
 
-- [ ] Create `apps/backend/src/lib/email-queue.ts`
-- [ ] Define `EmailJobPayload` interface with all required fields
-- [ ] Implement `getEmailQueue()` singleton function
-- [ ] Implement `enqueueEmail(payload)` function with job options
-- [ ] Verify Redis connection import works
-- [ ] Add JSDoc comments for exported functions
+- [x] Create `apps/backend/src/lib/email-queue.ts`
+- [x] Define `EmailJobPayload` interface with all required fields
+- [x] Implement `getEmailQueue()` singleton function
+- [x] Implement `enqueueEmail(payload)` function with job options
+- [x] Verify Redis connection import works
+- [x] Add JSDoc comments for exported functions
 
 ## Testing Requirements
 
@@ -113,12 +113,12 @@ export async function enqueueEmail(payload: EmailJobPayload): Promise<Job | null
 
 Create `apps/backend/integration-tests/unit/email-queue.unit.spec.ts`:
 
-- [ ] `getEmailQueue()` returns same instance on multiple calls (singleton)
-- [ ] `enqueueEmail()` creates job with correct name pattern `email-{orderId}`
-- [ ] `enqueueEmail()` sets jobId for idempotency
-- [ ] `enqueueEmail()` configures 3 attempts
-- [ ] `enqueueEmail()` configures exponential backoff with 1000ms delay
-- [ ] Job payload contains all fields from input
+- [x] `getEmailQueue()` returns same instance on multiple calls (singleton)
+- [x] `enqueueEmail()` creates job with correct name pattern `email-{orderId}`
+- [x] `enqueueEmail()` sets jobId for idempotency
+- [x] `enqueueEmail()` configures 3 attempts
+- [x] `enqueueEmail()` configures exponential backoff with 1000ms delay
+- [x] Job payload contains all fields from input
 
 ### Test Command
 
@@ -128,13 +128,13 @@ cd apps/backend && TEST_TYPE=unit npx jest integration-tests/unit/email-queue.un
 
 ## Definition of Done
 
-- [ ] File `apps/backend/src/lib/email-queue.ts` exists
-- [ ] `getEmailQueue()` returns singleton BullMQ Queue instance
-- [ ] `enqueueEmail()` adds job with correct options (attempts: 3, exponential backoff)
-- [ ] Job ID uses pattern `email-{orderId}` for idempotency
-- [ ] `EmailJobPayload` interface exported and typed correctly
-- [ ] No TypeScript errors (`pnpm typecheck` passes)
-- [ ] Unit tests pass
+- [x] File `apps/backend/src/lib/email-queue.ts` exists
+- [x] `getEmailQueue()` returns singleton BullMQ Queue instance
+- [x] `enqueueEmail()` adds job with correct options (attempts: 3, exponential backoff)
+- [x] Job ID uses pattern `email-{orderId}` for idempotency
+- [x] `EmailJobPayload` interface exported and typed correctly
+- [x] No TypeScript errors (`pnpm typecheck` passes)
+- [x] Unit tests pass
 
 ## Dev Notes
 
@@ -162,18 +162,17 @@ template: "order_confirmation" | "order_modified" | "order_shipped"
 
 ## Dev Agent Record
 
-_To be filled by implementing agent_
-
 ### Agent Model Used
-_Model name_
+Jules
 
 ### Completion Notes
-_Implementation notes_
+Implemented `email-queue.ts` with the Singleton pattern and `enqueueEmail` function.
+- Used `payment-capture-queue.ts` as a reference.
+- Implemented `getRedisConnection` locally as `apps/backend/src/lib/redis.ts` was not found.
+- Added comprehensive unit tests in `apps/backend/integration-tests/unit/email-queue.unit.spec.ts`.
 
 ### File List
 | File | Change |
 |------|--------|
 | `apps/backend/src/lib/email-queue.ts` | Created - queue singleton + enqueue function |
-
-### Change Log
-_Code review follow-ups_
+| `apps/backend/integration-tests/unit/email-queue.unit.spec.ts` | Created - unit tests |
