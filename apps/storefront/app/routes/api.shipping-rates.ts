@@ -21,6 +21,58 @@ interface ShippingRatesRequest {
   cartId?: string;
 }
 
+/**
+ * Extract the original amount from a prices array.
+ * Medusa API returns prices in cents (smallest currency unit).
+ */
+function extractAmountFromPrices(
+    prices: any[] | undefined,
+    regionId: string,
+    currency: string
+): number | undefined {
+    if (!Array.isArray(prices) || prices.length === 0) {
+        return undefined;
+    }
+
+    // Find price matching the region's currency or region ID
+    const regionPrice = prices.find((p: any) =>
+        p.region_id === regionId || p.currency_code?.toUpperCase() === currency.toUpperCase()
+    );
+
+    if (regionPrice && typeof regionPrice.amount === 'number') {
+        return regionPrice.amount;
+    }
+
+    // Fallback to first price
+    if (prices[0] && typeof prices[0].amount === 'number') {
+        return prices[0].amount;
+    }
+
+    return undefined;
+}
+
+/**
+ * Extract original amount from a shipping option object.
+ */
+function extractOriginalAmount(
+    option: any,
+    regionId: string,
+    currency: string
+): number | undefined {
+    // Try prices array first
+    const fromPrices = extractAmountFromPrices(option.prices, regionId, currency);
+    if (fromPrices !== undefined) {
+        return fromPrices;
+    }
+
+    // Check for a single price field
+    if (option.price && typeof option.price === 'number') {
+        return option.price;
+    }
+
+    return undefined;
+}
+
 export async function action({ request, context }: ActionFunctionArgs) {
   if (request.method !== "POST") {
     return data({ message: "Method not allowed" }, { status: 405 });
@@ -68,11 +120,6 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
     // 2. If no valid cartId, create one
     if (!cartId) {
-        // Need to find region ID for currency first
-        // We can reuse the existing logic or add a helper in service
-        // For now, let's keep it simple and assume we can fetch regions here or via service
-        // Since MedusaCartService takes region_id for creation, we need to fetch regions first.
-
         // Fetch regions to find region_id for currency
         const regionsResponse = await monitoredFetch(`${medusaBackendUrl}/store/regions`, {
             method: "GET",
@@ -100,10 +147,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
     }
 
     // 3. Sync Items
-    // Filter items to only include those with Medusa variant IDs
     const validItems = cartItems.filter(item => item.variantId && isMedusaId(item.variantId));
-    // Also include legacy items if we have a way to map them, but for now assuming we only sync mapped items
-
     await service.syncCartItems(cartId, validItems);
 
     // 4. Update Address
@@ -115,27 +159,77 @@ export async function action({ request, context }: ActionFunctionArgs) {
     const shippingOptions = await service.getShippingOptions(cartId);
 
     // 6. Map Response
-    const formattedOptions = shippingOptions.map(opt => ({
-        id: opt.id,
-        displayName: opt.name,
-        amount: opt.amount,
-        originalAmount: opt.originalAmount,
-        isFree: opt.amount === 0,
-        deliveryEstimate: null
-    }));
+    // We need to fetch regions again to support extractOriginalAmount if needed, or pass it down.
+    // However, the service response might already be simplified.
+    // To support `originalAmount`, `MedusaCartService.getShippingOptions` should ideally return the raw option or enough data.
+    // Let's modify the service or just fetch details here if free.
+    // But `MedusaCartService` already returns an array of objects.
+    // Let's look at `medusa-cart.ts` again. It returns:
+    // { id, name, amount, price_type, provider_id, is_return, originalAmount? }
+
+    // In `medusa-cart.ts`, I left `originalAmount` as potentially undefined.
+    // Since Medusa's `cart.shipping_methods` or `shipping_options` endpoint with cart context calculates the *discounted* price as `amount`.
+    // If we want the original price, we might need to inspect metadata or rules.
+    // But typically, for free shipping promotions, the `amount` becomes 0.
+    // The `originalAmount` might be available if we fetch the option *definition* from `/store/shipping-options` (without cart context or with region context) and match it.
+
+    // So, let's fetch the region-based options to find the base price for comparison.
+    // This effectively duplicates the logic from the fallback but uses it for enrichment.
+
+    let regionId = "";
+    const cart = await service.getCart(cartId);
+    if (cart) {
+        regionId = cart.region_id;
+    }
+
+    let regionOptions: any[] = [];
+    if (regionId) {
+        try {
+            const optionsResponse = await monitoredFetch(`${medusaBackendUrl}/store/shipping-options?region_id=${regionId}`, {
+                method: "GET",
+                headers: { "x-publishable-api-key": medusaPublishableKey },
+                label: "medusa-shipping-options-enrich",
+                cloudflareEnv: env,
+            });
+            if (optionsResponse.ok) {
+                const data = await optionsResponse.json() as { shipping_options: any[] };
+                regionOptions = data.shipping_options;
+            }
+        } catch (e) {
+            console.warn("Failed to fetch region options for enrichment", e);
+        }
+    }
+
+    const formattedOptions = shippingOptions.map(opt => {
+        let originalAmount = opt.originalAmount;
+
+        // If not present (it won't be from service usually), try to find it in regionOptions
+        if (originalAmount === undefined && regionOptions.length > 0) {
+            const regionOption = regionOptions.find((ro: any) => ro.id === opt.id);
+            if (regionOption) {
+                originalAmount = extractOriginalAmount(regionOption, regionId, currency);
+            }
+        }
+
+        // If explicitly free (amount 0) and we found an original amount, that's our strikethrough.
+        // If amount > 0 but different from original, that's a discount.
+
+        return {
+            id: opt.id,
+            displayName: opt.name,
+            amount: opt.amount,
+            originalAmount: originalAmount !== opt.amount ? originalAmount : undefined,
+            isFree: opt.amount === 0,
+            deliveryEstimate: null
+        };
+    });
 
     return { shippingOptions: formattedOptions, cartId };
 
   } catch (error: any) {
     console.error("Cart-based shipping failed:", error);
 
-    // Fallback to simple region-based fetch if cart operations fail
-    console.warn("Falling back to region-based shipping");
-
-    // We can essentially reuse the old logic here, or just fail gracefully.
-    // Given the prompt says "API failure -> fallback to region-based fetch", we should implement the fallback.
-    // Since I overwrote the file, I'll re-implement the fallback logic (from the previous version of this file).
-
+    // Fallback to simple region-based fetch
     try {
         const regionsResponse = await monitoredFetch(`${medusaBackendUrl}/store/regions`, {
             method: "GET",
@@ -166,12 +260,11 @@ export async function action({ request, context }: ActionFunctionArgs) {
             id: option.id,
             displayName: option.name,
             amount: option.amount,
-            originalAmount: undefined, // No promo info in fallback
+            originalAmount: undefined,
             isFree: option.amount === 0,
             deliveryEstimate: null
         }));
 
-        // Return without cartId to indicate fallback
         return { shippingOptions: formattedOptions, cartId: undefined };
 
     } catch (fallbackError) {

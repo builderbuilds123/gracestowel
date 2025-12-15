@@ -9,7 +9,8 @@
   "vars": {
     "MEDUSA_BACKEND_URL": "", // Placeholder for type generation
     "MEDUSA_PUBLISHABLE_KEY": "", // Placeholder for type generation
-    "STRIPE_PUBLISHABLE_KEY": "" // Placeholder for type generation
+    "STRIPE_PUBLISHABLE_KEY": "", // Placeholder for type generation
+    "STRIPE_SECRET_KEY": "" // Placeholder for type generation
   },
 
   "hyperdrive": [

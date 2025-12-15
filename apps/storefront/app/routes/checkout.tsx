@@ -40,7 +40,7 @@ export default function Checkout() {
   }, [stripePublishableKey]);
 
   const { items, cartTotal, updateQuantity, removeFromCart } = useCart();
-  const { currency } = useLocale();
+  const { currency } = useLocale(); // Verify currency is obtained here
   const { customer, isAuthenticated } = useCustomer();
 
   // Payment state
@@ -77,12 +77,8 @@ export default function Checkout() {
       if (cartId) {
         sessionStorage.setItem('medusa_cart_id', cartId);
       } else {
-        // Optional: remove if undefined? Or keep for session continuity?
-        // Typically we keep it until order completion or explicit expiration.
-        // If it becomes undefined (e.g. error/reset), we might want to clear it.
-        // For now, let's only set if truthy to avoid clearing potentially valid concurrent updates,
-        // but if it's explicitly reset, we should clear.
-        // However, standard pattern is usually just setItem.
+        // We generally don't remove it unless explicitly expired, but if cartId becomes undefined
+        // it means we lost context.
       }
     }
   }, [cartId]);
@@ -246,7 +242,7 @@ export default function Checkout() {
             province: address.address.state,
             phone: address.phone
           } : undefined,
-          currency,
+          currency, // Ensure currency is used here
           cartId // Pass the current cartId (state)
         }),
         label: 'fetch-shipping-rates',
@@ -277,7 +273,7 @@ export default function Checkout() {
     } finally {
       setIsCalculatingShipping(false);
     }
-  }, [currency, cartId]);
+  }, [currency, cartId]); // currency is in dependency array
 
   // Debounced fetch function
   const debouncedFetchShipping = useCallback(
