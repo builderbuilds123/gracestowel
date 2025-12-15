@@ -35,7 +35,6 @@ async function handleProxy(request: Request, context: any) {
             // Important: duplicate is needed to forward the body stream
             duplex: "half",
             label: "proxy-forward",
-            skipTracking: true,
             cloudflareEnv: cloudflareEnv,
         } as any);
 

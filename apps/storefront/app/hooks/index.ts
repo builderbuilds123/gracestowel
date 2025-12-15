@@ -11,3 +11,4 @@ export { useNavigationTracking } from "./useNavigationTracking";
 export { useScrollTracking } from "./useScrollTracking";
 export { useEngagementTracking } from "./useEngagementTracking";
 export { useFormTracking } from "./useFormTracking";
+export { useMonitoredFetch } from "./useMonitoredFetch";

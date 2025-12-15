@@ -90,6 +90,37 @@ describe('useFormTracking', () => {
     document.body.removeChild(form);
   });
 
+  it('captures validation errors', () => {
+    renderHook(() => useFormTracking());
+
+    const form = document.createElement('form');
+    form.id = 'register';
+    document.body.appendChild(form);
+
+    const input = document.createElement('input');
+    input.name = 'age';
+    input.type = 'number';
+    input.required = true;
+    form.appendChild(input);
+
+    // Set validation message mock (jsdom might not do it automatically)
+    Object.defineProperty(input, 'validationMessage', {
+      value: 'Please fill out this field.',
+      writable: true
+    });
+
+    input.dispatchEvent(new Event('invalid', { bubbles: false, cancelable: true }));
+
+    expect(mockCapture).toHaveBeenCalledWith('form_interaction', expect.objectContaining({
+      form_name: 'register',
+      field_name: 'age',
+      interaction_type: 'error',
+      error_message: 'Please fill out this field.',
+    }));
+
+    document.body.removeChild(form);
+  });
+
   it('ignores password fields', () => {
     renderHook(() => useFormTracking());
     
@@ -110,17 +141,17 @@ describe('useFormTracking', () => {
 
   it('ignores hidden fields', () => {
     renderHook(() => useFormTracking());
-    
+
     const form = document.createElement('form');
     document.body.appendChild(form);
-    
+
     const input = document.createElement('input');
     input.name = 'token';
     input.type = 'hidden';
     form.appendChild(input);
-    
+
     input.dispatchEvent(new Event('focus'));
-    
+
     expect(mockCapture).not.toHaveBeenCalled();
     
     document.body.removeChild(form);

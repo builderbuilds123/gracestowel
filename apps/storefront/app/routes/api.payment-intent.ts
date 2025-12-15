@@ -314,7 +314,6 @@ export async function action({ request, context }: ActionFunctionArgs) {
       headers,
       body: body.toString(),
       label: isUpdate ? "stripe-payment-intent-update" : "stripe-payment-intent-create",
-      skipTracking: true,
       cloudflareEnv: env,
     });
 
