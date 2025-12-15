@@ -8,7 +8,6 @@ import { useWishlist } from "../context/WishlistContext";
 import { Dropdown } from "./Dropdown";
 import { SearchBar } from "./SearchBar";
 import { useState, useEffect } from "react";
-import { SITE_CONFIG } from "../config/site";
 
 export function Header() {
     const { toggleCart, items } = useCart();
@@ -21,10 +20,9 @@ export function Header() {
     const isHome = location.pathname === "/";
 
     useEffect(() => {
-        const scrollThreshold = SITE_CONFIG.ui.headerScrollThreshold;
         const handleScroll = () => {
-            // Change header style after scrolling past configured threshold (e.g., 80vh for hero section)
-            if (window.scrollY > window.innerHeight * scrollThreshold) {
+            // Change header style after scrolling past 80vh (hero section)
+            if (window.scrollY > window.innerHeight * 0.8) {
                 setIsScrolled(true);
             } else {
                 setIsScrolled(false);

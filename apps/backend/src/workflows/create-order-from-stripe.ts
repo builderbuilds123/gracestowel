@@ -5,9 +5,8 @@ import {
     WorkflowResponse,
     transform,
 } from "@medusajs/framework/workflows-sdk";
-import { createOrdersWorkflow, updateInventoryLevelsStep } from "@medusajs/core-flows";
-import type { UpdateInventoryLevelInput } from "@medusajs/types";
-import { modificationTokenService } from "../services/modification-token";
+import { createOrderWorkflow, adjustInventoryLevelsStep, emitEventStep } from "@medusajs/medusa/core-flows";
+import type { InventoryTypes } from "@medusajs/framework/types";
 
 /**
  * Input for the create-order-from-stripe workflow
@@ -146,7 +145,7 @@ const prepareInventoryAdjustmentsStep = createStep(
     "prepare-inventory-adjustments",
     async (input: { cartItems: CreateOrderFromStripeInput["cartData"]["items"] }, { container }) => {
         const query = container.resolve("query");
-        const adjustments: UpdateInventoryLevelInput[] = [];
+        const adjustments: InventoryTypes.BulkAdjustInventoryLevelInput[] = [];
 
         for (const item of input.cartItems) {
             if (!item.variantId) continue;
@@ -169,7 +168,7 @@ const prepareInventoryAdjustmentsStep = createStep(
                 // Get the stock location for this inventory item
                 const { data: inventoryLevels } = await query.graph({
                     entity: "inventory_level",
-                    fields: ["id", "location_id", "inventory_item_id", "stocked_quantity"],
+                    fields: ["id", "location_id", "inventory_item_id"],
                     filters: { inventory_item_id: inventoryItemId },
                 });
 
@@ -177,14 +176,11 @@ const prepareInventoryAdjustmentsStep = createStep(
 
                 const locationId = inventoryLevels[0].location_id;
 
-                // Get current stocked quantity
-                const currentStockedQuantity = inventoryLevels[0].stocked_quantity || 0;
-
-                // Add update to reduce stock
+                // Add adjustment (negative to decrement)
                 adjustments.push({
                     inventory_item_id: inventoryItemId,
                     location_id: locationId,
-                    stocked_quantity: currentStockedQuantity - item.quantity, // Reduce stock
+                    adjustment: -item.quantity, // Negative to reduce stock
                 });
             } catch (error) {
                 console.error(`Error preparing inventory adjustment for variant ${item.variantId}:`, error);
@@ -217,13 +213,12 @@ const generateModificationTokenStep = createStep(
  */
 const logOrderCreatedStep = createStep(
     "log-order-created",
-    async (input: { orderId: string; paymentIntentId: string; inventoryAdjusted: boolean; modificationToken: string }) => {
+    async (input: { orderId: string; paymentIntentId: string; inventoryAdjusted: boolean }) => {
         console.log(`Order ${input.orderId} created from Stripe PaymentIntent ${input.paymentIntentId}`);
         if (input.inventoryAdjusted) {
             console.log(`Inventory levels adjusted for order ${input.orderId}`);
         }
-        console.log(`Modification token generated (valid for 1 hour)`);
-        return new StepResponse({ success: true, modificationToken: input.modificationToken });
+        return new StepResponse({ success: true });
     }
 );
 
@@ -234,9 +229,7 @@ const logOrderCreatedStep = createStep(
  * 1. Validates and prepares order data from Stripe payment metadata
  * 2. Creates the order using Medusa's createOrderWorkflow
  * 3. Adjusts inventory levels (decrements stock)
- * 4. Generates a modification token for the 1-hour modification window
- * 5. Logs the order creation
- * 6. Emits order.placed event (triggers email + payment capture scheduling)
+ * 4. Logs the order creation
  */
 export const createOrderFromStripeWorkflow = createWorkflow(
     "create-order-from-stripe",
@@ -245,7 +238,7 @@ export const createOrderFromStripeWorkflow = createWorkflow(
         const orderData = prepareOrderDataStep(input);
 
         // Step 2: Create the order using Medusa's built-in workflow
-        const order = createOrdersWorkflow.runAsStep({
+        const order = createOrderWorkflow.runAsStep({
             input: orderData,
         });
 
@@ -255,7 +248,7 @@ export const createOrderFromStripeWorkflow = createWorkflow(
         }));
         const inventoryAdjustments = prepareInventoryAdjustmentsStep(cartItemsInput);
 
-        // Step 4: Update inventory levels (decrement stock)
+        // Step 4: Adjust inventory levels (decrement stock)
         const shouldAdjustInventory = transform({ inventoryAdjustments }, (data) =>
             data.inventoryAdjustments.length > 0
         );
@@ -268,8 +261,8 @@ export const createOrderFromStripeWorkflow = createWorkflow(
             return [];
         });
 
-        // Call the inventory update step
-        updateInventoryLevelsStep(adjustedInventory);
+        // Call the inventory adjustment step
+        adjustInventoryLevelsStep(adjustedInventory);
 
         // Step 5: Generate modification token for 1-hour window
         const tokenInput = transform({ order, input }, (data) => ({
@@ -284,27 +277,17 @@ export const createOrderFromStripeWorkflow = createWorkflow(
             orderId: data.order.id,
             paymentIntentId: data.input.paymentIntentId,
             inventoryAdjusted: data.shouldAdjustInventory,
-            modificationToken: data.tokenResult.token,
         }));
         logOrderCreatedStep(logInput);
 
-        // Step 7: Emit order.placed event to trigger email notification and payment capture scheduling
-        const eventData = transform({ order, tokenResult }, (data) => ({
+        // Step 6: Emit order.placed event to trigger email notification
+        const eventData = transform({ order }, (data) => ({
             eventName: "order.placed" as const,
-            data: {
-                id: data.order.id,
-                modification_token: data.tokenResult.token,
-            },
+            data: { id: data.order.id },
         }));
         emitEventStep(eventData);
 
-        // Return order with modification token
-        const result = transform({ order, tokenResult }, (data) => ({
-            ...data.order,
-            modification_token: data.tokenResult.token,
-        }));
-
-        return new WorkflowResponse(result);
+        return new WorkflowResponse(order);
     }
 );
 

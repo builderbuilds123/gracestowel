@@ -6,7 +6,6 @@ import tsconfigPaths from "vite-tsconfig-paths";
 import mkcert from "vite-plugin-mkcert";
 
 const isProduction = process.env.NODE_ENV === "production" || process.env.CF_PAGES === "1";
-const isCI = process.env.CI === "true";
 
 export default defineConfig({
   // Avoid writing Vite caches under node_modules (can cause EXDEV issues in Docker/overlayfs)
@@ -21,7 +20,7 @@ export default defineConfig({
   },
   plugins: [
     // Only use mkcert for local development (not in CI/production builds)
-    !isProduction && !isCI && mkcert(),
+    !isProduction && mkcert(),
     cloudflare({ viteEnvironment: { name: "ssr" } }),
     tailwindcss(),
     reactRouter(),

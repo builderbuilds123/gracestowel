@@ -3,6 +3,7 @@ import { Link, useSearchParams, useNavigate, useLoaderData } from "react-router"
 import type { LoaderFunctionArgs } from "react-router";
 import { CheckCircle2, Package, Truck, MapPin, XCircle } from "lucide-react";
 import { useCart } from "../context/CartContext";
+import { loadStripe } from "@stripe/stripe-js";
 import { posts } from "../data/blogPosts";
 import { getStripe, initStripe } from "../lib/stripe";
 import { OrderTimer } from "../components/order/OrderTimer";
@@ -63,7 +64,6 @@ export async function loader({ context }: LoaderFunctionArgs): Promise<LoaderDat
 export default function CheckoutSuccess() {
     const { stripePublishableKey, medusaBackendUrl, medusaPublishableKey } = useLoaderData<LoaderData>();
     const [searchParams] = useSearchParams();
-    const navigate = useNavigate();
     const { clearCart, items } = useCart();
     const [paymentStatus, setPaymentStatus] = useState<'loading' | 'success' | 'error' | 'canceled'>('loading');
 
@@ -137,10 +137,7 @@ export default function CheckoutSuccess() {
                         return;
                     }
 
-                    // With manual capture mode, status will be 'requires_capture' (authorized but not captured)
-                    // or 'succeeded' (already captured after 1-hour window)
-                    const validStatuses = ['succeeded', 'requires_capture'];
-                    if (paymentIntent && validStatuses.includes(paymentIntent.status)) {
+                    if (paymentIntent && paymentIntent.status === 'succeeded') {
                         // Extract shipping details
                         if (paymentIntent.shipping) {
                             console.log("Shipping details found:", paymentIntent.shipping);
@@ -284,7 +281,7 @@ export default function CheckoutSuccess() {
                             clearCart();
                         }, 500);
                     } else {
-                        console.error("Payment status not valid:", paymentIntent?.status);
+                        console.error("Payment status not succeeded:", paymentIntent?.status);
                         setMessage(`Payment status: ${paymentIntent?.status}`);
                         setPaymentStatus('error');
                     }
@@ -354,34 +351,11 @@ export default function CheckoutSuccess() {
         );
     }
 
-    if (paymentStatus === 'canceled') {
-        return (
-            <div className="min-h-screen bg-background-earthy flex items-center justify-center px-4">
-                <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8 text-center">
-                    <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <XCircle className="w-10 h-10 text-gray-500" />
-                    </div>
-                    <h1 className="text-2xl font-serif text-text-earthy mb-2">Order Canceled</h1>
-                    <p className="text-text-earthy/70 mb-6">
-                        Your order has been canceled and your payment will be refunded within 5-10 business days.
-                    </p>
-                    <Link
-                        to="/shop"
-                        className="inline-block bg-accent-earthy text-white px-6 py-3 rounded-lg hover:bg-accent-earthy/90 transition-colors cursor-pointer"
-                    >
-                        Continue Shopping
-                    </Link>
-                </div>
-            </div>
-        );
-    }
-
-
     return (
         <div className="min-h-screen bg-background-earthy py-12 px-4">
             <div className="max-w-3xl mx-auto">
                 {/* Success Header */}
-                <div className="text-center mb-8">
+                <div className="text-center mb-12">
                     <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
                         <CheckCircle2 className="w-12 h-12 text-green-600" />
                     </div>

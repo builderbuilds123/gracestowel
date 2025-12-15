@@ -2,7 +2,6 @@ import { X, Minus, Plus } from 'lucide-react';
 import { ProductPrice } from './ProductPrice';
 import type { CartItem } from '../context/CartContext';
 import type { ShippingOption } from './CheckoutForm';
-import type { ProductId } from '../types/product';
 
 export interface OrderSummaryProps {
     items: CartItem[];
@@ -11,8 +10,8 @@ export interface OrderSummaryProps {
     selectedShipping: ShippingOption | null;
     shippingCost: number;
     finalTotal: number;
-    onUpdateQuantity: (id: ProductId, quantity: number) => void;
-    onRemoveFromCart: (id: ProductId, color?: string) => void;
+    onUpdateQuantity: (id: number, quantity: number) => void;
+    onRemoveFromCart: (id: number, color?: string) => void;
 }
 
 export function OrderSummary({
@@ -98,8 +97,8 @@ export function OrderSummary({
 
 interface OrderItemProps {
     item: CartItem;
-    onUpdateQuantity: (id: ProductId, quantity: number) => void;
-    onRemove: (id: ProductId, color?: string) => void;
+    onUpdateQuantity: (id: number, quantity: number) => void;
+    onRemove: (id: number, color?: string) => void;
 }
 
 function OrderItem({ item, onUpdateQuantity, onRemove }: OrderItemProps) {

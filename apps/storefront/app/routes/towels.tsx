@@ -5,7 +5,6 @@ import { ProductFilters } from "../components/ProductFilters";
 import { getMedusaClient, castToMedusaProduct, type MedusaProduct } from "../lib/medusa";
 import { productList } from "../data/products";
 import { SlidersHorizontal, X } from "lucide-react";
-import { transformToListItems, type ProductListItem } from "../lib/product-transformer";
 
 // SEO Meta tags
 export function meta() {
@@ -22,6 +21,17 @@ export function meta() {
         { name: "twitter:title", content: "Premium Towels Collection | Grace Stowel" },
         { name: "twitter:description", content: "Shop our collection of premium organic cotton towels. Luxuriously soft, sustainably made, and designed to last." },
     ];
+}
+
+interface ProductWithFilters {
+    id: string;
+    handle: string;
+    title: string;
+    price: string;
+    priceAmount: number;
+    image: string;
+    description: string;
+    colors: string[];
 }
 
 // Loader to fetch products from Medusa
