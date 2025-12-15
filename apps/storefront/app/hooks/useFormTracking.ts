@@ -51,7 +51,7 @@ function getFormName(element: HTMLElement): string {
   // Check for explicit data attribute
   const dataFormName = element.closest('[data-form-name]')?.getAttribute('data-form-name');
   if (dataFormName) return dataFormName;
-  
+
   // Check form id or name
   const form = element.closest('form');
   if (form) {
@@ -63,13 +63,13 @@ function getFormName(element: HTMLElement): string {
     }
     if (form.name) return form.name;
   }
-  
+
   // Check current URL path for context
   const path = window.location.pathname.toLowerCase();
   for (const [key, name] of Object.entries(FORM_IDENTIFIERS)) {
     if (path.includes(key)) return name;
   }
-  
+
   return 'unknown_form';
 }
 
@@ -78,18 +78,18 @@ function getFormName(element: HTMLElement): string {
  */
 function getFieldName(element: HTMLElement): string {
   const input = element as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
-  
+
   // Prefer explicit data attribute
   const dataFieldName = element.getAttribute('data-field-name');
   if (dataFieldName) return dataFieldName;
-  
+
   // Use name or id first
   if (input.name) return input.name;
   if (input.id) return input.id;
-  
+
   // Check for placeholder (not available on select elements)
   if ('placeholder' in input && input.placeholder) return input.placeholder;
-  
+
   // Fallback to aria-label
   return element.getAttribute('aria-label') || 'unknown_field';
 }
@@ -99,17 +99,17 @@ function getFieldName(element: HTMLElement): string {
  */
 function isSensitiveField(fieldName: string, fieldType?: string): boolean {
   const lowerName = fieldName.toLowerCase();
-  
+
   // Check against sensitive field patterns
   if (SENSITIVE_FIELDS.some(sensitive => lowerName.includes(sensitive))) {
     return true;
   }
-  
+
   // Password type inputs are always sensitive
   if (fieldType === 'password') {
     return true;
   }
-  
+
   return false;
 }
 
@@ -125,7 +125,7 @@ function isSensitiveField(fieldName: string, fieldType?: string): boolean {
  * - NEVER captures field values
  * - Identifies sensitive fields by name/type
  * - Only tracks field names and interaction types
- * 
+ *
  * @example
  * ```tsx
  * function App() {
@@ -140,14 +140,14 @@ export function useFormTracking() {
 
   const sendFormEvent = useCallback((eventData: FormInteractionEvent) => {
     if (typeof window === 'undefined') return;
-    
+
     // Don't log sensitive field names in detail
     if (isSensitiveField(eventData.field_name, eventData.field_type)) {
       eventData.field_name = '[sensitive]';
     }
-    
+
     posthog.capture('form_interaction', eventData);
-    
+
     if (import.meta.env.MODE === 'development') {
       console.log(`[Form] ${eventData.form_name}.${eventData.field_name} - ${eventData.interaction_type}`);
     }
@@ -157,16 +157,16 @@ export function useFormTracking() {
   const handleFocus = useCallback((event: FocusEvent) => {
     const target = event.target as HTMLElement;
     if (!target || !['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName)) return;
-    
+
     const formName = getFormName(target);
     const fieldName = getFieldName(target);
     const fieldType = (target as HTMLInputElement).type;
     const fieldKey = `${formName}.${fieldName}`;
-    
+
     // Only track first focus per field per page visit
     if (trackedFocusFields.current.has(fieldKey)) return;
     trackedFocusFields.current.add(fieldKey);
-    
+
     sendFormEvent({
       form_name: formName,
       field_name: fieldName,
@@ -180,21 +180,21 @@ export function useFormTracking() {
   const handleBlur = useCallback((event: FocusEvent) => {
     const target = event.target as HTMLElement;
     if (!target || !['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName)) return;
-    
+
     const input = target as HTMLInputElement;
     const formName = getFormName(target);
     const fieldName = getFieldName(target);
     const fieldType = input.type;
-    
+
     // Check for validation errors
     const hasError = !input.validity?.valid;
     let errorMessage: string | undefined;
-    
+
     if (hasError) {
       // Get browser validation message (safe to log)
       errorMessage = input.validationMessage || 'Validation error';
     }
-    
+
     sendFormEvent({
       form_name: formName,
       field_name: fieldName,
@@ -209,9 +209,9 @@ export function useFormTracking() {
   const handleSubmit = useCallback((event: Event) => {
     const form = event.target as HTMLFormElement;
     if (!form || form.tagName !== 'FORM') return;
-    
+
     const formName = getFormName(form);
-    
+
     sendFormEvent({
       form_name: formName,
       field_name: '_form_submit',
@@ -228,12 +228,12 @@ export function useFormTracking() {
   // Set up event listeners
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    
+
     // Use capture phase to catch events before they might be stopped
     document.addEventListener('focusin', handleFocus, true);
     document.addEventListener('focusout', handleBlur, true);
     document.addEventListener('submit', handleSubmit, true);
-    
+
     return () => {
       document.removeEventListener('focusin', handleFocus, true);
       document.removeEventListener('focusout', handleBlur, true);

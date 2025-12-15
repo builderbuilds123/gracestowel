@@ -34,7 +34,7 @@ describe('useFormTracking', () => {
         <input type="text" name="email" />
       </form>
     `;
-    
+
     renderHook(() => useFormTracking());
     
     const input = document.querySelector('input[name="email"]') as HTMLInputElement;
@@ -57,7 +57,7 @@ describe('useFormTracking', () => {
         <input type="text" name="city" value="Toronto" />
       </form>
     `;
-    
+
     renderHook(() => useFormTracking());
     
     const input = document.querySelector('input[name="city"]') as HTMLInputElement;
@@ -84,7 +84,7 @@ describe('useFormTracking', () => {
         <input type="password" name="password" />
       </form>
     `;
-    
+
     renderHook(() => useFormTracking());
     
     const input = document.querySelector('input[name="password"]') as HTMLInputElement;
@@ -105,15 +105,15 @@ describe('useFormTracking', () => {
         <button type="submit">Submit</button>
       </form>
     `;
-    
+
     renderHook(() => useFormTracking());
-    
+
     const form = document.querySelector('form') as HTMLFormElement;
-    
+
     act(() => {
       form.dispatchEvent(new Event('submit', { bubbles: true }));
     });
-    
+
     expect(mockCapture).toHaveBeenCalledWith('form_interaction', expect.objectContaining({
       form_name: 'checkout_form',
       field_name: '_form_submit',
@@ -127,7 +127,7 @@ describe('useFormTracking', () => {
         <input type="text" name="name" />
       </form>
     `;
-    
+
     renderHook(() => useFormTracking());
     
     const input = document.querySelector('input[name="name"]') as HTMLInputElement;
@@ -145,11 +145,11 @@ describe('useFormTracking', () => {
     act(() => {
       input.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
     });
-    
+
     const newCallCount = mockCapture.mock.calls.filter(
       (call) => call[0] === 'form_interaction' && call[1].interaction_type === 'focus'
     ).length;
-    
+
     // Should not have tracked second focus
     expect(newCallCount).toBe(callCount);
   });
@@ -160,7 +160,7 @@ describe('useFormTracking', () => {
         <input type="email" name="email" required />
       </form>
     `;
-    
+
     renderHook(() => useFormTracking());
     
     const input = document.querySelector('input[name="email"]') as HTMLInputElement;

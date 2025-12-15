@@ -18,11 +18,11 @@ import { CartDrawer } from "./components/CartDrawer";
 import { Header } from "./components/Header";
 import { Footer } from "./components/Footer";
 import { initPostHog, reportWebVitals, setupErrorTracking, captureException } from "./utils/posthog";
-import { 
-  useNavigationTracking, 
-  useScrollTracking, 
-  useEngagementTracking, 
-  useFormTracking 
+import {
+  useNavigationTracking,
+  useScrollTracking,
+  useEngagementTracking,
+  useFormTracking
 } from "./hooks";
 import posthog from "posthog-js";
 import "./app.css";

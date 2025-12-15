@@ -21,7 +21,7 @@ describe('useScrollTracking', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
-    
+
     // Mock window scroll properties
     Object.defineProperty(document.documentElement, 'scrollHeight', {
       value: 2000,
@@ -63,16 +63,16 @@ describe('useScrollTracking', () => {
     act(() => {
       vi.advanceTimersByTime(150);
     });
-    
+
     // Simulate scrolling to 25%
     Object.defineProperty(window, 'scrollY', { value: 375 }); // 375 / 1500 = 25%
-    
+
     act(() => {
       window.dispatchEvent(new Event('scroll'));
       // RAF callback
       vi.advanceTimersByTime(20);
     });
-    
+
     expect(mockCapture).toHaveBeenCalledWith('scroll_depth', expect.objectContaining({
       depth_percentage: 25,
       page_path: '/products/towel-1',
@@ -100,7 +100,7 @@ describe('useScrollTracking', () => {
       window.dispatchEvent(new Event('scroll'));
       vi.advanceTimersByTime(20);
     });
-    
+
     // Should not have captured again
     expect(mockCapture.mock.calls.length).toBe(callCount);
   });
@@ -111,14 +111,14 @@ describe('useScrollTracking', () => {
     act(() => {
       vi.advanceTimersByTime(150);
     });
-    
+
     // Scroll to 25%
     Object.defineProperty(window, 'scrollY', { value: 375 });
     act(() => {
       window.dispatchEvent(new Event('scroll'));
       vi.advanceTimersByTime(20);
     });
-    
+
     expect(mockCapture).toHaveBeenCalledTimes(1);
     
     // Change route
@@ -128,13 +128,13 @@ describe('useScrollTracking', () => {
     act(() => {
       vi.advanceTimersByTime(150);
     });
-    
+
     // Scroll again - should capture for new page
     act(() => {
       window.dispatchEvent(new Event('scroll'));
       vi.advanceTimersByTime(20);
     });
-    
+
     expect(mockCapture).toHaveBeenCalledTimes(2);
   });
 });

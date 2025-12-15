@@ -29,7 +29,7 @@ const ACTIVITY_EVENTS = ['mousedown', 'keydown', 'touchstart', 'scroll', 'mousem
  * Fires event on:
  * - Route change (leaving page)
  * - Page unload (closing tab/browser)
- * 
+ *
  * @example
  * ```tsx
  * function App() {
@@ -57,14 +57,14 @@ export function useEngagementTracking() {
   // Track user activity
   const trackActivity = useCallback((event?: Event) => {
     if (typeof window === 'undefined') return;
-    
+
     // Throttle mousemove events (max once per 100ms)
     if (event?.type === 'mousemove') {
       const now = Date.now();
       if (now - lastMouseMoveTrack.current < 100) return;
       lastMouseMoveTrack.current = now;
     }
-    
+
     const now = Date.now();
     
     // If user was idle, record the idle period
@@ -74,7 +74,7 @@ export function useEngagementTracking() {
       if (idlePeriod > maxIdlePeriod.current) {
         maxIdlePeriod.current = idlePeriod;
       }
-      
+
       if (import.meta.env.MODE === 'development') {
         console.log(`[Engagement] User returned from idle (${Math.round(idlePeriod / 1000)}s)`);
       }
@@ -88,10 +88,10 @@ export function useEngagementTracking() {
   // Check for idle state periodically
   const checkIdle = useCallback(() => {
     if (typeof window === 'undefined') return;
-    
+
     const now = Date.now();
     const timeSinceActivity = now - lastActivityTime.current;
-    
+
     if (timeSinceActivity >= IDLE_THRESHOLD_MS && !isIdle.current) {
       isIdle.current = true;
       idleStartTime.current = lastActivityTime.current + IDLE_THRESHOLD_MS;
@@ -105,10 +105,10 @@ export function useEngagementTracking() {
   // Send engagement event
   const sendEngagementEvent = useCallback((pagePath: string) => {
     if (typeof window === 'undefined') return;
-    
+
     const now = Date.now();
     const totalTime = now - pageLoadTime.current;
-    
+
     // If currently idle, add current idle period to total
     let finalIdleTime = totalIdleTime.current;
     if (isIdle.current && idleStartTime.current) {
@@ -117,12 +117,12 @@ export function useEngagementTracking() {
         maxIdlePeriod.current = now - idleStartTime.current;
       }
     }
-    
+
     const engagedTime = totalTime - finalIdleTime;
-    
+
     // Only send if user spent meaningful time on page (> 1 second)
     if (totalTime < 1000) return;
-    
+
     const eventData: PageEngagementEvent = {
       page_path: pagePath,
       engaged_time_ms: Math.max(0, engagedTime),
@@ -130,9 +130,9 @@ export function useEngagementTracking() {
       total_time_ms: totalTime,
       max_idle_period_ms: maxIdlePeriod.current,
     };
-    
+
     posthog.capture('page_engagement', eventData);
-    
+
     if (import.meta.env.MODE === 'development') {
       console.log(`[Engagement] ${pagePath}: ${Math.round(engagedTime / 1000)}s engaged, ${Math.round(finalIdleTime / 1000)}s idle, ${Math.round(totalTime / 1000)}s total`);
     }
@@ -151,32 +151,32 @@ export function useEngagementTracking() {
   // Handle route changes
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    
+
     const currentPath = location.pathname + location.search;
-    
+
     // Send engagement event for previous page
     if (previousPath.current && previousPath.current !== currentPath) {
       sendEngagementEvent(previousPath.current);
     }
-    
+
     // Reset for new page
     resetTracking();
     previousPath.current = currentPath;
-    
+
     // Set up activity listeners
     ACTIVITY_EVENTS.forEach(event => {
       window.addEventListener(event, trackActivity, { passive: true });
     });
-    
+
     // Set up idle checking interval
     idleCheckInterval.current = setInterval(checkIdle, 5000);
-    
+
     // Handle page unload
     const handleBeforeUnload = () => {
       sendEngagementEvent(currentPath);
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
-    
+
     // Handle visibility change (tab switch)
     const handleVisibilityChange = () => {
       if (document.hidden) {

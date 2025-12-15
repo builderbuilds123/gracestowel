@@ -4,7 +4,7 @@ user_name: 'Big Dick'
 date: '2025-12-05'
 sections_completed: ['technology_stack', 'implementation_rules', 'infrastructure', 'architecture', 'frontend', 'testing', 'anti_patterns', 'mcp_integration']
 status: 'complete'
-rule_count: 38
+rule_count: 30
 optimized_for_llm: true
 ---
 
@@ -88,31 +88,10 @@ _This file contains critical rules and patterns that AI agents must follow when 
 - **Storefront:** `pnpm run test` (Vitest).
   - ✅ Use `happy-dom` for environment.
 
-### Email Queue Patterns (Transactional Email)
-- **Queue Architecture:**
-  - ✅ Use BullMQ for async email processing (non-blocking)
-  - ✅ Enqueue emails from subscribers, never send directly
-  - ✅ Use `lib/email-queue.ts` singleton pattern for queue access
-  - 🛑 DO NOT send emails synchronously in event handlers
-- **Retry & DLQ:**
-  - ✅ Configure 3 retries with exponential backoff (1s, 2s, 4s)
-  - ✅ Move failed emails to Redis DLQ (`email:dlq`) after retries exhausted
-  - ✅ Log all email attempts with `[EMAIL]` prefix
-  - 🛑 DO NOT lose failed emails—always persist to DLQ
-- **PII Handling:**
-  - ✅ Mask email addresses in logs: `****@domain.com`
-  - 🛑 NEVER log full email addresses in production
-- **Resend Integration:**
-  - ✅ Use existing `src/modules/resend/service.ts` for sending
-  - ✅ Use React Email templates in `src/modules/resend/emails/`
-  - ✅ Store API key in `RESEND_API_KEY` env var
-
 ### Critical Anti-Patterns
 - 🛑 **Never** commit `.env` files.
 - 🛑 **Never** ignore errors in `catch` blocks—log them or rethrow.
 - 🛑 **Never** mix Storefront and Backend types—they are distinct packages.
-- 🛑 **Never** send emails synchronously in subscribers—use BullMQ queue.
-- 🛑 **Never** log PII (email addresses) in plain text.
 
 ---
 
@@ -132,4 +111,4 @@ _This file contains critical rules and patterns that AI agents must follow when 
 - Review quarterly for outdated rules
 - Remove rules that become obvious over time
 
-Last Updated: 2025-12-14
+Last Updated: 2025-12-12
