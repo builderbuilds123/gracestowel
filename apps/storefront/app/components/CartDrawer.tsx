@@ -10,8 +10,6 @@ export function CartDrawer() {
     const { items, isOpen, toggleCart, removeFromCart, updateQuantity, cartTotal } = useCart();
     const { formatPrice, t } = useLocale();
 
-    const isFreeGift = (item: any) => item.color === "Free Gift";
-
     return (
         <>
             {/* Backdrop */}
@@ -69,16 +67,14 @@ export function CartDrawer() {
                                                     </div>
                                                 )}
                                             </div>
-                                            {!isFreeGift(item) && (
-                                                <button
-                                                    onClick={() => removeFromCart(item.id, item.color)}
-                                                    className="text-text-earthy/40 hover:text-red-500 transition-colors"
-                                                >
-                                                    <X className="w-4 h-4" />
-                                                </button>
-                                            )}
+                                            <button
+                                                onClick={() => removeFromCart(item.id, item.color)}
+                                                className="text-text-earthy/40 hover:text-red-500 transition-colors"
+                                            >
+                                                <X className="w-4 h-4" />
+                                            </button>
                                         </div>
-                                        {item.color && item.id !== 4 && (
+                                        {item.color && (
                                             <p className="text-xs text-text-earthy/60 mb-2">Color: {item.color}</p>
                                         )}
                                         {item.embroidery && (
@@ -107,28 +103,21 @@ export function CartDrawer() {
                                             price={item.price}
                                             originalPrice={item.originalPrice}
                                             className="mb-4"
-                                            showFreeLabel={isFreeGift(item)}
                                         />
                                         <div className="flex items-center gap-3">
-                                            {item.id === 4 && item.price === "$0.00" ? (
-                                                <span className="text-sm text-text-earthy/60">Qty: {item.quantity}</span>
-                                            ) : (
-                                                <>
-                                                    <button
-                                                        onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                                                        className="p-1 rounded-full hover:bg-gray-100 border border-gray-200"
-                                                    >
-                                                        <Minus className="w-4 h-4" />
-                                                    </button>
-                                                    <span className="w-8 text-center">{item.quantity}</span>
-                                                    <button
-                                                        onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                                                        className="p-1 rounded-full hover:bg-gray-100 border border-gray-200"
-                                                    >
-                                                        <Plus className="w-4 h-4" />
-                                                    </button>
-                                                </>
-                                            )}
+                                            <button
+                                                onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                                                className="p-1 rounded-full hover:bg-gray-100 border border-gray-200"
+                                            >
+                                                <Minus className="w-4 h-4" />
+                                            </button>
+                                            <span className="w-8 text-center">{item.quantity}</span>
+                                            <button
+                                                onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                                                className="p-1 rounded-full hover:bg-gray-100 border border-gray-200"
+                                            >
+                                                <Plus className="w-4 h-4" />
+                                            </button>
                                         </div>
                                     </div>
                                 </div>

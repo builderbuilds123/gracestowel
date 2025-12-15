@@ -1,0 +1,171 @@
+# Implementation Plan
+
+- [ ] 1. Set up test infrastructure and helpers
+  - [ ] 1.1 Create test helper utilities for order creation and webhook simulation
+    - Create `apps/e2e/support/helpers/test-order.ts` with `createTestOrder()`, `generateModificationToken()`, `triggerCaptureJob()` functions
+    - Create `apps/e2e/support/helpers/webhook-simulator.ts` with `simulateWebhook()`, `generateStripeSignature()` functions
+    - _Requirements: 9.4, 9.5, 11.5_
+  - [ ]* 1.2 Write property test for unique identifier generation
+    - **Property 14: Cart Persistence Across Sessions**
+    - **Validates: Requirements 2.2, 4.3**
+  - [ ] 1.3 Create Stripe test card constants and payment helpers
+    - Create `apps/e2e/support/helpers/stripe-test-cards.ts` with TEST_CARDS constants
+    - Create `apps/e2e/support/helpers/payment-helpers.ts` with payment simulation utilities
+    - _Requirements: 9.1, 9.2, 9.3_
+  - [ ] 1.4 Update playwright.config.ts for API-first testing
+    - Configure API request context
+    - Set up environment variables for backend URL
+    - Configure minimal browser projects (chromium only for smoke tests)
+    - _Requirements: 6.1, 6.5_
+
+- [ ] 2. Implement Cart Flow Tests
+  - [ ] 2.1 Create cart API test suite
+    - Test cart add, update, remove operations via API
+    - Test cart total calculation
+    - Test cart persistence in localStorage
+    - _Requirements: 2.2, 12.1_
+  - [ ]* 2.2 Write property test for cart state consistency
+    - **Property 1: Cart State Consistency**
+    - **Validates: Requirements 12.1, 15.1**
+  - [ ]* 2.3 Write unit tests for price calculation utilities
+    - Test `toCents()`, `fromCents()`, `calculateTotal()` functions
+    - _Requirements: 15.1, 15.3_
+
+- [ ] 3. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [ ] 4. Implement Payment Intent Flow Tests
+  - [ ] 4.1 Create payment intent API test suite
+    - Test PaymentIntent creation with correct amount
+    - Test PaymentIntent update preserves ID
+    - Test idempotency key prevents duplicates
+    - _Requirements: 12.4, 12.5, 14.3_
+  - [ ]* 4.2 Write property test for PaymentIntent amount consistency
+    - **Property 2: PaymentIntent Amount Consistency**
+    - **Validates: Requirements 12.4, 12.5, 15.5**
+  - [ ] 4.3 Create stock validation test suite
+    - Test out-of-stock error handling
+    - Test insufficient quantity error handling
+    - _Requirements: 12.8_
+  - [ ]* 4.4 Write property test for stock validation error display
+    - **Property 3: Stock Validation Error Display**
+    - **Validates: Requirements 12.8**
+  - [ ]* 4.5 Write property test for idempotency key duplicate prevention
+    - **Property 12: Idempotency Key Duplicate Prevention**
+    - **Validates: Requirements 14.3**
+
+- [ ] 5. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [ ] 6. Implement Order Creation Flow Tests
+  - [ ] 6.1 Create webhook handler test suite
+    - Test order creation from payment_intent.amount_capturable_updated webhook
+    - Test idempotent webhook handling (duplicate events)
+    - Test webhook signature validation
+    - _Requirements: 13.1, 9.4, 9.5_
+  - [ ]* 6.2 Write property test for order creation from webhook
+    - **Property 5: Order Creation from Webhook**
+    - **Validates: Requirements 13.1**
+  - [ ] 6.3 Create modification token test suite
+    - Test token generation on order creation
+    - Test token validation (valid, expired, invalid signature)
+    - _Requirements: 13.2, 8.4_
+  - [ ]* 6.4 Write property test for modification token generation
+    - **Property 6: Modification Token Generation**
+    - **Validates: Requirements 13.2**
+
+- [ ] 7. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [ ] 8. Implement Order Modification Flow Tests
+  - [ ] 8.1 Create grace period test suite
+    - Test modification options available within grace period
+    - Test modification options hidden after grace period
+    - _Requirements: 8.2, 8.3, 13.3_
+  - [ ]* 8.2 Write property test for grace period modification availability
+    - **Property 7: Grace Period Modification Availability**
+    - **Validates: Requirements 8.2, 13.3**
+  - [ ]* 8.3 Write property test for grace period expiration behavior
+    - **Property 8: Grace Period Expiration Behavior**
+    - **Validates: Requirements 8.3, 13.4**
+  - [ ] 8.4 Create order cancellation test suite
+    - Test cancellation within grace period succeeds
+    - Test cancellation after grace period fails
+    - Test PaymentIntent is cancelled on order cancellation
+    - _Requirements: 8.5, 13.6_
+  - [ ]* 8.5 Write property test for order cancellation during grace period
+    - **Property 9: Order Cancellation During Grace Period**
+    - **Validates: Requirements 8.5, 13.6**
+  - [ ] 8.6 Create order update test suite
+    - Test address update within grace period
+    - Test item addition within grace period
+    - Test PaymentIntent amount updated on item addition
+    - _Requirements: 13.7, 13.8_
+
+- [ ] 9. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [ ] 10. Implement Payment Capture Flow Tests
+  - [ ] 10.1 Create payment capture test suite
+    - Test payment capture after grace period expiration
+    - Test order status update after capture
+    - _Requirements: 13.4, 13.5_
+  - [ ]* 10.2 Write property test for payment authorization state
+    - **Property 4: Payment Authorization State**
+    - **Validates: Requirements 12.9**
+  - [ ] 10.3 Create fallback capture test suite
+    - Test fallback capture for orders with needs_recovery flag
+    - Test fallback capture for stale orders (>65 minutes)
+    - _Requirements: 14.4, 14.5_
+  - [ ]* 10.4 Write property test for fallback capture recovery
+    - **Property 13: Fallback Capture Recovery**
+    - **Validates: Requirements 14.4**
+
+- [ ] 11. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [ ] 12. Implement Payment Error Flow Tests
+  - [ ] 12.1 Create payment decline test suite
+    - Test generic decline error handling
+    - Test insufficient funds error handling
+    - Test lost card error handling
+    - _Requirements: 14.1, 9.2_
+  - [ ]* 12.2 Write property test for payment decline error display
+    - **Property 10: Payment Decline Error Display**
+    - **Validates: Requirements 9.2, 14.1**
+  - [ ] 12.3 Create 3D Secure test suite
+    - Test 3DS authentication success flow
+    - Test 3DS authentication failure flow
+    - _Requirements: 9.3, 14.2_
+  - [ ]* 12.4 Write property test for 3D Secure challenge handling
+    - **Property 11: 3D Secure Challenge Handling**
+    - **Validates: Requirements 9.3, 14.2**
+
+- [ ] 13. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [ ] 14. Implement UI Smoke Tests
+  - [ ] 14.1 Create minimal UI smoke test suite
+    - Test homepage loads
+    - Test checkout page loads
+    - Test order status page loads with valid token
+    - _Requirements: 2.1, 7.1_
+  - [ ]* 14.2 Write property test for responsive viewport behavior
+    - **Property 15: Responsive Viewport Behavior**
+    - **Validates: Requirements 2.5, 7.5**
+
+- [ ] 15. Clean up and documentation
+  - [ ] 15.1 Remove or archive failing legacy tests
+    - Archive `apps/e2e/tests/checkout.spec.ts` (replaced by API tests)
+    - Archive `apps/e2e/tests/grace-period.spec.ts` (replaced by API tests)
+    - Archive `apps/e2e/tests/visual-regression.spec.ts` (not needed for flow testing)
+    - Archive `apps/e2e/resilience/network-failures.spec.ts` (replaced by API tests)
+    - _Requirements: 11.1_
+  - [ ] 15.2 Update README with new testing approach
+    - Document API-first testing strategy
+    - Document test helper usage
+    - Document how to run tests
+    - _Requirements: 6.4_
+
+- [ ] 16. Final Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.

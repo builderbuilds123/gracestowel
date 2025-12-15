@@ -10,7 +10,7 @@ import { Towel } from "@phosphor-icons/react";
 export function meta({ }: Route.MetaArgs) {
   return [
     { title: "Grace Stowel - Premium Organic Cotton Towels" },
-    { name: "description", content: "Discover luxuriously soft, sustainably made organic cotton towels. Handcrafted with care, designed to last. Free shipping on orders over $100." },
+    { name: "description", content: "Discover luxuriously soft, sustainably made organic cotton towels. Handcrafted with care, designed to last." },
     // Open Graph
     { property: "og:title", content: "Grace Stowel - Premium Organic Cotton Towels" },
     { property: "og:description", content: "Discover luxuriously soft, sustainably made organic cotton towels. Handcrafted with care, designed to last." },

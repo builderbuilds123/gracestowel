@@ -1,18 +1,18 @@
 import { useLocale } from '../context/LocaleContext';
+import { isFreePrice } from '../lib/price';
 
 interface ProductPriceProps {
     price: string | number;
     originalPrice?: string | number;
     className?: string;
-    showFreeLabel?: boolean;
 }
 
-export function ProductPrice({ price, originalPrice, className = '', showFreeLabel = false }: ProductPriceProps) {
+export function ProductPrice({ price, originalPrice, className = '' }: ProductPriceProps) {
     const { formatPrice } = useLocale();
 
     const currentPrice = typeof price === 'string' ? price : formatPrice(price);
     const hasDiscount = originalPrice && originalPrice !== price;
-    const isFree = currentPrice === '$0.00' || currentPrice === '0.00';
+    const isFree = typeof currentPrice === 'string' ? isFreePrice(currentPrice) : false;
 
     return (
         <div className={`flex items-center gap-2 ${className}`}>

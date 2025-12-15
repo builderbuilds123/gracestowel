@@ -21,8 +21,8 @@ export interface ErrorContext {
  * Configured for Railway/serverless environments with immediate flushing
  */
 export function initPostHog() {
-  const apiKey = process.env.POSTHOG_API_KEY;
-  const host = process.env.POSTHOG_HOST || 'https://app.posthog.com';
+  const apiKey = process.env.VITE_POSTHOG_API_KEY || process.env.POSTHOG_API_KEY;
+  const host = process.env.VITE_POSTHOG_HOST || process.env.POSTHOG_HOST || 'https://app.posthog.com';
 
   if (!apiKey) {
     console.warn('[PostHog] API key not configured. Server-side tracking disabled.');

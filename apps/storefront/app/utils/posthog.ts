@@ -29,14 +29,14 @@ export function initPostHog() {
   // Try runtime config first (from Cloudflare Workers via window.ENV)
   // Fallback to build-time config (VITE_* env vars)
   const runtimeConfig = (window as any).ENV;
-  const apiKey = runtimeConfig?.POSTHOG_API_KEY || import.meta.env.VITE_POSTHOG_API_KEY;
-  const host = runtimeConfig?.POSTHOG_HOST || import.meta.env.VITE_POSTHOG_HOST || 'https://us.i.posthog.com';
+  const apiKey = runtimeConfig?.VITE_POSTHOG_API_KEY || runtimeConfig?.POSTHOG_API_KEY || import.meta.env.VITE_POSTHOG_API_KEY;
+  const host = runtimeConfig?.VITE_POSTHOG_HOST || runtimeConfig?.POSTHOG_HOST || import.meta.env.VITE_POSTHOG_HOST || 'https://us.i.posthog.com';
   
   // Only initialize if API key is provided
   if (!apiKey) {
     console.warn('[PostHog] API key not configured. Skipping initialization.');
     console.warn('[PostHog] Checked:', {
-      runtime: !!runtimeConfig?.POSTHOG_API_KEY,
+      runtime: !!(runtimeConfig?.VITE_POSTHOG_API_KEY || runtimeConfig?.POSTHOG_API_KEY),
       buildTime: !!import.meta.env.VITE_POSTHOG_API_KEY,
     });
     return;
