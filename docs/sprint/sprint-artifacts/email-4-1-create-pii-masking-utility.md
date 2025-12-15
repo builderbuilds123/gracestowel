@@ -1,6 +1,6 @@
 # Story 4.1: Create PII Masking Utility
 
-Status: Drafted
+Status: done
 
 ## Story
 
@@ -113,15 +113,15 @@ export function maskEmailsInText(text: string): string {
 
 ## Tasks / Subtasks
 
-- [ ] Create `apps/backend/src/utils/email-masking.ts`
-- [ ] Implement `maskEmail()` function
-- [ ] Handle null/undefined inputs
-- [ ] Handle invalid email formats
-- [ ] Preserve domain for debugging
-- [ ] Mask local part (first char + asterisks)
-- [ ] Handle short emails gracefully
-- [ ] Add JSDoc documentation
-- [ ] Optionally implement `maskEmailsInText()` helper
+- [x] Create `apps/backend/src/utils/email-masking.ts`
+- [x] Implement `maskEmail()` function
+- [x] Handle null/undefined inputs
+- [x] Handle invalid email formats
+- [x] Preserve domain for debugging
+- [x] Mask local part (first char + asterisks)
+- [x] Handle short emails gracefully
+- [x] Add JSDoc documentation
+- [x] Optionally implement `maskEmailsInText()` helper
 
 ## Testing Requirements
 
@@ -194,14 +194,14 @@ cd apps/backend && TEST_TYPE=unit npx jest integration-tests/unit/email-masking.
 
 ## Definition of Done
 
-- [ ] File `apps/backend/src/utils/email-masking.ts` exists
-- [ ] `maskEmail()` masks local part, preserves domain
-- [ ] Short emails (1-2 char local) handled gracefully
-- [ ] Invalid/null inputs return `[invalid-email]`
-- [ ] Asterisks capped at 7 for readability
-- [ ] Unit tests cover: normal email, short email, invalid email, null
-- [ ] JSDoc documentation added
-- [ ] No TypeScript errors
+- [x] File `apps/backend/src/utils/email-masking.ts` exists
+- [x] `maskEmail()` masks local part, preserves domain
+- [x] Short emails (1-2 char local) handled gracefully
+- [x] Invalid/null inputs return `[invalid-email]`
+- [x] Asterisks capped at 7 for readability
+- [x] Unit tests cover: normal email, short email, invalid email, null
+- [x] JSDoc documentation added
+- [x] No TypeScript errors
 
 ## Dev Notes
 
@@ -247,19 +247,17 @@ Consider these edge cases:
 
 ## Dev Agent Record
 
-_To be filled by implementing agent_
-
 ### Agent Model Used
-_Model name_
+Jules
 
 ### Completion Notes
-_Implementation notes_
+Implemented `maskEmail` and `maskEmailsInText` utilities with comprehensive unit tests.
+- Installed `@swc/jest` to enable running unit tests in the backend.
+- Handled all edge cases including null, invalid emails, and short local parts.
+- Verified TypeScript compilation and Linting.
 
 ### File List
 | File | Change |
 |------|--------|
 | `apps/backend/src/utils/email-masking.ts` | Created |
 | `apps/backend/integration-tests/unit/email-masking.unit.spec.ts` | Created |
-
-### Change Log
-_Code review follow-ups_
