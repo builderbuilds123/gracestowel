@@ -651,3 +651,37 @@ As a Developer, I want all tracking hooks wired in `root.tsx` with tests so trac
 | FR5 | Capture `form_interaction` with form_name, field_name (no values), interaction_type, error_message | Epic 5 / Story 5.5 |
 | FR6 | Monitored fetch wrapper attaches route context and is used by all fetch calls | Epic 5 / Story 5.1 |
 | FR7 | Integrate hooks in root.tsx and verify events/tests | Epic 5 / Story 5.6 |
+
+---
+
+## Epic 9: Cart-Based Shipping & Promotion Engine
+
+**Goal:** Enable accurate shipping option calculations by syncing localStorage cart to Medusa cart, leveraging Medusa's promotion engine for free shipping and other promotions.
+
+**Full Details:** See [docs/product/epics/cart-based-shipping.md](./product/epics/cart-based-shipping.md)
+
+**Problem:** Current shipping options use region-based fetching which doesn't leverage Medusa's promotion engine, causing missing `originalAmount` for free shipping promotions.
+
+**Solution:** Hybrid approach — maintain localStorage cart for UI, sync to Medusa cart for shipping calculations.
+
+### Story Summary
+
+| Story | Title | Description |
+| :--- | :--- | :--- |
+| 9.1 | Medusa Cart Service Layer | Create service to manage Medusa cart lifecycle and sync |
+| 9.2 | Update Shipping Rates API | Modify API to use cart context for promotion calculations |
+| 9.3 | Update Checkout Flow | Pass cart items and address to shipping API |
+| 9.4 | Client-Side Caching & Debouncing | Optimize API calls with caching and debounce |
+| 9.5 | Cart Expiration & Error Handling | Graceful fallback on errors and cart expiration |
+| 9.6 | Integration Tests | Automated tests for cart-based shipping flow |
+
+### FR Coverage (Cart-Based Shipping)
+
+| Requirement | Description | Covered By |
+| :--- | :--- | :--- |
+| Cart Context | Shipping options use cart items for promotion calculation | Story 9.1, 9.2 |
+| originalAmount | Display original price when promotions apply | Story 9.2, 9.3 |
+| Address Context | Shipping considers shipping address | Story 9.2, 9.3 |
+| Performance | Caching and debouncing to minimize API calls | Story 9.4 |
+| Resilience | Graceful fallback on errors | Story 9.5 |
+| Quality | Automated test coverage | Story 9.6 |
