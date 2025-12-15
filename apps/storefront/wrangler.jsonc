@@ -7,18 +7,10 @@
 
   // Shared configuration (inherited by all environments)
   "vars": {
-    "MEDUSA_BACKEND_URL": "",
-    "MEDUSA_PUBLISHABLE_KEY": "",
-    "VITE_POSTHOG_API_KEY": "",
-    "VITE_POSTHOG_HOST": "",
-    "POSTHOG_API_KEY": "",
-    "POSTHOG_HOST": "",
-    "POSTHOG_SERVER_CAPTURE_ENABLED": "",
-    "STRIPE_PUBLISHABLE_KEY": "",
-    "STRIPE_SECRET_KEY": ""
-    // Runtime secrets (set via `wrangler secret put` or Cloudflare Dashboard):
-    // - MEDUSA_BACKEND_URL: Backend API URL
-    // - MEDUSA_PUBLISHABLE_KEY: Medusa Store API key
+    "MEDUSA_BACKEND_URL": "", // Placeholder for type generation
+    "MEDUSA_PUBLISHABLE_KEY": "", // Placeholder for type generation
+    "STRIPE_PUBLISHABLE_KEY": "", // Placeholder for type generation
+    "STRIPE_SECRET_KEY": "" // Placeholder for type generation
   },
 
   "hyperdrive": [

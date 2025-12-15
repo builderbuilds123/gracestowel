@@ -19,7 +19,7 @@ vi.mock('posthog-js', () => ({
   },
 }));
 
-describe('useNavigationTracking (Story 5.2.2)', () => {
+describe('useNavigationTracking', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
