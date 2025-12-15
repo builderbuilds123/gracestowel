@@ -17,6 +17,17 @@ export async function action({ request, context }: ActionFunctionArgs) {
     const medusaPublishableKey = env.MEDUSA_PUBLISHABLE_KEY || "";
 
     try {
+        // Parse request body for currency context
+        let currency = "CAD"; // Default
+        try {
+            const body = await request.clone().json() as { currency?: string };
+            if (body.currency) {
+                currency = body.currency;
+            }
+        } catch (e) {
+            console.warn("Could not parse request body for currency, using default.");
+        }
+
         // 1. Get Regions (to find default currency/region)
         // In a real app, this should come from the user's session or selection
         const regionsResponse = await monitoredFetch(`${medusaBackendUrl}/store/regions`, {
@@ -28,14 +39,22 @@ export async function action({ request, context }: ActionFunctionArgs) {
         });
 
         if (!regionsResponse.ok) {
-            throw new Error("Failed to fetch regions");
+            console.error(`Failed to fetch regions: ${regionsResponse.status} ${regionsResponse.statusText}`);
+            throw new Error("Unable to retrieve shipping regions");
         }
 
         const { regions } = await regionsResponse.json() as { regions: any[] };
-        const region = regions[0]; // Default to first region
+        
+        // Find region matching currency
+        let region = regions.find((r: any) => r.currency_code.toUpperCase() === currency.toUpperCase());
 
         if (!region) {
-            throw new Error("No regions found");
+            console.warn(`No region found for currency ${currency}, falling back to first region.`);
+            region = regions[0]; // Fallback
+        }
+
+        if (!region) {
+            throw new Error("No valid shipping region found");
         }
 
         // 2. Fetch Shipping Options for the region
@@ -48,14 +67,15 @@ export async function action({ request, context }: ActionFunctionArgs) {
         });
 
         if (!optionsResponse.ok) {
-            throw new Error("Failed to fetch shipping options");
+            console.error(`Failed to fetch shipping options: ${optionsResponse.status} ${optionsResponse.statusText}`);
+            throw new Error("Unable to retrieve shipping options");
         }
 
         const { shipping_options } = await optionsResponse.json() as { shipping_options: any[] };
 
         // 3. Map to frontend format
         // We do NOT apply any client-side price overrides. We trust Medusa.
-        const formattedOptions = shipping_options.map((option) => ({
+        const formattedOptions = shipping_options.map((option: any) => ({
             id: option.id,
             displayName: option.name,
             amount: option.amount, // Medusa returns amount in cents (usually)
@@ -67,7 +87,14 @@ export async function action({ request, context }: ActionFunctionArgs) {
         return { shippingOptions: formattedOptions };
 
     } catch (error: any) {
-        console.error("Error fetching shipping rates:", error);
-        return data({ message: `Error fetching shipping rates: ${error.message || error}` }, { status: 500 });
+        // Structured logging (basic)
+        console.error(JSON.stringify({
+            event: "shipping_rates_error",
+            message: error.message,
+            stack: error.stack,
+            timestamp: new Date().toISOString()
+        }));
+        
+        return data({ message: "An error occurred while calculating shipping rates." }, { status: 500 });
     }
 }

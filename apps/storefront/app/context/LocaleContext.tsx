@@ -62,7 +62,11 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
         
         if (isNaN(numericPrice)) return typeof price === 'string' ? price : '0.00';
 
-        return new Intl.NumberFormat(language === 'fr' ? 'fr-CA' : 'en-US', {
+        const localeString = language === 'fr'
+            ? 'fr-CA'
+            : `en-${currency === 'CAD' ? 'CA' : 'US'}`;
+
+        return new Intl.NumberFormat(localeString, {
             style: 'currency',
             currency: currency,
         }).format(numericPrice);
