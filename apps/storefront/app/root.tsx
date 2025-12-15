@@ -32,10 +32,6 @@ import "./app.css";
 if (typeof window !== 'undefined') {
   // Wait for window.ENV to be set (injected by EnvScript component)
   const initPostHogWhenReady = () => {
-    const runtimeConfig = (window as any).ENV;
-    const buildTimeKey = import.meta.env.VITE_POSTHOG_API_KEY;
-    const apiKey = runtimeConfig?.VITE_POSTHOG_API_KEY || runtimeConfig?.POSTHOG_API_KEY || buildTimeKey;
-
     initPostHog();
     reportWebVitals();
     setupErrorTracking();

@@ -1,5 +1,6 @@
 import { type ActionFunctionArgs, data } from "react-router";
 import { monitoredFetch } from "../utils/monitored-fetch";
+import type { CloudflareEnv } from "../utils/monitored-fetch";
 
 export async function action({ request, context }: ActionFunctionArgs) {
     if (request.method !== "POST") {
@@ -7,14 +8,17 @@ export async function action({ request, context }: ActionFunctionArgs) {
     }
 
     // Access full Cloudflare env
-    const env = context.cloudflare.env as {
+    const env = context.cloudflare.env as CloudflareEnv & {
         MEDUSA_BACKEND_URL?: string;
         MEDUSA_PUBLISHABLE_KEY?: string;
-        [key: string]: unknown;
     };
 
     const medusaBackendUrl = env.MEDUSA_BACKEND_URL || "http://localhost:9000";
-    const medusaPublishableKey = env.MEDUSA_PUBLISHABLE_KEY || "";
+    const medusaPublishableKey = env.MEDUSA_PUBLISHABLE_KEY;
+
+    if (!medusaPublishableKey) {
+        throw new Error("Missing MEDUSA_PUBLISHABLE_KEY environment variable");
+    }
 
     try {
         // Parse request body for currency context
@@ -36,6 +40,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
                 "x-publishable-api-key": medusaPublishableKey,
             },
             label: "medusa-regions",
+            cloudflareEnv: env,
         });
 
         if (!regionsResponse.ok) {
@@ -64,6 +69,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
                 "x-publishable-api-key": medusaPublishableKey,
             },
             label: "medusa-shipping-options",
+            cloudflareEnv: env,
         });
 
         if (!optionsResponse.ok) {
@@ -75,13 +81,92 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
         // 3. Map to frontend format
         // We do NOT apply any client-side price overrides. We trust Medusa.
-        const formattedOptions = shipping_options.map((option: any) => ({
-            id: option.id,
-            displayName: option.name,
-            amount: option.amount, // Medusa returns amount in cents (usually)
-            originalAmount: option.amount,
-            deliveryEstimate: null, // Medusa doesn't standardly return this, could be in metadata
-            isFree: option.amount === 0,
+        const formattedOptions = await Promise.all(shipping_options.map(async (option: any) => {
+            const amount = typeof option.amount === 'number' ? option.amount : 0;
+            const isFree = amount === 0;
+            
+            // Try to get originalAmount from Medusa's response
+            let originalAmount =
+                typeof option.original_amount === 'number'
+                    ? option.original_amount
+                    : (typeof option?.metadata?.original_amount === 'number' ? option.metadata.original_amount : undefined);
+
+            // If shipping is free and originalAmount is not provided, try to get the base price
+            if (isFree && originalAmount === undefined) {
+                // First, check if the option has a prices array with base price in the response
+                if (Array.isArray(option.prices) && option.prices.length > 0) {
+                    // Find price matching the region's currency or region ID
+                    const regionPrice = option.prices.find((p: any) => 
+                        p.region_id === region.id || p.currency_code?.toUpperCase() === currency.toUpperCase()
+                    );
+                    if (regionPrice && typeof regionPrice.amount === 'number') {
+                        // Medusa prices in the prices array might be in dollars (from config) or cents (from API)
+                        // If price < 10, assume it's in dollars (since shipping rarely costs < 10 cents)
+                        // Otherwise assume it's already in cents
+                        originalAmount = regionPrice.amount < 10 ? Math.round(regionPrice.amount * 100) : regionPrice.amount;
+                    } else if (option.prices[0] && typeof option.prices[0].amount === 'number') {
+                        // Fallback to first price
+                        const firstPrice = option.prices[0].amount;
+                        originalAmount = firstPrice < 10 ? Math.round(firstPrice * 100) : firstPrice;
+                    }
+                } else if (option.price && typeof option.price === 'number') {
+                    // Check for a single price field
+                    originalAmount = option.price < 10 ? Math.round(option.price * 100) : option.price;
+                } else {
+                    // Try to fetch shipping option details (if Store API supports it)
+                    // Note: This endpoint may not exist in Medusa Store API, but we try it as a fallback
+                    try {
+                        const optionDetailResponse = await monitoredFetch(
+                            `${medusaBackendUrl}/store/shipping-options/${option.id}`,
+                            {
+                                method: "GET",
+                                headers: {
+                                    "x-publishable-api-key": medusaPublishableKey,
+                                },
+                                label: "medusa-shipping-option-detail",
+                                cloudflareEnv: env,
+                            }
+                        );
+
+                        if (optionDetailResponse.ok) {
+                            const optionDetail = await optionDetailResponse.json() as { shipping_option?: any };
+                            const detail = optionDetail.shipping_option || optionDetail;
+                            
+                            // Check for prices array in the detail response
+                            if (Array.isArray(detail.prices) && detail.prices.length > 0) {
+                                const regionPrice = detail.prices.find((p: any) => 
+                                    p.region_id === region.id || p.currency_code?.toUpperCase() === currency.toUpperCase()
+                                );
+                                if (regionPrice && typeof regionPrice.amount === 'number') {
+                                    originalAmount = regionPrice.amount < 10 ? Math.round(regionPrice.amount * 100) : regionPrice.amount;
+                                } else if (detail.prices[0] && typeof detail.prices[0].amount === 'number') {
+                                    const firstPrice = detail.prices[0].amount;
+                                    originalAmount = firstPrice < 10 ? Math.round(firstPrice * 100) : firstPrice;
+                                }
+                            } else if (detail.price && typeof detail.price === 'number') {
+                                originalAmount = detail.price < 10 ? Math.round(detail.price * 100) : detail.price;
+                            }
+                        }
+                    } catch (error) {
+                        // If fetching option details fails, log but don't fail the entire request
+                        // This is expected if the Store API doesn't support individual option details
+                        console.warn(`Could not fetch base price for free shipping option ${option.id}. Original amount will not be displayed.`);
+                    }
+                }
+            }
+
+            const originalAmountToShow =
+                originalAmount !== undefined && originalAmount !== amount ? originalAmount : undefined;
+
+            return {
+                id: option.id,
+                displayName: option.name,
+                amount,
+                // Only include originalAmount if it differs from amount so the UI doesn't cross out $0.00
+                originalAmount: originalAmountToShow,
+                deliveryEstimate: null, // Medusa doesn't standardly return this, could be in metadata
+                isFree,
+            };
         }));
 
         return { shippingOptions: formattedOptions };

@@ -29,11 +29,19 @@ export const DEFAULT_CURRENCY: CurrencyCode = 'USD';
  */
 export function parsePrice(formatted: string): number {
     if (!formatted) return 0;
-    
+
     // Remove currency symbols, commas, and whitespace
-    const cleaned = formatted.replace(/[$€£,\s]/g, '');
+    let cleaned = formatted.replace(/[^0-9,\.\-]/g, '');
+
+    // If we only have commas, treat comma as decimal separator.
+    // If we have both comma and dot, treat comma as thousands separator.
+    if (cleaned.includes(',') && !cleaned.includes('.')) {
+        cleaned = cleaned.replace(',', '.');
+    } else if (cleaned.includes(',') && cleaned.includes('.')) {
+        cleaned = cleaned.replace(/,/g, '');
+    }
+
     const parsed = parseFloat(cleaned);
-    
     return isNaN(parsed) ? 0 : parsed;
 }
 

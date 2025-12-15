@@ -103,9 +103,6 @@ interface OrderItemProps {
 }
 
 function OrderItem({ item, onUpdateQuantity, onRemove }: OrderItemProps) {
-    const numericPrice = parseFloat(String(item.price).replace(/[^0-9.]/g, ''));
-    const isFree = !isNaN(numericPrice) && numericPrice === 0;
-
     return (
         <div className="flex gap-4">
             <div className="w-20 h-20 bg-card-earthy/30 rounded-md overflow-hidden flex-shrink-0">
