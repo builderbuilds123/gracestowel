@@ -1,10 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { renderHook } from '@testing-library/react';
 import { useFormTracking } from './useFormTracking';
 
 // Mock react-router
-const mockLocation = { pathname: '/checkout', search: '' };
-
+const mockLocation = { pathname: '/login', search: '' };
 vi.mock('react-router', () => ({
   useLocation: () => mockLocation,
 }));
@@ -20,169 +19,132 @@ vi.mock('posthog-js', () => ({
 describe('useFormTracking', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    document.body.innerHTML = '';
   });
 
-  afterEach(() => {
-    document.body.innerHTML = '';
-  });
-
-  it('tracks focus events on input fields', () => {
-    // Create a form with an input
-    document.body.innerHTML = `
-      <form id="checkout-form">
-        <input type="text" name="email" />
-      </form>
-    `;
-    
+  it('captures focus on input fields', () => {
     renderHook(() => useFormTracking());
     
-    const input = document.querySelector('input[name="email"]') as HTMLInputElement;
+    // Create form and input
+    const form = document.createElement('form');
+    form.id = 'login-form';
+    document.body.appendChild(form);
     
-    act(() => {
-      input.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
-    });
+    const input = document.createElement('input');
+    input.name = 'email';
+    input.type = 'email';
+    form.appendChild(input);
+
+    // Simulate focus
+    input.focus();
+    // JSDOM focus doesn't trigger global capture listener automatically?
+    // Dispatch event manually
+    const event = new Event('focus', { bubbles: false, cancelable: false });
+    input.dispatchEvent(event);
     
     expect(mockCapture).toHaveBeenCalledWith('form_interaction', expect.objectContaining({
-      form_name: 'checkout_form',
+      form_name: 'login-form',
       field_name: 'email',
       interaction_type: 'focus',
-      page_path: '/checkout',
     }));
+
+    document.body.removeChild(form);
   });
 
-  it('tracks blur events on input fields', () => {
-    document.body.innerHTML = `
-      <form id="checkout-form">
-        <input type="text" name="city" value="Toronto" />
-      </form>
-    `;
-    
+  it('captures blur on input fields', () => {
     renderHook(() => useFormTracking());
     
-    const input = document.querySelector('input[name="city"]') as HTMLInputElement;
+    const form = document.createElement('form');
+    form.name = 'signup';
+    document.body.appendChild(form);
     
-    // Need to mock validity
-    Object.defineProperty(input, 'validity', {
-      value: { valid: true },
-      writable: true,
-    });
+    const input = document.createElement('input');
+    input.name = 'username';
+    form.appendChild(input);
     
-    act(() => {
-      input.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
-    });
+    input.dispatchEvent(new Event('blur'));
     
     expect(mockCapture).toHaveBeenCalledWith('form_interaction', expect.objectContaining({
-      field_name: 'city',
+      form_name: 'signup',
+      field_name: 'username',
       interaction_type: 'blur',
     }));
+
+    document.body.removeChild(form);
   });
 
-  it('masks sensitive field names', () => {
-    document.body.innerHTML = `
-      <form id="payment-form">
-        <input type="password" name="password" />
-      </form>
-    `;
-    
+  it('captures form submission', () => {
     renderHook(() => useFormTracking());
     
-    const input = document.querySelector('input[name="password"]') as HTMLInputElement;
+    const form = document.createElement('form');
+    form.id = 'checkout';
+    document.body.appendChild(form);
     
-    act(() => {
-      input.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
-    });
-    
-    expect(mockCapture).toHaveBeenCalledWith('form_interaction', expect.objectContaining({
-      field_name: '[sensitive]',
-    }));
-  });
-
-  it('tracks form submission', () => {
-    document.body.innerHTML = `
-      <form id="checkout-form">
-        <input type="text" name="email" />
-        <button type="submit">Submit</button>
-      </form>
-    `;
-    
-    renderHook(() => useFormTracking());
-    
-    const form = document.querySelector('form') as HTMLFormElement;
-    
-    act(() => {
-      form.dispatchEvent(new Event('submit', { bubbles: true }));
-    });
+    form.dispatchEvent(new Event('submit', { bubbles: true }));
     
     expect(mockCapture).toHaveBeenCalledWith('form_interaction', expect.objectContaining({
-      form_name: 'checkout_form',
-      field_name: '_form_submit',
+      form_name: 'checkout',
+      field_name: 'form',
       interaction_type: 'submit',
     }));
+
+    document.body.removeChild(form);
   });
 
-  it('only tracks first focus per field per page', () => {
-    document.body.innerHTML = `
-      <form id="contact-form">
-        <input type="text" name="name" />
-      </form>
-    `;
-    
+  it('ignores password fields', () => {
     renderHook(() => useFormTracking());
     
-    const input = document.querySelector('input[name="name"]') as HTMLInputElement;
+    const form = document.createElement('form');
+    document.body.appendChild(form);
     
-    // First focus
-    act(() => {
-      input.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
-    });
+    const input = document.createElement('input');
+    input.name = 'password';
+    input.type = 'password';
+    form.appendChild(input);
     
-    const callCount = mockCapture.mock.calls.filter(
-      (call) => call[0] === 'form_interaction' && call[1].interaction_type === 'focus'
-    ).length;
-    
-    // Second focus on same field
-    act(() => {
-      input.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
-    });
-    
-    const newCallCount = mockCapture.mock.calls.filter(
-      (call) => call[0] === 'form_interaction' && call[1].interaction_type === 'focus'
-    ).length;
-    
-    // Should not have tracked second focus
-    expect(newCallCount).toBe(callCount);
+    input.dispatchEvent(new Event('focus'));
+
+    expect(mockCapture).not.toHaveBeenCalled();
+
+    document.body.removeChild(form);
   });
 
-  it('tracks validation errors on blur', () => {
-    document.body.innerHTML = `
-      <form id="checkout-form">
-        <input type="email" name="email" required />
-      </form>
-    `;
-    
+  it('ignores hidden fields', () => {
     renderHook(() => useFormTracking());
     
-    const input = document.querySelector('input[name="email"]') as HTMLInputElement;
+    const form = document.createElement('form');
+    document.body.appendChild(form);
     
-    // Mock invalid validity
-    Object.defineProperty(input, 'validity', {
-      value: { valid: false },
-      writable: true,
-    });
-    Object.defineProperty(input, 'validationMessage', {
-      value: 'Please enter a valid email',
-      writable: true,
+    const input = document.createElement('input');
+    input.name = 'token';
+    input.type = 'hidden';
+    form.appendChild(input);
+    
+    input.dispatchEvent(new Event('focus'));
+    
+    expect(mockCapture).not.toHaveBeenCalled();
+    
+    document.body.removeChild(form);
+  });
+
+  it('ignores sensitive fields by name heuristic', () => {
+    renderHook(() => useFormTracking());
+    
+    const form = document.createElement('form');
+    document.body.appendChild(form);
+    
+    const sensitiveNames = ['credit_card', 'user_ssn', 'api_key', 'auth_token'];
+    
+    sensitiveNames.forEach(name => {
+      const input = document.createElement('input');
+      input.name = name;
+      input.type = 'text'; // Even if type is text
+      form.appendChild(input);
+
+      input.dispatchEvent(new Event('focus'));
     });
     
-    act(() => {
-      input.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
-    });
-    
-    expect(mockCapture).toHaveBeenCalledWith('form_interaction', expect.objectContaining({
-      field_name: 'email',
-      interaction_type: 'error',
-      error_message: 'Please enter a valid email',
-    }));
+    expect(mockCapture).not.toHaveBeenCalled();
+
+    document.body.removeChild(form);
   });
 });

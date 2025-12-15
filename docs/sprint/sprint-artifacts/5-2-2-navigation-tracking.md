@@ -1,6 +1,6 @@
 # Story 5.2.2: Navigation Tracking
 
-Status: Todo
+Status: Done
 
 ## Story
 As a User Researcher,
@@ -14,3 +14,11 @@ So that we know flow patterns and dwell time between pages.
 
 ## Notes
 - Use existing PostHog client; ensure payload is minimal.
+
+## Dev Agent Record
+- Implemented `useNavigationTracking` hook in `apps/storefront/app/hooks/useNavigationTracking.ts`.
+- Hook tracks route changes, navigation type, and time spent on previous page.
+- Utilized `posthog-js` for event capture.
+- Added comprehensive unit tests in `apps/storefront/app/hooks/useNavigationTracking.test.ts`.
+- Validated types and linting.
+- Modified `apps/storefront/wrangler.jsonc` to fix type generation issues with environment variables.

@@ -1,6 +1,6 @@
 # Story 5.2.4: Engagement & Idle Tracking
 
-Status: Todo
+Status: Done
 
 ## Story
 As a PM,
@@ -14,3 +14,11 @@ So that we can measure engaged vs idle time.
 
 ## Notes
 - Keep overhead low; use listeners efficiently.
+
+## Dev Agent Record
+- Implemented `useEngagementTracking` hook in `apps/storefront/app/hooks/useEngagementTracking.ts`.
+- Detects idle time after 30s of inactivity.
+- Tracks engaged and idle time separately.
+- Emits event on route change or unload.
+- Added unit tests in `apps/storefront/app/hooks/useEngagementTracking.test.ts`.
+- Validated with tests and typecheck.

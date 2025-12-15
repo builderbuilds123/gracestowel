@@ -18,12 +18,7 @@ import { CartDrawer } from "./components/CartDrawer";
 import { Header } from "./components/Header";
 import { Footer } from "./components/Footer";
 import { initPostHog, reportWebVitals, setupErrorTracking, captureException } from "./utils/posthog";
-import { 
-  useNavigationTracking, 
-  useScrollTracking, 
-  useEngagementTracking, 
-  useFormTracking 
-} from "./hooks";
+import { AnalyticsTracking } from "./components/AnalyticsTracking";
 import posthog from "posthog-js";
 import "./app.css";
 
@@ -60,19 +55,6 @@ if (typeof window !== 'undefined') {
   } else {
     initPostHogWhenReady();
   }
-}
-
-/**
- * Analytics Tracking Component (Story 5.1)
- * Wraps all tracking hooks in a single component
- * Must be rendered within router context
- */
-function AnalyticsTracking() {
-  useNavigationTracking();
-  useScrollTracking();
-  useEngagementTracking();
-  useFormTracking();
-  return null;
 }
 
 export async function loader({ context }: Route.LoaderArgs) {

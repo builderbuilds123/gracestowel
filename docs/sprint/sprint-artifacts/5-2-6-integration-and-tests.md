@@ -1,6 +1,6 @@
 # Story 5.2.6: Integration & Tests
 
-Status: Todo
+Status: Done
 
 ## Story
 As a Developer,
@@ -15,3 +15,9 @@ So that tracking is reliable and verifiable.
 
 ## Notes
 - Ensure monitored fetch used everywhere; add CI check if possible.
+
+## Dev Agent Record
+- Created `apps/storefront/app/components/AnalyticsTracking.tsx` to encapsulate all tracking hooks.
+- Integrated `AnalyticsTracking` into `apps/storefront/app/root.tsx`.
+- Verified 17+ tests covering all hooks and interactions.
+- All 5 stories in the epic are now implemented and tested.
