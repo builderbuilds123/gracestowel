@@ -1,9 +1,9 @@
 /**
- * Scroll Depth Tracking Hook (Story 5.1)
- * Tracks how far users scroll on each page
+ * Scroll Depth Tracking Hook (Story 5.2.3)
+ * Tracks scroll milestones (25%, 50%, 75%, 100%)
  */
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef } from 'react';
 import { useLocation } from 'react-router';
 import posthog from 'posthog-js';
 
@@ -14,116 +14,101 @@ interface ScrollDepthEvent {
   time_to_depth_ms: number;
 }
 
-type DepthMilestone = 25 | 50 | 75 | 100;
-
-const MILESTONES: DepthMilestone[] = [25, 50, 75, 100];
-
 /**
  * Hook to track scroll depth milestones
  * 
- * Captures events when user reaches 25%, 50%, 75%, and 100% of page
+ * Captures:
+ * - Depth milestones (25, 50, 75, 100%)
+ * - Page height
+ * - Time taken to reach depth
  * 
- * Features:
- * - Only fires each milestone once per page
- * - Resets on route change
- * - Debounced scroll handler for performance
- * - Uses requestAnimationFrame for smooth tracking
- * 
- * @example
- * ```tsx
- * function App() {
- *   useScrollTracking();
- *   return <Outlet />;
- * }
- * ```
+ * Implementation Details:
+ * - Uses requestAnimationFrame for performance
+ * - Debounces calculations
+ * - Only fires once per threshold per pageview
  */
 export function useScrollTracking() {
   const location = useLocation();
-  
-  // Track which milestones have been reached on current page
-  const reachedMilestones = useRef<Set<DepthMilestone>>(new Set());
-  const pageLoadTime = useRef<number>(Date.now());
-  const rafId = useRef<number | null>(null);
+  const trackedMilestones = useRef<Set<number>>(new Set());
+  const maxScrollDepth = useRef<number>(0);
+  const startTime = useRef<number>(Date.now());
+  const pathRef = useRef<string>(location.pathname);
 
-  // Calculate current scroll percentage
-  const calculateScrollPercentage = useCallback((): number => {
-    if (typeof window === 'undefined') return 0;
-    
-    const scrollTop = window.scrollY || document.documentElement.scrollTop;
-    const scrollHeight = document.documentElement.scrollHeight;
-    const clientHeight = document.documentElement.clientHeight;
-    
-    // Avoid division by zero
-    const scrollableHeight = scrollHeight - clientHeight;
-    if (scrollableHeight <= 0) return 100; // Page fits in viewport
-    
-    return Math.min(100, Math.round((scrollTop / scrollableHeight) * 100));
-  }, []);
-
-  // Check and track milestones
-  const checkMilestones = useCallback(() => {
-    if (typeof window === 'undefined') return;
-    
-    const percentage = calculateScrollPercentage();
-    const pagePath = location.pathname + location.search;
-    const pageHeight = document.documentElement.scrollHeight;
-    
-    for (const milestone of MILESTONES) {
-      if (percentage >= milestone && !reachedMilestones.current.has(milestone)) {
-        reachedMilestones.current.add(milestone);
-        
-        const eventData: ScrollDepthEvent = {
-          depth_percentage: milestone,
-          page_path: pagePath,
-          page_height: pageHeight,
-          time_to_depth_ms: Date.now() - pageLoadTime.current,
-        };
-        
-        posthog.capture('scroll_depth', eventData);
-        
-        if (import.meta.env.MODE === 'development') {
-          console.log(`[Scroll] ${milestone}% reached on ${pagePath} (${eventData.time_to_depth_ms}ms)`);
-        }
-      }
+  useEffect(() => {
+    // Reset on path change
+    if (pathRef.current !== location.pathname) {
+      trackedMilestones.current.clear();
+      maxScrollDepth.current = 0;
+      startTime.current = Date.now();
+      pathRef.current = location.pathname;
     }
-  }, [calculateScrollPercentage, location.pathname, location.search]);
+  }, [location.pathname]);
 
-  // Debounced scroll handler using RAF
-  const handleScroll = useCallback(() => {
-    if (rafId.current) {
-      cancelAnimationFrame(rafId.current);
-    }
-    
-    rafId.current = requestAnimationFrame(() => {
-      checkMilestones();
-    });
-  }, [checkMilestones]);
-
-  // Reset milestones and check initial state on route change
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    
-    // Reset tracking for new page
-    reachedMilestones.current = new Set();
-    pageLoadTime.current = Date.now();
-    
-    // Check initial scroll position (user might land mid-page from anchor/bookmark)
-    // Delay slightly to ensure page has rendered
-    const initialCheckTimer = setTimeout(() => {
-      checkMilestones();
-    }, 100);
-    
-    // Add scroll listener
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    
-    return () => {
-      clearTimeout(initialCheckTimer);
-      window.removeEventListener('scroll', handleScroll);
-      if (rafId.current) {
-        cancelAnimationFrame(rafId.current);
+
+    let rafId: number | null = null;
+    let isScheduled = false;
+
+    const checkScrollDepth = () => {
+      isScheduled = false;
+
+      const scrollTop = window.scrollY || document.documentElement.scrollTop;
+      const winHeight = window.innerHeight;
+      const docHeight = document.documentElement.scrollHeight;
+
+      // Calculate percentage scrolled
+      // Formula: (scrollTop + winHeight) / docHeight * 100
+      // This calculates how much of the page has been viewed
+      const percent = Math.min(100, Math.round(((scrollTop + winHeight) / docHeight) * 100));
+
+      // Only check milestones if we've scrolled further than before
+      if (percent > maxScrollDepth.current) {
+        maxScrollDepth.current = percent;
+        
+        const milestones = [25, 50, 75, 100];
+        const timeToDepth = Date.now() - startTime.current;
+        
+        milestones.forEach((milestone) => {
+          if (percent >= milestone && !trackedMilestones.current.has(milestone)) {
+            trackedMilestones.current.add(milestone);
+
+            const eventData: ScrollDepthEvent = {
+              depth_percentage: milestone as 25 | 50 | 75 | 100,
+              page_path: location.pathname,
+              page_height: docHeight,
+              time_to_depth_ms: timeToDepth,
+            };
+
+            posthog.capture('scroll_depth', eventData);
+
+            if (import.meta.env.MODE === 'development') {
+              console.log(`[Scroll] reached ${milestone}% (${timeToDepth}ms)`);
+            }
+          }
+        });
       }
     };
-  }, [location.pathname, location.search, handleScroll, checkMilestones]);
+
+    const onScroll = () => {
+      if (!isScheduled) {
+        isScheduled = true;
+        rafId = requestAnimationFrame(checkScrollDepth);
+      }
+    };
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    
+    // Initial check in case page is short or already scrolled
+    onScroll();
+
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
+    };
+  }, [location.pathname]); // Re-bind when path changes to ensure fresh state closure if needed
 }
 
 export default useScrollTracking;

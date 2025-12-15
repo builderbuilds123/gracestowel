@@ -1,6 +1,6 @@
 # Story 5.2.5: Form Interaction Tracking
 
-Status: Todo
+Status: Done
 
 ## Story
 As a UX Analyst,
@@ -14,3 +14,11 @@ So that we can spot form friction without capturing values.
 
 ## Notes
 - Gate under `frontend-event-tracking` flag.
+
+## Dev Agent Record
+- Implemented `useFormTracking` hook in `apps/storefront/app/hooks/useFormTracking.ts`.
+- Captures focus, blur, and submit interactions.
+- Explicitly excludes password and hidden fields.
+- Does not capture values, only field names.
+- Added unit tests in `apps/storefront/app/hooks/useFormTracking.test.ts`.
+- Verified with tests and typecheck.
