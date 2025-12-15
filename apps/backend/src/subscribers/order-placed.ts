@@ -2,26 +2,17 @@ import type {
   SubscriberArgs,
   SubscriberConfig,
 } from "@medusajs/framework"
-import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
 import { sendOrderConfirmationWorkflow } from "../workflows/send-order-confirmation"
-import { schedulePaymentCapture } from "../lib/payment-capture-queue"
-import { getPostHog } from "../utils/posthog"
-
-interface OrderPlacedEventData {
-  id: string;
-  modification_token?: string;
-}
 
 export default async function orderPlacedHandler({
   event: { data },
   container,
-}: SubscriberArgs<OrderPlacedEventData>) {
-  const logger = container.resolve(ContainerRegistrationKeys.LOGGER)
-  logger.info(`Order placed event received: ${data.id}`)
+}: SubscriberArgs<{ id: string }>) {
+  console.log("Order placed event received:", data.id)
 
   // Log masked token for audit trail (Story 4.1 requirement) - logged BEFORE email attempt
   if (data.modification_token) {
-    logger.info(`[ORDER_PLACED] Token received (masked): ****...${data.modification_token.slice(-8)}`)
+    console.log(`[ORDER_PLACED] Token received (masked): ****...${data.modification_token.slice(-8)}`)
   }
 
   // Send order confirmation email
@@ -57,35 +48,11 @@ export default async function orderPlacedHandler({
         : undefined
 
       if (paymentIntentId) {
-        try {
-          await schedulePaymentCapture(data.id, paymentIntentId)
-          logger.info(`Payment capture scheduled for order ${data.id} (1 hour delay)`)
-        } catch (scheduleError: any) {
-          // Story 6.2: Handle Redis connection failures gracefully
-          const isRedisError = ['ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND'].includes(scheduleError?.code)
-          
-          if (isRedisError) {
-            logger.error(`[CRITICAL][DLQ] Redis connection failed for order ${data.id} - flagging for recovery`, scheduleError)
-            
-            // Update order metadata with recovery flag
-            const orderService = container.resolve("order")
-            await orderService.updateOrders([{
-              id: data.id,
-              metadata: {
-                ...order.metadata,
-                needs_recovery: true,
-                recovery_reason: 'redis_failure'
-              }
-            }])
-            logger.info(`[RECOVERY] Order ${data.id} flagged for recovery due to Redis failure`)
-          } else {
-            // Re-throw non-Redis errors
-            throw scheduleError
-          }
-        }
+        await schedulePaymentCapture(data.id, paymentIntentId)
+        console.log(`Payment capture scheduled for order ${data.id} (1 hour delay)`)
       } else {
         // M1: Log as error/warn indicating data integrity issue
-        logger.error(`[CRITICAL] No payment intent ID found for order ${data.id} - Automatic capture will NOT happen.`)
+        console.error(`[CRITICAL] No payment intent ID found for order ${data.id} - Automatic capture will NOT happen.`)
       }
 
       // Track order_placed event in PostHog

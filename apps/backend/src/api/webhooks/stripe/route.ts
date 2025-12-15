@@ -1,23 +1,18 @@
-
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import Stripe from "stripe";
 import { getStripeClient } from "../../../utils/stripe";
-import { queueStripeEvent, isEventProcessed } from "../../../lib/stripe-event-queue";
-import { logger } from "../../../utils/logger";
+import { createOrderFromStripeWorkflow } from "../../../workflows/create-order-from-stripe";
 
 /**
  * Stripe Webhook Handler
  * 
- * Handles Stripe webhook events by verifying the signature and 
- * queuing them for asynchronous processing.
- * 
- * Story 6.1: 
- * - AC 1-4: Signature Verification
- * - AC 5-7: Async Queueing (handled by worker)
- * - AC 8: Idempotency (checked here and in worker)
+ * Handles Stripe webhook events, particularly payment_intent.succeeded
+ * to create orders in Medusa when payments complete.
  * 
  * Endpoint: POST /webhooks/stripe
  */
+
+// Stripe client imported from ../../../utils/stripe
 
 /**
  * Helper to read raw body from request stream
@@ -32,20 +27,6 @@ async function getRawBody(req: MedusaRequest): Promise<string> {
     });
 }
 
-/**
- * Check if an error indicates a duplicate job in BullMQ
- * Encapsulated to isolate brittle string matching and make updates easier
- * if BullMQ error messages change in future versions.
- */
-function isDuplicateJobError(err: any, eventId: string): boolean {
-    // Ideal: BullMQ provides a specific error class
-    if (err?.name === "JobIdAlreadyExistsError") return true;
-    
-    const message = err?.message || "";
-    return message.includes("already exists") || 
-           (message.includes("Job") && message.includes(eventId));
-}
-
 export async function POST(
     req: MedusaRequest,
     res: MedusaResponse
@@ -54,7 +35,7 @@ export async function POST(
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
     if (!webhookSecret) {
-        logger.critical("webhook", "STRIPE_WEBHOOK_SECRET is not configured");
+        console.error("STRIPE_WEBHOOK_SECRET is not configured");
         res.status(500).json({ error: "Webhook secret not configured" });
         return;
     }
@@ -63,69 +44,149 @@ export async function POST(
     const sig = req.headers["stripe-signature"] as string;
 
     if (!sig) {
-        logger.error("webhook", "No Stripe signature found in request");
+        console.error("No Stripe signature found in request");
         res.status(400).json({ error: "No signature provided" });
         return;
     }
 
     let event: Stripe.Event;
-    
+    let rawBody: string;
+
     try {
         // Read the raw body from the request stream
-        const rawBody = await getRawBody(req);
+        // bodyParser is disabled for this route via middlewares.ts
+        rawBody = await getRawBody(req);
 
-        // Verify the webhook signature
+        // Verify the webhook signature with the exact raw body
         event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
     } catch (err) {
         const message = err instanceof Error ? err.message : "Unknown error";
-        logger.error("webhook", "Signature verification failed", { error: message });
+        console.error(`Webhook signature verification failed: ${message}`);
         res.status(400).json({ error: `Webhook Error: ${message}` });
         return;
     }
 
-    logger.info("webhook", "Event received", { eventId: event.id, eventType: event.type });
+    console.log(`Received Stripe webhook event: ${event.type}`);
 
-    // Story 6.1 AC8: Idempotency check 
-    // Rapid check to return 200 fast if we already know it's done
-    // The queue logic also performs an atomic lock check
-    const isProcessed = await isEventProcessed(event.id);
-    if (isProcessed) {
-        logger.info("webhook", "Skipping duplicate event", { eventId: event.id });
-        res.status(200).json({ received: true, duplicate: true });
-        return;
-    }
+    // Handle the event
+    switch (event.type) {
+        case "payment_intent.succeeded":
+            await handlePaymentIntentSucceeded(event.data.object as Stripe.PaymentIntent, req);
+            break;
 
-    // Queue the event for async processing
-    // Story 6.1 AC 5-7: Async processing with retries
-    try {
-        await queueStripeEvent(event);
-        logger.info("webhook", "Event queued for processing", { eventId: event.id, eventType: event.type });
-    } catch (err: any) {
-        // Check for duplicate job (already queued, being processed)
-        if (isDuplicateJobError(err, event.id)) {
-            logger.info("webhook", "Event already queued", { eventId: event.id });
-            res.status(200).json({ received: true, alreadyQueued: true });
-            return;
-        }
+        case "payment_intent.payment_failed":
+            await handlePaymentIntentFailed(event.data.object as Stripe.PaymentIntent);
+            break;
 
-        // Log with correlation context for production debugging
-        logger.critical("webhook", "Failed to queue event", {
-            eventId: event.id,
-            eventType: event.type,
-            errorName: err?.name,
-            errorMessage: err?.message,
-        });
-        
-        // Return 500 to trigger Stripe retry (protects against infrastructure failures)
-        res.status(500).json({ 
-            error: "Internal Server Error",
-            eventId: event.id, // Include for correlation in logs
-        });
-        return;
+        case "checkout.session.completed":
+            await handleCheckoutSessionCompleted(event.data.object as Stripe.Checkout.Session, req);
+            break;
+
+        default:
+            console.log(`Unhandled event type: ${event.type}`);
     }
 
     // Return a 200 response to acknowledge receipt of the event
-    logger.info("webhook", "Event acknowledged", { eventId: event.id, eventType: event.type });
     res.status(200).json({ received: true });
+}
+
+/**
+ * Handle successful payment intent
+ */
+async function handlePaymentIntentSucceeded(
+    paymentIntent: Stripe.PaymentIntent,
+    req: MedusaRequest
+): Promise<void> {
+    console.log(`PaymentIntent succeeded: ${paymentIntent.id}`);
+    console.log(`Amount: ${paymentIntent.amount / 100} ${paymentIntent.currency.toUpperCase()}`);
+
+    // Extract cart data from metadata (added in Task 2.3)
+    const metadata = paymentIntent.metadata || {};
+    const cartData = metadata.cart_data ? JSON.parse(metadata.cart_data) : null;
+
+    // Get customer email from metadata or from Stripe's receipt_email
+    const customerEmail = metadata.customer_email || paymentIntent.receipt_email;
+
+    // Get shipping address from metadata or from Stripe's shipping property
+    let shippingAddress = metadata.shipping_address ? JSON.parse(metadata.shipping_address) : null;
+
+    // If no shipping address in metadata, try to get from PaymentIntent's shipping
+    if (!shippingAddress && paymentIntent.shipping) {
+        const stripeShipping = paymentIntent.shipping;
+        shippingAddress = {
+            firstName: stripeShipping.name?.split(' ')[0] || '',
+            lastName: stripeShipping.name?.split(' ').slice(1).join(' ') || '',
+            address1: stripeShipping.address?.line1 || '',
+            address2: stripeShipping.address?.line2 || '',
+            city: stripeShipping.address?.city || '',
+            state: stripeShipping.address?.state || '',
+            postalCode: stripeShipping.address?.postal_code || '',
+            countryCode: stripeShipping.address?.country || 'US',
+            phone: stripeShipping.phone || '',
+        };
+    }
+
+    if (!cartData) {
+        console.log("No cart data in PaymentIntent metadata - skipping order creation");
+        return;
+    }
+
+    try {
+        console.log("[webhook] Starting order creation from PaymentIntent", {
+            payment_intent_id: paymentIntent.id,
+            currency: paymentIntent.currency,
+            amount: paymentIntent.amount,
+            amount_capturable: paymentIntent.amount_capturable,
+            status: paymentIntent.status,
+            has_cart: !!cartData,
+            has_shipping: !!shippingAddress,
+        });
+
+        // Create order in Medusa using workflow
+        const { result: order } = await createOrderFromStripeWorkflow(req.scope).run({
+            input: {
+                paymentIntentId: paymentIntent.id,
+                cartData,
+                customerEmail: customerEmail || undefined,
+                shippingAddress,
+                amount: paymentIntent.amount,
+                currency: paymentIntent.currency,
+            }
+        });
+
+        console.log(`Order created successfully: ${order.id}`);
+    } catch (error) {
+        console.error("[webhook] Failed to create order", {
+            payment_intent_id: paymentIntent.id,
+            currency: paymentIntent.currency,
+            amount: paymentIntent.amount,
+            amount_capturable: paymentIntent.amount_capturable,
+            status: paymentIntent.status,
+            cart_metadata_present: !!cartData,
+        }, error);
+        // Don't throw - we still want to return 200 to Stripe
+    }
+}
+
+/**
+ * Handle failed payment intent
+ */
+async function handlePaymentIntentFailed(
+    paymentIntent: Stripe.PaymentIntent
+): Promise<void> {
+    console.log(`PaymentIntent failed: ${paymentIntent.id}`);
+    console.log(`Failure reason: ${paymentIntent.last_payment_error?.message || "Unknown"}`);
+    // Could send notification email, update analytics, etc.
+}
+
+/**
+ * Handle completed checkout session
+ */
+async function handleCheckoutSessionCompleted(
+    session: Stripe.Checkout.Session,
+    req: MedusaRequest
+): Promise<void> {
+    console.log(`Checkout session completed: ${session.id}`);
+    // Handle Stripe Checkout flow if used
 }
 

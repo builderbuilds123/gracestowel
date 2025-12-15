@@ -2,23 +2,6 @@
 node_modules/
 
 # Build outputs
-# --- Package manager drift prevention (single root pnpm-lock.yaml) ---
-# Root lockfile is allowed via negation after **/pnpm-lock.yaml pattern below
-
-# npm
-package-lock.json
-**/package-lock.json
-npm-shrinkwrap.json
-**/npm-shrinkwrap.json
-
-# yarn
-yarn.lock
-**/yarn.lock
-
-# pnpm (nested lockfiles are forbidden, but allow root lockfile)
-**/pnpm-lock.yaml
-!pnpm-lock.yaml
-
 dist/
 build/
 .cache/
@@ -50,11 +33,6 @@ Thumbs.db
 *.log
 npm-debug.log*
 
-# Lockfiles (pnpm monorepo uses root pnpm-lock.yaml only)
-package-lock.json
-apps/**/package-lock.json
-apps/**/pnpm-lock.yaml
-
 # TypeScript
 *.tsbuildinfo
 
@@ -73,4 +51,6 @@ repomix-output.xml
 apps/e2e/playwright-report/
 apps/e2e/test-results/
 
-apps/storefront/.pnpm-store/*
+# Coverage reports
+coverage/
+*.lcov

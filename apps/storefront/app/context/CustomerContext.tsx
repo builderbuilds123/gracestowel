@@ -84,19 +84,6 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
             if (response.ok) {
                 const data = (await response.json()) as { customer: Customer };
                 setCustomer(data.customer);
-                
-                // Identify user in PostHog
-                if (typeof window !== 'undefined' && data.customer) {
-                    import('../utils/posthog').then(({ default: posthog }) => {
-                        posthog.identify(data.customer.id, {
-                            email: data.customer.email,
-                            first_name: data.customer.first_name,
-                            last_name: data.customer.last_name,
-                            created_at: data.customer.created_at,
-                        });
-                        console.log('[PostHog] User identified:', data.customer.id);
-                    });
-                }
             } else {
                 // Token is invalid, clear it
                 localStorage.removeItem(TOKEN_KEY);
@@ -195,14 +182,6 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
         localStorage.removeItem(TOKEN_KEY);
         setToken(null);
         setCustomer(null);
-        
-        // Reset PostHog identification
-        if (typeof window !== 'undefined') {
-            import('../utils/posthog').then(({ default: posthog }) => {
-                posthog.reset();
-                console.log('[PostHog] User identification reset');
-            });
-        }
     };
 
     const refreshCustomer = useCallback(async () => {

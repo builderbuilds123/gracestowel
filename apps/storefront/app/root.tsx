@@ -17,62 +17,12 @@ import { WishlistProvider } from "./context/WishlistContext";
 import { CartDrawer } from "./components/CartDrawer";
 import { Header } from "./components/Header";
 import { Footer } from "./components/Footer";
-import { initPostHog, reportWebVitals, setupErrorTracking, captureException } from "./utils/posthog";
-import {
-  useNavigationTracking,
-  useScrollTracking,
-  useEngagementTracking,
-  useFormTracking
-} from "./hooks";
-import posthog from "posthog-js";
 import "./app.css";
 
 // Initialize PostHog on client-side only
-// Note: Must wait for window.ENV to be populated from loader
 if (typeof window !== 'undefined') {
-  // Wait for window.ENV to be set (injected by EnvScript component)
-  const initPostHogWhenReady = () => {
-    initPostHog();
-    reportWebVitals();
-    setupErrorTracking();
-    
-    // Verify initialization after a short delay
-    if (import.meta.env.MODE !== 'production') {
-      setTimeout(() => {
-        // @ts-expect-error - posthog might not be initialized
-        const ph = window.posthog;
-        if (ph && typeof ph.capture === 'function') {
-          console.log('[PostHog Init] ✅ Successfully initialized');
-          console.log('[PostHog Init] Distinct ID:', ph.get_distinct_id?.() || 'unknown');
-        } else {
-          console.error('[PostHog Init] ❌ PostHog NOT initialized - check API key');
-        }
-      }, 1000);
-    }
-  };
-
-  // If window.ENV is already set, initialize immediately
-  // Otherwise wait for DOMContentLoaded (when EnvScript runs)
-  if ((window as any).ENV) {
-    initPostHogWhenReady();
-  } else if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initPostHogWhenReady);
-  } else {
-    initPostHogWhenReady();
-  }
-}
-
-/**
- * Analytics Tracking Component (Story 5.1)
- * Wraps all tracking hooks in a single component
- * Must be rendered within router context
- */
-function AnalyticsTracking() {
-  useNavigationTracking();
-  useScrollTracking();
-  useEngagementTracking();
-  useFormTracking();
-  return null;
+  initPostHog();
+  reportWebVitals();
 }
 
 export async function loader({ context }: Route.LoaderArgs) {
@@ -100,21 +50,10 @@ export async function loader({ context }: Route.LoaderArgs) {
       console.error("❌ Failed to verify Medusa connection:", err);
   }
   
-  // Extract PostHog config from Cloudflare Workers env (runtime) or fallback to build-time
-  // Prioritize VITE_ prefixed vars as per policy
-  const posthogApiKey = (env as any).VITE_POSTHOG_API_KEY || (env as any).POSTHOG_API_KEY || import.meta.env.VITE_POSTHOG_API_KEY;
-  const posthogHost = (env as any).VITE_POSTHOG_HOST || (env as any).POSTHOG_HOST || import.meta.env.VITE_POSTHOG_HOST || 'https://us.i.posthog.com';
-  
   return { 
     env: { 
       MEDUSA_BACKEND_URL, 
-      MEDUSA_PUBLISHABLE_KEY,
-      // Include PostHog config for client-side initialization
-      VITE_POSTHOG_API_KEY: posthogApiKey,
-      VITE_POSTHOG_HOST: posthogHost,
-      // Keep legacy for compat if needed, but VITE_ is primary
-      POSTHOG_API_KEY: posthogApiKey,
-      POSTHOG_HOST: posthogHost,
+      MEDUSA_PUBLISHABLE_KEY 
     } 
   };
 }
@@ -176,12 +115,7 @@ function EnvScript() {
 }
 
 export default function App() {
-  return (
-    <>
-      <AnalyticsTracking />
-      <Outlet />
-    </>
-  );
+  return <Outlet />;
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
@@ -198,26 +132,6 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   } else if (import.meta.env.DEV && error && error instanceof Error) {
     details = error.message;
     stack = error.stack;
-  }
-
-  // Capture error in PostHog using standard $exception format (Story 4.1)
-  // M2 fix: Use direct import instead of dynamic import to avoid missing errors
-  if (typeof window !== 'undefined' && error) {
-    const isRouteError = isRouteErrorResponse(error);
-    const errorObj = error instanceof Error ? error : null;
-    
-    posthog.capture('$exception', {
-      $exception_type: isRouteError ? 'RouteError' : (errorObj?.name || 'Error'),
-      $exception_message: details,
-      $exception_stack_trace_raw: stack,
-      $exception_handled: true, // ErrorBoundary caught it
-      $exception_synthetic: false,
-      $exception_source: 'ErrorBoundary',
-      is_route_error: isRouteError,
-      route_status: isRouteError ? error.status : undefined,
-      url: window.location.href,
-      user_agent: navigator.userAgent,
-    });
   }
 
   return (

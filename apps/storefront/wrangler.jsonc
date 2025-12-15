@@ -4,13 +4,10 @@
   "compatibility_date": "2025-04-04",
   "compatibility_flags": ["nodejs_compat"],
   "main": "./workers/app.ts",
-
-  // Shared configuration (inherited by all environments)
   "vars": {
-    "MEDUSA_BACKEND_URL": "", // Placeholder for type generation
-    "MEDUSA_PUBLISHABLE_KEY": "", // Placeholder for type generation
-    "STRIPE_PUBLISHABLE_KEY": "", // Placeholder for type generation
-    "STRIPE_SECRET_KEY": "" // Placeholder for type generation
+    "VALUE_FROM_CLOUDFLARE": "Hello from Cloudflare"
+    // MEDUSA_BACKEND_URL is set via `wrangler secret put MEDUSA_BACKEND_URL`
+    // Example: https://gracestowel-backend.up.railway.app
   },
 
   "hyperdrive": [
@@ -36,29 +33,5 @@
       "persist": true,
       "head_sampling_rate": 1
     }
-  },
-
-  // Environment-specific configurations
-  // See docs/ENVIRONMENTS.md for setup instructions
-  "env": {
-    // Staging environment (deployed from `staging` branch)
-    "staging": {
-      "name": "gracestowelstorefront-staging",
-      "vars": {
-        "ENVIRONMENT": "staging"
-      }
-      // Hyperdrive is injected by CI from HYPERDRIVE_ID secret
-      // Secrets are set via: wrangler secret put <NAME> --env staging
-    },
-
-    // Production environment (deployed from `main` branch)
-    "production": {
-      "name": "gracestowelstorefront",
-      "vars": {
-        "ENVIRONMENT": "production"
-      }
-      // Hyperdrive is injected by CI from HYPERDRIVE_ID secret
-      // Secrets are set via: wrangler secret put <NAME> --env production
-    }
-  }
+  ]
 }

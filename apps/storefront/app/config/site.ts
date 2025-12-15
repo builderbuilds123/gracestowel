@@ -19,10 +19,9 @@ export const SITE_CONFIG = {
         twitter: "https://twitter.com/gracestowel"
     },
 
-    // UI Configuration
-    ui: {
-        headerScrollThreshold: 0.8, // Percentage of viewport height to trigger solid header
-    },
+    // Business Logic
+    freeGiftThreshold: 35, // Minimum cart value for free gift
+    freeShippingThreshold: 99, // Minimum cart value for free shipping
 } as const;
 
 export default SITE_CONFIG;
