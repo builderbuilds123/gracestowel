@@ -30,15 +30,29 @@ export const DEFAULT_CURRENCY: CurrencyCode = 'USD';
 export function parsePrice(formatted: string): number {
     if (!formatted) return 0;
 
-    // Remove currency symbols, commas, and whitespace
+    // Remove currency symbols and whitespace, keep digits, commas, dots, and minus
     let cleaned = formatted.replace(/[^0-9,\.\-]/g, '');
 
-    // If we only have commas, treat comma as decimal separator.
-    // If we have both comma and dot, treat comma as thousands separator.
-    if (cleaned.includes(',') && !cleaned.includes('.')) {
-        cleaned = cleaned.replace(',', '.');
-    } else if (cleaned.includes(',') && cleaned.includes('.')) {
+    // Heuristic for comma vs dot as decimal separator:
+    // - If both comma and dot are present, comma is the thousands separator (e.g., "1,234.56")
+    // - If only comma is present:
+    //   - If there's exactly one comma and it's followed by exactly 2 digits at the end,
+    //     treat it as a European decimal separator (e.g., "1,50" -> 1.50)
+    //   - Otherwise, treat commas as thousands separators (e.g., "1,000" -> 1000)
+    // - If only dot is present, it's the decimal separator (standard US format)
+    if (cleaned.includes(',') && cleaned.includes('.')) {
+        // Both present: comma is thousands separator, dot is decimal
         cleaned = cleaned.replace(/,/g, '');
+    } else if (cleaned.includes(',')) {
+        // Only comma present - check if it looks like European decimal format
+        const commaMatch = cleaned.match(/,(\d+)$/);
+        if (commaMatch && commaMatch[1].length === 2 && cleaned.indexOf(',') === cleaned.lastIndexOf(',')) {
+            // Single comma followed by exactly 2 digits at end - European decimal (e.g., "1,50")
+            cleaned = cleaned.replace(',', '.');
+        } else {
+            // Multiple commas or not followed by 2 digits - thousands separator (e.g., "1,000")
+            cleaned = cleaned.replace(/,/g, '');
+        }
     }
 
     const parsed = parseFloat(cleaned);

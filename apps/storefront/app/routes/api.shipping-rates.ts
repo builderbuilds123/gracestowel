@@ -2,6 +2,70 @@ import { type ActionFunctionArgs, data } from "react-router";
 import { monitoredFetch } from "../utils/monitored-fetch";
 import type { CloudflareEnv } from "../utils/monitored-fetch";
 
+/**
+ * Extract the original amount from a prices array.
+ * Medusa API returns prices in cents (smallest currency unit).
+ * 
+ * @param prices - Array of price objects from Medusa
+ * @param regionId - The region ID to match
+ * @param currency - The currency code to match
+ * @returns The amount in cents, or undefined if not found
+ */
+function extractAmountFromPrices(
+    prices: any[] | undefined,
+    regionId: string,
+    currency: string
+): number | undefined {
+    if (!Array.isArray(prices) || prices.length === 0) {
+        return undefined;
+    }
+
+    // Find price matching the region's currency or region ID
+    const regionPrice = prices.find((p: any) =>
+        p.region_id === regionId || p.currency_code?.toUpperCase() === currency.toUpperCase()
+    );
+
+    if (regionPrice && typeof regionPrice.amount === 'number') {
+        // Medusa API returns amounts in cents
+        return regionPrice.amount;
+    }
+
+    // Fallback to first price
+    if (prices[0] && typeof prices[0].amount === 'number') {
+        return prices[0].amount;
+    }
+
+    return undefined;
+}
+
+/**
+ * Extract original amount from a shipping option object.
+ * Checks multiple possible locations where the price might be stored.
+ * 
+ * @param option - Shipping option object from Medusa
+ * @param regionId - The region ID to match
+ * @param currency - The currency code to match
+ * @returns The amount in cents, or undefined if not found
+ */
+function extractOriginalAmount(
+    option: any,
+    regionId: string,
+    currency: string
+): number | undefined {
+    // Try prices array first
+    const fromPrices = extractAmountFromPrices(option.prices, regionId, currency);
+    if (fromPrices !== undefined) {
+        return fromPrices;
+    }
+
+    // Check for a single price field (already in cents from Medusa)
+    if (option.price && typeof option.price === 'number') {
+        return option.price;
+    }
+
+    return undefined;
+}
+
 export async function action({ request, context }: ActionFunctionArgs) {
     if (request.method !== "POST") {
         return data({ message: "Method not allowed" }, { status: 405 });
@@ -29,7 +93,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
                 currency = body.currency;
             }
         } catch (e) {
-            console.warn("Could not parse request body for currency, using default.");
+            console.warn("Could not parse request body for currency, defaulting to CAD.");
         }
 
         // 1. Get Regions (to find default currency/region)
@@ -93,28 +157,11 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
             // If shipping is free and originalAmount is not provided, try to get the base price
             if (isFree && originalAmount === undefined) {
-                // First, check if the option has a prices array with base price in the response
-                if (Array.isArray(option.prices) && option.prices.length > 0) {
-                    // Find price matching the region's currency or region ID
-                    const regionPrice = option.prices.find((p: any) => 
-                        p.region_id === region.id || p.currency_code?.toUpperCase() === currency.toUpperCase()
-                    );
-                    if (regionPrice && typeof regionPrice.amount === 'number') {
-                        // Medusa prices in the prices array might be in dollars (from config) or cents (from API)
-                        // If price < 10, assume it's in dollars (since shipping rarely costs < 10 cents)
-                        // Otherwise assume it's already in cents
-                        originalAmount = regionPrice.amount < 10 ? Math.round(regionPrice.amount * 100) : regionPrice.amount;
-                    } else if (option.prices[0] && typeof option.prices[0].amount === 'number') {
-                        // Fallback to first price
-                        const firstPrice = option.prices[0].amount;
-                        originalAmount = firstPrice < 10 ? Math.round(firstPrice * 100) : firstPrice;
-                    }
-                } else if (option.price && typeof option.price === 'number') {
-                    // Check for a single price field
-                    originalAmount = option.price < 10 ? Math.round(option.price * 100) : option.price;
-                } else {
-                    // Try to fetch shipping option details (if Store API supports it)
-                    // Note: This endpoint may not exist in Medusa Store API, but we try it as a fallback
+                // First, try to extract from the option's prices array or price field
+                originalAmount = extractOriginalAmount(option, region.id, currency);
+
+                // If still not found, try to fetch shipping option details as a fallback
+                if (originalAmount === undefined) {
                     try {
                         const optionDetailResponse = await monitoredFetch(
                             `${medusaBackendUrl}/store/shipping-options/${option.id}`,
@@ -131,21 +178,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
                         if (optionDetailResponse.ok) {
                             const optionDetail = await optionDetailResponse.json() as { shipping_option?: any };
                             const detail = optionDetail.shipping_option || optionDetail;
-                            
-                            // Check for prices array in the detail response
-                            if (Array.isArray(detail.prices) && detail.prices.length > 0) {
-                                const regionPrice = detail.prices.find((p: any) => 
-                                    p.region_id === region.id || p.currency_code?.toUpperCase() === currency.toUpperCase()
-                                );
-                                if (regionPrice && typeof regionPrice.amount === 'number') {
-                                    originalAmount = regionPrice.amount < 10 ? Math.round(regionPrice.amount * 100) : regionPrice.amount;
-                                } else if (detail.prices[0] && typeof detail.prices[0].amount === 'number') {
-                                    const firstPrice = detail.prices[0].amount;
-                                    originalAmount = firstPrice < 10 ? Math.round(firstPrice * 100) : firstPrice;
-                                }
-                            } else if (detail.price && typeof detail.price === 'number') {
-                                originalAmount = detail.price < 10 ? Math.round(detail.price * 100) : detail.price;
-                            }
+                            originalAmount = extractOriginalAmount(detail, region.id, currency);
                         }
                     } catch (error) {
                         // If fetching option details fails, log but don't fail the entire request
