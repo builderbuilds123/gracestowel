@@ -44,13 +44,6 @@ vi.mock("../../utils/debounce", () => ({
   },
 }));
 
-// Mock useCallback in checkout.tsx is failing because we can't easily mock React hooks inside a component module unless we mock React itself, which is dangerous.
-// The error `ReferenceError: useCallback is not defined` likely comes from `checkout.tsx` using `useCallback` but failing to import it properly or something being wrong with the environment.
-// But `checkout.tsx` imports `useCallback` from `react` via `import { useState, useEffect, useRef } from "react";`.
-// Wait, `checkout.tsx` imports: `import { useState, useEffect, useRef } from "react";`.
-// IT DOES NOT IMPORT `useCallback`!
-// That's the bug. I added `useCallback` usage but forgot to import it.
-
 describe("Checkout Integration", () => {
   beforeEach(() => {
     vi.clearAllMocks();

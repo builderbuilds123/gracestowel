@@ -50,11 +50,18 @@ export default function Checkout() {
   const [lastTraceId, setLastTraceId] = useState<string | null>(null);
 
   // Shipping & Cart state
+  // Initialize cartId from sessionStorage if available (client-side only)
+  const [cartId, setCartId] = useState<string | undefined>(() => {
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem('medusa_cart_id') || undefined;
+    }
+    return undefined;
+  });
+
   const [shippingOptions, setShippingOptions] = useState<ShippingOption[]>([]);
   const [selectedShipping, setSelectedShipping] =
     useState<ShippingOption | null>(null);
   const [isCalculatingShipping, setIsCalculatingShipping] = useState(false);
-  const [cartId, setCartId] = useState<string | undefined>(undefined);
   const [shippingAddress, setShippingAddress] = useState<any>(undefined);
 
   // Track initialization to prevent clientSecret changes
@@ -63,6 +70,22 @@ export default function Checkout() {
 
   // Caching mechanism for shipping rates
   const shippingCache = useRef<Map<string, { options: ShippingOption[], cartId: string | undefined }>>(new Map());
+
+  // Persist cartId to sessionStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (cartId) {
+        sessionStorage.setItem('medusa_cart_id', cartId);
+      } else {
+        // Optional: remove if undefined? Or keep for session continuity?
+        // Typically we keep it until order completion or explicit expiration.
+        // If it becomes undefined (e.g. error/reset), we might want to clear it.
+        // For now, let's only set if truthy to avoid clearing potentially valid concurrent updates,
+        // but if it's explicitly reset, we should clear.
+        // However, standard pattern is usually just setItem.
+      }
+    }
+  }, [cartId]);
 
   // Calculate original total (before discount) using price utility
   const originalTotal = items.reduce((total, item) => {
@@ -224,7 +247,7 @@ export default function Checkout() {
             phone: address.phone
           } : undefined,
           currency,
-          cartId
+          cartId // Pass the current cartId (state)
         }),
         label: 'fetch-shipping-rates',
       });
