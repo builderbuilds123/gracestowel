@@ -1,7 +1,7 @@
 # Story 4-1: Create Webhook Handler Test Suite
 
 **Epic:** Epic 4 - Order Creation Flow Testing  
-**Status:** drafted  
+**Status:** done
 **Created:** 2025-12-14  
 **Requirements:** FR13.1, FR9.4, FR9.5
 
@@ -99,11 +99,11 @@ test.describe('Webhook Handler', () => {
 
 ## Definition of Done
 
-- [ ] Order creation from webhook test passes
-- [ ] Idempotent handling prevents duplicate orders
-- [ ] Invalid signature is rejected with 401
-- [ ] Webhook signature validation works correctly
-- [ ] Tests use fixtures for cleanup
+- [x] Order creation from webhook test passes
+- [x] Idempotent handling prevents duplicate orders
+- [x] Invalid signature is rejected with 401
+- [x] Webhook signature validation works correctly
+- [x] Tests use fixtures for cleanup
 
 ---
 

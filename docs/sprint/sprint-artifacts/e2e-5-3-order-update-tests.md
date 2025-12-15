@@ -1,7 +1,7 @@
 # Story 5-3: Create Order Update Test Suite
 
 **Epic:** Epic 5 - Order Modification Flow Testing  
-**Status:** drafted  
+**Status:** done
 **Created:** 2025-12-14  
 **Requirements:** FR13.7, FR13.8
 
@@ -117,10 +117,10 @@ test.describe('Order Updates', () => {
 
 ## Definition of Done
 
-- [ ] Address update works correctly
-- [ ] Adding items increases PaymentIntent amount
-- [ ] Concurrent modifications handled with optimistic locking
-- [ ] Updates rejected after grace period
+- [x] Address update works correctly
+- [x] Adding items increases PaymentIntent amount
+- [x] Concurrent modifications handled with optimistic locking
+- [x] Updates rejected after grace period
 
 ---
 

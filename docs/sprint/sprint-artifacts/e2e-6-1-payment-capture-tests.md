@@ -1,7 +1,7 @@
 # Story 6-1: Create Payment Capture Test Suite
 
 **Epic:** Epic 6 - Payment Capture Flow Testing  
-**Status:** drafted  
+**Status:** done
 **Created:** 2025-12-14  
 **Requirements:** FR13.4, FR13.5
 
@@ -94,10 +94,10 @@ test.describe('Payment Capture', () => {
 
 ## Definition of Done
 
-- [ ] Capture succeeds after grace period
-- [ ] Order status updates to "captured"
-- [ ] Capture failures are logged
-- [ ] Manual intervention alerts triggered on failure
+- [x] Capture succeeds after grace period
+- [x] Order status updates to "captured"
+- [x] Capture failures are logged
+- [x] Manual intervention alerts triggered on failure
 
 ---
 

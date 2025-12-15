@@ -1,7 +1,7 @@
 # Story 9-1: Archive Legacy Tests
 
 **Epic:** Epic 9 - Cleanup & Documentation  
-**Status:** drafted  
+**Status:** done
 **Created:** 2025-12-14  
 **Requirements:** FR11.1
 
@@ -109,11 +109,11 @@ the new API-first testing patterns.
 
 ## Definition of Done
 
-- [ ] Archive script created
-- [ ] Legacy files moved to archive/
-- [ ] Playwright config excludes archive
-- [ ] Test suite runs without legacy tests
-- [ ] Archive README documents reason
+- [x] Archive script created
+- [x] Legacy files moved to archive/
+- [x] Playwright config excludes archive
+- [x] Test suite runs without legacy tests
+- [x] Archive README documents reason
 
 ---
 

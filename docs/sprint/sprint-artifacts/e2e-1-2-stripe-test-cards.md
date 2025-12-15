@@ -1,7 +1,7 @@
 # Story 1-2: Create Stripe Test Card Constants and Payment Helpers
 
 **Epic:** Epic 1 - Test Infrastructure Foundation  
-**Status:** drafted  
+**Status:** done
 **Created:** 2025-12-14  
 **Requirements:** FR9.1, FR9.2, FR9.3
 
@@ -279,6 +279,7 @@ export const test = base.extend<{ payment: PaymentFixture }>({
       createPaymentIntent: createTestPaymentIntent,
       cancelPaymentIntent,
       capturePaymentIntent,
+      capturePaymentIntent,
     });
   },
 });
@@ -303,13 +304,13 @@ STRIPE_SECRET_KEY=sk_test_...
 
 ## Definition of Done
 
-- [ ] `TEST_CARDS` constant exported with all standard test card numbers
-- [ ] `getTestCardDetails()` returns complete card details for form filling
-- [ ] `simulatePayment()` confirms PaymentIntents with test cards
-- [ ] `createTestPaymentIntent()` creates PaymentIntents in test mode
-- [ ] Payment fixture available in Playwright tests
-- [ ] Unit tests verify card constants match Stripe documentation
-- [ ] Integration test confirms payment with success card
+- [x] `TEST_CARDS` constant exported with all standard test card numbers
+- [x] `getTestCardDetails()` returns complete card details for form filling
+- [x] `simulatePayment()` confirms PaymentIntents with test cards
+- [x] `createTestPaymentIntent()` creates PaymentIntents in test mode
+- [x] Payment fixture available in Playwright tests
+- [x] Unit tests verify card constants match Stripe documentation
+- [x] Integration test confirms payment with success card
 
 ---
 

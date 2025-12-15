@@ -1,7 +1,7 @@
 # Story 4-3: Write Property Test for Order Creation from Webhook
 
 **Epic:** Epic 4 - Order Creation Flow Testing  
-**Status:** drafted  
+**Status:** done
 **Created:** 2025-12-14  
 **Requirements:** FR13.1  
 **Property:** Property 5: Order Creation from Webhook
@@ -101,10 +101,10 @@ test.describe('Property: Order Creation from Webhook', () => {
 
 ## Definition of Done
 
-- [ ] Property test runs 100+ iterations
-- [ ] Order amount matches PaymentIntent amount
-- [ ] Order metadata is preserved
-- [ ] Test is annotated with property reference
+- [x] Property test runs 100+ iterations
+- [x] Order amount matches PaymentIntent amount
+- [x] Order metadata is preserved
+- [x] Test is annotated with property reference
 
 ---
 

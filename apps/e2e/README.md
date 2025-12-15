@@ -1,304 +1,174 @@
-# Grace Stowel E2E Test Framework
+# E2E Tests
 
-Production-ready end-to-end test framework for the Grace Stowel e-commerce platform, built with Playwright and following best practices for scalable, maintainable test automation.
+End-to-end tests for Grace Stowel using Playwright with an API-first approach.
 
-## Architecture Overview
+## Testing Strategy
 
-### Directory Structure
+### API-First Approach
+We test business logic via API calls rather than UI interactions. This provides:
+- **Speed**: API tests run faster than UI tests
+- **Reliability**: Less flaky than UI-dependent tests
+- **Flexibility**: UI can be revamped without breaking tests
 
-```
-apps/e2e/
-├── support/              # Framework infrastructure (key pattern)
-│   ├── fixtures/         # Test fixtures (composable, mergeTests pattern)
-│   ├── helpers/          # Utility functions (pure, framework-agnostic)
-│   └── factories/        # Data factories (faker-based, auto-cleanup)
-├── tests/                # Test files (users organize as needed)
-├── resilience/           # Resilience/chaos tests
-└── playwright.config.ts  # Framework configuration
-```
+### Webhook Mocking
+Instead of automating Stripe's hosted checkout pages, we:
+1. Create PaymentIntents via API
+2. Simulate payment confirmation
+3. Send webhooks directly to our backend
+4. Verify order creation and state transitions
 
-### Key Patterns
+### Property-Based Testing
+We use `fast-check` to verify correctness properties:
+- Cart total consistency
+- PaymentIntent amount accuracy
+- Order creation integrity
 
-1. **Fixture Architecture**: Pure functions → fixtures → `mergeTests` composition
-2. **Data Factories**: Faker-based factories with auto-cleanup (no test pollution)
-3. **Network-First**: Intercept before navigate to prevent race conditions
-4. **API-First Setup**: Seed data via API (10-50x faster than UI)
+## Quick Start
 
-## Setup Instructions
+### Prerequisites
+- Node.js 18+
+- pnpm
+- Running backend and storefront
 
-### 1. Install Dependencies
-
+### Install Dependencies
 ```bash
-cd apps/e2e
 pnpm install
 ```
 
-### 2. Configure Environment
-
-Copy `.env.example` to `.env` and fill in environment variables:
-
-```bash
-cp .env.example .env
-```
-
-Required variables:
-- `STOREFRONT_URL`: Base URL for the storefront (default: `https://localhost:5173`)
-- `API_URL` or `BACKEND_URL`: Backend API URL (default: `http://localhost:9000`)
-
-### 3. Install Playwright Browsers
-
-```bash
-npx playwright install
-```
-
-## Running Tests
-
-### Local Execution
-
+### Run Tests
 ```bash
 # Run all tests
 pnpm test
 
-# Run with UI mode (interactive)
+# Run specific test file
+pnpm test tests/cart/cart-operations.api.spec.ts
+
+# Run with UI
 pnpm test:ui
 
-# Run in headed mode (see browser)
+# Run headed (see browser)
 pnpm test:headed
-
-# Run specific test file
-pnpm test tests/checkout.spec.ts
-
-# Run specific project (browser)
-pnpm test --project=chromium
-
-# Debug mode
-pnpm test:debug
 ```
 
-### CI Execution
-
-```bash
-# Run tests in CI (Docker Compose)
-pnpm test:ci
+### Environment Variables
+Copy `.env.test.example` to `.env.test` and configure:
+```env
+STOREFRONT_URL=http://localhost:3000
+BACKEND_URL=http://localhost:9000
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_test_...
+JWT_SECRET=your-jwt-secret
 ```
 
-## Architecture Details
+## Project Structure
 
-### Fixture Pattern
+```
+apps/e2e/
+├── fixtures/           # Playwright fixtures
+│   ├── index.ts        # Combined fixtures export
+│   ├── data-factory.fixture.ts
+│   └── payment.fixture.ts
+├── helpers/            # Test utilities
+│   ├── test-cards.ts   # Stripe test card constants
+│   ├── payment.helper.ts
+│   ├── webhook.helper.ts
+│   └── data-factory.ts
+├── tests/
+│   ├── cart/           # Cart flow tests
+│   ├── checkout/       # Checkout tests
+│   ├── orders/         # Order lifecycle tests
+│   ├── payment/        # Payment tests
+│   ├── webhooks/       # Webhook handler tests
+│   └── smoke/          # UI smoke tests
+├── playwright.config.ts
+└── README.md
+```
 
-Tests import merged fixtures to get all capabilities:
+## Writing Tests
 
+### Using Fixtures
 ```typescript
-import { test, expect } from '../support/fixtures';
+import { test, expect } from '../../fixtures';
 
-test('user can checkout', async ({ page, apiRequest, userFactory }) => {
-  // Create test user via factory
-  const user = await userFactory.createUser({ email: 'test@example.com' });
+test('example test', async ({ dataFactory, payment, webhook }) => {
+  // Create test data
+  const product = await dataFactory.getRandomProduct();
+  const cart = await dataFactory.createCart([
+    { variant_id: product.variants[0].id, quantity: 1 }
+  ]);
 
-  // Use API for fast setup
-  await apiRequest({
-    method: 'POST',
-    url: '/admin/customers',
-    data: user,
-  });
+  // Create and confirm payment
+  const pi = await payment.createPaymentIntent(cart.total);
+  await payment.simulatePayment(pi.id, 'SUCCESS');
 
-  // Test UI behavior
-  await page.goto('/checkout');
-  await expect(page.getByText('Checkout')).toBeVisible();
+  // Simulate webhook
+  await webhook.mockPaymentIntentAuthorized(pi.id, cart.total);
+
+  // Assertions...
 });
 ```
 
-### Data Factories
-
-Factories generate parallel-safe, unique test data:
-
+### Test Cards
 ```typescript
-import { createUser, createProduct } from '../support/factories';
+import { TEST_CARDS } from '../../helpers/test-cards';
 
-// Default user
-const user = createUser();
+// Success
+TEST_CARDS.SUCCESS // 4242424242424242
 
-// Admin user (explicit override shows intent)
-const admin = createUser({ role: 'admin' });
+// Decline
+TEST_CARDS.DECLINE_GENERIC // 4000000000000002
 
-// Product with custom price
-const product = createProduct({ price: 99.99 });
+// 3D Secure
+TEST_CARDS.REQUIRES_3DS // 4000002760003184
 ```
 
-Factories with auto-cleanup (via fixtures):
-
+### Property Tests
 ```typescript
-import { test, expect } from '../support/fixtures';
+import * as fc from 'fast-check';
 
-test('user can place order', async ({ userFactory, productFactory }) => {
-  const user = await userFactory.createUser();
-  const product = await productFactory.createProduct();
-
-  // Test logic...
-
-  // No manual cleanup needed - fixture handles it automatically
+/**
+ * **Feature: e2e-testing-overhaul, Property 1: Cart State Consistency**
+ */
+test('cart total property', async () => {
+  fc.assert(
+    fc.property(cartArbitrary, (cart) => {
+      // Property assertion
+      return calculateTotal(cart) === expectedTotal(cart);
+    }),
+    { numRuns: 100 }
+  );
 });
 ```
 
-### Network-First Pattern
+## CI/CD
 
-Always intercept **before** navigation to prevent race conditions:
+Tests run automatically on:
+- Pull requests
+- Merges to main
 
-```typescript
-import { waitForApiResponse, mockApiResponse } from '../support/helpers/network-helpers';
+### CI Configuration
+- Retries: 2 (on failure)
+- Browsers: Chromium, Firefox, WebKit
+- Reports: HTML, JSON, JUnit
 
-test('dashboard loads user data', async ({ page }) => {
-  // Step 1: Register interception FIRST
-  const responsePromise = waitForApiResponse(page, '**/api/users');
-
-  // Step 2: THEN trigger the request
-  await page.goto('/dashboard');
-
-  // Step 3: THEN await the response
-  const { body } = await responsePromise;
-
-  // Step 4: Assert on structured data
-  expect(body).toHaveLength(10);
-  await expect(page.getByText(body[0].name)).toBeVisible();
-});
-```
-
-### API Request Helper
-
-Pure function for API calls (framework-agnostic):
-
-```typescript
-import { test, expect } from '../support/fixtures';
-
-test('can create order via API', async ({ apiRequest }) => {
-  const order = await apiRequest({
-    method: 'POST',
-    url: '/admin/orders',
-    data: {
-      customer_id: '123',
-      items: [{ product_id: '456', quantity: 2 }],
-    },
-  });
-
-  expect(order.id).toBeDefined();
-});
-```
-
-## Best Practices
-
-### Selector Strategy
-
-**Always use `data-testid` attributes** for UI elements:
-
-```typescript
-// ✅ GOOD
-await page.getByTestId('add-to-cart-button').click();
-
-// ❌ BAD - Brittle CSS selector
-await page.locator('.product-card > button.btn-primary').click();
-```
-
-### Test Isolation
-
-- Each test creates its own data (via factories)
-- No shared state between tests
-- Auto-cleanup via fixtures prevents test pollution
-
-### Deterministic Waits
-
-**Never use hard waits** (`waitForTimeout`):
-
-```typescript
-// ✅ GOOD - Wait for response
-const response = await page.waitForResponse('**/api/orders');
-
-// ✅ GOOD - Wait for element state
-await expect(page.getByTestId('loading-spinner')).not.toBeVisible();
-
-// ❌ BAD - Hard wait
-await page.waitForTimeout(3000);
-```
-
-### Timeout Standards
-
-- **Test timeout**: 60 seconds (global)
-- **Action timeout**: 15 seconds (click, fill, etc.)
-- **Navigation timeout**: 30 seconds (page.goto, page.reload)
-- **Expect timeout**: 15 seconds (all assertions)
-
-Override per-test if needed:
-
-```typescript
-test('slow operation', async ({ page }) => {
-  test.setTimeout(180000); // 3 minutes for this test
-  // ...
-});
-```
-
-## CI Integration
-
-### Artifact Configuration
-
-Tests capture artifacts on failure:
-- **Screenshots**: `test-results/` (only on failure)
-- **Videos**: `test-results/` (retain on failure)
-- **Traces**: `test-results/` (retain on failure)
-- **HTML Report**: `test-results/html/`
-- **JUnit XML**: `test-results/junit.xml` (for CI integration)
-
-### CI Pipeline
-
-The framework is configured for CI with:
-- Retries: 2 (CI only)
-- Workers: 1 (CI stability)
-- GitHub Actions reporter (CI only)
-- JUnit XML output for test result parsing
-
-## Knowledge Base References
-
-This framework follows patterns from the TEA (Test Architecture) knowledge base:
-
-- **Fixture Architecture**: Pure function → fixture → `mergeTests` composition
-- **Data Factories**: Faker-based factories with overrides and auto-cleanup
-- **Network-First**: Intercept before navigate, deterministic waits
-- **Playwright Config**: Environment-based, timeout standards, artifact outputs
+### Viewing Reports
+After CI run, download artifacts:
+- `playwright-report/` - HTML report
+- `test-results/` - Screenshots, videos, traces
 
 ## Troubleshooting
 
-### Tests Fail with Timeout
-
-- Check `STOREFRONT_URL` in `.env` matches running app
-- Verify app is running: `pnpm dev:storefront`
-- Increase timeout if needed (but prefer fixing root cause)
-
-### API Seeding Fails
-
-- Check `API_URL` or `BACKEND_URL` in `.env`
-- Verify backend is running: `pnpm dev:api`
-- API endpoints may need adjustment based on Medusa API structure
-- Factories gracefully fall back to UI-only mode if API fails
+### Tests Failing Locally
+1. Ensure backend and storefront are running
+2. Check environment variables
+3. Run `pnpm test:headed` to see browser
 
 ### Flaky Tests
+1. Check for race conditions
+2. Use `waitForResponse` for API calls
+3. Avoid `page.waitForTimeout`
 
-- Ensure network interception happens **before** navigation
-- Replace hard waits with deterministic waits (response, element state)
-- Check for race conditions in parallel test execution
-
-### Browser Not Found
-
-```bash
-npx playwright install
-```
-
-## Next Steps
-
-1. **Review existing tests**: Update to use new fixture architecture
-2. **Add more factories**: Create factories for orders, carts, etc.
-3. **Enhance network helpers**: Add more network-first patterns
-4. **CI Pipeline**: Configure artifact uploads in CI/CD
-
-## Additional Resources
-
-- [Playwright Documentation](https://playwright.dev)
-- [Faker.js Documentation](https://fakerjs.dev)
-- [TEA Knowledge Base](../.bmad/bmm/testarch/knowledge/)
+### Stripe Errors
+1. Verify `STRIPE_SECRET_KEY` is test mode
+2. Check webhook secret matches
+3. Use test cards only

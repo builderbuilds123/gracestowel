@@ -1,7 +1,7 @@
 # Story 7-2: Create 3D Secure Test Suite
 
 **Epic:** Epic 7 - Payment Error Flow Testing  
-**Status:** drafted  
+**Status:** done
 **Created:** 2025-12-14  
 **Requirements:** FR9.3, FR14.2
 
@@ -112,10 +112,10 @@ test.describe('3D Secure Authentication', () => {
 
 ## Definition of Done
 
-- [ ] 3DS modal appears for required cards
-- [ ] Successful 3DS completes payment
-- [ ] Failed 3DS shows appropriate error
-- [ ] Customer can retry after 3DS failure
+- [x] 3DS modal appears for required cards
+- [x] Successful 3DS completes payment
+- [x] Failed 3DS shows appropriate error
+- [x] Customer can retry after 3DS failure
 
 ---
 

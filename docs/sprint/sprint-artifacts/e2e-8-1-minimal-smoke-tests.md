@@ -1,7 +1,7 @@
 # Story 8-1: Create Minimal UI Smoke Test Suite
 
 **Epic:** Epic 8 - UI Smoke Tests & Cross-Browser  
-**Status:** drafted  
+**Status:** done
 **Created:** 2025-12-14  
 **Requirements:** FR2.1, FR7.1
 
@@ -97,11 +97,11 @@ test.describe('Smoke Tests - Page Load', () => {
 
 ## Definition of Done
 
-- [ ] Homepage loads with products
-- [ ] Product page loads correctly
-- [ ] Checkout page loads with form
-- [ ] Order status page loads with valid token
-- [ ] All smoke tests pass on Chromium
+- [x] Homepage loads with products
+- [x] Product page loads correctly
+- [x] Checkout page loads with form
+- [x] Order status page loads with valid token
+- [x] All smoke tests pass on Chromium
 
 ---
 

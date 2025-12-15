@@ -1,7 +1,7 @@
 # Story 1-3: Update Playwright Config for API-First Testing
 
 **Epic:** Epic 1 - Test Infrastructure Foundation  
-**Status:** drafted  
+**Status:** done
 **Created:** 2025-12-14  
 **Requirements:** FR6.1, FR6.2, FR6.3, FR6.5
 
@@ -315,15 +315,15 @@ export default globalTeardown;
 
 ## Definition of Done
 
-- [ ] Playwright config updated with all timeout settings
-- [ ] Retry mechanism configured (2 retries in CI)
-- [ ] HTML, JSON, and JUnit reporters configured
-- [ ] Screenshots, videos, and traces captured on failure
-- [ ] Desktop and mobile viewport projects defined
-- [ ] API-only test project configured
-- [ ] Global setup verifies environment and services
-- [ ] Package.json scripts updated for various test modes
-- [ ] Tests run successfully in CI environment
+- [x] Playwright config updated with all timeout settings
+- [x] Retry mechanism configured (2 retries in CI)
+- [x] HTML, JSON, and JUnit reporters configured
+- [x] Screenshots, videos, and traces captured on failure
+- [x] Desktop and mobile viewport projects defined
+- [x] API-only test project configured
+- [x] Global setup verifies environment and services
+- [x] Package.json scripts updated for various test modes
+- [x] Tests run successfully in CI environment
 
 ---
 

@@ -1,7 +1,7 @@
 # Story 5-2: Create Order Cancellation Test Suite
 
 **Epic:** Epic 5 - Order Modification Flow Testing  
-**Status:** drafted  
+**Status:** done
 **Created:** 2025-12-14  
 **Requirements:** FR8.5, FR13.6
 
@@ -108,11 +108,11 @@ test.describe('Order Cancellation', () => {
 
 ## Definition of Done
 
-- [ ] Cancellation succeeds within grace period
-- [ ] PaymentIntent is cancelled in Stripe
-- [ ] BullMQ capture job is removed
-- [ ] Cancellation rejected after grace period
-- [ ] Already cancelled orders cannot be cancelled again
+- [x] Cancellation succeeds within grace period
+- [x] PaymentIntent is cancelled in Stripe
+- [x] BullMQ capture job is removed
+- [x] Cancellation rejected after grace period
+- [x] Already cancelled orders cannot be cancelled again
 
 ---
 

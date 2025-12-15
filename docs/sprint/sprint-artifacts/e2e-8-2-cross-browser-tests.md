@@ -1,7 +1,7 @@
 # Story 8-2: Create Cross-Browser and Viewport Tests
 
 **Epic:** Epic 8 - UI Smoke Tests & Cross-Browser  
-**Status:** drafted  
+**Status:** done
 **Created:** 2025-12-14  
 **Requirements:** FR7.1, FR7.5, FR10.2
 
@@ -162,12 +162,12 @@ test.describe('Viewport Responsiveness', () => {
 
 ## Definition of Done
 
-- [ ] Tests pass on Chromium
-- [ ] Tests pass on Firefox
-- [ ] Tests pass on WebKit
-- [ ] Desktop viewport tests pass
-- [ ] Mobile viewport tests pass
-- [ ] Screenshots captured for visual comparison
+- [x] Tests pass on Chromium
+- [x] Tests pass on Firefox
+- [x] Tests pass on WebKit
+- [x] Desktop viewport tests pass
+- [x] Mobile viewport tests pass
+- [x] Screenshots captured for visual comparison
 
 ---
 

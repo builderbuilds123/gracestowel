@@ -1,7 +1,7 @@
 # Story 7-1: Create Payment Decline Test Suite
 
 **Epic:** Epic 7 - Payment Error Flow Testing  
-**Status:** drafted  
+**Status:** done
 **Created:** 2025-12-14  
 **Requirements:** FR14.1, FR9.2
 
@@ -108,10 +108,10 @@ test.describe('Payment Decline Handling', () => {
 
 ## Definition of Done
 
-- [ ] Generic decline shows correct error
-- [ ] Insufficient funds shows specific error
-- [ ] Retry with different card works
-- [ ] Error messages are user-friendly
+- [x] Generic decline shows correct error
+- [x] Insufficient funds shows specific error
+- [x] Retry with different card works
+- [x] Error messages are user-friendly
 
 ---
 

@@ -1,95 +1,137 @@
-import { defineConfig, devices } from "@playwright/test";
+import { defineConfig, devices } from '@playwright/test';
+import dotenv from 'dotenv';
+import path from 'path';
 
-/**
- * Playwright configuration for Grace Stowel E2E tests
- * @see https://playwright.dev/docs/test-configuration
- */
+// Load environment variables
+dotenv.config({ path: path.resolve(__dirname, '.env.test') });
+// Fallback to .env if .env.test doesn't exist or for other env vars
+dotenv.config({ path: path.resolve(__dirname, '.env') });
+
+
 export default defineConfig({
-  testDir: "./tests",
-  /* Output directory for test artifacts */
-  outputDir: "./test-results",
-  /* Run tests in files in parallel */
+  // Test directory
+  testDir: './tests',
+
+  // Test file pattern
+  testMatch: '**/*.spec.ts',
+  testIgnore: ['**/archive/**'],
+
+  // Parallel execution
   fullyParallel: true,
-  /* Fail the build on CI if you accidentally left test.only in the source code */
+  workers: process.env.CI ? 2 : undefined,
+
+  // Fail the build on CI if you accidentally left test.only in the source code
   forbidOnly: !!process.env.CI,
-  /* Retry on CI only */
+
+  // Retry configuration
   retries: process.env.CI ? 2 : 0,
-  /* Use single worker to avoid overwhelming the dev server */
-  workers: 1,
-  /* Reporter to use */
+
+  // Global Setup and Teardown
+  globalSetup: require.resolve('./global-setup'),
+  globalTeardown: require.resolve('./global-teardown'),
+
+  // Reporter configuration
   reporter: [
-    ["html", { outputFolder: "test-results/html", open: "never" }],
-    ["junit", { outputFile: "test-results/junit.xml" }],
-    ["json", { outputFile: "test-results/results.json" }],
-    process.env.CI ? ["github"] : ["list"],
-  ],
-  /* Shared settings for all the projects below */
-  use: {
-    /* Base URL to use in actions like `await page.goto('/')` */
-    baseURL: process.env.STOREFRONT_URL || "https://localhost:5173",
-    /* Collect trace when retrying the failed test */
-    trace: "retain-on-failure",
-    /* Capture screenshot on failure */
-    screenshot: "only-on-failure",
-    /* Record video on failure */
-    video: "retain-on-failure",
-    /* Ignore HTTPS errors for local development */
-    ignoreHTTPSErrors: true,
-    /* Action timeout: 15 seconds (click, fill, etc.) */
-    actionTimeout: 15 * 1000,
-    /* Navigation timeout: 30 seconds (page.goto, page.reload) */
-    navigationTimeout: 30 * 1000,
-  },
-
-  /* Configure projects for major browsers */
-  projects: [
-    {
-      name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
-    },
-    {
-      name: "firefox",
-      use: { ...devices["Desktop Firefox"] },
-    },
-    {
-      name: "webkit",
-      use: { ...devices["Desktop Safari"] },
-    },
-    /* Test against mobile viewports */
-    {
-      name: "Mobile Chrome",
-      use: { ...devices["Pixel 5"] },
-    },
-    {
-      name: "Mobile Safari",
-      use: { ...devices["iPhone 12"] },
-    },
-    /* Resilience tests project */
-    {
-      name: "resilience",
-      testDir: "./resilience",
-      use: { ...devices["Desktop Chrome"] },
-    },
+    ['html', { outputFolder: 'playwright-report', open: 'never' }],
+    ['json', { outputFile: 'test-results/results.json' }],
+    ['junit', { outputFile: 'test-results/junit.xml' }],
+    process.env.CI ? ['github'] : ['list'],
   ],
 
-  /* Run your local dev server before starting the tests */
-  /* In CI, storefront is already running via Docker Compose, so we skip webServer */
-  webServer: process.env.CI
-    ? undefined
-    : {
-        command: `cd ../.. && MEDUSA_PUBLISHABLE_KEY=${process.env.MEDUSA_PUBLISHABLE_KEY} CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE='${process.env.CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE}' npm run dev --workspace=apps/storefront`,
-        url: "https://localhost:5173",
-        reuseExistingServer: true,
-        ignoreHTTPSErrors: true,
-        timeout: 120 * 1000,
-      },
-
-  /* Global timeout for each test: 60 seconds */
-  timeout: 60 * 1000,
-
-  /* Expect timeout: 15 seconds (all assertions) */
+  // Global timeout settings
+  timeout: 60_000, // 60s per test
   expect: {
-    timeout: 15 * 1000,
+    timeout: 10_000, // 10s for assertions
   },
-});
 
+  // Shared settings for all projects
+  use: {
+    // Base URL for navigation
+    baseURL: process.env.STOREFRONT_URL || 'http://localhost:3000',
+
+    // Action timeout
+    actionTimeout: 15_000, // 15s
+
+    // Navigation timeout
+    navigationTimeout: 30_000, // 30s
+
+    // Collect trace on failure
+    trace: 'on-first-retry',
+
+    // Screenshot on failure
+    screenshot: 'only-on-failure',
+
+    // Video on failure
+    video: 'on-first-retry',
+
+    // Extra HTTP headers for API requests
+    extraHTTPHeaders: {
+      'Accept': 'application/json',
+    },
+  },
+
+  // Project configurations
+  projects: [
+    // Desktop browsers
+    {
+      name: 'chromium',
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1280, height: 720 },
+      },
+    },
+    {
+      name: 'firefox',
+      use: {
+        ...devices['Desktop Firefox'],
+        viewport: { width: 1280, height: 720 },
+      },
+    },
+    {
+      name: 'webkit',
+      use: {
+        ...devices['Desktop Safari'],
+        viewport: { width: 1280, height: 720 },
+      },
+    },
+
+    // Mobile viewports
+    {
+      name: 'mobile-chrome',
+      use: {
+        ...devices['Pixel 5'],
+        viewport: { width: 375, height: 667 },
+      },
+    },
+    {
+      name: 'mobile-safari',
+      use: {
+        ...devices['iPhone 12'],
+        viewport: { width: 375, height: 667 },
+      },
+    },
+
+    // API-only tests (no browser)
+    {
+      name: 'api',
+      testMatch: '**/*.api.spec.ts',
+      use: {
+        // No browser needed for API tests
+      },
+    },
+  ],
+
+  // Output directory for test artifacts
+  outputDir: 'test-results',
+
+  // Web server configuration (optional - for local dev)
+  /* Jules: Commenting out webServer as we don't want to auto-start in this env for now */
+  /*
+  webServer: process.env.CI ? undefined : {
+    command: 'pnpm --filter storefront dev',
+    url: 'http://localhost:3000',
+    reuseExistingServer: true,
+    timeout: 120_000,
+  },
+  */
+});

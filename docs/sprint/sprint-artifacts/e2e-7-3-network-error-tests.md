@@ -1,7 +1,7 @@
 # Story 7-3: Create Network Error Test Suite
 
 **Epic:** Epic 7 - Payment Error Flow Testing  
-**Status:** drafted  
+**Status:** done
 **Created:** 2025-12-14  
 **Requirements:** FR4.1, FR4.4, FR14.3
 
@@ -107,10 +107,10 @@ test.describe('Network Error Handling', () => {
 
 ## Definition of Done
 
-- [ ] Idempotency prevents duplicate PaymentIntents
-- [ ] Page reload reuses existing PaymentIntent
-- [ ] Validation errors display per-field messages
-- [ ] Network timeouts handled gracefully
+- [x] Idempotency prevents duplicate PaymentIntents
+- [x] Page reload reuses existing PaymentIntent
+- [x] Validation errors display per-field messages
+- [x] Network timeouts handled gracefully
 
 ---
 

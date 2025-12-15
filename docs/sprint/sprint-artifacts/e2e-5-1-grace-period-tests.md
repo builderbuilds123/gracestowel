@@ -1,7 +1,7 @@
 # Story 5-1: Create Grace Period Test Suite
 
 **Epic:** Epic 5 - Order Modification Flow Testing  
-**Status:** drafted  
+**Status:** done
 **Created:** 2025-12-14  
 **Requirements:** FR8.2, FR8.3, FR13.3
 
@@ -93,10 +93,10 @@ test.describe('Grace Period', () => {
 
 ## Definition of Done
 
-- [ ] Modification options visible within grace period
-- [ ] Countdown timer displays correctly
-- [ ] Modifications hidden after grace period
-- [ ] "Being processed" message shown after expiration
+- [x] Modification options visible within grace period
+- [x] Countdown timer displays correctly
+- [x] Modifications hidden after grace period
+- [x] "Being processed" message shown after expiration
 
 ---
 

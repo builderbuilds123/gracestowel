@@ -1,7 +1,7 @@
 # Story 1-1: Create Test Helper Utilities for Order and Webhook Simulation
 
 **Epic:** Epic 1 - Test Infrastructure Foundation  
-**Status:** drafted  
+**Status:** done
 **Created:** 2025-12-14  
 **Requirements:** FR1.2, FR3.4, FR11.5
 
@@ -198,13 +198,13 @@ JWT_SECRET=test-jwt-secret
 
 ## Definition of Done
 
-- [ ] `simulateWebhook()` function sends webhooks with valid Stripe signatures
-- [ ] `createTestOrder()` creates orders with PaymentIntent in `requires_capture` status
-- [ ] `generateModificationToken()` creates valid JWT tokens
-- [ ] All helpers are exported as Playwright fixtures
-- [ ] Unit tests pass for helper functions
-- [ ] Integration test verifies webhook → order creation flow
-- [ ] Code follows existing project conventions
+- [x] `simulateWebhook()` function sends webhooks with valid Stripe signatures
+- [x] `createTestOrder()` creates orders with PaymentIntent in `requires_capture` status
+- [x] `generateModificationToken()` creates valid JWT tokens
+- [x] All helpers are exported as Playwright fixtures
+- [x] Unit tests pass for helper functions
+- [x] Integration test verifies webhook → order creation flow
+- [x] Code follows existing project conventions
 
 ---
 
