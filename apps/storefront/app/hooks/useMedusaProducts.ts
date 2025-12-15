@@ -7,7 +7,7 @@ import { monitoredFetch } from "../utils/monitored-fetch";
  */
 const MEDUSA_API_URL = typeof window !== 'undefined'
     ? (window as unknown as { ENV?: { MEDUSA_BACKEND_URL?: string } }).ENV?.MEDUSA_BACKEND_URL || "http://localhost:9000"
-    : (typeof process !== 'undefined' ? process.env.MEDUSA_BACKEND_URL : "http://localhost:9000");
+    : "http://localhost:9000";
 
 /**
  * Product type matching Medusa's store API response
