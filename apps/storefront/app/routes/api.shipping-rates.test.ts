@@ -1,186 +1,196 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { action } from './api.shipping-rates';
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { action } from "./api.shipping-rates";
 
-// Mock Cloudflare context
-const mockContext = {
-    cloudflare: {
+// Define mock functions
+const mockGetCart = vi.fn();
+const mockGetOrCreateCart = vi.fn();
+const mockSyncCartItems = vi.fn();
+const mockUpdateShippingAddress = vi.fn();
+const mockGetShippingOptions = vi.fn();
+
+// Mock MedusaCartService
+vi.mock("../services/medusa-cart", () => {
+  return {
+    MedusaCartService: class {
+        constructor() {}
+        getCart = mockGetCart;
+        getOrCreateCart = mockGetOrCreateCart;
+        syncCartItems = mockSyncCartItems;
+        updateShippingAddress = mockUpdateShippingAddress;
+        getShippingOptions = mockGetShippingOptions;
+    }
+  };
+});
+
+// Mock monitoredFetch
+const mockMonitoredFetchFn = vi.fn();
+vi.mock("../utils/monitored-fetch", () => ({
+  monitoredFetch: (...args: any[]) => mockMonitoredFetchFn(...args),
+}));
+
+describe("API Shipping Rates", () => {
+  let context: any;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    context = {
+      cloudflare: {
         env: {
-            MEDUSA_BACKEND_URL: 'http://localhost:9000',
-            MEDUSA_PUBLISHABLE_KEY: 'pk_test_mock',
+          MEDUSA_BACKEND_URL: "http://medusa",
+          MEDUSA_PUBLISHABLE_KEY: "pk_123",
         },
-    },
-};
+      },
+    };
+  });
 
-// Helper to unwrap response
-async function unwrap(response: any) {
-    if (response instanceof Response || typeof response.json === 'function') {
-        return { data: await response.json(), status: response.status };
-    }
-    // Check for DataWithResponseInit-like structure
-    if (response && typeof response === 'object' && 'data' in response && 'init' in response) {
-        return { 
-            data: response.data, 
-            status: response.init?.status || 200 
-        };
-    }
-    // Default to plain object (direct return from action)
-    return { data: response, status: 200 };
-}
-
-describe('api.shipping-rates action', () => {
-    let fetchSpy: any;
-
-    beforeEach(() => {
-        fetchSpy = vi.spyOn(global, 'fetch');
-        // Console error mock to keep output clean during expected error tests
-        vi.spyOn(console, 'error').mockImplementation(() => {});
-        vi.spyOn(console, 'warn').mockImplementation(() => {});
+  it("should use existing cart if cartId provided", async () => {
+    const request = new Request("http://localhost", {
+      method: "POST",
+      body: JSON.stringify({
+        cartId: "cart_123",
+        currency: "USD",
+        cartItems: [],
+        shippingAddress: {}
+      }),
     });
 
-    afterEach(() => {
-        vi.restoreAllMocks();
+    mockGetCart.mockResolvedValue({ id: "cart_123" });
+    mockSyncCartItems.mockResolvedValue({});
+    mockUpdateShippingAddress.mockResolvedValue({});
+    mockGetShippingOptions.mockResolvedValue([
+      { id: "opt_1", name: "Std", amount: 1000 }
+    ]);
+
+    const response: any = await action({ request, params: {}, context });
+    expect(response.shippingOptions).toHaveLength(1);
+    expect(response.cartId).toBe("cart_123");
+    expect(mockGetCart).toHaveBeenCalledWith("cart_123");
+  });
+
+  it("should create new cart if cartId invalid/missing", async () => {
+    const request = new Request("http://localhost", {
+      method: "POST",
+      body: JSON.stringify({
+        currency: "USD",
+        cartItems: [],
+      }),
     });
 
-    it('returns shipping options for the requested currency (CAD)', async () => {
-        // Mock regions response
-        fetchSpy.mockResolvedValueOnce({
-            ok: true,
-            json: async () => ({
-                regions: [
-                    { id: 'reg_us', currency_code: 'usd' },
-                    { id: 'reg_ca', currency_code: 'cad' },
-                ]
-            }),
-        });
-
-        // Mock shipping options response
-        fetchSpy.mockResolvedValueOnce({
-            ok: true,
-            json: async () => ({
-                shipping_options: [
-                    { id: 'so_1', name: 'Standard', amount: 1000 }, // $10.00
-                    { id: 'so_2', name: 'Express', amount: 2000 },  // $20.00
-                ]
-            }),
-        });
-
-        const request = new Request('http://localhost:3000/api/shipping-rates', {
-            method: 'POST',
-            body: JSON.stringify({ currency: 'CAD' }),
-        });
-
-        const response: any = await action({ request, context: mockContext as any, params: {} });
-        const { data } = await unwrap(response);
-
-        // Verify we got options
-        expect(data.shippingOptions).toHaveLength(2);
-        expect(data.shippingOptions[0].id).toBe('so_1');
-        
-        // Verify region selection logic
-        // The second call (options) should use reg_ca
-        const optionsCall = fetchSpy.mock.calls[1];
-        expect(optionsCall[0]).toContain('region_id=reg_ca');
+    // Mock region fetch
+    mockMonitoredFetchFn.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ regions: [{ id: "reg_1", currency_code: "USD" }] }),
     });
 
-    it('falls back to first region if currency not found', async () => {
-        // Mock regions response (only EUR available)
-        fetchSpy.mockResolvedValueOnce({
-            ok: true,
-            json: async () => ({
-                regions: [
-                    { id: 'reg_eu', currency_code: 'eur' },
-                ]
-            }),
-        });
+    mockGetOrCreateCart.mockResolvedValue("cart_new");
+    mockSyncCartItems.mockResolvedValue({});
+    mockGetShippingOptions.mockResolvedValue([]);
 
-        // Mock shipping options response
-        fetchSpy.mockResolvedValueOnce({
-            ok: true,
-            json: async () => ({
-                shipping_options: [
-                    { id: 'so_eu', name: 'Euro Standard', amount: 500 },
-                ]
-            }),
-        });
+    const response: any = await action({ request, params: {}, context });
+    expect(response.cartId).toBe("cart_new");
+    expect(mockGetOrCreateCart).toHaveBeenCalledWith("reg_1", "USD");
+  });
 
-        const request = new Request('http://localhost:3000/api/shipping-rates', {
-            method: 'POST',
-            body: JSON.stringify({ currency: 'CAD' }), // Requesting CAD, but only EUR exists
-        });
-
-        const response: any = await action({ request, context: mockContext as any, params: {} });
-        const { data } = await unwrap(response);
-
-        expect(data.shippingOptions).toHaveLength(1);
-        expect(data.shippingOptions[0].id).toBe('so_eu');
-
-        // Verify fallback to first region
-        const optionsCall = fetchSpy.mock.calls[1];
-        expect(optionsCall[0]).toContain('region_id=reg_eu');
+  it("should fallback to region-based fetch if service fails", async () => {
+    const request = new Request("http://localhost", {
+      method: "POST",
+      body: JSON.stringify({
+        cartId: "cart_broken",
+        currency: "USD",
+        cartItems: [],
+      }),
     });
 
-    it('returns 500 when regions fetch fails', async () => {
-        fetchSpy.mockResolvedValueOnce({
-            ok: false,
-            status: 500,
-            statusText: 'Internal Server Error',
-        });
+    mockGetCart.mockRejectedValue(new Error("Service error"));
 
-        const request = new Request('http://localhost:3000/api/shipping-rates', {
-            method: 'POST',
-            body: JSON.stringify({ currency: 'CAD' }),
-        });
+    // Fallback mocks
+    mockMonitoredFetchFn
+      // First call is in step 2 (getOrCreateCart requires regions).
+      // Wait, let's trace the execution.
+      // 1. service.getCart throws Error("Service error")
+      // 2. Catch block
+      // 3. Fallback logic starts
+      //    - Fetch regions
+      //    - Fetch options
 
-        const response: any = await action({ request, context: mockContext as any, params: {} });
-        const { data, status } = await unwrap(response);
+      .mockResolvedValueOnce({ // Regions for fallback
+        ok: true,
+        json: async () => ({ regions: [{ id: "reg_1", currency_code: "USD" }] }),
+      })
+      .mockResolvedValueOnce({ // Options for fallback
+        ok: true,
+        json: async () => ({ shipping_options: [{ id: "opt_fallback", name: "Fallback", amount: 500 }] }),
+      });
 
-        expect(status).toBe(500);
-        expect(data.message).toBe("An error occurred while calculating shipping rates.");
-    });
+    const response: any = await action({ request, params: {}, context });
 
-    it('returns 500 when no regions are found', async () => {
-        fetchSpy.mockResolvedValueOnce({
-            ok: true,
-            json: async () => ({ regions: [] }),
-        });
+    // Check if we hit the fallback
+    // Note: The code calls fetch regions inside the "If no valid cartId" block too, but ONLY if we haven't tried to get cart or if we want to create one.
+    // In this test case:
+    // 1. We have cartId "cart_broken".
+    // 2. service.getCart("cart_broken") throws.
+    // 3. cartId becomes undefined.
+    // 4. "If no valid cartId, create one" block executes.
+    //    - Fetches regions (mockMonitoredFetchFn call 1)
+    //    - calls getOrCreateCart -> returns undefined or throws?
+    //    - Wait, if getCart throws, we set cartId = undefined.
+    //    - Then we enter step 2: if (!cartId).
+    //    - We fetch regions.
+    //    - We call getOrCreateCart.
+    //    - If getOrCreateCart succeeds, we have a new cartId.
+    //    - Then syncItems/updateAddress/getOptions.
+    //    - If THOSE fail, we go to catch block.
 
-        const request = new Request('http://localhost:3000/api/shipping-rates', {
-            method: 'POST',
-            body: JSON.stringify({ currency: 'CAD' }),
-        });
+    // But in my test setup:
+    // mockGetCart rejects. -> cartId = undefined.
+    // Step 2: fetch regions. (Call 1) -> success.
+    // calls getOrCreateCart -> I mocked it to resolve "cart_new" in previous test, but here I didn't set a return value, so it returns undefined by default.
+    // So cartId remains undefined.
+    // Then "if (!cartId) throw Error('Failed to initialize cart')".
+    // This throws.
+    // Catch block.
+    // Fallback logic.
+    // Fetch regions (Call 2).
+    // Fetch options (Call 3).
 
-        const response: any = await action({ request, context: mockContext as any, params: {} });
-        const { data, status } = await unwrap(response);
+    // So we expect 3 calls if getOrCreateCart fails/returns nothing.
 
-        expect(status).toBe(500);
-        expect(data.message).toBe("An error occurred while calculating shipping rates.");
-    });
+    // Let's adjust expectations or mocks.
+    // If I want to test "Service error" triggers fallback, I should make the service error bubble up or happen in a way that triggers catch.
 
-    it('returns 500 when shipping options fetch fails', async () => {
-        // Mock regions success
-        fetchSpy.mockResolvedValueOnce({
-            ok: true,
-            json: async () => ({
-                regions: [{ id: 'reg_1', currency_code: 'cad' }]
-            }),
-        });
+    // In the code:
+    // if (cartId) { try { getCart } catch { cartId = undefined } }
+    // So getCart failure just means we try to create a new cart.
+    // It doesn't go to catch block immediately.
 
-        // Mock options failure
-        fetchSpy.mockResolvedValueOnce({
-            ok: false,
-            status: 502,
-            statusText: 'Bad Gateway',
-        });
+    // To trigger the MAIN catch block (and thus fallback), something must throw that isn't caught.
+    // E.g. getOrCreateCart throws, or syncCartItems throws.
 
-        const request = new Request('http://localhost:3000/api/shipping-rates', {
-            method: 'POST',
-            body: JSON.stringify({ currency: 'CAD' }),
-        });
+    // Let's make getOrCreateCart throw.
+    mockGetOrCreateCart.mockRejectedValue(new Error("Creation failed"));
 
-        const response: any = await action({ request, context: mockContext as any, params: {} });
-        const { data, status } = await unwrap(response);
+    // Reset mocks count
+    mockMonitoredFetchFn.mockReset();
 
-        expect(status).toBe(500);
-        expect(data.message).toBe("An error occurred while calculating shipping rates.");
-    });
+    // Setup fetch mocks again
+    mockMonitoredFetchFn
+      .mockResolvedValueOnce({ // Regions (attempted during creation)
+        ok: true,
+        json: async () => ({ regions: [{ id: "reg_1", currency_code: "USD" }] }),
+      })
+      .mockResolvedValueOnce({ // Regions (fallback)
+        ok: true,
+        json: async () => ({ regions: [{ id: "reg_1", currency_code: "USD" }] }),
+      })
+      .mockResolvedValueOnce({ // Options (fallback)
+        ok: true,
+        json: async () => ({ shipping_options: [{ id: "opt_fallback", name: "Fallback", amount: 500 }] }),
+      });
+
+    const response2: any = await action({ request, params: {}, context });
+
+    expect(response2.shippingOptions).toHaveLength(1);
+    expect(response2.shippingOptions[0].id).toBe("opt_fallback");
+    expect(response2.cartId).toBeUndefined();
+  });
 });

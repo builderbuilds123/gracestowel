@@ -1,7 +1,7 @@
 import { ArrowLeft } from "lucide-react";
 import { Link, useLoaderData } from "react-router";
 import type { LoaderFunctionArgs } from "react-router";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Elements } from "@stripe/react-stripe-js";
 import type { StripeAddressElementChangeEvent } from "@stripe/stripe-js";
 import { useCart } from "../context/CartContext";
@@ -13,6 +13,8 @@ import { OrderSummary } from "../components/OrderSummary";
 import { parsePrice } from "../lib/price";
 import { generateTraceId } from "../lib/logger";
 import { monitoredFetch } from "../utils/monitored-fetch";
+import { generateCartHash } from "../utils/cart-hash";
+import { debounce } from "../utils/debounce";
 
 interface LoaderData {
   stripePublishableKey: string;
@@ -47,15 +49,20 @@ export default function Checkout() {
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [lastTraceId, setLastTraceId] = useState<string | null>(null);
 
-  // Shipping state
+  // Shipping & Cart state
   const [shippingOptions, setShippingOptions] = useState<ShippingOption[]>([]);
   const [selectedShipping, setSelectedShipping] =
     useState<ShippingOption | null>(null);
   const [isCalculatingShipping, setIsCalculatingShipping] = useState(false);
+  const [cartId, setCartId] = useState<string | undefined>(undefined);
+  const [shippingAddress, setShippingAddress] = useState<any>(undefined);
 
   // Track initialization to prevent clientSecret changes
   const isInitialized = useRef(false);
   const sessionTraceId = useRef(generateTraceId());
+
+  // Caching mechanism for shipping rates
+  const shippingCache = useRef<Map<string, { options: ShippingOption[], cartId: string | undefined }>>(new Map());
 
   // Calculate original total (before discount) using price utility
   const originalTotal = items.reduce((total, item) => {
@@ -186,69 +193,92 @@ export default function Checkout() {
     paymentIntentId,
   ]);
 
-  // Re-fetch shipping rates when cart total changes (for dynamic free shipping)
-  useEffect(() => {
-    if (shippingOptions.length === 0) return;
+  // Function to fetch shipping rates
+  const fetchShippingRates = useCallback(async (currentItems: typeof items, address: any) => {
+    setIsCalculatingShipping(true);
 
-    const refetchShipping = async () => {
-      try {
-        const response = await monitoredFetch("/api/shipping-rates", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            subtotal: cartTotal,
-          }),
-          label: 'refetch-shipping-rates',
-        });
+    const cacheKey = generateCartHash(currentItems, address, currency);
+    if (shippingCache.current.has(cacheKey)) {
+        const cached = shippingCache.current.get(cacheKey)!;
+        setShippingOptions(cached.options);
+        if (cached.cartId) setCartId(cached.cartId);
+        setIsCalculatingShipping(false);
+        return;
+    }
 
-        const data = (await response.json()) as { shippingOptions: ShippingOption[] };
-        setShippingOptions(data.shippingOptions);
+    try {
+      const response = await monitoredFetch("/api/shipping-rates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cartItems: currentItems,
+          shippingAddress: address ? {
+            first_name: address.firstName,
+            last_name: address.lastName,
+            address_1: address.address.line1,
+            address_2: address.address.line2,
+            city: address.address.city,
+            country_code: address.address.country,
+            postal_code: address.address.postal_code,
+            province: address.address.state,
+            phone: address.phone
+          } : undefined,
+          currency,
+          cartId
+        }),
+        label: 'fetch-shipping-rates',
+      });
 
-        if (selectedShipping) {
-          const updatedOption = data.shippingOptions.find(
-            (opt) => opt.id === selectedShipping.id
-          );
-          if (updatedOption) {
-            setSelectedShipping(updatedOption);
+      if (response.ok) {
+          const data = (await response.json()) as { shippingOptions: ShippingOption[], cartId?: string };
+          setShippingOptions(data.shippingOptions);
+
+          if (data.cartId) {
+              setCartId(data.cartId);
           }
-        }
-      } catch (error) {
-        console.error("Error refetching shipping rates:", error);
+
+          if (data.shippingOptions.length > 0) {
+            // Preserve selected shipping if still available
+            setSelectedShipping(prev => {
+                const found = data.shippingOptions.find(o => o.id === prev?.id);
+                return found || data.shippingOptions[0];
+            });
+          }
+
+          // Cache results
+          shippingCache.current.set(cacheKey, { options: data.shippingOptions, cartId: data.cartId });
       }
-    };
 
-    refetchShipping();
-  }, [cartTotal]);
+    } catch (error) {
+      console.error("Error fetching shipping rates:", error);
+    } finally {
+      setIsCalculatingShipping(false);
+    }
+  }, [currency, cartId]);
 
-  // Handler for address changes
+  // Debounced fetch function
+  const debouncedFetchShipping = useCallback(
+      debounce((items, address) => fetchShippingRates(items, address), 300),
+      [fetchShippingRates]
+  );
+
+  // Effect to trigger shipping fetch when items or address change
+  useEffect(() => {
+    if (items.length > 0) {
+        debouncedFetchShipping(items, shippingAddress);
+    }
+  }, [items, shippingAddress, debouncedFetchShipping]);
+
+  // Handler for address changes from Stripe Address Element
   const handleAddressChange = async (event: StripeAddressElementChangeEvent) => {
     const addressValue = event.value;
     if (!addressValue || !addressValue.address || !addressValue.address.country) {
       return;
     }
 
-    setIsCalculatingShipping(true);
-    try {
-      const response = await monitoredFetch("/api/shipping-rates", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          subtotal: cartTotal,
-        }),
-        label: 'fetch-shipping-rates',
-      });
-
-      const data = (await response.json()) as { shippingOptions: ShippingOption[] };
-      setShippingOptions(data.shippingOptions);
-
-      if (data.shippingOptions.length > 0) {
-        setSelectedShipping(data.shippingOptions[0]);
-      }
-    } catch (error) {
-      console.error("Error fetching shipping rates:", error);
-    } finally {
-      setIsCalculatingShipping(false);
-    }
+    // Only update if address substantially changed (country, state, zip) to avoid rapid re-fetches
+    // Or just pass the whole object and let debounce handle it
+    setShippingAddress(addressValue);
   };
 
   const options = {
