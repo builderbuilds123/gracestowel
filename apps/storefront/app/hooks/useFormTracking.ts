@@ -1,120 +1,245 @@
 /**
- * Form Interaction Tracking Hook (Story 5.2.5)
- * Tracks form interactions without capturing values
+ * Form Interaction Tracking Hook (Story 5.1)
+ * Tracks user interactions with forms (without capturing sensitive values)
  */
 
-import { useEffect } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { useLocation } from 'react-router';
 import posthog from 'posthog-js';
 
 interface FormInteractionEvent {
   form_name: string;
   field_name: string;
-  interaction_type: 'focus' | 'blur' | 'submit' | 'error';
+  interaction_type: 'focus' | 'blur' | 'change' | 'submit' | 'error';
+  page_path: string;
+  field_type?: string;
   error_message?: string;
 }
 
-// Fields that should never be tracked based on name heuristics
-const SENSITIVE_FIELDS = ['password', 'secret', 'token', 'key', 'auth', 'credit', 'card', 'cvv', 'cc', 'ssn', 'social', 'security'];
+// Fields that should NEVER have values logged
+const SENSITIVE_FIELDS = [
+  'password',
+  'card',
+  'cvv',
+  'cvc',
+  'credit',
+  'debit',
+  'ssn',
+  'social',
+  'secret',
+  'token',
+  'pin',
+];
+
+// Known form names by route or id
+const FORM_IDENTIFIERS: Record<string, string> = {
+  checkout: 'checkout_form',
+  login: 'login_form',
+  register: 'register_form',
+  search: 'search_form',
+  contact: 'contact_form',
+  newsletter: 'newsletter_form',
+  review: 'review_form',
+  address: 'address_form',
+  account: 'account_form',
+};
+
+/**
+ * Determine form name from element context
+ */
+function getFormName(element: HTMLElement): string {
+  // Check for explicit data attribute
+  const dataFormName = element.closest('[data-form-name]')?.getAttribute('data-form-name');
+  if (dataFormName) return dataFormName;
+
+  // Check form id or name
+  const form = element.closest('form');
+  if (form) {
+    if (form.id) {
+      for (const [key, name] of Object.entries(FORM_IDENTIFIERS)) {
+        if (form.id.toLowerCase().includes(key)) return name;
+      }
+      return form.id;
+    }
+    if (form.name) return form.name;
+  }
+
+  // Check current URL path for context
+  const path = window.location.pathname.toLowerCase();
+  for (const [key, name] of Object.entries(FORM_IDENTIFIERS)) {
+    if (path.includes(key)) return name;
+  }
+
+  return 'unknown_form';
+}
+
+/**
+ * Get field name safely (sanitized)
+ */
+function getFieldName(element: HTMLElement): string {
+  const input = element as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+
+  // Prefer explicit data attribute
+  const dataFieldName = element.getAttribute('data-field-name');
+  if (dataFieldName) return dataFieldName;
+
+  // Use name or id first
+  if (input.name) return input.name;
+  if (input.id) return input.id;
+
+  // Check for placeholder (not available on select elements)
+  if ('placeholder' in input && input.placeholder) return input.placeholder;
+
+  // Fallback to aria-label
+  return element.getAttribute('aria-label') || 'unknown_field';
+}
+
+/**
+ * Check if field is sensitive
+ */
+function isSensitiveField(fieldName: string, fieldType?: string): boolean {
+  const lowerName = fieldName.toLowerCase();
+
+  // Check against sensitive field patterns
+  if (SENSITIVE_FIELDS.some(sensitive => lowerName.includes(sensitive))) {
+    return true;
+  }
+
+  // Password type inputs are always sensitive
+  if (fieldType === 'password') {
+    return true;
+  }
+
+  return false;
+}
 
 /**
  * Hook to track form interactions
  * 
- * Captures:
- * - Focus/Blur on input fields
+ * Tracks:
+ * - Field focus/blur
  * - Form submissions
- * - Validation errors (if detectable via invalid events)
+ * - Validation errors
  * 
- * Safety:
+ * Security:
  * - NEVER captures field values
- * - Ignores password fields by default for extra safety
+ * - Identifies sensitive fields by name/type
+ * - Only tracks field names and interaction types
+ *
+ * @example
+ * ```tsx
+ * function App() {
+ *   useFormTracking();
+ *   return <Outlet />;
+ * }
+ * ```
  */
 export function useFormTracking() {
   const location = useLocation();
+  const trackedFocusFields = useRef<Set<string>>(new Set());
 
+  const sendFormEvent = useCallback((eventData: FormInteractionEvent) => {
+    if (typeof window === 'undefined') return;
+
+    // Don't log sensitive field names in detail
+    if (isSensitiveField(eventData.field_name, eventData.field_type)) {
+      eventData.field_name = '[sensitive]';
+    }
+
+    posthog.capture('form_interaction', eventData);
+
+    if (import.meta.env.MODE === 'development') {
+      console.log(`[Form] ${eventData.form_name}.${eventData.field_name} - ${eventData.interaction_type}`);
+    }
+  }, []);
+
+  // Handle focus events
+  const handleFocus = useCallback((event: FocusEvent) => {
+    const target = event.target as HTMLElement;
+    if (!target || !['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName)) return;
+
+    const formName = getFormName(target);
+    const fieldName = getFieldName(target);
+    const fieldType = (target as HTMLInputElement).type;
+    const fieldKey = `${formName}.${fieldName}`;
+
+    // Only track first focus per field per page visit
+    if (trackedFocusFields.current.has(fieldKey)) return;
+    trackedFocusFields.current.add(fieldKey);
+
+    sendFormEvent({
+      form_name: formName,
+      field_name: fieldName,
+      field_type: fieldType,
+      interaction_type: 'focus',
+      page_path: location.pathname,
+    });
+  }, [location.pathname, sendFormEvent]);
+
+  // Handle blur events (field left)
+  const handleBlur = useCallback((event: FocusEvent) => {
+    const target = event.target as HTMLElement;
+    if (!target || !['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName)) return;
+
+    const input = target as HTMLInputElement;
+    const formName = getFormName(target);
+    const fieldName = getFieldName(target);
+    const fieldType = input.type;
+
+    // Check for validation errors
+    const hasError = !input.validity?.valid;
+    let errorMessage: string | undefined;
+
+    if (hasError) {
+      // Get browser validation message (safe to log)
+      errorMessage = input.validationMessage || 'Validation error';
+    }
+
+    sendFormEvent({
+      form_name: formName,
+      field_name: fieldName,
+      field_type: fieldType,
+      interaction_type: hasError ? 'error' : 'blur',
+      page_path: location.pathname,
+      error_message: hasError ? errorMessage : undefined,
+    });
+  }, [location.pathname, sendFormEvent]);
+
+  // Handle form submissions
+  const handleSubmit = useCallback((event: Event) => {
+    const form = event.target as HTMLFormElement;
+    if (!form || form.tagName !== 'FORM') return;
+
+    const formName = getFormName(form);
+
+    sendFormEvent({
+      form_name: formName,
+      field_name: '_form_submit',
+      interaction_type: 'submit',
+      page_path: location.pathname,
+    });
+  }, [location.pathname, sendFormEvent]);
+
+  // Reset tracking on route change
+  useEffect(() => {
+    trackedFocusFields.current = new Set();
+  }, [location.pathname]);
+
+  // Set up event listeners
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    const handleFocus = (e: Event) => {
-      trackInteraction(e, 'focus');
-    };
-
-    const handleBlur = (e: Event) => {
-      trackInteraction(e, 'blur');
-    };
-
-    const handleSubmit = (e: Event) => {
-      const target = e.target as HTMLFormElement;
-      if (!target || target.tagName !== 'FORM') return;
-
-      const formName = target.getAttribute('name') || target.id || 'unknown_form';
-
-      posthog.capture('form_interaction', {
-        form_name: formName,
-        field_name: 'form',
-        interaction_type: 'submit',
-      } as FormInteractionEvent);
-    };
-
-    const handleInvalid = (e: Event) => {
-      const target = e.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
-      if (!target || !['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
-
-      const form = target.form;
-      const formName = form?.getAttribute('name') || form?.id || 'unknown_form';
-      const fieldName = target.name || target.id || 'unknown_field';
-
-      // Check heuristics for sensitive field names
-      if (SENSITIVE_FIELDS.some(term => fieldName.toLowerCase().includes(term))) return;
-
-      posthog.capture('form_interaction', {
-        form_name: formName,
-        field_name: fieldName,
-        interaction_type: 'error',
-        error_message: target.validationMessage,
-      } as FormInteractionEvent);
-    };
-
-    const trackInteraction = (e: Event, type: 'focus' | 'blur') => {
-      const target = e.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
-
-      // Only track interesting inputs
-      if (!target || !['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
-
-      // Ignore sensitive fields explicitly
-      if (target.type === 'password' || target.type === 'hidden') return;
-      if (target.getAttribute('data-sensitive') === 'true') return;
-
-      // Get form name
-      const form = target.form;
-      const formName = form?.getAttribute('name') || form?.id || 'unknown_form';
-      const fieldName = target.name || target.id || 'unknown_field';
-
-      // Check heuristics for sensitive field names
-      if (SENSITIVE_FIELDS.some(term => fieldName.toLowerCase().includes(term))) return;
-
-      const eventData: FormInteractionEvent = {
-        form_name: formName,
-        field_name: fieldName,
-        interaction_type: type,
-      };
-
-      posthog.capture('form_interaction', eventData);
-    };
-
-    // Use capture phase to catch focus/blur events which don't bubble
-    window.addEventListener('focus', handleFocus, true);
-    window.addEventListener('blur', handleBlur, true);
-    window.addEventListener('submit', handleSubmit, true);
-    window.addEventListener('invalid', handleInvalid, true);
+    // Use capture phase to catch events before they might be stopped
+    document.addEventListener('focusin', handleFocus, true);
+    document.addEventListener('focusout', handleBlur, true);
+    document.addEventListener('submit', handleSubmit, true);
 
     return () => {
-      window.removeEventListener('focus', handleFocus, true);
-      window.removeEventListener('blur', handleBlur, true);
-      window.removeEventListener('submit', handleSubmit, true);
-      window.removeEventListener('invalid', handleInvalid, true);
+      document.removeEventListener('focusin', handleFocus, true);
+      document.removeEventListener('focusout', handleBlur, true);
+      document.removeEventListener('submit', handleSubmit, true);
     };
-  }, [location.pathname]);
+  }, [handleFocus, handleBlur, handleSubmit]);
 }
 
 export default useFormTracking;
