@@ -1,6 +1,6 @@
 # Story 1.2: Create Email Worker
 
-Status: Drafted
+Status: done
 
 ## Story
 
@@ -125,13 +125,13 @@ Check existing patterns in `apps/backend/src/loaders/` for how workers are start
 
 ## Tasks / Subtasks
 
-- [ ] Create `apps/backend/src/jobs/email-worker.ts`
-- [ ] Implement worker that processes `email-queue` jobs
-- [ ] Resolve Resend service from Medusa container
-- [ ] Call Resend service `send()` method with correct parameters
-- [ ] Add logging for processing, success, and failure
-- [ ] Register worker to start on Medusa boot (loader or jobs index)
-- [ ] Verify worker starts when running `pnpm dev`
+- [x] Create `apps/backend/src/jobs/email-worker.ts`
+- [x] Implement worker that processes `email-queue` jobs
+- [x] Resolve Resend service from Medusa container
+- [x] Call Resend service `send()` method with correct parameters
+- [x] Add logging for processing, success, and failure
+- [x] Register worker to start on Medusa boot (loader or jobs index)
+- [x] Verify worker starts when running `pnpm dev`
 
 ## Testing Requirements
 
@@ -139,11 +139,11 @@ Check existing patterns in `apps/backend/src/loaders/` for how workers are start
 
 Create `apps/backend/integration-tests/unit/email-worker.unit.spec.ts`:
 
-- [ ] Worker processes job and calls Resend service
-- [ ] Worker logs success with masked email
-- [ ] Worker logs failure with error message
-- [ ] Worker throws on Resend failure (enables retry)
-- [ ] Worker logs attempt number correctly
+- [x] Worker processes job and calls Resend service
+- [x] Worker logs success with masked email
+- [x] Worker logs failure with error message
+- [x] Worker throws on Resend failure (enables retry)
+- [x] Worker logs attempt number correctly
 
 ### Integration Tests
 
@@ -158,14 +158,14 @@ cd apps/backend && TEST_TYPE=unit npx jest integration-tests/unit/email-worker.u
 
 ## Definition of Done
 
-- [ ] File `apps/backend/src/jobs/email-worker.ts` exists
-- [ ] Worker processes jobs from `email-queue`
-- [ ] Worker calls Resend service to send emails
-- [ ] Worker logs success with masked email address
-- [ ] Worker logs failure with error message
-- [ ] Worker throws on failure (enables BullMQ retry)
-- [ ] Worker starts when Medusa application boots
-- [ ] No TypeScript errors (`pnpm typecheck` passes)
+- [x] File `apps/backend/src/jobs/email-worker.ts` exists
+- [x] Worker processes jobs from `email-queue`
+- [x] Worker calls Resend service to send emails
+- [x] Worker logs success with masked email address
+- [x] Worker logs failure with error message
+- [x] Worker throws on failure (enables BullMQ retry)
+- [x] Worker starts when Medusa application boots
+- [x] No TypeScript errors (`pnpm typecheck` passes)
 
 ## Dev Notes
 
@@ -195,19 +195,20 @@ Set `concurrency: 5` to process multiple emails in parallel. Adjust based on Res
 
 ## Dev Agent Record
 
-_To be filled by implementing agent_
-
 ### Agent Model Used
-_Model name_
+Jules
 
 ### Completion Notes
-_Implementation notes_
+Implemented email worker functionality.
+- Created `apps/backend/src/jobs/email-worker.ts` with worker implementation using BullMQ.
+- Added `apps/backend/src/loaders/email-worker.ts` to start the worker on boot.
+- Added `resetEmailWorkerForTests` utility for testing purposes.
+- Updated `enqueueEmail` to include `channel: "email"` to satisfy `ProviderSendNotificationDTO` requirements.
+- Verified with unit tests.
 
 ### File List
 | File | Change |
 |------|--------|
 | `apps/backend/src/jobs/email-worker.ts` | Created - BullMQ worker |
-| `apps/backend/src/loaders/email-worker-loader.ts` | Created - worker startup |
-
-### Change Log
-_Code review follow-ups_
+| `apps/backend/src/loaders/email-worker.ts` | Created - worker startup |
+| `apps/backend/integration-tests/unit/email-worker.unit.spec.ts` | Created - unit tests |
