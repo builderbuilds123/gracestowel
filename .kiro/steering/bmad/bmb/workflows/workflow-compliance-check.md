@@ -1,0 +1,5 @@
+---
+inclusion: always
+---
+
+IT IS CRITICAL THAT YOU FOLLOW THIS COMMAND: LOAD the FULL @.bmad/bmb/workflows/workflow-compliance-check/workflow.md, READ its entire contents and follow its directions exactly!

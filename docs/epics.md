@@ -94,10 +94,25 @@ So that my payment information remains safe and PCI compliant.
 **And** it should support Card payments and BNPL (Klarna/Affirm) if configured
 **And** submitting the form should create a Payment Session in Medusa
 
+**Given** I am in the checkout flow
+**When** I modify my cart or shipping selection
+**Then** the system SHALL UPDATE the existing PaymentIntent rather than creating a new one
+**And** the `clientSecret` SHALL remain stable (not change) to prevent Stripe Elements from breaking
+
+**Given** a PaymentIntent is being created
+**When** the API request is made
+**Then** the system SHALL use a deterministic idempotency key based on cart contents
+**And** duplicate requests with the same cart SHALL return the same PaymentIntent
+
 **Technical Notes:**
 - Use `@stripe/react-stripe-js` in `apps/storefront`
 - Implement `PaymentElement` component
 - Ensure `return_url` is set to `/checkout/success`
+- **Updated 2025-12-12**: PaymentIntent lifecycle management per Course Correction
+  - `api.payment-intent.ts`: Accept `paymentIntentId` param for updates
+  - `checkout.tsx`: Store and reuse `paymentIntentId` in state
+  - Server generates idempotency key from cart hash for creates only
+  - Single `useEffect` manages create/update lifecycle
 
 ### Story 1.3: Express Checkout Element
 
@@ -523,7 +538,20 @@ I want logs to contain `order_id` and `trace_id` for the entire capture workflow
 So that I can debug issues easily.
 
 **Acceptance Criteria:**
-- Standardize log format for payment events using JSON structure.
+
+**Given** any payment-related operation occurs
+**When** the system logs the event
+**Then** the log entry SHALL be JSON-structured with fields: `timestamp`, `level`, `message`, `context`
+**And** the `context` SHALL include `traceId`, and optionally `orderId`, `paymentIntentId`, `customerId`
+**And** trace IDs SHALL be propagated via `x-trace-id` header from frontend to backend
+**And** error responses SHALL include `traceId` for customer support reference
+
+**Technical Notes:**
+- Create `apps/storefront/app/lib/logger.ts` utility
+- Generate trace IDs in format `gt_{timestamp}_{random}`
+- Use `createLogger()` factory with child logger support
+- Return `traceId` in error responses for support escalation
+- **Updated 2025-12-12**: Expanded scope per Course Correction proposal
 
 ### Story 8.2: Metrics Dashboard
 
@@ -559,3 +587,67 @@ All 10 Functional Requirements are covered. **2 implementation gaps identified**
 _For implementation: Use the `create-story` workflow to generate individual story implementation plans from this epic breakdown._
 
 _This document will be updated after UX Design and Architecture workflows to incorporate interaction details and technical details._
+
+---
+
+## Epic 5: Comprehensive Frontend Event Tracking
+
+**Goal:** Capture frontend behavior across API calls, navigation, scroll, engagement, and forms with privacy-safe PostHog events for storefront.
+
+### Story 5.1: Monitored Fetch & API Request Events (FR1, FR6)
+As a Developer, I want a monitored fetch wrapper that records `api_request` events with sanitized URL, method, status_code, duration_ms, success, error_message, and route context so API calls are consistently tracked.
+
+**Acceptance Criteria:**
+- All storefront fetch calls use the monitored wrapper.
+- `api_request` fires on success and failure with sanitized URLs (no tokens) and route.
+- Duration measured client-side; errors include message only, never body/payload.
+- Rollout gated under `frontend-event-tracking`; DNT/opt-out is not offered.
+
+### Story 5.2: Navigation Tracking (FR2)
+As a User Researcher, I want navigation events on every route change so we know flow patterns and dwell time between pages.
+
+**Acceptance Criteria:**
+- Emit `navigation` with from_path, to_path, navigation_type (link, back, forward, direct), and time_on_previous_page_ms.
+- Works with React Router transitions and browser back/forward.
+
+### Story 5.3: Scroll Depth Tracking (FR3)
+As a PM, I want scroll depth milestones so we understand content engagement.
+
+**Acceptance Criteria:**
+- Emit `scroll_depth` at 25/50/75/100 with depth_percentage, page_path, page_height, time_to_depth_ms.
+- Uses debounced handling + requestAnimationFrame; no duplicate emissions per threshold per pageview.
+
+### Story 5.4: Engagement & Idle Tracking (FR4)
+As a PM, I want `page_engagement` data so we can measure engaged vs idle time.
+
+**Acceptance Criteria:**
+- Detect idle after 30s of no mouse/keyboard activity.
+- On unload/navigation, emit `page_engagement` with engaged_time_ms, idle_time_ms, total_time_ms, page_path.
+
+### Story 5.5: Form Interaction Tracking (FR5)
+As a UX Analyst, I want `form_interaction` events so we can spot form friction without capturing values.
+
+**Acceptance Criteria:**
+- Emit on focus, blur, submit, error with form_name, field_name (no values), interaction_type, error_message for validation only.
+- Exclude sensitive fields; never send values.
+- Minimal payload, no PII; DNT/opt-out not offered.
+
+### Story 5.6: Integration & Tests (FR7)
+As a Developer, I want all tracking hooks wired in `root.tsx` with tests so tracking is reliable.
+
+**Acceptance Criteria:**
+- Hooks mounted globally (navigation, scroll, engagement, form, monitored fetch) with feature flag gating; DNT/opt-out not offered.
+- 17 tests cover hooks and event payloads; events verified in PostHog test workspace.
+- Event handlers add <5ms median overhead; use rAF/debounce where needed; payloads are minimal and sanitized.
+
+### FR Coverage Matrix (Frontend Tracking)
+
+| FR | Requirement | Covered By |
+| :--- | :--- | :--- |
+| FR1 | Capture `api_request` with sanitized URL, method, status_code, duration_ms, success, error_message, route | Epic 5 / Story 5.1 |
+| FR2 | Capture `navigation` with from_path, to_path, navigation_type, time_on_previous_page_ms | Epic 5 / Story 5.2 |
+| FR3 | Capture `scroll_depth` at 25/50/75/100 with depth, page_path, page_height, time_to_depth_ms | Epic 5 / Story 5.3 |
+| FR4 | Capture `page_engagement` with engaged_time_ms, idle_time_ms, total_time_ms; idle after 30s | Epic 5 / Story 5.4 |
+| FR5 | Capture `form_interaction` with form_name, field_name (no values), interaction_type, error_message | Epic 5 / Story 5.5 |
+| FR6 | Monitored fetch wrapper attaches route context and is used by all fetch calls | Epic 5 / Story 5.1 |
+| FR7 | Integrate hooks in root.tsx and verify events/tests | Epic 5 / Story 5.6 |

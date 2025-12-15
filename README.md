@@ -32,8 +32,8 @@ Full documentation is available in the [docs](./docs/index.md) directory.
 3. **Start Development**
 
    ```bash
-   npm install
-   npm run dev
+   pnpm install
+   pnpm run dev
    ```
 
    See the [Development Guide](./docs/development-guide.md) for detailed workflows.

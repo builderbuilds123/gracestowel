@@ -10,6 +10,7 @@ export interface PaymentCaptureJobData {
     orderId: string;
     paymentIntentId: string;
     scheduledAt: number;
+    source?: "normal" | "fallback" | "redis_recovery"; // Story 6.2: Track job origin
 }
 
 /**
@@ -49,9 +50,17 @@ const getRedisConnection = () => {
 // Queue name for payment capture
 export const PAYMENT_CAPTURE_QUEUE = "payment-capture";
 
-// Delay for payment capture - configurable via env, defaults to 1 hour (3600000ms)
+// Story 6.3: Capture buffer - start capture 30s before grace period ends (59:30)
+// This prevents race conditions where edits arrive just as capture starts
+export const CAPTURE_BUFFER_SECONDS = parseInt(
+    process.env.CAPTURE_BUFFER_SECONDS || "30",
+    10
+);
+
+// Delay for payment capture - configurable via env, defaults to 59:30 (3570000ms)
+// Story 6.3: Uses 30s buffer before full hour to prevent edit/capture race
 export const PAYMENT_CAPTURE_DELAY_MS = parseInt(
-    process.env.PAYMENT_CAPTURE_DELAY_MS || String(60 * 60 * 1000),
+    process.env.PAYMENT_CAPTURE_DELAY_MS || String((60 * 60 - CAPTURE_BUFFER_SECONDS) * 1000),
     10
 );
 
@@ -63,6 +72,12 @@ export const PAYMENT_CAPTURE_WORKER_CONCURRENCY = parseInt(
 
 let queue: Queue<PaymentCaptureJobData> | null = null;
 let worker: Worker<PaymentCaptureJobData> | null = null;
+
+// Avoid accumulating process signal listeners during Jest runs.
+const IS_JEST = process.env.JEST_WORKER_ID !== undefined;
+
+// Track shutdown handler to prevent listener leaks in long-lived processes.
+let shutdownHandler: (() => Promise<void>) | null = null;
 
 // Store container reference for use in worker
 let containerRef: MedusaContainer | null = null;
@@ -233,6 +248,70 @@ export async function fetchOrderTotal(orderId: string): Promise<{ totalCents: nu
 }
 
 /**
+ * Story 6.3: Set order edit_status for race condition handling
+ * 
+ * Uses optimistic locking pattern:
+ * 1. Read current state
+ * 2. Verify expected state (for lock acquisition)
+ * 3. Update with new state and timestamp
+ * 
+ * Note: This is not a true database-level atomic operation (no FOR UPDATE).
+ * The 30s capture buffer (CAPTURE_BUFFER_SECONDS) provides the primary race
+ * condition protection. This lock is a secondary guard.
+ * 
+ * @param orderId - The Medusa order ID
+ * @param editStatus - The edit status to set (locked_for_capture, idle, editable)
+ * @param expectCurrentStatus - Optional: only update if current status matches
+ * @returns true if status was set, false if skipped (e.g., already locked)
+ */
+async function setOrderEditStatus(
+    orderId: string, 
+    editStatus: "locked_for_capture" | "idle" | "editable",
+    expectCurrentStatus?: "editable" | "idle" | undefined
+): Promise<boolean> {
+    if (!containerRef) {
+        console.error("[PaymentCapture] Container not initialized - cannot set edit status");
+        return false;
+    }
+
+    try {
+        // Optimistic locking: check current state if expected status specified
+        if (expectCurrentStatus !== undefined) {
+            const query = containerRef.resolve("query");
+            const { data: orders } = await query.graph({
+                entity: "order",
+                fields: ["id", "metadata"],
+                filters: { id: orderId },
+            });
+
+            if (orders.length > 0) {
+                const currentStatus = (orders[0].metadata as any)?.edit_status;
+                // Only acquire lock if current status is editable, idle, or undefined
+                // Reject if already locked_for_capture
+                if (currentStatus === "locked_for_capture") {
+                    console.warn(`[PaymentCapture] Order ${orderId}: Already locked ('${currentStatus}'), skipping lock acquisition`);
+                    return false;
+                }
+            }
+        }
+
+        const orderService = containerRef.resolve("order");
+        await orderService.updateOrders([{
+            id: orderId,
+            metadata: {
+                edit_status: editStatus,
+                edit_status_updated_at: new Date().toISOString(),
+            },
+        }]);
+        console.log(`[PaymentCapture] Order ${orderId}: edit_status set to ${editStatus}`);
+        return true;
+    } catch (error) {
+        console.error(`[PaymentCapture] Error setting edit_status for order ${orderId}:`, error);
+        throw error; // Re-throw to trigger retry - errors should not be silently swallowed
+    }
+}
+
+/**
  * Update order metadata to track payment capture status in Medusa
  * Uses metadata since payment_status is not in UpdateOrderDTO
  * @param orderId - The Medusa order ID
@@ -264,6 +343,7 @@ async function updateOrderAfterCapture(orderId: string, amountCaptured: number):
 /**
  * Process a payment capture job
  * Story 2.3: Enhanced to capture dynamic order total instead of static PaymentIntent amount
+ * Story 6.3: Added edit_status locking for race condition handling
  * Exported for unit testing
  */
 export async function processPaymentCapture(job: Job<PaymentCaptureJobData>): Promise<void> {
@@ -273,7 +353,13 @@ export async function processPaymentCapture(job: Job<PaymentCaptureJobData>): Pr
     
     const stripe = getStripeClient();
     
+    // Story 6.3: Track if we acquired the lock so we know to release it
+    let lockAcquired = false;
+    
     try {
+        // Story 6.3 AC 1, 3: Set edit_status to locked_for_capture BEFORE any capture logic
+        lockAcquired = await setOrderEditStatus(orderId, "locked_for_capture");
+        
         // Step 1: Get the current state of the payment intent
         const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
         
@@ -359,8 +445,12 @@ export async function processPaymentCapture(job: Job<PaymentCaptureJobData>): Pr
             console.log(`[PaymentCapture] Order ${orderId}: Captured ${totalCents} cents (${captured.status})`);
         }
 
-        // Step 5: Update Medusa order with capture metadata
+        // Step 5: Update Medusa order with capture metadata and release lock
         await updateOrderAfterCapture(orderId, totalCents);
+        
+        // Story 6.3: Release lock after successful capture
+        await setOrderEditStatus(orderId, "idle");
+        lockAcquired = false; // Mark as released so finally doesn't double-release
 
     } catch (error: any) {
         // Handle specific Stripe errors using property checks (more robust than instanceof)
@@ -375,6 +465,15 @@ export async function processPaymentCapture(job: Job<PaymentCaptureJobData>): Pr
         }
         
         throw error; // Re-throw to trigger retry
+    } finally {
+        // Story 6.3 AC 8: Always release lock in finally block to prevent stuck locks
+        if (lockAcquired) {
+            try {
+                await setOrderEditStatus(orderId, "idle");
+            } catch (releaseError) {
+                console.error(`[PaymentCapture][CRITICAL] Failed to release lock for order ${orderId}:`, releaseError);
+            }
+        }
     }
 }
 
@@ -430,13 +529,15 @@ export function startPaymentCaptureWorker(container?: MedusaContainer): Worker<P
 
     console.log("[PaymentCapture] Worker started");
 
-    // Graceful shutdown
-    const shutdown = async () => {
-        console.log("[PaymentCapture] Shutting down worker...");
-        await worker?.close();
-    };
-    process.on("SIGTERM", shutdown);
-    process.on("SIGINT", shutdown);
+    // Graceful shutdown (register once). Skip in Jest to avoid listener accumulation.
+    if (!shutdownHandler && !IS_JEST) {
+        shutdownHandler = async () => {
+            console.log("[PaymentCapture] Shutting down worker...");
+            await worker?.close();
+        };
+        process.on("SIGTERM", shutdownHandler);
+        process.on("SIGINT", shutdownHandler);
+    }
 
     return worker;
 }

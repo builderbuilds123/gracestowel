@@ -124,18 +124,18 @@ describe("Cancel Order Workflow Steps", () => {
             expect(result.canCancel).toBe(true);
         });
 
-        it("should throw PartialCaptureError if order payment_status is partially_captured", async () => {
+        it("should throw PartialCaptureError if order metadata.payment_status is partially_captured", async () => {
             queryMock.mockResolvedValue({
-                data: [{ id: "ord_partial", status: "pending", payment_status: "partially_captured" }]
+                data: [{ id: "ord_partial", status: "pending", metadata: { payment_status: "partially_captured" } }]
             });
 
             await expect(lockOrderHandler({ orderId: "ord_partial", paymentIntentId: "pi_1" }, container))
                 .rejects.toThrow(PartialCaptureError);
         });
 
-        it("should throw LateCancelError if order payment_status is captured", async () => {
+        it("should throw LateCancelError if order metadata.payment_status is captured", async () => {
             queryMock.mockResolvedValue({
-                data: [{ id: "ord_captured", status: "pending", payment_status: "captured" }]
+                data: [{ id: "ord_captured", status: "pending", metadata: { payment_status: "captured" } }]
             });
 
             await expect(lockOrderHandler({ orderId: "ord_captured", paymentIntentId: "pi_1" }, container))

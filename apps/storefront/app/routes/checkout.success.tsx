@@ -7,6 +7,7 @@ import { loadStripe } from "@stripe/stripe-js";
 import { posts } from "../data/blogPosts";
 import { getStripe, initStripe } from "../lib/stripe";
 import { OrderTimer } from "../components/order/OrderTimer";
+import { monitoredFetch } from "../utils/monitored-fetch";
 
 // Lazy load Map component to avoid SSR issues with Leaflet
 const Map = lazy(() => import("../components/Map.client"));
@@ -148,7 +149,10 @@ export default function CheckoutSuccess() {
                             console.log("Geocoding address:", addressString);
 
                             try {
-                                const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addressString)}`);
+                                const response = await monitoredFetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addressString)}`, {
+                                    method: "GET",
+                                    label: "geocode-shipping-address",
+                                });
                                 const data = await response.json() as any[];
                                 console.log("Geocoding response:", data);
                                 if (Array.isArray(data) && data.length > 0) {
@@ -220,12 +224,14 @@ export default function CheckoutSuccess() {
 
                         const fetchOrderWithToken = async (): Promise<void> => {
                             try {
-                                const response = await fetch(
+                                const response = await monitoredFetch(
                                     `${medusaUrl}/store/orders/by-payment-intent?payment_intent_id=${encodeURIComponent(paymentIntentId)}`,
                                     {
+                                        method: "GET",
                                         headers: {
                                             "x-publishable-api-key": medusaPublishableKey,
                                         },
+                                        label: "order-by-payment-intent",
                                     }
                                 );
 

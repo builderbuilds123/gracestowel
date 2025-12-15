@@ -1,8 +1,24 @@
 import posthog from 'posthog-js';
 
 /**
+ * Get sanitized URL (strips sensitive query params like tokens)
+ * Prevents leaking auth tokens to analytics
+ */
+function getSanitizedUrl(): string {
+  if (typeof window === 'undefined') return '';
+  const url = new URL(window.location.href);
+  // Remove sensitive query parameters
+  const sensitiveParams = ['token', 'auth', 'key', 'secret', 'password', 'jwt'];
+  sensitiveParams.forEach(param => url.searchParams.delete(param));
+  return url.toString();
+}
+
+/**
  * Initialize PostHog for client-side analytics and monitoring
  * Only active in production or when explicitly enabled via env var
+ * 
+ * Supports both build-time (VITE_*) and runtime (window.ENV) configuration
+ * Runtime config from Cloudflare Workers takes precedence
  */
 export function initPostHog() {
   // Only initialize in browser environment
@@ -10,12 +26,19 @@ export function initPostHog() {
     return;
   }
 
-  const apiKey = import.meta.env.VITE_POSTHOG_API_KEY;
-  const host = import.meta.env.VITE_POSTHOG_HOST || 'https://app.posthog.com';
+  // Try runtime config first (from Cloudflare Workers via window.ENV)
+  // Fallback to build-time config (VITE_* env vars)
+  const runtimeConfig = (window as any).ENV;
+  const apiKey = runtimeConfig?.VITE_POSTHOG_API_KEY || runtimeConfig?.POSTHOG_API_KEY || import.meta.env.VITE_POSTHOG_API_KEY;
+  const host = runtimeConfig?.VITE_POSTHOG_HOST || runtimeConfig?.POSTHOG_HOST || import.meta.env.VITE_POSTHOG_HOST || 'https://us.i.posthog.com';
   
   // Only initialize if API key is provided
   if (!apiKey) {
     console.warn('[PostHog] API key not configured. Skipping initialization.');
+    console.warn('[PostHog] Checked:', {
+      runtime: !!(runtimeConfig?.VITE_POSTHOG_API_KEY || runtimeConfig?.POSTHOG_API_KEY),
+      buildTime: !!import.meta.env.VITE_POSTHOG_API_KEY,
+    });
     return;
   }
 
@@ -36,9 +59,6 @@ export function initPostHog() {
     
     // Enable autocapture for clicks and form submissions
     autocapture: true,
-    
-    // Respect user privacy
-    respect_dnt: true,
 
     // Explicitly enable persistence (localStorage+cookie) as per architecture policy
     persistence: 'localStorage+cookie',
@@ -65,24 +85,136 @@ export function getPostHog() {
 }
 
 /**
- * Report Web Vitals to PostHog
+ * Web Vitals metric structure from web-vitals v5
+ * @see https://github.com/GoogleChrome/web-vitals
+ */
+export interface WebVitalMetric {
+  name: 'CLS' | 'INP' | 'LCP' | 'FCP' | 'TTFB';
+  value: number;
+  rating: 'good' | 'needs-improvement' | 'poor';
+  delta: number;
+  id: string;
+  navigationType: string;
+  entries: PerformanceEntry[];
+}
+
+/**
+ * Report Web Vitals to PostHog (Story 4.2)
+ * Captures Core Web Vitals: LCP, CLS, INP (replaces FID), FCP, TTFB
+ * Each metric includes a rating (good, needs-improvement, poor)
  */
 export function reportWebVitals() {
   if (typeof window === 'undefined') return;
 
   import('web-vitals').then(({ onCLS, onINP, onLCP, onFCP, onTTFB }) => {
-    const sendToPostHog = (metric: any) => {
-      posthog.capture('$performance_event', {
-        ...metric,
-        url: window.location.href,
+    const sendToPostHog = (metric: WebVitalMetric) => {
+      posthog.capture('web_vitals', {
+        metric_name: metric.name,
+        metric_value: metric.value,
+        metric_rating: metric.rating, // AC2: good, needs-improvement, poor
+        metric_delta: metric.delta,
+        metric_id: metric.id,
+        navigation_type: metric.navigationType,
+        url: getSanitizedUrl(),
       });
+      
+      // Debug log in development
+      if (import.meta.env.MODE === 'development') {
+        console.log(`[WebVitals] ${metric.name}: ${metric.value.toFixed(2)} (${metric.rating})`);
+      }
     };
 
-    onCLS(sendToPostHog);
-    onINP(sendToPostHog);
-    onLCP(sendToPostHog);
-    onFCP(sendToPostHog);
-    onTTFB(sendToPostHog);
+    // Core Web Vitals
+    onCLS(sendToPostHog);  // Cumulative Layout Shift
+    onLCP(sendToPostHog);  // Largest Contentful Paint
+    onINP(sendToPostHog);  // Interaction to Next Paint (replaces FID)
+    
+    // Additional metrics
+    onFCP(sendToPostHog);  // First Contentful Paint
+    onTTFB(sendToPostHog); // Time to First Byte
+  });
+}
+
+/**
+ * Setup global error tracking for PostHog (Story 4.1)
+ * Captures unhandled errors and promise rejections
+ * Chains with existing handlers to avoid clobbering other error trackers (M1 fix)
+ */
+export function setupErrorTracking() {
+  if (typeof window === 'undefined') return;
+
+  // Store existing handlers to chain them (M1: Don't clobber other error trackers)
+  const prevOnerror = window.onerror;
+  const prevOnunhandledrejection = window.onunhandledrejection;
+
+  // Track unhandled JavaScript errors
+  window.onerror = (message, source, lineno, colno, error) => {
+    posthog.capture('$exception', {
+      $exception_type: error?.name || 'Error',
+      $exception_message: typeof message === 'string' ? message : 'Unknown error',
+      $exception_source: source,
+      $exception_lineno: lineno,
+      $exception_colno: colno,
+      $exception_stack_trace_raw: error?.stack,
+      $exception_handled: false,
+      $exception_synthetic: false,
+      url: getSanitizedUrl(),
+      user_agent: navigator.userAgent,
+    });
+    
+    // Chain to previous handler if it exists
+    if (prevOnerror) {
+      return prevOnerror(message, source, lineno, colno, error);
+    }
+    
+    // Don't prevent default error handling
+    return false;
+  };
+
+  // Track unhandled promise rejections
+  window.onunhandledrejection = (event: PromiseRejectionEvent) => {
+    const error = event.reason;
+    const isError = error instanceof Error;
+    
+    posthog.capture('$exception', {
+      $exception_type: isError ? error.name : 'UnhandledPromiseRejection',
+      $exception_message: isError ? error.message : String(error),
+      $exception_stack_trace_raw: isError ? error.stack : undefined,
+      $exception_handled: false,
+      $exception_synthetic: false,
+      $exception_is_promise_rejection: true,
+      url: getSanitizedUrl(),
+      user_agent: navigator.userAgent,
+    });
+    
+    // Chain to previous handler if it exists
+    if (prevOnunhandledrejection) {
+      prevOnunhandledrejection.call(window, event);
+    }
+  };
+
+  // Only log in development (L1 fix)
+  if (import.meta.env.MODE === 'development') {
+    console.log('[PostHog] Error tracking initialized');
+  }
+}
+
+/**
+ * Capture a handled exception manually
+ * Use this to track errors that are caught but still significant
+ */
+export function captureException(error: Error, context?: Record<string, unknown>) {
+  if (typeof window === 'undefined') return;
+  
+  posthog.capture('$exception', {
+    $exception_type: error.name,
+    $exception_message: error.message,
+    $exception_stack_trace_raw: error.stack,
+    $exception_handled: true,
+    $exception_synthetic: false,
+    url: getSanitizedUrl(),
+    user_agent: navigator.userAgent, // L2 fix: consistent with auto-captured exceptions
+    ...context,
   });
 }
 

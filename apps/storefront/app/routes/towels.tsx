@@ -10,7 +10,7 @@ import { SlidersHorizontal, X } from "lucide-react";
 export function meta() {
     return [
         { title: "Premium Towels Collection | Grace Stowel" },
-        { name: "description", content: "Shop our collection of premium organic cotton towels. Luxuriously soft, sustainably made, and designed to last. Free shipping on orders over $100." },
+        { name: "description", content: "Shop our collection of premium organic cotton towels. Luxuriously soft, sustainably made, and designed to last." },
         // Open Graph
         { property: "og:title", content: "Premium Towels Collection | Grace Stowel" },
         { property: "og:description", content: "Shop our collection of premium organic cotton towels. Luxuriously soft, sustainably made, and designed to last." },

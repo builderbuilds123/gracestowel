@@ -59,20 +59,17 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
 
     const formatPrice = (price: string | number): string => {
         let numericPrice = typeof price === 'string' ? parseFloat(price.replace(/[^0-9.]/g, '')) : price;
-
+        
         if (isNaN(numericPrice)) return typeof price === 'string' ? price : '0.00';
 
-        if (currency === 'USD') {
-            numericPrice = numericPrice * 0.75; // Approximate conversion
-        }
+        const localeString = language === 'fr'
+            ? 'fr-CA'
+            : `en-${currency === 'CAD' ? 'CA' : 'US'}`;
 
-        const formatted = new Intl.NumberFormat(language === 'fr' ? 'fr-CA' : 'en-CA', {
+        return new Intl.NumberFormat(localeString, {
             style: 'currency',
             currency: currency,
-            currencyDisplay: 'narrowSymbol',
         }).format(numericPrice);
-
-        return formatted.replace('US', '').replace('CA', '').trim();
     };
 
     return (

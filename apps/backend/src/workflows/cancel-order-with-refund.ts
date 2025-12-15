@@ -166,13 +166,15 @@ export const lockOrderHandler = async (input: { orderId: string; paymentIntentId
     }
     
     // Check if payment has been captured (too late to cancel)
-    if (order.payment_status === "captured" || order.metadata?.payment_captured_at) {
+    // Note: Medusa v2 Order type doesn't have payment_status, so we check metadata
+    const paymentStatus = (order.metadata as Record<string, unknown>)?.payment_status as string | undefined;
+    if (paymentStatus === "captured" || order.metadata?.payment_captured_at) {
         console.log(`[CancelOrder] Order ${input.orderId} payment already captured - too late to cancel`);
         throw new LateCancelError();
     }
 
     // Check for partial capture (requires manual intervention)
-    if (order.payment_status === "partially_captured") {
+    if (paymentStatus === "partially_captured") {
         console.error(`[CancelOrder][REJECTED] Order ${input.orderId} is partially captured. Manual refund required.`);
         throw new PartialCaptureError();
     }

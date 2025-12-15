@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { monitoredFetch } from '../utils/monitored-fetch';
 
 export interface CustomerAddress {
     id: string;
@@ -72,11 +73,12 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
         }
 
         try {
-            const response = await fetch(`${MEDUSA_BACKEND_URL}/store/customers/me`, {
+            const response = await monitoredFetch(`${MEDUSA_BACKEND_URL}/store/customers/me`, {
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`,
                 },
+                label: 'customer-me',
             });
 
             if (response.ok) {
@@ -98,10 +100,11 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
     const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
         try {
             // Step 1: Authenticate with email/password
-            const authResponse = await fetch(`${MEDUSA_BACKEND_URL}/auth/customer/emailpass`, {
+            const authResponse = await monitoredFetch(`${MEDUSA_BACKEND_URL}/auth/customer/emailpass`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, password }),
+                label: 'customer-login',
             });
 
             if (!authResponse.ok) {
@@ -130,10 +133,11 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
     ): Promise<{ success: boolean; error?: string }> => {
         try {
             // Step 1: Register auth identity
-            const authResponse = await fetch(`${MEDUSA_BACKEND_URL}/auth/customer/emailpass/register`, {
+            const authResponse = await monitoredFetch(`${MEDUSA_BACKEND_URL}/auth/customer/emailpass/register`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, password }),
+                label: 'customer-register-auth',
             });
 
             if (!authResponse.ok) {
@@ -144,7 +148,7 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
             const { token: regToken } = (await authResponse.json()) as { token: string };
 
             // Step 2: Create customer profile
-            const customerResponse = await fetch(`${MEDUSA_BACKEND_URL}/store/customers`, {
+            const customerResponse = await monitoredFetch(`${MEDUSA_BACKEND_URL}/store/customers`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -155,6 +159,7 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
                     first_name: firstName,
                     last_name: lastName,
                 }),
+                label: 'customer-register-profile',
             });
 
             if (!customerResponse.ok) {

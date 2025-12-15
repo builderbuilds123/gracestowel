@@ -13,6 +13,7 @@ import {
     VariantNotFoundError,
     PaymentIntentMissingError,
     PriceNotFoundError,
+    OrderLockedError,
 } from "../../../../../workflows/add-item-to-order";
 
 /**
@@ -122,6 +123,15 @@ export async function POST(
     } catch (error) {
         // FIX: Use proper error type checks instead of string matching
 
+        // 409 Conflict - Order locked for capture (Story 6.3)
+        if (error instanceof OrderLockedError) {
+            res.status(409).json({
+                code: error.code,
+                message: error.message,
+            });
+            return;
+        }
+
         // 409 Conflict - Stock issues
         if (error instanceof InsufficientStockError) {
             res.status(409).json({
@@ -155,12 +165,13 @@ export async function POST(
             return;
         }
 
-        // 402 Payment Required - Card declined
+        // 402 Payment Required - Card declined (Story 6.4)
         if (error instanceof CardDeclinedError) {
             res.status(402).json({
-                code: "card_declined",
-                message: error.message,
-                stripe_code: error.stripeCode,
+                code: error.code,
+                message: error.userMessage,
+                type: error.type,
+                retryable: error.retryable,
                 decline_code: error.declineCode,
             });
             return;

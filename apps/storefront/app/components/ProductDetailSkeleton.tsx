@@ -104,9 +104,9 @@ export default function ProductDetailSkeleton({ product, relatedProducts }: Prod
                             </button>
 
                             <div className="grid grid-cols-2 gap-6 pt-8 border-t border-gray-100">
-                                <div className="flex items-center gap-3 text-text-earthy/70">
-                                    <Truck className="w-6 h-6 text-accent-earthy" />
-                                    <span className="text-sm">Free shipping over $100</span>
+                                <div className="flex items-center gap-2 text-text-earthy/60">
+                                    <div className="w-5 h-5 bg-gray-200 rounded" />
+                                    <span className="text-sm">Fast, tracked shipping</span>
                                 </div>
                                 <div className="flex items-center gap-3 text-text-earthy/70">
                                     <ShieldCheck className="w-6 h-6 text-accent-earthy" />

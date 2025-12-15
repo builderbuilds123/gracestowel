@@ -44,9 +44,15 @@ development_status:
   epic-1-retrospective: optional
 
   epic-2: backlog
-  2-1-implement-server-side-tracking: backlog
-  2-2-identify-associate-logged-in-users: backlog
-  2-3-ensure-correct-user-id-server-side: backlog
+  2-1-implement-server-side-tracking:
+    path: docs/sprint/sprint-artifacts/2-1-implement-server-side-tracking.md
+    status: done
+  2-2-identify-associate-logged-in-users:
+    path: docs/sprint/sprint-artifacts/2-2-identify-associate-logged-in-users.md
+    status: done
+  2-3-ensure-correct-user-id-server-side:
+    status: done
+    meta: "Pre-existing implementation verified. Server-side events use customer_id or guest_${order.id}."
   epic-2-retrospective: optional
 
   epic-3: backlog
@@ -56,12 +62,54 @@ development_status:
   epic-3-retrospective: optional
 
   epic-4: backlog
-  4-1-implement-error-tracking-posthog: backlog
-  4-2-track-web-vitals-performance: backlog
-  4-3-implement-backend-event-tracking: backlog
-  4-4-create-posthog-monitoring-dashboards: backlog
-  4-5-set-up-basic-alerting: backlog
+  4-1-implement-error-tracking-posthog:
+    path: docs/sprint/sprint-artifacts/4-1-implement-error-tracking-posthog.md
+    status: done
+  4-2-track-web-vitals-performance:
+    path: docs/sprint/sprint-artifacts/4-2-track-web-vitals-performance.md
+    status: done
+  4-3-monitor-api-latency-error-rates:
+    path: docs/sprint/sprint-artifacts/4-3-monitor-api-latency-error-rates.md
+    status: done
+  4-4-backend-error-tracking:
+    path: docs/sprint/sprint-artifacts/4-4-backend-error-tracking.md
+    status: done
+  4-5-health-check-monitoring:
+    path: docs/sprint/sprint-artifacts/4-5-health-check-monitoring.md
+    status: done
+  4-6-create-posthog-monitoring-dashboards: backlog
   epic-4-retrospective: optional
+
+  # --- Enhanced Analytics (Growth Features from PRD) ---
+  epic-5-enhanced-analytics: in-progress
+  5-2-comprehensive-frontend-tracking:
+    path: docs/sprint/sprint-artifacts/5-2-comprehensive-frontend-tracking.md
+    status: done
+    meta: "PRD Growth Features: Track users' every move. API calls, navigation, scroll, engagement, forms."
+    completed: "2025-12-14"
+  5-2-1-monitored-fetch-api-events:
+    path: docs/sprint/sprint-artifacts/5-2-1-monitored-fetch-api-events.md
+    status: done
+    completed: "2025-12-14"
+  5-2-2-navigation-tracking:
+    path: docs/sprint/sprint-artifacts/5-2-2-navigation-tracking.md
+    status: todo
+  5-2-3-scroll-depth-tracking:
+    path: docs/sprint/sprint-artifacts/5-2-3-scroll-depth-tracking.md
+    status: todo
+  5-2-4-engagement-idle-tracking:
+    path: docs/sprint/sprint-artifacts/5-2-4-engagement-idle-tracking.md
+    status: todo
+  5-2-5-form-interaction-tracking:
+    path: docs/sprint/sprint-artifacts/5-2-5-form-interaction-tracking.md
+    status: todo
+  5-2-6-integration-and-tests:
+    path: docs/sprint/sprint-artifacts/5-2-6-integration-and-tests.md
+    status: todo
+  5-2-posthog-ci-env-fix:
+    status: done
+    meta: "Fixed VITE_POSTHOG_API_KEY and VITE_POSTHOG_HOST injection in CI/CD build step."
+  epic-5-retrospective: optional
 
   # --- Cookie Policy Epics (from docs/product/epics/cookie-policy.md) ---
   cp-epic-1: backlog
@@ -161,15 +209,28 @@ development_status:
     status: done
   pi-epic-4-retrospective: optional
 
-  pi-epic-5: backlog
-  5-1-e2e-grace-period-tests: backlog
+  pi-epic-5: in-progress
+  5-1-e2e-grace-period-tests:
+    path: docs/sprint/sprint-artifacts/5-1-e2e-grace-period-tests.md
+    status: done
+  5-2-e2e-test-infrastructure:
+    status: backlog
+    meta: "Enable E2E tests in CI - remove test.skip(), add order seeding, overhaul existing tests for recent changes"
   pi-epic-5-retrospective: optional
 
-  pi-epic-6: backlog
-  6-1-webhook-validation-retry: backlog
-  6-2-redis-connection-failure-handling: backlog
-  6-3-race-condition-handling: backlog
-  6-4-increment-fallback-flow: backlog
+  pi-epic-6: in-progress
+  6-1-webhook-validation-retry:
+    path: docs/sprint/sprint-artifacts/6-1-webhook-validation-retry.md
+    status: done
+  6-2-redis-connection-failure-handling:
+    path: docs/sprint/sprint-artifacts/6-2-redis-connection-failure-handling.md
+    status: done
+  6-3-race-condition-handling:
+    path: docs/sprint/sprint-artifacts/6-3-race-condition-handling.md
+    status: done
+  6-4-increment-fallback-flow:
+    path: docs/sprint/sprint-artifacts/6-4-increment-fallback-flow.md
+    status: done
   pi-epic-6-retrospective: optional
 
   pi-epic-7: backlog
@@ -179,8 +240,37 @@ development_status:
   7-4-csrf-protection: backlog
   pi-epic-7-retrospective: optional
 
-  pi-epic-8: backlog
-  8-1-structured-logging: backlog
+  pi-epic-8: in-progress
+  8-1-structured-logging:
+    status: done
+    path: docs/sprint/sprint-artifacts/checkout-payment-flow-fixes.md
+    meta: "Implemented as part of checkout-payment-flow-fixes story. PR #55 merged 2025-12-13."
   8-2-metrics-dashboard: backlog
   8-3-alerting: backlog
   pi-epic-8-retrospective: optional
+
+  # Backlog: Atomic batch item addition
+  batch-add-items-endpoint:
+    status: backlog
+    meta: "Create POST /store/orders/:id/line-items/batch for atomic multi-item add. Single Stripe increment call for total, all-or-nothing commit. Required for true AC6 compliance with multi-item UX."
+
+  # --- Course Correction: Checkout Payment Flow Fixes (2025-12-12) ---
+  checkout-payment-flow-fixes:
+    status: done
+    proposal: docs/sprint/proposals/sprint-change-proposal-2025-12-12-checkout-fixes.md
+    story: docs/sprint/sprint-artifacts/checkout-payment-flow-fixes.md
+    meta: "PR #55 merged 2025-12-13. PaymentIntent lifecycle, idempotency, structured logging."
+    completed: "2025-12-13"
+    changes:
+      - id: change-1-payment-intent-lifecycle
+        status: done
+        files: ["apps/storefront/app/routes/api.payment-intent.ts", "apps/storefront/app/routes/checkout.tsx"]
+        description: "Create once, update on changes pattern with server-side idempotency"
+      - id: change-2-structured-logging
+        status: done
+        files: ["apps/storefront/app/lib/logger.ts"]
+        description: "New logger utility with trace ID generation and propagation"
+      - id: change-3-backend-idempotency
+        status: done
+        files: ["apps/backend/src/loaders/stripe-event-worker.ts"]
+        description: "Idempotent order creation in webhook handler"

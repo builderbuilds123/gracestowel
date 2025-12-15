@@ -28,9 +28,18 @@ The application uses file-system based routing:
 ### API Proxying & BFF pattern
 The storefront includes server-side resource routes (loaders/actions) that act as a Backend-for-Frontend (BFF) to securely interact with third-party services or abstract complex backend calls:
 - `api.checkout-session.ts`: Manages Stripe checkout sessions.
-- `api.payment-intent.ts`: Handles payment intent creation/updates.
+- `api.payment-intent.ts`: Manages Stripe PaymentIntent lifecycle (create OR update).
+  - Accepts optional `paymentIntentId` for updates (reuse existing intent)
+  - Returns both `clientSecret` and `paymentIntentId`
+  - Uses deterministic idempotency keys for creates (based on cart hash)
+  - **Updated 2025-12-12**: Implements Stripe best practice "create once, update on changes"
 - `api.shipping-rates.ts`: Fetches shipping options.
 - `api.health.ts`: Health check endpoint.
+
+### Logging & Observability
+- **Structured Logging**: `lib/logger.ts` provides JSON-structured logging with trace IDs
+- **Trace Propagation**: `x-trace-id` header passed from frontend to backend
+- **Error References**: Error responses include `traceId` for support escalation
 
 ### State Management & Styling
 - **State**: React Server Components / Loaders are used for data fetching. Local state is managed via React hooks.

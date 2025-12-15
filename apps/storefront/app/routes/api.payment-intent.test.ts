@@ -53,7 +53,7 @@ describe('api.payment-intent action', () => {
         // Mock successful Stripe PaymentIntent creation
         fetchSpy.mockResolvedValueOnce({
             ok: true,
-            json: async () => ({ client_secret: 'pi_123_secret_456' }),
+            json: async () => ({ id: 'pi_123', client_secret: 'pi_123_secret_456' }),
         });
 
         const request = new Request('http://localhost:3000/api/payment-intent', {
@@ -74,7 +74,9 @@ describe('api.payment-intent action', () => {
         const response: any = await action({ request, context: mockContext as any, params: {} });
         const { data } = await unwrap(response);
 
-        expect(data).toEqual({ clientSecret: 'pi_123_secret_456' });
+        expect(data.clientSecret).toBe('pi_123_secret_456');
+        expect(data.paymentIntentId).toBe('pi_123');
+        expect(data.traceId).toBeDefined();
 
         // Verify Stripe call payload
         const stripeCall = fetchSpy.mock.calls[1];
@@ -114,7 +116,8 @@ describe('api.payment-intent action', () => {
         const { data, status } = await unwrap(response);
 
         expect(status).toBe(400);
-        expect(data.message).toContain('out of stock');
+        expect(data.message.toLowerCase()).toContain('out of stock');
+        expect(data.traceId).toBeDefined();
         
         // Ensure Stripe was NOT called
         expect(fetchSpy).toHaveBeenCalledTimes(1); // Only stock check
@@ -146,7 +149,8 @@ describe('api.payment-intent action', () => {
         const { data, status } = await unwrap(response);
 
         expect(status).toBe(400);
-        expect(data.message).toContain('out of stock');
+        expect(data.message.toLowerCase()).toContain('out of stock');
+        expect(data.traceId).toBeDefined();
         expect(data.outOfStockItems).toEqual([{
             title: 'Deleted Towel',
             requested: 1,

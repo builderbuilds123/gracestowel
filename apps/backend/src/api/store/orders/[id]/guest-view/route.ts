@@ -104,7 +104,7 @@ export async function GET(
         const canModify = remainingTime > 0 && order.status !== "canceled";
 
         // PII Masking: AC10 allows ONLY email (masked), country_code, and last_name (masked)
-        const maskedLastName = order.shipping_address.last_name ? order.shipping_address.last_name.charAt(0) + "***" : "";
+        const maskedLastName = order.shipping_address?.last_name ? order.shipping_address.last_name.charAt(0) + "***" : "";
         const shippingAddress = order.shipping_address ? {
             last_name: maskedLastName,
             country_code: order.shipping_address.country_code,
@@ -132,7 +132,7 @@ export async function GET(
                 return localPart.substring(0, 2) + '***' + domain;
             }
         };
-        const maskedEmail = maskEmail(order.email);
+        const maskedEmail = order.email ? maskEmail(order.email) : "";
 
         res.status(200).json({
             order: {
@@ -146,7 +146,7 @@ export async function GET(
                 tax_total: order.tax_total,
                 shipping_total: order.shipping_total,
                 created_at: order.created_at,
-                items: order.items?.map((item) => ({
+                items: order.items?.filter((item) => item !== null).map((item) => ({
                     id: item.id,
                     title: item.variant?.product?.title || item.title,
                     variant_title: item.variant?.title,
