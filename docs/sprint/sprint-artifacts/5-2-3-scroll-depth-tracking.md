@@ -1,6 +1,6 @@
 # Story 5.2.3: Scroll Depth Tracking
 
-Status: Todo
+Status: Done
 
 ## Story
 As a PM,
@@ -14,3 +14,10 @@ So that we understand content engagement.
 
 ## Notes
 - Keep handler overhead minimal; avoid jank.
+
+## Dev Agent Record
+- Implemented `useScrollTracking` hook in `apps/storefront/app/hooks/useScrollTracking.ts`.
+- Uses `requestAnimationFrame` for performance optimization.
+- Tracks milestones (25, 50, 75, 100%) and resets on route change.
+- Added unit tests in `apps/storefront/app/hooks/useScrollTracking.test.ts` covering various scenarios.
+- Verified with tests and typecheck.
