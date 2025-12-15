@@ -1,6 +1,6 @@
 # Story 4.1: Create PII Masking Utility
 
-Status: Drafted
+Status: Ready-for-Dev
 
 ## Story
 

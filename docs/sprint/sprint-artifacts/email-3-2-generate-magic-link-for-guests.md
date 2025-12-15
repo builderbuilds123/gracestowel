@@ -1,6 +1,6 @@
 # Story 3.2: Generate Magic Link for Guest Orders
 
-Status: Drafted
+Status: Ready-for-Dev
 
 ## Story
 

@@ -1,6 +1,6 @@
 # Story 1.2: Create Email Worker
 
-Status: Drafted
+Status: Ready-for-Dev
 
 ## Story
 

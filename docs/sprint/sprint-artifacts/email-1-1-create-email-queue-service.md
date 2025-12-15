@@ -1,6 +1,6 @@
 # Story 1.1: Create Email Queue Service
 
-Status: Drafted
+Status: Ready-for-Dev
 
 ## Story
 

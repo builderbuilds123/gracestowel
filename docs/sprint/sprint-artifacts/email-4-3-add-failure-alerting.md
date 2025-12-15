@@ -1,6 +1,6 @@
 # Story 4.3: Add Failure Alerting
 
-Status: Drafted
+Status: Ready-for-Dev
 
 ## Story
 

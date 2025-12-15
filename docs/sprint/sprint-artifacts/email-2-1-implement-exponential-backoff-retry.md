@@ -1,6 +1,6 @@
 # Story 2.1: Implement Exponential Backoff Retry
 
-Status: Drafted
+Status: Ready-for-Dev
 
 ## Story
 

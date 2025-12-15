@@ -1,6 +1,6 @@
 # Story 1.3: Verify Non-Blocking Behavior
 
-Status: Drafted
+Status: Ready-for-Dev
 
 ## Story
 

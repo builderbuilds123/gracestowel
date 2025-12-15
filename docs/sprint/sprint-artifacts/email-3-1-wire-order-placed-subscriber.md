@@ -1,6 +1,6 @@
 # Story 3.1: Wire Order Placed Subscriber to Email Queue
 
-Status: Drafted
+Status: Ready-for-Dev
 
 ## Story
 

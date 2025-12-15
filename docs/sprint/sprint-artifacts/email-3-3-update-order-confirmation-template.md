@@ -1,6 +1,6 @@
 # Story 3.3: Update Order Confirmation Email Template
 
-Status: Drafted
+Status: Done
 
 ## Story
 

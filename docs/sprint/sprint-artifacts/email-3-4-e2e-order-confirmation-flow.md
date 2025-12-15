@@ -1,6 +1,6 @@
 # Story 3.4: End-to-End Order Confirmation Flow
 
-Status: Drafted
+Status: Ready-for-Dev
 
 ## Story
 

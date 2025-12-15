@@ -1,6 +1,6 @@
 # Story 4.2: Add Structured Logging Throughout Email Flow
 
-Status: Drafted
+Status: Ready-for-Dev
 
 ## Story
 

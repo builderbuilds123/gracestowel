@@ -1,6 +1,6 @@
 # Story 2.3: Handle Invalid Email Addresses
 
-Status: Drafted
+Status: Ready-for-Dev
 
 ## Story
 

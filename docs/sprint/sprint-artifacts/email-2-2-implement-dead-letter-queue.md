@@ -1,6 +1,6 @@
 # Story 2.2: Implement Dead Letter Queue
 
-Status: Drafted
+Status: Ready-for-Dev
 
 ## Story
 

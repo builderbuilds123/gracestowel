@@ -277,69 +277,79 @@ development_status:
 
   # --- Transactional Email Integration (from docs/product/epics/transactional-email-epics.md) ---
   # Added: 2025-12-14
+  # Updated: 2025-12-15
   # PRD: docs/product/prds/transactional-email-prd.md
   # Architecture: docs/product/architecture/transactional-email-architecture.md
+  #
+  # ARCHITECTURAL DECISION (2025-12-15): BullMQ queue is REQUIRED per architecture.
+  # Existing Medusa Workflow implementation must be REPLACED with BullMQ.
+  # See: docs/sprint/agent-prompt-transactional-email.md for migration details.
 
-  email-epic-1: drafted
+  email-epic-1: ready-for-dev
   email-1-1-create-email-queue-service:
     path: docs/sprint/sprint-artifacts/email-1-1-create-email-queue-service.md
-    status: drafted
-    meta: "BullMQ queue singleton + enqueueEmail() function"
+    status: ready-for-dev
+    meta: "Create BullMQ queue singleton + enqueueEmail() function"
   email-1-2-create-email-worker:
     path: docs/sprint/sprint-artifacts/email-1-2-create-email-worker.md
-    status: drafted
-    meta: "BullMQ worker that processes email jobs via Resend"
+    status: ready-for-dev
+    meta: "Create BullMQ worker that processes email jobs via Resend"
   email-1-3-verify-non-blocking-behavior:
     path: docs/sprint/sprint-artifacts/email-1-3-verify-non-blocking-behavior.md
-    status: drafted
+    status: ready-for-dev
     meta: "Ensure email failures never block order flows"
   email-epic-1-retrospective: optional
 
-  email-epic-2: drafted
+  email-epic-2: ready-for-dev
   email-2-1-implement-exponential-backoff-retry:
     path: docs/sprint/sprint-artifacts/email-2-1-implement-exponential-backoff-retry.md
-    status: drafted
-    meta: "3x retry with 1s, 2s, 4s delays"
+    status: ready-for-dev
+    meta: "3x retry with 1s, 2s, 4s exponential backoff delays"
   email-2-2-implement-dead-letter-queue:
     path: docs/sprint/sprint-artifacts/email-2-2-implement-dead-letter-queue.md
-    status: drafted
-    meta: "Redis list email:dlq for failed emails"
+    status: ready-for-dev
+    meta: "Redis list email:dlq for failed emails after all retries"
   email-2-3-handle-invalid-email-addresses:
     path: docs/sprint/sprint-artifacts/email-2-3-handle-invalid-email-addresses.md
-    status: drafted
+    status: ready-for-dev
     meta: "Skip retry for invalid emails, go directly to DLQ"
   email-epic-2-retrospective: optional
 
-  email-epic-3: drafted
+  email-epic-3: ready-for-dev
   email-3-1-wire-order-placed-subscriber:
     path: docs/sprint/sprint-artifacts/email-3-1-wire-order-placed-subscriber.md
-    status: drafted
-    meta: "Add enqueueEmail() call to order-placed subscriber"
+    status: ready-for-dev
+    meta: "REFACTOR REQUIRED - Replace sendOrderConfirmationWorkflow with enqueueEmail()"
+    migration_note: "Existing workflow implementation must be replaced with BullMQ queue call"
   email-3-2-generate-magic-link-for-guests:
     path: docs/sprint/sprint-artifacts/email-3-2-generate-magic-link-for-guests.md
-    status: drafted
-    meta: "Generate magic link for guest orders using ModificationTokenService"
+    status: ready-for-dev
+    meta: "REFACTOR REQUIRED - Integrate magic link generation with BullMQ queue"
+    migration_note: "ModificationTokenService exists and works - integrate with new queue approach"
   email-3-3-update-order-confirmation-template:
     path: docs/sprint/sprint-artifacts/email-3-3-update-order-confirmation-template.md
-    status: drafted
-    meta: "Add magic link button to order-placed.tsx template"
+    status: done
+    meta: "DONE - order-placed.tsx already has modification_token prop and Modify Order button"
+    completed: "2025-12-14"
+    note: "Template is correct, no changes needed for BullMQ migration"
   email-3-4-e2e-order-confirmation-flow:
     path: docs/sprint/sprint-artifacts/email-3-4-e2e-order-confirmation-flow.md
-    status: drafted
-    meta: "Integration tests for complete email flow"
+    status: ready-for-dev
+    meta: "Integration tests for complete BullMQ email flow"
   email-epic-3-retrospective: optional
 
-  email-epic-4: drafted
+  email-epic-4: ready-for-dev
   email-4-1-create-pii-masking-utility:
     path: docs/sprint/sprint-artifacts/email-4-1-create-pii-masking-utility.md
-    status: drafted
-    meta: "maskEmail() utility for safe logging"
+    status: ready-for-dev
+    meta: "Extract maskEmail() from guest-view/route.ts to utils/email-masking.ts"
+    source: "apps/backend/src/api/store/orders/[id]/guest-view/route.ts lines 120-135"
   email-4-2-add-structured-logging:
     path: docs/sprint/sprint-artifacts/email-4-2-add-structured-logging.md
-    status: drafted
-    meta: "[EMAIL] namespace logging throughout flow"
+    status: ready-for-dev
+    meta: "[EMAIL] namespace logging throughout queue and worker"
   email-4-3-add-failure-alerting:
     path: docs/sprint/sprint-artifacts/email-4-3-add-failure-alerting.md
-    status: drafted
+    status: ready-for-dev
     meta: "[EMAIL][ALERT] logs for DLQ entries"
   email-epic-4-retrospective: optional
