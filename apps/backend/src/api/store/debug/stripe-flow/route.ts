@@ -19,6 +19,12 @@ export async function GET(
     req: MedusaRequest,
     res: MedusaResponse
 ): Promise<void> {
+    // Security: Block access in production
+    if (process.env.NODE_ENV === "production") {
+        res.status(404).json({ error: "Endpoint not available in production" });
+        return;
+    }
+
     const paymentIntentId = req.query.payment_intent_id as string;
 
     if (!paymentIntentId) {

@@ -16,6 +16,12 @@ export async function GET(
     req: MedusaRequest,
     res: MedusaResponse
 ): Promise<void> {
+    // Security: Block access in production (stacktraces and internal state exposed)
+    if (process.env.NODE_ENV === "production") {
+        res.status(404).json({ error: "Endpoint not available in production" });
+        return;
+    }
+
     try {
         const queue = getStripeEventQueue();
         
@@ -60,7 +66,7 @@ export async function GET(
                     eventType: j.data.eventType,
                     attempts: j.attemptsMade,
                     failedReason: j.failedReason,
-                    stacktrace: j.stacktrace?.slice(0, 3), // First 3 lines
+                    // Removed: stacktrace - exposes internal implementation details
                 })),
                 delayed: delayed.map(j => ({
                     id: j.id,

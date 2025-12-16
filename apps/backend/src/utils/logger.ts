@@ -100,11 +100,11 @@ function sendToPostHog(
         message,
         level,
         ...data,
-        // Error details if present
+        // Error details if present (no stack to avoid PII leakage)
         ...(error && {
           error_name: error.name,
           error_message: error.message,
-          error_stack: error.stack?.split("\n").slice(0, 5).join("\n"),
+          // Removed: error_stack - can contain PII and sensitive paths
         }),
         // Environment context
         environment: process.env.NODE_ENV || "development",
