@@ -1,5 +1,5 @@
 import { MedusaContainer } from "@medusajs/framework/types";
-import { startEmailWorker } from "../jobs/email-worker";
+import { startEmailWorker } from "../lib/email-worker";
 import { initEmailQueue } from "../lib/email-queue";
 
 /**

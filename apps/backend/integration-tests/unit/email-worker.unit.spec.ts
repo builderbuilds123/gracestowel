@@ -66,7 +66,7 @@ describe("Email Worker", () => {
 
   describe("Core Functionality (Story 1.2)", () => {
     it("processes job and calls Resend service", async () => {
-      const { startEmailWorker } = require("../../src/jobs/email-worker");
+      const { startEmailWorker } = require("../../src/lib/email-worker");
       const worker = startEmailWorker(mockContainer) as any;
       const processor = worker.processor;
 
@@ -91,7 +91,7 @@ describe("Email Worker", () => {
     });
 
     it("logs success with masked email", async () => {
-      const { startEmailWorker } = require("../../src/jobs/email-worker");
+      const { startEmailWorker } = require("../../src/lib/email-worker");
       const worker = startEmailWorker(mockContainer) as any;
       const processor = worker.processor;
 
@@ -114,7 +114,7 @@ describe("Email Worker", () => {
     });
 
     it("logs failure and throws on Resend error", async () => {
-      const { startEmailWorker } = require("../../src/jobs/email-worker");
+      const { startEmailWorker } = require("../../src/lib/email-worker");
       const worker = startEmailWorker(mockContainer) as any;
       const processor = worker.processor;
 
@@ -141,7 +141,7 @@ describe("Email Worker", () => {
 
   describe("Retry Logic (Story 2.1)", () => {
     it("logs retry attempt when attemptsMade > 0", async () => {
-      const { startEmailWorker } = require("../../src/jobs/email-worker");
+      const { startEmailWorker } = require("../../src/lib/email-worker");
       const worker = startEmailWorker(mockContainer) as any;
       const processor = worker.processor;
 
@@ -166,7 +166,7 @@ describe("Email Worker", () => {
 
   describe("Failure Alerting (Story 4.3)", () => {
       it("logs alert when job moves to DLQ via 'failed' event", async () => {
-        const { startEmailWorker } = require("../../src/jobs/email-worker");
+        const { startEmailWorker } = require("../../src/lib/email-worker");
         const worker = startEmailWorker(mockContainer) as any;
 
         // Simulate failed event
@@ -198,7 +198,7 @@ describe("Email Worker", () => {
       });
 
       it("alert log is parseable", async () => {
-        const { startEmailWorker } = require("../../src/jobs/email-worker");
+        const { startEmailWorker } = require("../../src/lib/email-worker");
         const worker = startEmailWorker(mockContainer) as any;
         const failedHandler = worker.callbacks['failed'];
 
@@ -229,7 +229,7 @@ describe("Email Worker", () => {
       });
 
       it("logs alert when invalid email moves directly to DLQ", async () => {
-        const { startEmailWorker } = require("../../src/jobs/email-worker");
+        const { startEmailWorker } = require("../../src/lib/email-worker");
         const worker = startEmailWorker(mockContainer) as any;
         const processor = worker.processor;
 
@@ -260,7 +260,7 @@ describe("Email Worker", () => {
 
   describe("DLQ Storage (Story 2.2)", () => {
     it("stores correct DLQ entry format with masked email", async () => {
-      const { startEmailWorker } = require("../../src/jobs/email-worker");
+      const { startEmailWorker } = require("../../src/lib/email-worker");
       const worker = startEmailWorker(mockContainer) as any;
       const failedHandler = worker.callbacks['failed'];
 
@@ -299,27 +299,27 @@ describe("Email Worker", () => {
 
   describe("Invalid Email Handling (Story 2.3)", () => {
     it("isRetryableError returns false for 400 status", () => {
-      const { isRetryableError } = require("../../src/jobs/email-worker");
+      const { isRetryableError } = require("../../src/lib/email-worker");
       expect(isRetryableError({ statusCode: 400 })).toBe(false);
       expect(isRetryableError({ status: 400 })).toBe(false);
       expect(isRetryableError({ response: { status: 400 } })).toBe(false);
     });
 
     it("isRetryableError returns false for specific error messages", () => {
-      const { isRetryableError } = require("../../src/jobs/email-worker");
+      const { isRetryableError } = require("../../src/lib/email-worker");
       expect(isRetryableError({ message: "Some invalid email error" })).toBe(false);
       expect(isRetryableError({ message: "Email address is not valid" })).toBe(false);
     });
 
     it("isRetryableError returns true for 500/429/Network", () => {
-      const { isRetryableError } = require("../../src/jobs/email-worker");
+      const { isRetryableError } = require("../../src/lib/email-worker");
       expect(isRetryableError({ statusCode: 500 })).toBe(true);
       expect(isRetryableError({ statusCode: 429 })).toBe(true);
       expect(isRetryableError({ message: "Network timeout" })).toBe(true);
     });
 
     it("moves invalid email directly to DLQ without throwing", async () => {
-      const { startEmailWorker } = require("../../src/jobs/email-worker");
+      const { startEmailWorker } = require("../../src/lib/email-worker");
       const worker = startEmailWorker(mockContainer) as any;
       const processor = worker.processor;
 
