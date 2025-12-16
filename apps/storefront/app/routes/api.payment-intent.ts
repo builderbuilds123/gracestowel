@@ -404,21 +404,26 @@ export async function action({ request, context }: ActionFunctionArgs) {
       });
       
       // Sanitize error message to avoid exposing sensitive information
-      // Only include user-friendly Stripe error messages
+      // Only include user-friendly Stripe error messages for safe, user-actionable errors
       const errorCode = stripeError?.error?.code;
-      const errorMessage = stripeError?.error?.message || "Unknown error";
+      const errorMessage = stripeError?.error?.message;
       
-      // Only include detailed message if it's a safe, user-actionable error
-      // Check both that errorCode exists and is in safe list
-      const debugInfo = (errorCode && SAFE_ERROR_CODES.has(errorCode))
+      // Generic fallback for any unsafe/unknown errors
+      const GENERIC_ERROR_MESSAGE = "Payment service error - please try again or contact support";
+      
+      // Only include detailed message if:
+      // 1. errorCode exists and is valid
+      // 2. errorCode is in the safe list
+      // 3. errorMessage exists and is a non-empty string
+      const debugInfo = (errorCode && SAFE_ERROR_CODES.has(errorCode) && errorMessage)
         ? `Stripe error: ${errorMessage}`
-        : "Payment service error - please try again or contact support";
+        : GENERIC_ERROR_MESSAGE;
       
       return data(
         { 
           message: "Payment initialization failed", 
           debugInfo,
-          stripeErrorCode: errorCode,
+          stripeErrorCode: errorCode || undefined,
           traceId 
         },
         { status: 500 }

@@ -16,8 +16,8 @@ import { monitoredFetch } from "../utils/monitored-fetch";
 import { generateCartHash } from "../utils/cart-hash";
 import { debounce } from "../utils/debounce";
 
-// Check if in development mode (Vite/React Router environment)
-const isDevelopment = import.meta.env.DEV || import.meta.env.MODE === 'development';
+// Check if in development mode (consistent with codebase pattern)
+const isDevelopment = import.meta.env.MODE === 'development';
 
 interface LoaderData {
   stripePublishableKey: string;
@@ -186,24 +186,9 @@ export default function Checkout() {
             traceId?: string;
           };
           
-          // Build error message with structured approach
-          let errorMessage = error.message || "Payment initialization failed";
-          
-          // Only append debugInfo if it provides additional context
-          if (error.debugInfo) {
-            // Check if debugInfo is substantially different from message
-            const isSubstantiallyDifferent = 
-              error.debugInfo !== error.message &&
-              !error.message?.includes(error.debugInfo) &&
-              !error.debugInfo.includes(error.message || '');
-            
-            if (isSubstantiallyDifferent) {
-              errorMessage = `${errorMessage}. ${error.debugInfo}`;
-            } else {
-              // Use debugInfo as it's more detailed
-              errorMessage = error.debugInfo;
-            }
-          }
+          // Build error message - prefer debugInfo when available as it's more specific
+          // If both exist, use debugInfo since it contains actionable details from Stripe
+          const errorMessage = error.debugInfo || error.message || "Payment initialization failed";
           
           setPaymentError(errorMessage);
           setLastTraceId(error.traceId || null);
