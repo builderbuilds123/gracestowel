@@ -137,7 +137,11 @@ export function startEmailWorker(container: MedusaContainer): Worker {
         // Check if error is retryable
         if (!isRetryableError(error)) {
           // Invalid email - move directly to DLQ, don't retry
-          await moveToDLQDirectly(job, error, dlqRedis!, logger);
+          if (!dlqRedis) {
+            logger.error(`[EMAIL][DLQ_ERROR] DLQ Redis client not initialized, cannot store failed job`);
+            throw new Error("DLQ Redis client not initialized");
+          }
+          await moveToDLQDirectly(job, error, dlqRedis, logger);
           return; // Don't throw - job completes (but email not sent)
         }
 
@@ -173,8 +177,13 @@ export function startEmailWorker(container: MedusaContainer): Worker {
             attempts: job.attemptsMade,
         };
 
+        if (!dlqRedis) {
+            logger.error(`[EMAIL][DLQ_ERROR] DLQ Redis client not initialized, cannot store failed job ${job.id}`);
+            return;
+        }
+
         try {
-            await dlqRedis!.lpush(DLQ_KEY, JSON.stringify(dlqEntry));
+            await dlqRedis.lpush(DLQ_KEY, JSON.stringify(dlqEntry));
             logger.error(`[EMAIL][DLQ] Job ${job.id} moved to DLQ after ${job.attemptsMade} attempts: ${error.message}`);
 
             // ALERT log (parseable format)

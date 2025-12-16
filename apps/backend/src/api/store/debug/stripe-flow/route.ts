@@ -1,5 +1,6 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { getStripeEventQueue } from "../../../../lib/stripe-event-queue";
+import { getRedisConnection } from "../../../../lib/redis";
 import Redis from "ioredis";
 
 /**
@@ -38,14 +39,7 @@ export async function GET(
     try {
         const redisUrl = process.env.REDIS_URL;
         if (redisUrl) {
-            const url = new URL(redisUrl);
-            const redis = new Redis({
-                host: url.hostname,
-                port: parseInt(url.port || "6379"),
-                password: url.password || undefined,
-                username: url.username || undefined,
-                tls: url.protocol === "rediss:" ? {} : undefined,
-            });
+            const redis = new Redis(getRedisConnection());
 
             const idempotencyKey = `stripe:processed:${paymentIntentId}`;
             const value = await redis.get(idempotencyKey);
