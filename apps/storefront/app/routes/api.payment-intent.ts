@@ -257,8 +257,8 @@ export async function action({ request, context }: ActionFunctionArgs) {
       );
     }
 
-    // Validate currency
-    const validatedCurrency = currency || "usd";
+    // Validate currency (normalize to lowercase)
+    const validatedCurrency = (currency || "usd").toLowerCase();
     
     // Basic format validation
     if (!validatedCurrency.match(/^[a-z]{3}$/)) {
