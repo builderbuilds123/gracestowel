@@ -75,8 +75,8 @@ jobs:
           # Extract epic/story references (e.g., Epic 1.2, Story 3.4, 5-2)
           EPIC_REF=$(echo "$PR_TITLE $PR_BODY" | grep -oE '([Ee]pic|[Ss]tory) [0-9]+\.[0-9]+|[0-9]+-[0-9]+' | head -1 || echo "")
 
-          # Create context JSON
-          CONTEXT=$(jq -n \
+          # Create context JSON (compact format for GITHUB_OUTPUT)
+          CONTEXT=$(jq -nc \
             --arg epic "$EPIC_REF" \
             --arg title "$PR_TITLE" \
             '{epic: $epic, title: $title}')
