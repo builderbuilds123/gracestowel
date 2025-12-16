@@ -314,6 +314,30 @@
     - **Test Staging Before Production:** Always verify checkout flow end-to-end after deploying to staging
 - **Location:** `apps/storefront/app/routes/api.shipping-rates.ts:229-240`
 
+### 2025-12-16 - Medusa v2 SDK API Structure Change (carts → store.cart) [RESOLVED]
+
+- **Symptom:** `TypeError: Cannot read properties of undefined (reading 'create')` on `client.carts.create()`. Error persists even after fixing environment variables.
+- **Root Cause:** Medusa v2 JS SDK (`@medusajs/js-sdk@^2.12.1`) uses a different API structure than v1:
+    - **v1 (broken):** `client.carts.create()`, `client.shippingOptions.list()`
+    - **v2 (correct):** `client.store.cart.create()`, `client.store.fulfillment.listCartOptions()`
+- **Data Flow Traced:**
+    1. `MedusaCartService` instantiates client via `getMedusaClient()`
+    2. SDK initializes with `store.*` namespace, not top-level `carts.*`
+    3. Code calls `this.client.carts.create()` → `this.client.carts` is undefined → throws
+- **Solution:** Complete rewrite of `medusa-cart.ts` to use v2 SDK structure:
+    - `client.carts.create()` → `client.store.cart.create()`
+    - `client.carts.retrieve()` → `client.store.cart.retrieve()`
+    - `client.carts.lineItems.create()` → `client.store.cart.createLineItem()`
+    - `client.carts.lineItems.update()` → `client.store.cart.updateLineItem()`
+    - `client.carts.lineItems.delete()` → `client.store.cart.deleteLineItem()`
+    - `client.carts.update()` → `client.store.cart.update()`
+    - `client.shippingOptions.list()` → `client.store.fulfillment.listCartOptions()`
+- **Prevention:**
+    - When upgrading Medusa SDK, always check the API structure changes
+    - Reference `/store/shipping-options` now requires `cart_id`, not `region_id`
+    - Test against actual SDK imports, not just mocks
+- **Location:** `apps/storefront/app/services/medusa-cart.ts`
+
 ### 2025-12-07 - Test Request Object Missing Stream Methods for getRawBody() [RESOLVED]
 
 - **Symptom:** Tests pass locally but fail in CI. `mockConstructEvent` shows 0 calls. Clearing local cache (`rm -rf node_modules/.cache .swc dist && npm test -- --clearCache`) reproduces the failure locally.
