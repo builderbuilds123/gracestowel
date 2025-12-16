@@ -7,7 +7,7 @@ import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
 import { schedulePaymentCapture } from "../lib/payment-capture-queue"
 import { getPostHog } from "../utils/posthog"
 import { enqueueEmail } from "../lib/email-queue"
-// ModificationTokenService is now resolved from container
+import type { ModificationTokenService } from "../services/modification-token"
 
 interface OrderPlacedEventData {
   id: string;
@@ -69,7 +69,7 @@ export default async function orderPlacedHandler({
 
                 if (paymentIntentId) {
                      // Resolve service from container instead of importing singleton
-                     const modificationTokenService = container.resolve("modificationTokenService");
+                     const modificationTokenService = container.resolve("modificationTokenService") as ModificationTokenService;
 
                      const token = modificationTokenService.generateToken(
                         order.id,
@@ -94,10 +94,10 @@ export default async function orderPlacedHandler({
         const emailPayload = {
             orderId: order.id,
             template: "order_confirmation" as const,
-            recipient: order.email,
+            recipient: order.email || "",
             data: {
-              orderNumber: order.display_id,
-              items: order.items.map((item: any) => ({
+              orderNumber: order.display_id || order.id,
+              items: (order.items || []).map((item: any) => ({
                 title: item.variant?.product?.title || item.title,
                 quantity: item.quantity,
                 unit_price: item.unit_price,
@@ -109,8 +109,13 @@ export default async function orderPlacedHandler({
             },
         }
 
-        // Enqueue email (non-blocking)
-        await enqueueEmail(emailPayload)
+        // Skip if no email address
+        if (!emailPayload.recipient) {
+            logger.warn(`[EMAIL][WARN] No email address for order ${order.id} - skipping`)
+        } else {
+            // Enqueue email (non-blocking)
+            await enqueueEmail(emailPayload)
+        }
         logger.info(`[EMAIL][QUEUE] Order confirmation queued for ${order.id}`)
     } else {
         logger.error(`[EMAIL][ERROR] Order ${data.id} not found for email`)
