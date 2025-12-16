@@ -253,4 +253,54 @@ describe('api.payment-intent action', () => {
         expect(data.stripeErrorCode).toBe('amount_too_small');
         expect(data.traceId).toBeDefined();
     });
+
+    it('sanitizes sensitive error messages for unsafe error codes', async () => {
+        // Mock successful stock check
+        fetchSpy.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({
+                variant: { id: 'variant_123', inventory_quantity: 10 }
+            }),
+        });
+
+        // Mock Stripe API failure with internal error (should be sanitized)
+        fetchSpy.mockResolvedValueOnce({
+            ok: false,
+            status: 500,
+            statusText: 'Internal Server Error',
+            text: async () => JSON.stringify({
+                error: {
+                    type: 'api_error',
+                    code: 'internal_error',
+                    message: 'Internal server error with sensitive details',
+                }
+            }),
+        });
+
+        const request = new Request('http://localhost:3000/api/payment-intent', {
+            method: 'POST',
+            body: JSON.stringify({
+                amount: 10,
+                currency: 'usd',
+                cartItems: [{
+                    id: 'item_1',
+                    variantId: 'variant_123',
+                    title: 'Test Towel',
+                    price: '20.00',
+                    quantity: 1
+                }]
+            }),
+        });
+
+        const response: any = await action({ request, context: mockContext as any, params: {} });
+        const { data, status } = await unwrap(response);
+
+        expect(status).toBe(500);
+        expect(data.message).toBe('Payment initialization failed');
+        // Should NOT contain sensitive internal error details
+        expect(data.debugInfo).not.toContain('sensitive details');
+        expect(data.debugInfo).toContain('Payment service error');
+        expect(data.stripeErrorCode).toBe('internal_error');
+        expect(data.traceId).toBeDefined();
+    });
 });

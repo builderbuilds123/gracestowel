@@ -3,6 +3,12 @@ import { toCents } from "../lib/price";
 import { createLogger, getTraceIdFromRequest } from "../lib/logger";
 import { monitoredFetch, type CloudflareEnv } from "../utils/monitored-fetch";
 
+// Common supported currencies (module-level constant)
+const COMMON_CURRENCIES = new Set([
+  'usd', 'eur', 'gbp', 'cad', 'aud', 'jpy', 'cny', 'inr', 'brl', 'mxn',
+  'nzd', 'sgd', 'hkd', 'nok', 'sek', 'dkk', 'pln', 'chf', 'krw', 'thb'
+]);
+
 interface CartItem {
   id: string | number;
   variantId?: string;
@@ -248,13 +254,6 @@ export async function action({ request, context }: ActionFunctionArgs) {
     // Validate currency
     const validatedCurrency = currency || "usd";
     
-    // Common supported currencies - Stripe supports many more, but these are the most common
-    // If an unsupported currency is used, Stripe will return a proper error
-    const COMMON_CURRENCIES = new Set([
-      'usd', 'eur', 'gbp', 'cad', 'aud', 'jpy', 'cny', 'inr', 'brl', 'mxn',
-      'nzd', 'sgd', 'hkd', 'nok', 'sek', 'dkk', 'pln', 'chf', 'krw', 'thb'
-    ]);
-    
     // Basic format validation
     if (!validatedCurrency.match(/^[a-z]{3}$/)) {
       logger.error("Invalid currency format", new Error("Currency must be 3 letter code"), {
@@ -398,13 +397,27 @@ export async function action({ request, context }: ActionFunctionArgs) {
         requestAmountInCents: toCents(totalAmount),
       });
       
-      // Return detailed error message for debugging
-      const debugMessage = stripeError?.error?.message || errorText || "Unknown Stripe error";
+      // Sanitize error message to avoid exposing sensitive information
+      // Only include user-friendly Stripe error messages
+      const errorCode = stripeError?.error?.code;
+      const errorMessage = stripeError?.error?.message || "Unknown error";
+      
+      // Safe error messages to expose (user-actionable)
+      const safeErrorCodes = new Set([
+        'amount_too_small', 'amount_too_large', 'invalid_currency',
+        'parameter_missing', 'parameter_invalid_empty', 'rate_limit'
+      ]);
+      
+      // Only include detailed message if it's a safe, user-actionable error
+      const debugInfo = safeErrorCodes.has(errorCode) 
+        ? `Stripe error: ${errorMessage}`
+        : "Payment service error - please try again or contact support";
+      
       return data(
         { 
           message: "Payment initialization failed", 
-          debugInfo: `Stripe error: ${debugMessage}`,
-          stripeErrorCode: stripeError?.error?.code,
+          debugInfo,
+          stripeErrorCode: errorCode,
           traceId 
         },
         { status: 500 }

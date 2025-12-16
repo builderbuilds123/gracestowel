@@ -150,17 +150,19 @@ export default function Checkout() {
           paymentIntentId: paymentIntentId, // Reuse if exists
         };
 
-        // Log request details for debugging
-        console.log("[Checkout] Payment intent request:", {
-          operation: paymentIntentId ? "update" : "create",
-          amount: requestData.amount,
-          currency: requestData.currency,
-          shipping: requestData.shipping,
-          total: requestData.amount + requestData.shipping,
-          itemCount: requestData.cartItems.length,
-          paymentIntentId,
-          traceId: sessionTraceId.current,
-        });
+        // Log request details for debugging (only in development)
+        if (typeof process !== 'undefined' && process.env.NODE_ENV === 'development') {
+          console.log("[Checkout] Payment intent request:", {
+            operation: paymentIntentId ? "update" : "create",
+            amount: requestData.amount,
+            currency: requestData.currency,
+            shipping: requestData.shipping,
+            total: requestData.amount + requestData.shipping,
+            itemCount: requestData.cartItems.length,
+            paymentIntentId,
+            traceId: sessionTraceId.current,
+          });
+        }
 
         const response = await monitoredFetch("/api/payment-intent", {
           method: "POST",
@@ -181,26 +183,37 @@ export default function Checkout() {
             traceId?: string;
           };
           
-          // Build error message - prefer debugInfo if available, otherwise use message
-          // Avoid redundancy by showing debugInfo only if it's different from message
+          // Build error message with structured approach
           let errorMessage = error.message || "Payment initialization failed";
-          if (error.debugInfo && !error.debugInfo.includes(errorMessage)) {
-            errorMessage = `${errorMessage}. Details: ${error.debugInfo}`;
-          } else if (error.debugInfo) {
-            // debugInfo contains the message, just use debugInfo
-            errorMessage = error.debugInfo;
+          
+          // Only append debugInfo if it provides additional context
+          if (error.debugInfo) {
+            // Check if debugInfo is substantially different from message
+            const isSubstantiallyDifferent = 
+              error.debugInfo !== error.message &&
+              !error.message?.includes(error.debugInfo) &&
+              !error.debugInfo.includes(error.message || '');
+            
+            if (isSubstantiallyDifferent) {
+              errorMessage = `${errorMessage}. ${error.debugInfo}`;
+            } else {
+              // Use debugInfo as it's more detailed
+              errorMessage = error.debugInfo;
+            }
           }
           
           setPaymentError(errorMessage);
           setLastTraceId(error.traceId || null);
           
-          // Log detailed error for debugging
-          console.error("[Checkout] Payment initialization error:", {
-            message: error.message,
-            debugInfo: error.debugInfo,
-            stripeErrorCode: error.stripeErrorCode,
-            traceId: error.traceId,
-          });
+          // Log detailed error for debugging (only in development)
+          if (typeof process !== 'undefined' && process.env.NODE_ENV === 'development') {
+            console.error("[Checkout] Payment initialization error:", {
+              message: error.message,
+              debugInfo: error.debugInfo,
+              stripeErrorCode: error.stripeErrorCode,
+              traceId: error.traceId,
+            });
+          }
           return;
         }
 
@@ -210,14 +223,16 @@ export default function Checkout() {
           traceId?: string;
         };
 
-        // Log successful response
-        console.log("[Checkout] Payment intent response:", {
-          operation: paymentIntentId ? "updated" : "created",
-          paymentIntentId: data.paymentIntentId,
-          hasClientSecret: !!data.clientSecret,
-          traceId: data.traceId,
-          isFirstInitialization: !isInitialized.current,
-        });
+        // Log successful response (only in development)
+        if (typeof process !== 'undefined' && process.env.NODE_ENV === 'development') {
+          console.log("[Checkout] Payment intent response:", {
+            operation: paymentIntentId ? "updated" : "created",
+            paymentIntentId: data.paymentIntentId,
+            hasClientSecret: !!data.clientSecret,
+            traceId: data.traceId,
+            isFirstInitialization: !isInitialized.current,
+          });
+        }
 
         // CRITICAL: Only set clientSecret on FIRST call
         // Changing it breaks Stripe Elements
