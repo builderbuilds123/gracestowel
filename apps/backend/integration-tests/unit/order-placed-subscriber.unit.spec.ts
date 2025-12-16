@@ -86,9 +86,12 @@ describe("Order Placed Subscriber", () => {
 
     expect(enqueueEmail).toHaveBeenCalledWith(
       expect.objectContaining({
+        template: "order-placed",
         data: expect.objectContaining({
-          magicLink: expect.stringContaining("http://test-store.com/order/status/order_guest_1?token=mock_token_123"),
-          isGuest: true
+          modification_token: "mock_token_123",
+          order: expect.objectContaining({
+            id: "order_guest_1"
+          })
         })
       })
     );
@@ -119,9 +122,12 @@ describe("Order Placed Subscriber", () => {
 
     expect(enqueueEmail).toHaveBeenCalledWith(
       expect.objectContaining({
+        template: "order-placed",
         data: expect.objectContaining({
-          magicLink: null,
-          isGuest: false
+          modification_token: undefined,
+          order: expect.objectContaining({
+            id: "order_reg_1"
+          })
         })
       })
     );
@@ -158,12 +164,15 @@ describe("Order Placed Subscriber", () => {
       expect.stringMatching(/\[EMAIL\]\[WARN\] Failed to generate magic link for order order_fail_1: Failed for user \*\*\* because reason/)
     );
 
-    // Should still enqueue email, just without link
+    // Should still enqueue email, just without modification token
     expect(enqueueEmail).toHaveBeenCalledWith(
       expect.objectContaining({
+        template: "order-placed",
         data: expect.objectContaining({
-          magicLink: null,
-          isGuest: true
+          modification_token: undefined,
+          order: expect.objectContaining({
+            id: "order_fail_1"
+          })
         })
       })
     );
@@ -197,9 +206,12 @@ describe("Order Placed Subscriber", () => {
     // Email still sent
     expect(enqueueEmail).toHaveBeenCalledWith(
       expect.objectContaining({
+        template: "order-placed",
         data: expect.objectContaining({
-          magicLink: null,
-          isGuest: true
+          modification_token: undefined,
+          order: expect.objectContaining({
+            id: "order_nopay_1"
+          })
         })
       })
     );
@@ -234,8 +246,12 @@ describe("Order Placed Subscriber", () => {
 
     expect(enqueueEmail).toHaveBeenCalledWith(
       expect.objectContaining({
+        template: "order-placed",
         data: expect.objectContaining({
-          magicLink: expect.stringContaining("http://localhost:5173/order/status/order_local_1"),
+          modification_token: "mock_token_123",
+          order: expect.objectContaining({
+            id: "order_local_1"
+          })
         })
       })
     );
