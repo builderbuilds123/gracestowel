@@ -247,14 +247,31 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
     // Validate currency
     const validatedCurrency = currency || "usd";
+    
+    // Common supported currencies - Stripe supports many more, but these are the most common
+    // If an unsupported currency is used, Stripe will return a proper error
+    const COMMON_CURRENCIES = new Set([
+      'usd', 'eur', 'gbp', 'cad', 'aud', 'jpy', 'cny', 'inr', 'brl', 'mxn',
+      'nzd', 'sgd', 'hkd', 'nok', 'sek', 'dkk', 'pln', 'chf', 'krw', 'thb'
+    ]);
+    
+    // Basic format validation
     if (!validatedCurrency.match(/^[a-z]{3}$/)) {
-      logger.error("Invalid currency", new Error("Currency must be 3 letter code"), {
+      logger.error("Invalid currency format", new Error("Currency must be 3 letter code"), {
         currency: validatedCurrency,
       });
       return data(
-        { message: "Invalid currency code", traceId },
+        { message: "Invalid currency code format (must be 3 lowercase letters)", traceId },
         { status: 400 }
       );
+    }
+    
+    // Warn if using uncommon currency (but allow it - Stripe will validate)
+    if (!COMMON_CURRENCIES.has(validatedCurrency)) {
+      logger.warn("Uncommon currency code", {
+        currency: validatedCurrency,
+        message: "Currency not in common list but will be validated by Stripe"
+      });
     }
 
     logger.info("Payment validation passed", {

@@ -180,9 +180,17 @@ export default function Checkout() {
             stripeErrorCode?: string;
             traceId?: string;
           };
-          const errorMessage = error.debugInfo 
-            ? `${error.message || "Payment initialization failed"}: ${error.debugInfo}`
-            : error.message || "Payment initialization failed";
+          
+          // Build error message - prefer debugInfo if available, otherwise use message
+          // Avoid redundancy by showing debugInfo only if it's different from message
+          let errorMessage = error.message || "Payment initialization failed";
+          if (error.debugInfo && !error.debugInfo.includes(errorMessage)) {
+            errorMessage = `${errorMessage}. Details: ${error.debugInfo}`;
+          } else if (error.debugInfo) {
+            // debugInfo contains the message, just use debugInfo
+            errorMessage = error.debugInfo;
+          }
+          
           setPaymentError(errorMessage);
           setLastTraceId(error.traceId || null);
           
