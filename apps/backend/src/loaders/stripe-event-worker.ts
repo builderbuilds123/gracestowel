@@ -1,6 +1,6 @@
 import { MedusaContainer } from "@medusajs/framework/types";
 import Stripe from "stripe";
-import { startStripeEventWorker } from "../lib/stripe-event-queue";
+import { startStripeEventWorker } from "../workers/stripe-event-worker";
 import { createOrderFromStripeWorkflow } from "../workflows/create-order-from-stripe";
 import { z } from "zod";
 import { logger } from "../utils/logger";

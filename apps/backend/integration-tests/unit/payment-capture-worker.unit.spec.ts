@@ -6,13 +6,13 @@
  */
 
 // Use jest.fn directly in the mock factory
-jest.mock("../../src/lib/payment-capture-queue", () => ({
+jest.mock("../../src/workers/payment-capture-worker", () => ({
     startPaymentCaptureWorker: jest.fn(),
 }))
 
 // Import after mock setup
 import paymentCaptureWorkerLoader from "../../src/loaders/payment-capture-worker"
-import { startPaymentCaptureWorker } from "../../src/lib/payment-capture-queue"
+import { startPaymentCaptureWorker } from "../../src/workers/payment-capture-worker"
 
 // Get typed mock reference
 const mockStartPaymentCaptureWorker = startPaymentCaptureWorker as jest.Mock

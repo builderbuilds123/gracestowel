@@ -112,13 +112,16 @@ describe("payment-capture-queue", () => {
         };
 
         // Import the module under test FRESH for each test
-        const mod = require("../../src/lib/payment-capture-queue");
-        getPaymentCaptureQueue = mod.getPaymentCaptureQueue;
-        schedulePaymentCapture = mod.schedulePaymentCapture;
-        cancelPaymentCaptureJob = mod.cancelPaymentCaptureJob;
-        startPaymentCaptureWorker = mod.startPaymentCaptureWorker;
-        fetchOrderTotal = mod.fetchOrderTotal;
-        processPaymentCapture = mod.processPaymentCapture;
+        const queueMod = require("../../src/lib/payment-capture-queue");
+        getPaymentCaptureQueue = queueMod.getPaymentCaptureQueue;
+        schedulePaymentCapture = queueMod.schedulePaymentCapture;
+        cancelPaymentCaptureJob = queueMod.cancelPaymentCaptureJob;
+        
+        // Worker functions are now in a separate module
+        const workerMod = require("../../src/workers/payment-capture-worker");
+        startPaymentCaptureWorker = workerMod.startPaymentCaptureWorker;
+        fetchOrderTotal = workerMod.fetchOrderTotal;
+        processPaymentCapture = workerMod.processPaymentCapture;
     });
 
     afterEach(() => {

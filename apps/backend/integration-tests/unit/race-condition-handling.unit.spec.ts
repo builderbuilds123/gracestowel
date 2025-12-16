@@ -104,10 +104,13 @@ describe("Story 6.3: Race Condition Handling", () => {
             }),
         };
 
-        const mod = require("../../src/lib/payment-capture-queue");
-        processPaymentCapture = mod.processPaymentCapture;
-        startPaymentCaptureWorker = mod.startPaymentCaptureWorker;
-        OrderLockedError = mod.OrderLockedError;
+        const queueMod = require("../../src/lib/payment-capture-queue");
+        OrderLockedError = queueMod.OrderLockedError;
+        
+        // Worker functions are now in a separate module
+        const workerMod = require("../../src/workers/payment-capture-worker");
+        processPaymentCapture = workerMod.processPaymentCapture;
+        startPaymentCaptureWorker = workerMod.startPaymentCaptureWorker;
     });
 
     afterEach(() => {

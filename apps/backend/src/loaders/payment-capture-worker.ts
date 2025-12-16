@@ -1,5 +1,5 @@
 import { MedusaContainer } from "@medusajs/framework/types";
-import { startPaymentCaptureWorker } from "../lib/payment-capture-queue";
+import { startPaymentCaptureWorker } from "../workers/payment-capture-worker";
 
 /**
  * Loader to start the BullMQ payment capture worker when the Medusa server starts.
