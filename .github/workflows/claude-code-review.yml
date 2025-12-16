@@ -2,165 +2,55 @@ name: Claude Code Review
 
 on:
   pull_request:
-    types: [opened, synchronize, ready_for_review, reopened]
-    branches: [main, staging]
-
-# Run concurrently with CI but cancel old runs when new commits pushed
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
-permissions:
-  contents: read
-  pull-requests: write
-  id-token: write
-
-env:
-  NODE_VERSION: "24"
+    types: [opened, synchronize]
+    # Optional: Only run on specific file changes
+    # paths:
+    #   - "src/**/*.ts"
+    #   - "src/**/*.tsx"
+    #   - "src/**/*.js"
+    #   - "src/**/*.jsx"
 
 jobs:
-  # ============================================
-  # Stage 1: Context Preparation
-  # ============================================
-  prepare-context:
-    name: Prepare Review Context
-    runs-on: ubuntu-latest
-    if: github.event.pull_request.draft == false
-    outputs:
-      changed-files: ${{ steps.changed-files.outputs.files }}
-      review-scope: ${{ steps.determine-scope.outputs.scope }}
-      epic-context: ${{ steps.epic-context.outputs.context }}
-
-    steps:
-      - name: Checkout PR branch
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.ref }}
-          fetch-depth: 0
-
-      - name: Get changed files
-        id: changed-files
-        run: |
-          git fetch origin ${{ github.event.pull_request.base.ref }}
-          CHANGED_FILES=$(git diff --name-only origin/${{ github.event.pull_request.base.ref }}...HEAD | jq -R -s -c 'split("\n")[:-1]')
-          echo "files=$CHANGED_FILES" >> $GITHUB_OUTPUT
-          echo "Changed files: $CHANGED_FILES"
-
-      - name: Determine review scope
-        id: determine-scope
-        run: |
-          FILES='${{ steps.changed-files.outputs.files }}'
-          BACKEND_FILES=$(echo "$FILES" | jq -r '.[] | select(startswith("apps/backend/"))' | wc -l)
-          STOREFRONT_FILES=$(echo "$FILES" | jq -r '.[] | select(startswith("apps/storefront/"))' | wc -l)
-          E2E_FILES=$(echo "$FILES" | jq -r '.[] | select(startswith("apps/e2e/"))' | wc -l)
-
-          SCOPE="full"
-          if [ "$BACKEND_FILES" -gt 0 ] && [ "$STOREFRONT_FILES" -eq 0 ]; then
-            SCOPE="backend"
-          elif [ "$STOREFRONT_FILES" -gt 0 ] && [ "$BACKEND_FILES" -eq 0 ]; then
-            SCOPE="storefront"
-          elif [ "$E2E_FILES" -gt 0 ]; then
-            SCOPE="e2e"
-          fi
-
-          echo "scope=$SCOPE" >> $GITHUB_OUTPUT
-          echo "Review scope: $SCOPE"
-
-      - name: Extract epic context from PR
-        id: epic-context
-        env:
-          PR_BODY: ${{ github.event.pull_request.body }}
-          PR_TITLE: ${{ github.event.pull_request.title }}
-        run: |
-          # Extract epic/story references (e.g., Epic 1.2, Story 3.4, 5-2)
-          EPIC_REF=$(echo "$PR_TITLE $PR_BODY" | grep -oE '([Ee]pic|[Ss]tory) [0-9]+\.[0-9]+|[0-9]+-[0-9]+' | head -1 || echo "")
-
-          # Create context JSON (compact format for GITHUB_OUTPUT)
-          CONTEXT=$(jq -nc \
-            --arg epic "$EPIC_REF" \
-            --arg title "$PR_TITLE" \
-            '{epic: $epic, title: $title}')
-
-          echo "context=$CONTEXT" >> $GITHUB_OUTPUT
-          echo "Epic context: $CONTEXT"
-
-  # ============================================
-  # Stage 2: Wait for Validation
-  # ============================================
-  wait-for-lint:
-    name: Wait for Linting
-    runs-on: ubuntu-latest
-    needs: prepare-context
-    steps:
-      - name: Wait for CI validation to complete
-        uses: lewagon/wait-on-check-action@v1.3.4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          check-name: "Validate"
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          wait-interval: 10
-          allowed-conclusions: success,skipped
-
-  # ============================================
-  # Stage 3: Claude Code Review
-  # ============================================
   claude-review:
-    name: Claude Code Review
+    # Optional: Filter by PR author
+    # if: |
+    #   github.event.pull_request.user.login == 'external-contributor' ||
+    #   github.event.pull_request.user.login == 'new-developer' ||
+    #   github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR'
+
     runs-on: ubuntu-latest
-    needs: [prepare-context, wait-for-lint]
-    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+      id-token: write
 
     steps:
-      - name: Checkout PR branch
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.ref }}
-          fetch-depth: 0
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: "pnpm"
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+          fetch-depth: 1
 
       - name: Run Claude Code Review
+        id: claude-review
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          track_progress: true
           prompt: |
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number }}
-            REVIEW SCOPE: ${{ needs.prepare-context.outputs.review-scope }}
-            EPIC CONTEXT: ${{ fromJson(needs.prepare-context.outputs.epic-context).epic }}
 
-            You are reviewing a PR in the gracestowel monorepo. Follow the instructions in .github/prompts/code-review-prompt.md.
+            Please review this pull request and provide feedback on:
+            - Code quality and best practices
+            - Potential bugs or issues
+            - Performance considerations
+            - Security concerns
+            - Test coverage
 
-            Key context:
-            - This is a Turbo monorepo with apps/backend (Medusa), apps/storefront (React Router + Cloudflare Workers), apps/e2e (Playwright)
-            - Review scope: ${{ needs.prepare-context.outputs.review-scope }}
-            - Epic/Story: ${{ fromJson(needs.prepare-context.outputs.epic-context).epic }}
+            Use the repository's CLAUDE.md for guidance on style and conventions. Be constructive and helpful in your feedback.
 
-            Load and follow the detailed review instructions from .github/prompts/code-review-prompt.md.
-            Use inline comments for specific code issues and a summary comment for overall findings.
+            Use `gh pr comment` with your Bash tool to leave your review as a comment on the PR.
 
-          claude_args: |
-            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr view:*),Bash(gh pr diff:*),Read,Grep,Glob,Bash(git:*),Bash(pnpm:*)"
-
-      - name: Run focused tests
-        if: needs.prepare-context.outputs.review-scope == 'backend' || needs.prepare-context.outputs.review-scope == 'storefront'
-        run: |
-          echo "Running tests for ${{ needs.prepare-context.outputs.review-scope }}..."
-          if [ "${{ needs.prepare-context.outputs.review-scope }}" = "backend" ]; then
-            pnpm turbo run test --filter=@gracestowel/backend
-          elif [ "${{ needs.prepare-context.outputs.review-scope }}" = "storefront" ]; then
-            pnpm turbo run test --filter=apps-storefront
-          fi
-        continue-on-error: true
+          # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
+          # or https://code.claude.com/docs/en/cli-reference for available options
+          claude_args: '--allowed-tools "Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*)"'
