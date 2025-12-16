@@ -3,6 +3,18 @@ import { toCents } from "../lib/price";
 import { createLogger, getTraceIdFromRequest } from "../lib/logger";
 import { monitoredFetch, type CloudflareEnv } from "../utils/monitored-fetch";
 
+// Common supported currencies (module-level constant)
+const COMMON_CURRENCIES = new Set([
+  'usd', 'eur', 'gbp', 'cad', 'aud', 'jpy', 'cny', 'inr', 'brl', 'mxn',
+  'nzd', 'sgd', 'hkd', 'nok', 'sek', 'dkk', 'pln', 'chf', 'krw', 'thb'
+]);
+
+// Safe Stripe error codes to expose to clients (user-actionable errors)
+const SAFE_ERROR_CODES = new Set([
+  'amount_too_small', 'amount_too_large', 'invalid_currency',
+  'parameter_missing', 'parameter_invalid_empty', 'rate_limit'
+]);
+
 interface CartItem {
   id: string | number;
   variantId?: string;
@@ -232,6 +244,47 @@ export async function action({ request, context }: ActionFunctionArgs) {
     const totalAmount = amount + (shipping || 0);
     const isUpdate = !!paymentIntentId;
 
+    // Validate amount is positive
+    if (totalAmount <= 0) {
+      logger.error("Invalid amount", new Error("Amount must be positive"), {
+        amount,
+        shipping,
+        totalAmount,
+      });
+      return data(
+        { message: "Invalid amount: must be greater than 0", traceId },
+        { status: 400 }
+      );
+    }
+
+    // Validate currency (normalize to lowercase)
+    const validatedCurrency = (currency || "usd").toLowerCase();
+    
+    // Basic format validation
+    if (!validatedCurrency.match(/^[a-z]{3}$/)) {
+      logger.error("Invalid currency format", new Error("Currency must be 3 letter code"), {
+        currency: validatedCurrency,
+      });
+      return data(
+        { message: "Invalid currency code format (must be 3 lowercase letters)", traceId },
+        { status: 400 }
+      );
+    }
+    
+    // Warn if using uncommon currency (but allow it - Stripe will validate)
+    if (!COMMON_CURRENCIES.has(validatedCurrency)) {
+      logger.warn("Uncommon currency code", {
+        currency: validatedCurrency,
+        message: "Currency not in common list but will be validated by Stripe"
+      });
+    }
+
+    logger.info("Payment validation passed", {
+      totalAmount,
+      currency: validatedCurrency,
+      amountInCents: toCents(totalAmount),
+    });
+
     // Build request headers
     const headers: Record<string, string> = {
       Authorization: `Bearer ${STRIPE_SECRET_KEY}`,
@@ -303,10 +356,16 @@ export async function action({ request, context }: ActionFunctionArgs) {
       ? `https://api.stripe.com/v1/payment_intents/${paymentIntentId}`
       : "https://api.stripe.com/v1/payment_intents";
 
+    // Log request details for debugging
     logger.info("Calling Stripe API", {
       operation: isUpdate ? "update" : "create",
       paymentIntentId,
       amount: totalAmount,
+      currency: currency || "usd",
+      amountInCents: toCents(totalAmount),
+      hasCartItems: !!cartItems?.length,
+      cartItemCount: cartItems?.length,
+      idempotencyKey: headers["Idempotency-Key"],
     });
 
     const response = await monitoredFetch(url, {
@@ -319,13 +378,54 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
     if (!response.ok) {
       const errorText = await response.text();
+      
+      // Parse Stripe error response for better diagnostics
+      let stripeError: any = null;
+      try {
+        stripeError = JSON.parse(errorText);
+      } catch {
+        // Error is not JSON, use raw text
+        stripeError = { raw: errorText };
+      }
+      
+      // Enhanced logging with full error details
       logger.error("Stripe API error", new Error(errorText), {
         status: response.status,
+        statusText: response.statusText,
         paymentIntentId,
         operation: isUpdate ? "update" : "create",
+        stripeErrorType: stripeError?.error?.type,
+        stripeErrorCode: stripeError?.error?.code,
+        stripeErrorMessage: stripeError?.error?.message,
+        stripeErrorParam: stripeError?.error?.param,
+        requestAmount: totalAmount,
+        requestCurrency: currency || "usd",
+        requestAmountInCents: toCents(totalAmount),
       });
+      
+      // Sanitize error message to avoid exposing sensitive information
+      // Only include user-friendly Stripe error messages for safe, user-actionable errors
+      const errorCode = stripeError?.error?.code;
+      const errorMessage = stripeError?.error?.message;
+      
+      // Generic fallback for any unsafe/unknown errors
+      const GENERIC_ERROR_MESSAGE = "Payment service error - please try again or contact support";
+      
+      // Only include detailed message if:
+      // 1. errorCode exists and is valid
+      // 2. errorCode is in the safe list
+      // 3. errorMessage exists and is a non-empty string
+      const debugInfo = (errorCode && SAFE_ERROR_CODES.has(errorCode) && errorMessage)
+        ? `Stripe error: ${errorMessage}`
+        : GENERIC_ERROR_MESSAGE;
+      
       return data(
-        { message: "Payment initialization failed", traceId },
+        { 
+          message: "Payment initialization failed", 
+          debugInfo,
+          stripeErrorCode: errorCode || undefined,
+          traceId 
+        },
         { status: 500 }
       );
     }

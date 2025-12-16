@@ -16,6 +16,9 @@ import { monitoredFetch } from "../utils/monitored-fetch";
 import { generateCartHash } from "../utils/cart-hash";
 import { debounce } from "../utils/debounce";
 
+// Check if in development mode (consistent with codebase pattern)
+const isDevelopment = import.meta.env.MODE === 'development';
+
 interface LoaderData {
   stripePublishableKey: string;
 }
@@ -130,6 +133,40 @@ export default function Checkout() {
       try {
         setPaymentError(null);
 
+        const requestData = {
+          amount: cartTotal,
+          currency: currency.toLowerCase(),
+          shipping: selectedShipping?.amount
+            ? selectedShipping.amount / 100
+            : 0,
+          customerId: isAuthenticated ? customer?.id : undefined,
+          customerEmail: isAuthenticated ? customer?.email : undefined,
+          cartItems: items.map((item) => ({
+            id: item.id,
+            variantId: item.variantId,
+            sku: item.sku,
+            title: item.title,
+            price: item.price,
+            quantity: item.quantity,
+            color: item.color,
+          })),
+          paymentIntentId: paymentIntentId, // Reuse if exists
+        };
+
+        // Log request details for debugging (only in development)
+        if (isDevelopment) {
+          console.log("[Checkout] Payment intent request:", {
+            operation: paymentIntentId ? "update" : "create",
+            amount: requestData.amount,
+            currency: requestData.currency,
+            shipping: requestData.shipping,
+            total: requestData.amount + requestData.shipping,
+            itemCount: requestData.cartItems.length,
+            paymentIntentId,
+            traceId: sessionTraceId.current,
+          });
+        }
+
         const response = await monitoredFetch("/api/payment-intent", {
           method: "POST",
           headers: {
@@ -137,35 +174,34 @@ export default function Checkout() {
             "x-trace-id": sessionTraceId.current,
           },
           signal: controller.signal,
-          body: JSON.stringify({
-            amount: cartTotal,
-            currency: currency.toLowerCase(),
-            shipping: selectedShipping?.amount
-              ? selectedShipping.amount / 100
-              : 0,
-            customerId: isAuthenticated ? customer?.id : undefined,
-            customerEmail: isAuthenticated ? customer?.email : undefined,
-            cartItems: items.map((item) => ({
-              id: item.id,
-              variantId: item.variantId,
-              sku: item.sku,
-              title: item.title,
-              price: item.price,
-              quantity: item.quantity,
-              color: item.color,
-            })),
-            paymentIntentId: paymentIntentId, // Reuse if exists
-          }),
+          body: JSON.stringify(requestData),
           label: paymentIntentId ? 'update-payment-intent' : 'create-payment-intent',
         });
 
         if (!response.ok) {
           const error = (await response.json()) as {
             message?: string;
+            debugInfo?: string;
+            stripeErrorCode?: string;
             traceId?: string;
           };
-          setPaymentError(error.message || "Payment initialization failed");
+          
+          // Build error message - prefer debugInfo when available as it's more specific
+          // If both exist, use debugInfo since it contains actionable details from Stripe
+          const errorMessage = error.debugInfo || error.message || "Payment initialization failed";
+          
+          setPaymentError(errorMessage);
           setLastTraceId(error.traceId || null);
+          
+          // Log detailed error for debugging (only in development)
+          if (isDevelopment) {
+            console.error("[Checkout] Payment initialization error:", {
+              message: error.message,
+              debugInfo: error.debugInfo,
+              stripeErrorCode: error.stripeErrorCode,
+              traceId: error.traceId,
+            });
+          }
           return;
         }
 
@@ -175,11 +211,25 @@ export default function Checkout() {
           traceId?: string;
         };
 
+        // Log successful response (only in development)
+        if (isDevelopment) {
+          console.log("[Checkout] Payment intent response:", {
+            operation: paymentIntentId ? "updated" : "created",
+            paymentIntentId: data.paymentIntentId,
+            hasClientSecret: !!data.clientSecret,
+            traceId: data.traceId,
+            isFirstInitialization: !isInitialized.current,
+          });
+        }
+
         // CRITICAL: Only set clientSecret on FIRST call
         // Changing it breaks Stripe Elements
         if (!isInitialized.current) {
           setClientSecret(data.clientSecret);
           isInitialized.current = true;
+          if (isDevelopment) {
+            console.log("[Checkout] Client secret set for first time");
+          }
         }
 
         // Always update the paymentIntentId
@@ -187,7 +237,18 @@ export default function Checkout() {
         if (data.traceId) setLastTraceId(data.traceId);
       } catch (error) {
         if ((error as Error).name !== "AbortError") {
-          console.error("[Checkout] PaymentIntent error:", error);
+          if (isDevelopment) {
+            console.error("[Checkout] PaymentIntent error:", {
+              error,
+              errorMessage: (error as Error).message,
+              errorName: (error as Error).name,
+              cartTotal,
+              currency,
+              itemCount: items.length,
+              paymentIntentId,
+              traceId: sessionTraceId.current,
+            });
+          }
           setPaymentError("Failed to initialize payment");
         }
       }
