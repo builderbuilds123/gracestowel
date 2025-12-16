@@ -278,6 +278,42 @@
     - Test locally with `--runInBand` to catch CI-specific failures early
 - **Location:** `apps/backend/src/utils/stripe.ts`, `apps/backend/integration-tests/unit/webhooks/stripe/route.unit.spec.ts`
 
+### 2025-12-16 - Medusa v2 Shipping Options API Breaking Change + Env Var Mix-up [RESOLVED]
+
+- **Symptom:** Three cascading errors on staging checkout: 1) `Cannot read properties of undefined (reading 'create')` 2) `Error creating Medusa cart` 3) `Fallback shipping failed: Options fetch failed`. Backend logs show: `Invalid request: Field 'cart_id' is required; Unrecognized fields: 'region_id'`.
+- **Root Cause (Multiple Issues):**
+    1. **Env Var Mix-up:** `STRIPE_SECRET_KEY` on Cloudflare Worker was set to a Medusa key (`mk_...`) instead of Stripe key (`sk_test_...`). Copy-paste error during staging setup.
+    2. **SDK Initialization Failure:** Missing/invalid `MEDUSA_PUBLISHABLE_KEY` caused `getMedusaClient()` to return an SDK without properly initialized `client.carts` object.
+    3. **Medusa v1 → v2 API Breaking Change:** Fallback code called `/store/shipping-options?region_id=...` but Medusa v2 **requires `cart_id`**, not `region_id`. The old v1 API format is no longer supported.
+- **Data Flow Traced:**
+    1. `MedusaCartService.getOrCreateCart()` calls `this.client.carts.create()` → SDK not initialized → throws
+    2. Error caught, fallback triggered
+    3. Fallback calls `/store/shipping-options?region_id=...` → Medusa v2 rejects with validation error
+    4. All three errors logged in sequence
+- **Solution:**
+    1. Fixed `STRIPE_SECRET_KEY` to use actual Stripe key (`sk_test_...`)
+    2. Verified `MEDUSA_PUBLISHABLE_KEY` is set correctly (`pk_...`)
+    3. Removed broken v1-style fallback from `api.shipping-rates.ts` - now returns clear error immediately
+- **Code Change:**
+    ```typescript
+    // REMOVED (broken v1 fallback):
+    const optionsResponse = await monitoredFetch(
+        `${medusaBackendUrl}/store/shipping-options?region_id=${region.id}`, ...
+    );
+    
+    // REPLACED WITH (clean error):
+    return data({ 
+        message: "Unable to calculate shipping rates. Please try again.",
+        error: error.message 
+    }, { status: 500 });
+    ```
+- **Prevention:**
+    - **Key Prefixes Matter:** Stripe keys = `sk_`/`pk_`, Medusa keys = `mk_`/`pk_` - verify prefixes when configuring env vars
+    - **Medusa v2 Migration:** When upgrading to Medusa v2, audit all direct API calls for breaking changes
+    - **Fallbacks Should Be Valid:** Don't add fallback paths that use deprecated APIs - they mask the real error
+    - **Test Staging Before Production:** Always verify checkout flow end-to-end after deploying to staging
+- **Location:** `apps/storefront/app/routes/api.shipping-rates.ts:229-240`
+
 ### 2025-12-07 - Test Request Object Missing Stream Methods for getRawBody() [RESOLVED]
 
 - **Symptom:** Tests pass locally but fail in CI. `mockConstructEvent` shows 0 calls. Clearing local cache (`rm -rf node_modules/.cache .swc dist && npm test -- --clearCache`) reproduces the failure locally.

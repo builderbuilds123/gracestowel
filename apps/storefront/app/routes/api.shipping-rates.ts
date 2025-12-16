@@ -227,49 +227,14 @@ export async function action({ request, context }: ActionFunctionArgs) {
     return { shippingOptions: formattedOptions, cartId };
 
   } catch (error: any) {
+    // Log the actual error for debugging
     console.error("Cart-based shipping failed:", error);
-
-    // Fallback to simple region-based fetch
-    try {
-        const regionsResponse = await monitoredFetch(`${medusaBackendUrl}/store/regions`, {
-            method: "GET",
-            headers: { "x-publishable-api-key": medusaPublishableKey },
-            label: "medusa-regions",
-            cloudflareEnv: env,
-        });
-
-        if (!regionsResponse.ok) throw new Error("Regions fetch failed");
-
-        const { regions } = await regionsResponse.json() as { regions: any[] };
-        const region = regions.find((r: any) => r.currency_code.toUpperCase() === currency.toUpperCase()) || regions[0];
-        
-        if (!region) throw new Error("No region found");
-
-        const optionsResponse = await monitoredFetch(`${medusaBackendUrl}/store/shipping-options?region_id=${region.id}`, {
-            method: "GET",
-            headers: { "x-publishable-api-key": medusaPublishableKey },
-            label: "medusa-shipping-options",
-            cloudflareEnv: env,
-        });
-
-        if (!optionsResponse.ok) throw new Error("Options fetch failed");
-
-        const { shipping_options } = await optionsResponse.json() as { shipping_options: any[] };
-
-        const formattedOptions = shipping_options.map((option: any) => ({
-            id: option.id,
-            displayName: option.name,
-            amount: option.amount,
-            originalAmount: undefined,
-            isFree: option.amount === 0,
-            deliveryEstimate: null
-        }));
-
-        return { shippingOptions: formattedOptions, cartId: undefined };
-
-    } catch (fallbackError) {
-        console.error("Fallback shipping failed:", fallbackError);
-        return data({ message: "An error occurred while calculating shipping rates." }, { status: 500 });
-    }
+    
+    // Return clear error - Medusa v2 requires cart_id for shipping options,
+    // so there's no valid fallback without a cart. Surface the real error.
+    return data({ 
+        message: "Unable to calculate shipping rates. Please try again.",
+        error: error.message 
+    }, { status: 500 });
   }
 }
