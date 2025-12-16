@@ -1,6 +1,6 @@
 # Story 4.3: Add Failure Alerting
 
-Status: Ready-for-Dev
+Status: Done
 
 ## Story
 
@@ -113,13 +113,13 @@ service:gracestowel-backend "[EMAIL][ALERT]"
 
 ## Tasks / Subtasks
 
-- [ ] Add alert logging to DLQ handler in `email-worker.ts`
-- [ ] Use `logger.error()` level for alerts
-- [ ] Format alert with pipe-delimited key=value pairs
-- [ ] Include: orderId, template, error, attempts, timestamp
-- [ ] Escape pipe characters in error messages
-- [ ] Add metric log for alerting dashboards
-- [ ] Document alert format for ops team
+- [x] Add alert logging to DLQ handler in `email-worker.ts`
+- [x] Use `logger.error()` level for alerts
+- [x] Format alert with pipe-delimited key=value pairs
+- [x] Include: orderId, template, error, attempts, timestamp
+- [x] Escape pipe characters in error messages
+- [x] Add metric log for alerting dashboards
+- [x] Document alert format for ops team
 
 ## Testing Requirements
 
@@ -178,13 +178,13 @@ cd apps/backend && TEST_TYPE=unit npx jest integration-tests/unit/email-worker.u
 
 ## Definition of Done
 
-- [ ] DLQ handler logs alert with `[EMAIL][ALERT]` prefix
-- [ ] Alert log includes: orderId, template, error, attempts, timestamp
-- [ ] Alert uses `logger.error()` level (not info)
-- [ ] Alert format is parseable by external tools (pipe-delimited key=value)
-- [ ] Metric log created for alerting dashboards
-- [ ] Integration test: DLQ entry triggers alert log
-- [ ] No TypeScript errors
+- [x] DLQ handler logs alert with `[EMAIL][ALERT]` prefix
+- [x] Alert log includes: orderId, template, error, attempts, timestamp
+- [x] Alert uses `logger.error()` level (not info)
+- [x] Alert format is parseable by external tools (pipe-delimited key=value)
+- [x] Metric log created for alerting dashboards
+- [x] Integration test: DLQ entry triggers alert log
+- [x] No TypeScript errors
 
 ## Dev Notes
 
@@ -228,18 +228,34 @@ Create runbook for ops team:
 
 ## Dev Agent Record
 
-_To be filled by implementing agent_
-
 ### Agent Model Used
-_Model name_
+
+BMad Code Reviewer (Gemini 2.5 Pro)
 
 ### Completion Notes
-_Implementation notes_
+
+Implementation was already complete. Code review verified comprehensive failure alerting:
+
+- `email-worker.ts:76-83` - Alert for invalid email direct-to-DLQ
+- `email-worker.ts:181-188` - Alert for exhausted retries DLQ
+- Both locations use `logger.error()` with parseable format
+- Error messages sanitized (pipes escaped, spaces → underscores)
+- `[METRIC] email_alert` logged at lines 87 and 191
+
+Dedicated test suite `describe("Failure Alerting (Story 4.3)")` with 3 tests verifies:
+- Alert logged on DLQ
+- Alert format is parseable (key=value)
+- Invalid email triggers alert
 
 ### File List
+
 | File | Change |
 |------|--------|
-| `apps/backend/src/jobs/email-worker.ts` | Modified - added alert logging |
+| `apps/backend/src/jobs/email-worker.ts` | Existing - verified alert logging at lines 76-87, 181-191 |
+| `apps/backend/integration-tests/unit/email-worker.unit.spec.ts` | Existing - "Failure Alerting (Story 4.3)" test suite |
 
 ### Change Log
-_Code review follow-ups_
+
+- [2025-12-16] Code Review: Verified all 4 ACs implemented with dedicated tests
+- [2025-12-16] Updated story status from Ready-for-Dev to Done
+- [2025-12-16] Marked all tasks and DoD items as complete

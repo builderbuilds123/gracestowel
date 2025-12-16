@@ -1,6 +1,6 @@
 # Story 2.2: Implement Dead Letter Queue
 
-Status: Ready-for-Dev
+Status: done
 
 ## Story
 
@@ -131,12 +131,12 @@ interface DLQEntry {
 
 ## Tasks / Subtasks
 
-- [ ] Add `failed` event handler to email worker
-- [ ] Create DLQ entry with all required fields
-- [ ] Store entry in Redis list `email:dlq` using LPUSH
-- [ ] Mask email address using `maskEmail()` utility
-- [ ] Log DLQ storage with `[EMAIL][DLQ]` prefix
-- [ ] Handle DLQ storage errors gracefully (log, don't throw)
+- [x] Add `failed` event handler to email worker
+- [x] Create DLQ entry with all required fields
+- [x] Store entry in Redis list `email:dlq` using LPUSH
+- [x] Mask email address using `maskEmail()` utility
+- [x] Log DLQ storage with `[EMAIL][DLQ]` prefix
+- [x] Handle DLQ storage errors gracefully (log, don't throw)
 
 ## Testing Requirements
 
@@ -177,13 +177,13 @@ cd apps/backend && TEST_TYPE=integration npx jest integration-tests/integration/
 
 ## Definition of Done
 
-- [ ] Worker has `failed` event handler
-- [ ] Failed jobs are stored in Redis list `email:dlq`
-- [ ] DLQ entries contain: jobId, orderId, template, masked recipient, error, failedAt, attempts
-- [ ] Email addresses are masked in DLQ entries
-- [ ] Log entry created when job moves to DLQ
-- [ ] Manual verification: `redis-cli LRANGE email:dlq 0 -1` shows entries
-- [ ] No TypeScript errors
+- [x] Worker has `failed` event handler
+- [x] Failed jobs are stored in Redis list `email:dlq`
+- [x] DLQ entries contain: jobId, orderId, template, masked recipient, error, failedAt, attempts
+- [x] Email addresses are masked in DLQ entries
+- [x] Log entry created when job moves to DLQ
+- [x] Manual verification: `redis-cli LRANGE email:dlq 0 -1` shows entries
+- [x] No TypeScript errors
 
 ## Dev Notes
 
@@ -222,18 +222,21 @@ try {
 
 ## Dev Agent Record
 
-_To be filled by implementing agent_
-
 ### Agent Model Used
-_Model name_
+Amelia (Reviewer)
 
 ### Completion Notes
-_Implementation notes_
+- Verified "ghost implementation" of DLQ logic in `apps/backend/src/jobs/email-worker.ts`.
+- Added missing unit tests for DLQ content assertions in `apps/backend/integration-tests/unit/email-worker.unit.spec.ts`.
+- Created integration test `apps/backend/integration-tests/integration/email-dlq.integration.spec.ts` verifying storage and retrieval.
+- Verified tests pass.
 
 ### File List
 | File | Change |
 |------|--------|
-| `apps/backend/src/jobs/email-worker.ts` | Modified - added failed event handler |
+| `apps/backend/src/jobs/email-worker.ts` | Verified |
+| `apps/backend/integration-tests/unit/email-worker.unit.spec.ts` | Updated |
+| `apps/backend/integration-tests/integration/email-dlq.integration.spec.ts` | Created |
 
 ### Change Log
-_Code review follow-ups_
+- Added missing verification tests.

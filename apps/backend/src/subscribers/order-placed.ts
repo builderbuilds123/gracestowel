@@ -3,9 +3,11 @@ import type {
   SubscriberConfig,
 } from "@medusajs/framework"
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
-import { sendOrderConfirmationWorkflow } from "../workflows/send-order-confirmation"
+// import { sendOrderConfirmationWorkflow } from "../workflows/send-order-confirmation" // DEPRECATED - Replaced by BullMQ
 import { schedulePaymentCapture } from "../lib/payment-capture-queue"
 import { getPostHog } from "../utils/posthog"
+import { enqueueEmail } from "../lib/email-queue"
+import type { ModificationTokenService } from "../services/modification-token"
 
 interface OrderPlacedEventData {
   id: string;
@@ -24,17 +26,113 @@ export default async function orderPlacedHandler({
     logger.info(`[ORDER_PLACED] Token received (masked): ****...${data.modification_token.slice(-8)}`)
   }
 
-  // Send order confirmation email
+  // Send order confirmation email via BullMQ
+  // Story 3.1: Replace workflow with enqueueEmail()
+  // Story 3.2: Generate magic link for guests
   try {
-    await sendOrderConfirmationWorkflow(container).run({
-      input: {
-        id: data.id,
-        modification_token: data.modification_token,
-      },
+    const query = container.resolve("query")
+    const { data: orders } = await query.graph({
+        entity: "order",
+        fields: [
+          "id",
+          "display_id",
+          "email",
+          "currency_code",
+          "total",
+          "customer_id",
+          "created_at",
+          "items.title",
+          "items.quantity",
+          "items.unit_price",
+          "items.variant.title",
+          "items.variant.product.title",
+          "payment_collections.payments.data"
+        ],
+        filters: { id: data.id },
     })
-    console.log("Order confirmation email workflow completed for order:", data.id)
-  } catch (error) {
-    console.error("Failed to send order confirmation email:", error)
+
+    if (orders.length > 0) {
+        const order = orders[0]
+        const isGuest = !order.customer_id
+
+        // Generate magic link for guests only
+        let magicLink: string | null = null
+        if (isGuest) {
+            try {
+                // Get payment_intent_id from order
+                const paymentCollection = order.payment_collections?.[0];
+                const payment = paymentCollection?.payments?.[0];
+                const paymentData = payment?.data as any;
+
+                const paymentIntentId = paymentData?.id;
+
+                if (paymentIntentId) {
+                     // Resolve service from container instead of importing singleton
+                     const modificationTokenService = container.resolve("modificationTokenService") as ModificationTokenService;
+
+                     const token = modificationTokenService.generateToken(
+                        order.id,
+                        paymentIntentId,
+                        new Date(order.created_at)
+                      );
+
+                      const storefrontUrl = process.env.STOREFRONT_URL;
+                      if (!storefrontUrl) {
+                        logger.warn(`[EMAIL][WARN] STOREFRONT_URL not set - using localhost default for magic link`);
+                      }
+                      const baseUrl = storefrontUrl || "http://localhost:5173";
+                      magicLink = `${baseUrl}/order/status/${order.id}?token=${token}`;
+
+                      logger.info(`[EMAIL] Magic link generated for guest order ${order.id}`);
+                } else {
+                    logger.warn(`[EMAIL][WARN] Could not find payment intent ID for guest order ${order.id} - magic link skipped`);
+                }
+            } catch (error: any) {
+                // Log warning but continue - email will be sent without magic link
+                // Sanitize error message to avoid PII leak
+                const safeErrorMessage = error.message ? error.message.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, '***') : 'Unknown error';
+                logger.warn(`[EMAIL][WARN] Failed to generate magic link for order ${order.id}: ${safeErrorMessage}`);
+            }
+        }
+
+        // Prepare email payload matching OrderPlacedEmailProps interface
+        // Template must be "order-placed" to match Templates.ORDER_PLACED enum
+        const emailPayload = {
+            orderId: order.id,
+            template: "order-placed" as const,
+            recipient: order.email || "",
+            data: {
+              order: {
+                id: order.id,
+                display_id: order.display_id || undefined,
+                email: order.email || undefined,
+                currency_code: order.currency_code,
+                total: order.total,
+                items: (order.items || []).map((item: any) => ({
+                  title: item.variant?.product?.title || item.title,
+                  variant_title: item.variant?.title,
+                  quantity: item.quantity,
+                  unit_price: item.unit_price,
+                })),
+              },
+              modification_token: magicLink ? magicLink.split('token=')[1] : undefined,
+            },
+        }
+
+        // Skip if no email address
+        if (!emailPayload.recipient) {
+            logger.warn(`[EMAIL][WARN] No email address for order ${order.id} - skipping`)
+        } else {
+            // Enqueue email (non-blocking)
+            await enqueueEmail(emailPayload)
+            logger.info(`[EMAIL][QUEUE] Order confirmation queued for ${order.id}`)
+        }
+    } else {
+        logger.error(`[EMAIL][ERROR] Order ${data.id} not found for email`)
+    }
+  } catch (error: any) {
+    // Log but don't throw - email failure shouldn't block order
+    logger.error(`[EMAIL][ERROR] Failed to queue confirmation for order ${data.id}: ${error.message}`)
   }
 
   // Schedule payment capture after 1-hour modification window
@@ -122,4 +220,3 @@ export default async function orderPlacedHandler({
 export const config: SubscriberConfig = {
   event: "order.placed",
 }
-

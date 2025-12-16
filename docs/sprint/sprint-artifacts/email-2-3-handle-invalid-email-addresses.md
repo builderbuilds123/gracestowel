@@ -1,6 +1,6 @@
 # Story 2.3: Handle Invalid Email Addresses
 
-Status: Ready-for-Dev
+Status: done
 
 ## Story
 
@@ -120,13 +120,13 @@ emailWorker = new Worker(
 
 ## Tasks / Subtasks
 
-- [ ] Create `isRetryableError(error)` helper function
-- [ ] Create `moveToDLQDirectly()` function for immediate DLQ storage
-- [ ] Update worker to check error type before throwing
-- [ ] For invalid email (400), call `moveToDLQDirectly()` and return (don't throw)
-- [ ] For retryable errors (5xx, 429, network), throw to trigger retry
-- [ ] Add `reason: "invalid_email"` field to DLQ entries for filtering
-- [ ] Log with `[EMAIL][INVALID]` prefix for invalid emails
+- [x] Create `isRetryableError(error)` helper function
+- [x] Create `moveToDLQDirectly()` function for immediate DLQ storage
+- [x] Update worker to check error type before throwing
+- [x] For invalid email (400), call `moveToDLQDirectly()` and return (don't throw)
+- [x] For retryable errors (5xx, 429, network), throw to trigger retry
+- [x] Add `reason: "invalid_email"` field to DLQ entries for filtering
+- [x] Log with `[EMAIL][INVALID]` prefix for invalid emails
 
 ## Testing Requirements
 
@@ -159,14 +159,14 @@ cd apps/backend && TEST_TYPE=unit npx jest integration-tests/unit/email-worker.u
 
 ## Definition of Done
 
-- [ ] Worker detects invalid email errors (Resend 400)
-- [ ] Invalid email errors skip retry and go directly to DLQ
-- [ ] Retryable errors (5xx, 429, network) trigger normal retry
-- [ ] Log entry distinguishes invalid email (`[EMAIL][INVALID]`) from other failures
-- [ ] DLQ entries include `reason` field for filtering
-- [ ] Unit tests pass for error classification
-- [ ] Integration test: invalid email goes to DLQ without retry
-- [ ] No TypeScript errors
+- [x] Worker detects invalid email errors (Resend 400)
+- [x] Invalid email errors skip retry and go directly to DLQ
+- [x] Retryable errors (5xx, 429, network) trigger normal retry
+- [x] Log entry distinguishes invalid email (`[EMAIL][INVALID]`) from other failures
+- [x] DLQ entries include `reason` field for filtering
+- [x] Unit tests pass for error classification
+- [x] Integration test: invalid email goes to DLQ without retry
+- [x] No TypeScript errors
 
 ## Dev Notes
 
@@ -211,18 +211,21 @@ The `failed` event handler (Story 2.2) won't fire because the job "succeeded" (f
 
 ## Dev Agent Record
 
-_To be filled by implementing agent_
-
 ### Agent Model Used
-_Model name_
+Amelia (Reviewer)
 
 ### Completion Notes
-_Implementation notes_
+- Verified "ghost implementation" of invalid email handling in `apps/backend/src/jobs/email-worker.ts`.
+- Added missing unit tests for `isRetryableError` and direct DLQ flow in `apps/backend/integration-tests/unit/email-worker.unit.spec.ts`.
+- Created integration test `apps/backend/integration-tests/integration/email-invalid.integration.spec.ts`.
+- Verified tests pass.
 
 ### File List
 | File | Change |
 |------|--------|
-| `apps/backend/src/jobs/email-worker.ts` | Modified - error classification, direct DLQ |
+| `apps/backend/src/jobs/email-worker.ts` | Verified |
+| `apps/backend/integration-tests/unit/email-worker.unit.spec.ts` | Updated |
+| `apps/backend/integration-tests/integration/email-invalid.integration.spec.ts` | Created |
 
 ### Change Log
-_Code review follow-ups_
+- Added missing verification tests.

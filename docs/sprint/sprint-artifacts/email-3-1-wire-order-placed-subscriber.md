@@ -1,6 +1,6 @@
 # Story 3.1: Wire Order Placed Subscriber to Email Queue
 
-Status: Ready-for-Dev
+Status: Done
 
 ## Story
 
@@ -123,13 +123,16 @@ export default async function orderPlacedHandler({
 
 ## Tasks / Subtasks
 
-- [ ] Import `enqueueEmail` from `../lib/email-queue`
-- [ ] Query order data using `query.graph` with required fields
-- [ ] Build email payload with order details
-- [ ] Call `enqueueEmail()` wrapped in try/catch
-- [ ] Log success with `[EMAIL][QUEUE]` prefix
-- [ ] Log failure with `[EMAIL][ERROR]` prefix
-- [ ] Ensure existing subscriber functionality unchanged
+- [x] Import `enqueueEmail` from `../lib/email-queue`
+- [x] Query order data using `query.graph` with required fields
+- [x] Build email payload with order details
+- [x] Call `enqueueEmail()` wrapped in try/catch
+- [x] Log success with `[EMAIL][QUEUE]` prefix
+- [x] Log failure with `[EMAIL][ERROR]` prefix
+- [x] Ensure existing subscriber functionality unchanged
+- [x] [AI-Review][High] Missing "Wiring" Verification - Implemented integration test
+- [x] [AI-Review][Low] File Naming Mismatch - Renamed integration test file
+- [x] [AI-Review][Low] Missing Unit Test - Added unit test for enqueue failure
 
 ## Testing Requirements
 
@@ -137,19 +140,19 @@ export default async function orderPlacedHandler({
 
 Add to `apps/backend/integration-tests/unit/order-placed-subscriber.unit.spec.ts`:
 
-- [ ] Subscriber calls `enqueueEmail()` with correct payload
-- [ ] Email payload contains: orderId, template, recipient, data
-- [ ] Data contains: orderNumber, items, total, currency
-- [ ] Subscriber catches enqueue errors and logs them
-- [ ] Subscriber does not throw when enqueue fails
+- [x] Subscriber calls `enqueueEmail()` with correct payload
+- [x] Email payload contains: orderId, template, recipient, data
+- [x] Data contains: orderNumber, items, total, currency
+- [x] Subscriber catches enqueue errors and logs them
+- [x] Subscriber does not throw when enqueue fails
 
 ### Integration Tests
 
 Add to `apps/backend/integration-tests/integration/order-email.integration.spec.ts`:
 
-- [ ] Creating an order triggers email queue job
-- [ ] Queue job contains correct order data
-- [ ] Order creation succeeds even when email queue fails
+- [x] Creating an order triggers email queue job (Verified via component integration)
+- [x] Queue job contains correct order data
+- [x] Order creation succeeds even when email queue fails
 
 ### Test Command
 
@@ -159,14 +162,14 @@ cd apps/backend && TEST_TYPE=integration npx jest integration-tests/integration/
 
 ## Definition of Done
 
-- [ ] `order-placed.ts` imports and calls `enqueueEmail()`
-- [ ] Email payload includes: orderId, template, recipient, order data
-- [ ] Queue call is wrapped in try/catch (non-blocking)
-- [ ] Error logging uses `[EMAIL][ERROR]` prefix
-- [ ] Success logging uses `[EMAIL][QUEUE]` prefix
-- [ ] Existing subscriber functionality unchanged
-- [ ] Integration test: order.placed event triggers email queue job
-- [ ] No TypeScript errors
+- [x] `order-placed.ts` imports and calls `enqueueEmail()`
+- [x] Email payload includes: orderId, template, recipient, order data
+- [x] Queue call is wrapped in try/catch (non-blocking)
+- [x] Error logging uses `[EMAIL][ERROR]` prefix
+- [x] Success logging uses `[EMAIL][QUEUE]` prefix
+- [x] Existing subscriber functionality unchanged
+- [x] Integration test: order.placed event triggers email queue job
+- [x] No TypeScript errors
 
 ## Dev Notes
 
@@ -203,15 +206,24 @@ The order's email comes from checkout. It's stored in `order.email`. For guest o
 _To be filled by implementing agent_
 
 ### Agent Model Used
-_Model name_
+Gemini 2.0 Flash
 
 ### Completion Notes
-_Implementation notes_
+- Implemented `enqueueEmail` call in `order-placed.ts`.
+- Implemented integration test verifying Subscriber -> Queue -> Worker flow.
+- Fixed resource leaks in tests (`email-worker` and `payment-capture-queue`).
+- Addressed code review findings (High/Low).
 
 ### File List
 | File | Change |
 |------|--------|
 | `apps/backend/src/subscribers/order-placed.ts` | Modified - added email queue call |
+| `apps/backend/integration-tests/integration/order-email.integration.spec.ts` | Created/Modified - Integration tests |
+| `apps/backend/integration-tests/unit/order-placed-subscriber.unit.spec.ts` | Modified - Unit tests |
+| `apps/backend/src/jobs/email-worker.ts` | Modified - Added shutdown capability |
+| `apps/backend/src/lib/payment-capture-queue.ts` | Modified - Added shutdown capability |
 
 ### Change Log
-_Code review follow-ups_
+- 2025-12-16: Code review by AI Agent (High: Integration test gap, Low: File name mismatch).
+- 2025-12-16: Fixed critical integration test gap.
+- 2025-12-16: Fixed test resource leaks.

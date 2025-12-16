@@ -1,6 +1,6 @@
 # Story 1.2: Create Email Worker
 
-Status: Ready-for-Dev
+Status: done
 
 ## Story
 
@@ -125,13 +125,13 @@ Check existing patterns in `apps/backend/src/loaders/` for how workers are start
 
 ## Tasks / Subtasks
 
-- [ ] Create `apps/backend/src/jobs/email-worker.ts`
-- [ ] Implement worker that processes `email-queue` jobs
-- [ ] Resolve Resend service from Medusa container
-- [ ] Call Resend service `send()` method with correct parameters
-- [ ] Add logging for processing, success, and failure
-- [ ] Register worker to start on Medusa boot (loader or jobs index)
-- [ ] Verify worker starts when running `pnpm dev`
+- [x] Create `apps/backend/src/jobs/email-worker.ts`
+- [x] Implement worker that processes `email-queue` jobs
+- [x] Resolve Resend service from Medusa container
+- [x] Call Resend service `send()` method with correct parameters
+- [x] Add logging for processing, success, and failure
+- [x] Register worker to start on Medusa boot (loader or jobs index)
+- [x] Verify worker starts when running `pnpm dev`
 
 ## Testing Requirements
 
@@ -139,11 +139,11 @@ Check existing patterns in `apps/backend/src/loaders/` for how workers are start
 
 Create `apps/backend/integration-tests/unit/email-worker.unit.spec.ts`:
 
-- [ ] Worker processes job and calls Resend service
-- [ ] Worker logs success with masked email
-- [ ] Worker logs failure with error message
-- [ ] Worker throws on Resend failure (enables retry)
-- [ ] Worker logs attempt number correctly
+- [x] Worker processes job and calls Resend service
+- [x] Worker logs success with masked email
+- [x] Worker logs failure with error message
+- [x] Worker throws on Resend failure (enables retry)
+- [x] Worker logs attempt number correctly
 
 ### Integration Tests
 
@@ -158,14 +158,14 @@ cd apps/backend && TEST_TYPE=unit npx jest integration-tests/unit/email-worker.u
 
 ## Definition of Done
 
-- [ ] File `apps/backend/src/jobs/email-worker.ts` exists
-- [ ] Worker processes jobs from `email-queue`
-- [ ] Worker calls Resend service to send emails
-- [ ] Worker logs success with masked email address
-- [ ] Worker logs failure with error message
-- [ ] Worker throws on failure (enables BullMQ retry)
-- [ ] Worker starts when Medusa application boots
-- [ ] No TypeScript errors (`pnpm typecheck` passes)
+- [x] File `apps/backend/src/jobs/email-worker.ts` exists
+- [x] Worker processes jobs from `email-queue`
+- [x] Worker calls Resend service to send emails
+- [x] Worker logs success with masked email address
+- [x] Worker logs failure with error message
+- [x] Worker throws on failure (enables BullMQ retry)
+- [x] Worker starts when Medusa application boots
+- [x] No TypeScript errors (`pnpm typecheck` passes)
 
 ## Dev Notes
 
@@ -195,19 +195,26 @@ Set `concurrency: 5` to process multiple emails in parallel. Adjust based on Res
 
 ## Dev Agent Record
 
-_To be filled by implementing agent_
-
 ### Agent Model Used
-_Model name_
+Amelia (Reviewer)
 
 ### Completion Notes
-_Implementation notes_
+- Verified existing implementation of `apps/backend/src/jobs/email-worker.ts`.
+- Created missing unit tests in `apps/backend/integration-tests/unit/email-worker.unit.spec.ts`.
+- Verified tests pass.
+- Verified implementation meets ACs.
+- Noted massive scope creep (Stories 1.2, 1.3, 2.x, 4.x implemented in one file).
 
 ### File List
 | File | Change |
 |------|--------|
-| `apps/backend/src/jobs/email-worker.ts` | Created - BullMQ worker |
-| `apps/backend/src/loaders/email-worker-loader.ts` | Created - worker startup |
+| `apps/backend/src/jobs/email-worker.ts` | Verified |
+| `apps/backend/src/loaders/email-worker.ts` | Verified |
+| `apps/backend/src/loaders/index.ts` | Modified - added emailWorkerLoader registration |
+| `apps/backend/integration-tests/unit/email-worker.unit.spec.ts` | Updated with Story 1.2 tests |
 
 ### Change Log
-_Code review follow-ups_
+- Added missing unit tests for Story 1.2.
+- Updated File List to include loader files.
+- Updated Testing Requirements checkboxes to reflect test coverage.
+- Note: Implementation includes scope from future stories (2.2 DLQ, 2.3 invalid email handling, 4.3 alerting).

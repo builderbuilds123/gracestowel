@@ -1,6 +1,6 @@
 # Story 3.2: Generate Magic Link for Guest Orders
 
-Status: Ready-for-Dev
+Status: Done
 
 ## Story
 
@@ -226,18 +226,26 @@ This path may vary - check actual order structure.
 
 ## Dev Agent Record
 
-_To be filled by implementing agent_
-
 ### Agent Model Used
-_Model name_
+Gemini 2.0 Flash
 
 ### Completion Notes
-_Implementation notes_
+Implemented magic link generation for guest orders within the `order.placed` subscriber.
+- Leveraged `ModificationTokenService` for token generation.
+- Added validation for `paymentIntentId` to prevent token generation errors.
+- Optimized data fetching to retrieve only necessary fields.
+- Implemented robust error handling with PII sanitization in logs.
+- Added comprehensive unit tests covering happy paths, edge cases (missing payment intent), and error handling.
 
 ### File List
 | File | Change |
 |------|--------|
-| `apps/backend/src/subscribers/order-placed.ts` | Modified - added magic link generation |
+| `apps/backend/src/subscribers/order-placed.ts` | Modified - Added magic link generation logic |
+| `apps/backend/integration-tests/unit/order-placed-subscriber.unit.spec.ts` | Created - Added unit tests for subscriber logic |
 
 ### Change Log
-_Code review follow-ups_
+- **Fix:** Added validation for `paymentIntentId` before calling `generateToken`.
+- **Fix:** Optimized `query.graph` to remove unnecessary nested fields.
+- **Fix:** Sanitized error messages in `catch` block to prevent PII leakage.
+- **Fix:** Improved `STOREFRONT_URL` fallback handling.
+- **Test:** Added unit tests for missing payment intent and error sanitization.

@@ -541,3 +541,18 @@ export function startPaymentCaptureWorker(container?: MedusaContainer): Worker<P
 
     return worker;
 }
+
+/**
+ * Shuts down the payment capture worker and queue.
+ * Essential for testing to prevent open handles.
+ */
+export async function shutdownPaymentCaptureQueue() {
+    if (worker) {
+        await worker.close();
+        worker = null;
+    }
+    if (queue) {
+        await queue.close();
+        queue = null;
+    }
+}
