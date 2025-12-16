@@ -68,10 +68,10 @@ jobs:
 
       - name: Extract epic context from PR
         id: epic-context
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
-          PR_BODY='${{ github.event.pull_request.body }}'
-          PR_TITLE='${{ github.event.pull_request.title }}'
-
           # Extract epic/story references (e.g., Epic 1.2, Story 3.4, 5-2)
           EPIC_REF=$(echo "$PR_TITLE $PR_BODY" | grep -oE '([Ee]pic|[Ss]tory) [0-9]+\.[0-9]+|[0-9]+-[0-9]+' | head -1 || echo "")
 
@@ -96,7 +96,7 @@ jobs:
         uses: lewagon/wait-on-check-action@v1.3.4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-          check-name: 'Validate'
+          check-name: "Validate"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           wait-interval: 10
           allowed-conclusions: success,skipped
