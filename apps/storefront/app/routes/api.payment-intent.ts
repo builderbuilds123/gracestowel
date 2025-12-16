@@ -232,6 +232,37 @@ export async function action({ request, context }: ActionFunctionArgs) {
     const totalAmount = amount + (shipping || 0);
     const isUpdate = !!paymentIntentId;
 
+    // Validate amount is positive
+    if (totalAmount <= 0) {
+      logger.error("Invalid amount", new Error("Amount must be positive"), {
+        amount,
+        shipping,
+        totalAmount,
+      });
+      return data(
+        { message: "Invalid amount: must be greater than 0", traceId },
+        { status: 400 }
+      );
+    }
+
+    // Validate currency
+    const validatedCurrency = currency || "usd";
+    if (!validatedCurrency.match(/^[a-z]{3}$/)) {
+      logger.error("Invalid currency", new Error("Currency must be 3 letter code"), {
+        currency: validatedCurrency,
+      });
+      return data(
+        { message: "Invalid currency code", traceId },
+        { status: 400 }
+      );
+    }
+
+    logger.info("Payment validation passed", {
+      totalAmount,
+      currency: validatedCurrency,
+      amountInCents: toCents(totalAmount),
+    });
+
     // Build request headers
     const headers: Record<string, string> = {
       Authorization: `Bearer ${STRIPE_SECRET_KEY}`,
@@ -303,10 +334,16 @@ export async function action({ request, context }: ActionFunctionArgs) {
       ? `https://api.stripe.com/v1/payment_intents/${paymentIntentId}`
       : "https://api.stripe.com/v1/payment_intents";
 
+    // Log request details for debugging
     logger.info("Calling Stripe API", {
       operation: isUpdate ? "update" : "create",
       paymentIntentId,
       amount: totalAmount,
+      currency: currency || "usd",
+      amountInCents: toCents(totalAmount),
+      hasCartItems: !!cartItems?.length,
+      cartItemCount: cartItems?.length,
+      idempotencyKey: headers["Idempotency-Key"],
     });
 
     const response = await monitoredFetch(url, {
@@ -319,13 +356,40 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
     if (!response.ok) {
       const errorText = await response.text();
+      
+      // Parse Stripe error response for better diagnostics
+      let stripeError: any = null;
+      try {
+        stripeError = JSON.parse(errorText);
+      } catch {
+        // Error is not JSON, use raw text
+        stripeError = { raw: errorText };
+      }
+      
+      // Enhanced logging with full error details
       logger.error("Stripe API error", new Error(errorText), {
         status: response.status,
+        statusText: response.statusText,
         paymentIntentId,
         operation: isUpdate ? "update" : "create",
+        stripeErrorType: stripeError?.error?.type,
+        stripeErrorCode: stripeError?.error?.code,
+        stripeErrorMessage: stripeError?.error?.message,
+        stripeErrorParam: stripeError?.error?.param,
+        requestAmount: totalAmount,
+        requestCurrency: currency || "usd",
+        requestAmountInCents: toCents(totalAmount),
       });
+      
+      // Return detailed error message for debugging
+      const debugMessage = stripeError?.error?.message || errorText || "Unknown Stripe error";
       return data(
-        { message: "Payment initialization failed", traceId },
+        { 
+          message: "Payment initialization failed", 
+          debugInfo: `Stripe error: ${debugMessage}`,
+          stripeErrorCode: stripeError?.error?.code,
+          traceId 
+        },
         { status: 500 }
       );
     }
