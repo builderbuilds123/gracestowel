@@ -95,22 +95,27 @@ export default async function orderPlacedHandler({
             }
         }
 
-        // Prepare email payload
+        // Prepare email payload matching OrderPlacedEmailProps interface
+        // Template must be "order-placed" to match Templates.ORDER_PLACED enum
         const emailPayload = {
             orderId: order.id,
-            template: "order_confirmation" as const,
+            template: "order-placed" as const,
             recipient: order.email || "",
             data: {
-              orderNumber: order.display_id || order.id,
-              items: (order.items || []).map((item: any) => ({
-                title: item.variant?.product?.title || item.title,
-                quantity: item.quantity,
-                unit_price: item.unit_price,
-              })),
-              total: order.total,
-              currency: order.currency_code,
-              magicLink,
-              isGuest,
+              order: {
+                id: order.id,
+                display_id: order.display_id || undefined,
+                email: order.email || undefined,
+                currency_code: order.currency_code,
+                total: order.total,
+                items: (order.items || []).map((item: any) => ({
+                  title: item.variant?.product?.title || item.title,
+                  variant_title: item.variant?.title,
+                  quantity: item.quantity,
+                  unit_price: item.unit_price,
+                })),
+              },
+              modification_token: magicLink ? magicLink.split('token=')[1] : undefined,
             },
         }
 

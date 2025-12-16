@@ -154,15 +154,17 @@ describe("End-to-End Email Flow Integration", () => {
 
       await enqueueEmail({
         orderId,
-        template: "order_confirmation",
+        template: "order-placed",
         recipient: "guest@example.com",
         data: {
-          orderNumber: "1001",
-          items: [{ title: "Item 1", quantity: 1, unit_price: 1000 }],
-          total: 1000,
-          currency: "usd",
-          isGuest: true,
-          magicLink
+          order: {
+            id: orderId,
+            display_id: "1001",
+            items: [{ title: "Item 1", quantity: 1, unit_price: 1000 }],
+            total: 1000,
+            currency_code: "usd",
+          },
+          modification_token: token
         }
       });
 
@@ -197,15 +199,16 @@ describe("End-to-End Email Flow Integration", () => {
 
       await enqueueEmail({
         orderId,
-        template: "order_confirmation",
+        template: "order-placed",
         recipient: "user@example.com",
         data: {
-          orderNumber: "1002",
-          items: [{ title: "Item 1", quantity: 1, unit_price: 1000 }],
-          total: 1000,
-          currency: "usd",
-          isGuest: false,
-          magicLink: null
+          order: {
+            id: orderId,
+            display_id: "1002",
+            items: [{ title: "Item 1", quantity: 1, unit_price: 1000 }],
+            total: 1000,
+            currency_code: "usd",
+          },
         }
       });
 
@@ -233,13 +236,16 @@ describe("End-to-End Email Flow Integration", () => {
 
       await enqueueEmail({
         orderId,
-        template: "order_confirmation",
+        template: "order-placed",
         recipient: "fail@example.com",
         data: {
-            orderNumber: "1003",
+          order: {
+            id: orderId,
+            display_id: "1003",
             items: [],
             total: 100,
-            currency: "usd"
+            currency_code: "usd"
+          }
         }
       });
 

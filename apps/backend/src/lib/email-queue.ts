@@ -10,16 +10,36 @@ let logger: any = console; // Default to console, replaced by initEmailQueue
 
 export interface EmailJobPayload {
   orderId: string;
-  template: "order_confirmation"; // extend for future templates
+  template: "order-placed"; // matches Templates.ORDER_PLACED enum in resend service
   recipient: string;
   data: {
-    orderNumber: string | number;
-    items: Array<{ title: string; quantity: number; unit_price: number }>;
-    total: number;
-    currency: string;
-    magicLink?: string | null;
-    isGuest?: boolean;
-    // extensible for future templates
+    order: {
+      id: string;
+      display_id?: string;
+      email?: string;
+      currency_code?: string;
+      total?: number;
+      subtotal?: number;
+      shipping_total?: number;
+      tax_total?: number;
+      items?: Array<{
+        title: string;
+        variant_title?: string;
+        quantity: number;
+        unit_price: number;
+      }>;
+      shipping_address?: {
+        first_name?: string;
+        last_name?: string;
+        address_1?: string;
+        address_2?: string;
+        city?: string;
+        province?: string;
+        postal_code?: string;
+        country_code?: string;
+      };
+    };
+    modification_token?: string;
   };
 }
 

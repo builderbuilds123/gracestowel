@@ -52,13 +52,16 @@ describe("Email Queue Service", () => {
   it("enqueueEmail() adds job with correct options", async () => {
     const payload = {
       orderId: "ord_123",
-      template: "order_confirmation" as const,
+      template: "order-placed" as const,
       recipient: "test@example.com",
       data: {
-        orderNumber: 1001,
-        items: [],
-        total: 100,
-        currency: "usd",
+        order: {
+          id: "ord_123",
+          display_id: "1001",
+          items: [],
+          total: 100,
+          currency_code: "usd",
+        },
       },
     }
 
@@ -86,9 +89,17 @@ describe("Email Queue Service", () => {
 
     const payload = {
         orderId: "ord_fail",
-        template: "order_confirmation" as const,
+        template: "order-placed" as const,
         recipient: "test@example.com",
-        data: { orderNumber: 1, items: [], total: 0, currency: "usd" }
+        data: {
+          order: {
+            id: "ord_fail",
+            display_id: "1",
+            items: [],
+            total: 0,
+            currency_code: "usd"
+          }
+        }
     }
 
     const result = await enqueueEmail(payload)
