@@ -16,6 +16,9 @@ import { monitoredFetch } from "../utils/monitored-fetch";
 import { generateCartHash } from "../utils/cart-hash";
 import { debounce } from "../utils/debounce";
 
+// Check if in development mode (Vite/React Router environment)
+const isDevelopment = import.meta.env.DEV || import.meta.env.MODE === 'development';
+
 interface LoaderData {
   stripePublishableKey: string;
 }
@@ -151,7 +154,7 @@ export default function Checkout() {
         };
 
         // Log request details for debugging (only in development)
-        if (typeof process !== 'undefined' && process.env.NODE_ENV === 'development') {
+        if (isDevelopment) {
           console.log("[Checkout] Payment intent request:", {
             operation: paymentIntentId ? "update" : "create",
             amount: requestData.amount,
@@ -206,7 +209,7 @@ export default function Checkout() {
           setLastTraceId(error.traceId || null);
           
           // Log detailed error for debugging (only in development)
-          if (typeof process !== 'undefined' && process.env.NODE_ENV === 'development') {
+          if (isDevelopment) {
             console.error("[Checkout] Payment initialization error:", {
               message: error.message,
               debugInfo: error.debugInfo,
@@ -224,7 +227,7 @@ export default function Checkout() {
         };
 
         // Log successful response (only in development)
-        if (typeof process !== 'undefined' && process.env.NODE_ENV === 'development') {
+        if (isDevelopment) {
           console.log("[Checkout] Payment intent response:", {
             operation: paymentIntentId ? "updated" : "created",
             paymentIntentId: data.paymentIntentId,
@@ -239,7 +242,9 @@ export default function Checkout() {
         if (!isInitialized.current) {
           setClientSecret(data.clientSecret);
           isInitialized.current = true;
-          console.log("[Checkout] Client secret set for first time");
+          if (isDevelopment) {
+            console.log("[Checkout] Client secret set for first time");
+          }
         }
 
         // Always update the paymentIntentId
@@ -247,16 +252,18 @@ export default function Checkout() {
         if (data.traceId) setLastTraceId(data.traceId);
       } catch (error) {
         if ((error as Error).name !== "AbortError") {
-          console.error("[Checkout] PaymentIntent error:", {
-            error,
-            errorMessage: (error as Error).message,
-            errorName: (error as Error).name,
-            cartTotal,
-            currency,
-            itemCount: items.length,
-            paymentIntentId,
-            traceId: sessionTraceId.current,
-          });
+          if (isDevelopment) {
+            console.error("[Checkout] PaymentIntent error:", {
+              error,
+              errorMessage: (error as Error).message,
+              errorName: (error as Error).name,
+              cartTotal,
+              currency,
+              itemCount: items.length,
+              paymentIntentId,
+              traceId: sessionTraceId.current,
+            });
+          }
           setPaymentError("Failed to initialize payment");
         }
       }
