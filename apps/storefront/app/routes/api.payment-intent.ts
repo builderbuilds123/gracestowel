@@ -319,13 +319,26 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      logger.error("Stripe API error", new Error(errorText), {
+      let errorMessage = "Payment initialization failed";
+
+      try {
+        const errorJson = JSON.parse(errorText);
+        if (errorJson.error && errorJson.error.message) {
+            errorMessage = errorJson.error.message;
+        }
+      } catch (e) {
+          // ignore json parse error
+      }
+
+      logger.error("Stripe API error", new Error(errorMessage), {
         status: response.status,
         paymentIntentId,
         operation: isUpdate ? "update" : "create",
+        rawError: errorText
       });
+
       return data(
-        { message: "Payment initialization failed", traceId },
+        { message: errorMessage, traceId },
         { status: 500 }
       );
     }
