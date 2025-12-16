@@ -49,7 +49,7 @@ describe("Invalid Email Integration (Simulated)", () => {
     mockResendService.send.mockRejectedValue({ statusCode: 400, message: "Invalid email" });
 
     // 2. Start worker
-    const { startEmailWorker } = require("../../src/lib/email-worker");
+    const { startEmailWorker } = require("../../src/workers/email-worker");
     startEmailWorker(mockContainer);
     
     // Get processor directly from the mocked constructor call

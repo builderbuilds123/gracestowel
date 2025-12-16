@@ -1,4 +1,4 @@
-import { startEmailWorker, shutdownEmailWorker } from "../../src/lib/email-worker";
+import { startEmailWorker, shutdownEmailWorker } from "../../src/workers/email-worker";
 import { getEmailQueue, enqueueEmail } from "../../src/lib/email-queue";
 import orderPlacedHandler from "../../src/subscribers/order-placed";
 import { Queue } from "bullmq";

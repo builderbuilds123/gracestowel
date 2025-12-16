@@ -42,7 +42,7 @@ describe("DLQ Integration (Simulated)", () => {
 
   it("stores failed job in DLQ and allows retrieval", async () => {
     // 1. Start worker to get the failed handler
-    const { startEmailWorker } = require("../../src/lib/email-worker");
+    const { startEmailWorker } = require("../../src/workers/email-worker");
     // We need to spy on the Worker constructor to capture the 'failed' handler
     const MockWorker = require("bullmq").Worker;
     let failedHandler: any;
