@@ -47,3 +47,7 @@ ece141cc9e78ba37232e3e083426053fd534b3aa:.bmad/_cfg/files-manifest.csv:generic-a
 
 # Test file mock client_secret for PaymentIntent tests (not a real secret)
 00dbcebe1d10e2303e61108f722ee4e5eb6c3611:apps/storefront/app/routes/api.payment-intent.test.ts:generic-api-key:56
+
+# Test file mock client_secrets for PaymentIntent tests (commit 03ef2e85 - not real secrets)
+03ef2e85fa00bbd2fd3d33240c2005c0d797f672:apps/storefront/app/routes/api.payment-intent.test.ts:generic-api-key:220
+03ef2e85fa00bbd2fd3d33240c2005c0d797f672:apps/storefront/app/routes/api.payment-intent.test.ts:generic-api-key:262
