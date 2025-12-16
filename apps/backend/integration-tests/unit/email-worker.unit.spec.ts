@@ -1,4 +1,4 @@
-import { Job, Worker } from "bullmq";
+// Uses Worker dynamically in mocks
 
 // Mock dependencies
 jest.mock("bullmq", () => {

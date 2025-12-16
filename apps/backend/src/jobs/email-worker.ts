@@ -1,7 +1,7 @@
 import { Worker, Job } from "bullmq";
 import { MedusaContainer } from "@medusajs/framework/types";
 import { getRedisConnection } from "../lib/redis";
-import { getEmailQueue, EmailJobPayload } from "../lib/email-queue";
+import { EmailJobPayload } from "../lib/email-queue";
 import { maskEmail } from "../utils/email-masking";
 // We need a redis client for LPUSH operations
 import Redis from "ioredis";

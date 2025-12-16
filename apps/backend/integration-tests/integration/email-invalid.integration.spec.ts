@@ -1,5 +1,4 @@
-import { startEmailWorker } from "../../src/jobs/email-worker";
-import { Job } from "bullmq";
+// Uses startEmailWorker dynamically for testing mocks
 
 // Functional Mock for Redis List
 const redisList: string[] = [];
@@ -51,7 +50,7 @@ describe("Invalid Email Integration (Simulated)", () => {
 
     // 2. Start worker
     const { startEmailWorker } = require("../../src/jobs/email-worker");
-    const worker = startEmailWorker(mockContainer);
+    startEmailWorker(mockContainer);
     
     // Get processor directly from the mocked constructor call
     const MockWorker = require("bullmq").Worker;

@@ -1,5 +1,4 @@
-import { startEmailWorker } from "../../src/jobs/email-worker";
-import { Job } from "bullmq";
+// Uses startEmailWorker dynamically for testing mocks
 
 // Functional Mock for Redis List
 const redisList: string[] = [];

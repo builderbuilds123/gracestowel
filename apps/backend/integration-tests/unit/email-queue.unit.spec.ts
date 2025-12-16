@@ -1,5 +1,4 @@
 import { getEmailQueue, enqueueEmail, initEmailQueue } from "../../src/lib/email-queue"
-import { Queue } from "bullmq"
 
 // Mock BullMQ
 jest.mock("bullmq", () => {

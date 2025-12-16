@@ -1,7 +1,7 @@
 import { startEmailWorker, shutdownEmailWorker } from "../../src/jobs/email-worker";
 import { getEmailQueue, enqueueEmail } from "../../src/lib/email-queue";
 import orderPlacedHandler from "../../src/subscribers/order-placed";
-import { Queue, Worker } from "bullmq";
+import { Queue } from "bullmq";
 import { getRedisConnection } from "../../src/lib/redis";
 import Redis from "ioredis";
 import { modificationTokenService } from "../../src/services/modification-token";

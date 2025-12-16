@@ -120,8 +120,8 @@ export default async function orderPlacedHandler({
         } else {
             // Enqueue email (non-blocking)
             await enqueueEmail(emailPayload)
+            logger.info(`[EMAIL][QUEUE] Order confirmation queued for ${order.id}`)
         }
-        logger.info(`[EMAIL][QUEUE] Order confirmation queued for ${order.id}`)
     } else {
         logger.error(`[EMAIL][ERROR] Order ${data.id} not found for email`)
     }
