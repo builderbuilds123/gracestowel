@@ -205,6 +205,86 @@ describe('api.payment-intent action', () => {
         expect(data.traceId).toBeDefined();
     });
 
+    it('normalizes uppercase currency codes to lowercase', async () => {
+        // Mock successful stock check
+        fetchSpy.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({
+                variant: { id: 'variant_123', inventory_quantity: 10 }
+            }),
+        });
+
+        // Mock successful Stripe PaymentIntent creation
+        fetchSpy.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ id: 'pi_123', client_secret: 'pi_123_secret_456' }),
+        });
+
+        // Send uppercase currency code
+        const request = new Request('http://localhost:3000/api/payment-intent', {
+            method: 'POST',
+            body: JSON.stringify({
+                amount: 10,
+                currency: 'USD', // Uppercase
+                cartItems: [{
+                    id: 'item_1',
+                    variantId: 'variant_123',
+                    title: 'Test Towel',
+                    price: '20.00',
+                    quantity: 1
+                }]
+            }),
+        });
+
+        const response: any = await action({ request, context: mockContext as any, params: {} });
+        const { data } = await unwrap(response);
+
+        expect(data.clientSecret).toBe('pi_123_secret_456');
+        expect(data.paymentIntentId).toBe('pi_123');
+
+        // Verify Stripe API call received lowercase currency
+        const stripeCall = fetchSpy.mock.calls[1];
+        const body = new URLSearchParams(stripeCall[1].body);
+        expect(body.get('currency')).toBe('usd'); // Should be lowercase
+
+        // Verify idempotency key uses lowercase currency (by checking it's consistent)
+        const idempotencyKey1 = stripeCall[1].headers['Idempotency-Key'];
+
+        // Make another request with lowercase currency - should generate same idempotency key
+        fetchSpy.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({
+                variant: { id: 'variant_123', inventory_quantity: 10 }
+            }),
+        });
+        fetchSpy.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ id: 'pi_123', client_secret: 'pi_123_secret_456' }),
+        });
+
+        const request2 = new Request('http://localhost:3000/api/payment-intent', {
+            method: 'POST',
+            body: JSON.stringify({
+                amount: 10,
+                currency: 'usd', // Lowercase
+                cartItems: [{
+                    id: 'item_1',
+                    variantId: 'variant_123',
+                    title: 'Test Towel',
+                    price: '20.00',
+                    quantity: 1
+                }]
+            }),
+        });
+
+        await action({ request: request2, context: mockContext as any, params: {} });
+        const stripeCall2 = fetchSpy.mock.calls[3];
+        const idempotencyKey2 = stripeCall2[1].headers['Idempotency-Key'];
+
+        // Idempotency keys should be the same (within same 5-minute bucket)
+        expect(idempotencyKey1).toBe(idempotencyKey2);
+    });
+
     it('returns detailed error info when Stripe API fails', async () => {
         // Mock successful stock check
         fetchSpy.mockResolvedValueOnce({

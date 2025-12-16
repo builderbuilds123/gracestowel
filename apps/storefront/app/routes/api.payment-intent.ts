@@ -295,7 +295,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
     if (!isUpdate) {
       headers["Idempotency-Key"] = generateIdempotencyKey(
         totalAmount,
-        currency || "usd",
+        validatedCurrency,
         cartItems,
         customerId
       );
@@ -306,7 +306,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
     // These params only on CREATE
     if (!isUpdate) {
-      body.append("currency", currency || "usd");
+      body.append("currency", validatedCurrency);
       body.append("automatic_payment_methods[enabled]", "true");
       body.append("capture_method", "manual");
       body.append(
@@ -361,7 +361,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
       operation: isUpdate ? "update" : "create",
       paymentIntentId,
       amount: totalAmount,
-      currency: currency || "usd",
+      currency: validatedCurrency,
       amountInCents: toCents(totalAmount),
       hasCartItems: !!cartItems?.length,
       cartItemCount: cartItems?.length,
@@ -399,7 +399,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
         stripeErrorMessage: stripeError?.error?.message,
         stripeErrorParam: stripeError?.error?.param,
         requestAmount: totalAmount,
-        requestCurrency: currency || "usd",
+        requestCurrency: validatedCurrency,
         requestAmountInCents: toCents(totalAmount),
       });
       
