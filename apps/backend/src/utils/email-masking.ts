@@ -26,7 +26,8 @@ export function maskEmail(email: string | null | undefined): string {
 
   // Basic email validation
   const atIndex = trimmed.indexOf("@")
-  if (atIndex === -1 || atIndex === 0) {
+  const lastAtIndex = trimmed.lastIndexOf("@")
+  if (atIndex === -1 || atIndex === 0 || atIndex !== lastAtIndex) {
     return "[invalid-email]"
   }
 

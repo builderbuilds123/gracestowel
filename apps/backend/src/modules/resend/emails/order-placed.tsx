@@ -1,4 +1,3 @@
-// @ts-nocheck - React types version mismatch with @react-email/components
 import * as React from "react"
 import {
   Body,
@@ -87,14 +86,20 @@ export const OrderPlacedEmailComponent = ({ order, modification_token }: OrderPl
             Thank you for your order! We're preparing your premium towels with care.
           </Text>
 
-          {modifyOrderUrl && (
+          {modifyOrderUrl ? (
             <Section style={modifyOrderSection}>
               <Text style={modifyOrderText}>
                 Changed your mind? You have 1 hour to modify your order.
               </Text>
               <Link href={modifyOrderUrl} style={modifyOrderLink}>
-                Modify Order
+                Modify Your Order
               </Link>
+            </Section>
+          ) : (
+            <Section style={registeredUserSection}>
+              <Text style={paragraph}>
+                Log in to your account to view and manage your order.
+              </Text>
             </Section>
           )}
           
@@ -211,8 +216,9 @@ const footerSmall = { color: "#999999", fontSize: "12px", textAlign: "center" as
 const modifyOrderSection = { backgroundColor: "#e8f4fd", padding: "16px 20px", borderRadius: "8px", margin: "20px 0", textAlign: "center" as const, border: "1px solid #b8daef" }
 const modifyOrderText = { color: "#1a5276", fontSize: "14px", margin: "0 0 12px" }
 const modifyOrderLink = { backgroundColor: "#2980b9", color: "#ffffff", padding: "10px 24px", borderRadius: "6px", fontSize: "14px", fontWeight: "600", textDecoration: "none", display: "inline-block" }
+const registeredUserSection = { marginTop: "20px", marginBottom: "20px" }
 
-export const orderPlacedEmail = (props: unknown) => {
-  return <OrderPlacedEmailComponent {...(props as OrderPlacedEmailProps)} />
+export const orderPlacedEmail = (props: OrderPlacedEmailProps) => {
+  return <OrderPlacedEmailComponent {...props} />
 }
 

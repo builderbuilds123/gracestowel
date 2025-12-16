@@ -264,7 +264,11 @@ development_status:
     changes:
       - id: change-1-payment-intent-lifecycle
         status: done
-        files: ["apps/storefront/app/routes/api.payment-intent.ts", "apps/storefront/app/routes/checkout.tsx"]
+        files:
+          [
+            "apps/storefront/app/routes/api.payment-intent.ts",
+            "apps/storefront/app/routes/checkout.tsx",
+          ]
         description: "Create once, update on changes pattern with server-side idempotency"
       - id: change-2-structured-logging
         status: done
@@ -329,27 +333,29 @@ development_status:
   email-3-3-update-order-confirmation-template:
     path: docs/sprint/sprint-artifacts/email-3-3-update-order-confirmation-template.md
     status: done
-    meta: "DONE - order-placed.tsx already has modification_token prop and Modify Order button"
-    completed: "2025-12-14"
-    note: "Template is correct, no changes needed for BullMQ migration"
+    meta: "Review Complete: Added missing unit tests, fixed AC (registered user message), updated text to match AC."
+    completed: "2025-12-15"
   email-3-4-e2e-order-confirmation-flow:
     path: docs/sprint/sprint-artifacts/email-3-4-e2e-order-confirmation-flow.md
-    status: ready-for-dev
-    meta: "Integration tests for complete BullMQ email flow"
+    status: done
+    meta: "Code Review: Comprehensive test coverage already exists across 7 test files covering all ACs"
+    completed: "2025-12-15"
   email-epic-3-retrospective: optional
 
   email-epic-4: ready-for-dev
   email-4-1-create-pii-masking-utility:
     path: docs/sprint/sprint-artifacts/email-4-1-create-pii-masking-utility.md
-    status: ready-for-dev
-    meta: "Extract maskEmail() from guest-view/route.ts to utils/email-masking.ts"
-    source: "apps/backend/src/api/store/orders/[id]/guest-view/route.ts lines 120-135"
+    status: done
+    meta: "Code Review: Implementation and tests verified complete (9 tests passing)"
+    completed: "2025-12-16"
   email-4-2-add-structured-logging:
     path: docs/sprint/sprint-artifacts/email-4-2-add-structured-logging.md
-    status: ready-for-dev
-    meta: "[EMAIL] namespace logging throughout queue and worker"
+    status: done
+    meta: "Code Review: All 5 ACs verified - [EMAIL][QUEUE/PROCESS/SENT/FAILED/DLQ] logs with [METRIC]"
+    completed: "2025-12-16"
   email-4-3-add-failure-alerting:
     path: docs/sprint/sprint-artifacts/email-4-3-add-failure-alerting.md
-    status: ready-for-dev
-    meta: "[EMAIL][ALERT] logs for DLQ entries"
+    status: done
+    meta: "Code Review: All 4 ACs verified - [EMAIL][ALERT] with parseable key=value format"
+    completed: "2025-12-16"
   email-epic-4-retrospective: optional

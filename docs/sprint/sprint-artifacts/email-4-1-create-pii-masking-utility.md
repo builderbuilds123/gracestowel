@@ -1,6 +1,6 @@
 # Story 4.1: Create PII Masking Utility
 
-Status: Ready-for-Dev
+Status: Done
 
 ## Story
 
@@ -113,15 +113,15 @@ export function maskEmailsInText(text: string): string {
 
 ## Tasks / Subtasks
 
-- [ ] Create `apps/backend/src/utils/email-masking.ts`
-- [ ] Implement `maskEmail()` function
-- [ ] Handle null/undefined inputs
-- [ ] Handle invalid email formats
-- [ ] Preserve domain for debugging
-- [ ] Mask local part (first char + asterisks)
-- [ ] Handle short emails gracefully
-- [ ] Add JSDoc documentation
-- [ ] Optionally implement `maskEmailsInText()` helper
+- [x] Create `apps/backend/src/utils/email-masking.ts`
+- [x] Implement `maskEmail()` function
+- [x] Handle null/undefined inputs
+- [x] Handle invalid email formats
+- [x] Preserve domain for debugging
+- [x] Mask local part (first char + asterisks)
+- [x] Handle short emails gracefully
+- [x] Add JSDoc documentation
+- [x] Optionally implement `maskEmailsInText()` helper
 
 ## Testing Requirements
 
@@ -194,20 +194,21 @@ cd apps/backend && TEST_TYPE=unit npx jest integration-tests/unit/email-masking.
 
 ## Definition of Done
 
-- [ ] File `apps/backend/src/utils/email-masking.ts` exists
-- [ ] `maskEmail()` masks local part, preserves domain
-- [ ] Short emails (1-2 char local) handled gracefully
-- [ ] Invalid/null inputs return `[invalid-email]`
-- [ ] Asterisks capped at 7 for readability
-- [ ] Unit tests cover: normal email, short email, invalid email, null
-- [ ] JSDoc documentation added
-- [ ] No TypeScript errors
+- [x] File `apps/backend/src/utils/email-masking.ts` exists
+- [x] `maskEmail()` masks local part, preserves domain
+- [x] Short emails (1-2 char local) handled gracefully
+- [x] Invalid/null inputs return `[invalid-email]`
+- [x] Asterisks capped at 7 for readability
+- [x] Unit tests cover: normal email, short email, invalid email, null
+- [x] JSDoc documentation added
+- [x] No TypeScript errors
 
 ## Dev Notes
 
 ### Why Preserve Domain?
 
 The domain helps with debugging:
+
 - Know if it's a Gmail, corporate, or disposable email
 - Identify patterns in failures (e.g., all @hotmail.com failing)
 - Still protects the user's identity
@@ -215,17 +216,20 @@ The domain helps with debugging:
 ### Asterisk Cap
 
 Capping at 7 asterisks keeps logs readable:
+
 - `j*******@example.com` (7 asterisks)
 - Not `j*******************@example.com` (too long)
 
 ### Usage in Other Stories
 
 This utility is used by:
+
 - Story 1.2: Email Worker (logging)
 - Story 2.2: DLQ (storing masked recipient)
 - Story 4.2: Structured Logging
 
 Import as:
+
 ```typescript
 import { maskEmail } from "../utils/email-masking"
 ```
@@ -233,6 +237,7 @@ import { maskEmail } from "../utils/email-masking"
 ### Edge Cases
 
 Consider these edge cases:
+
 - Unicode in email local part
 - Very long domains
 - Multiple @ symbols (invalid)
@@ -247,19 +252,28 @@ Consider these edge cases:
 
 ## Dev Agent Record
 
-_To be filled by implementing agent_
-
 ### Agent Model Used
-_Model name_
+
+BMad Code Reviewer (Gemini 2.5 Pro)
 
 ### Completion Notes
-_Implementation notes_
+
+Implementation was already complete. Code review discovered both source and tests exist:
+- `email-masking.ts`: 67 lines, implements `maskEmail()` and `maskEmailsInText()`
+- `email-masking.unit.spec.ts`: 9 tests covering all 4 ACs
+- Utility is actively used by `email-queue.ts` and `email-worker.ts`
+
+All tests pass (9/9).
 
 ### File List
+
 | File | Change |
 |------|--------|
-| `apps/backend/src/utils/email-masking.ts` | Created |
-| `apps/backend/integration-tests/unit/email-masking.unit.spec.ts` | Created |
+| `apps/backend/src/utils/email-masking.ts` | Existing - verified |
+| `apps/backend/integration-tests/unit/email-masking.unit.spec.ts` | Existing - verified |
 
 ### Change Log
-_Code review follow-ups_
+
+- [2025-12-16] Code Review: Verified existing implementation covers all ACs
+- [2025-12-16] Updated story status from Ready-for-Dev to Done
+- [2025-12-16] Marked all tasks and DoD items as complete

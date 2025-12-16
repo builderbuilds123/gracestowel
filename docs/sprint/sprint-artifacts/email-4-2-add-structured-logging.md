@@ -1,6 +1,6 @@
 # Story 4.2: Add Structured Logging Throughout Email Flow
 
-Status: Ready-for-Dev
+Status: Done
 
 ## Story
 
@@ -99,13 +99,13 @@ Metrics use key=value format for easy parsing:
 
 ## Tasks / Subtasks
 
-- [ ] Update `email-queue.ts` with queue logging
-- [ ] Update `email-worker.ts` with processing/success/failure logging
-- [ ] Update DLQ handler with DLQ logging
-- [ ] Add metric logs for all events
-- [ ] Ensure all email addresses use `maskEmail()`
-- [ ] Use correct log levels (info vs error)
-- [ ] Verify logs appear in console/log files
+- [x] Update `email-queue.ts` with queue logging
+- [x] Update `email-worker.ts` with processing/success/failure logging
+- [x] Update DLQ handler with DLQ logging
+- [x] Add metric logs for all events
+- [x] Ensure all email addresses use `maskEmail()`
+- [x] Use correct log levels (info vs error)
+- [x] Verify logs appear in console/log files
 
 ## Testing Requirements
 
@@ -147,15 +147,15 @@ cd apps/backend && TEST_TYPE=unit npx jest --grep "logging"
 
 ## Definition of Done
 
-- [ ] Queue enqueue logged with `[EMAIL][QUEUE]`
-- [ ] Worker processing logged with `[EMAIL][PROCESS]`
-- [ ] Success logged with `[EMAIL][SENT]` and `[METRIC]`
-- [ ] Failure logged with `[EMAIL][FAILED]` and `[METRIC]`
-- [ ] DLQ logged with `[EMAIL][DLQ]` and `[METRIC]`
-- [ ] All email addresses masked in logs
-- [ ] Logs include orderId, template, attempt count where relevant
-- [ ] Metric logs use key=value format
-- [ ] No TypeScript errors
+- [x] Queue enqueue logged with `[EMAIL][QUEUE]`
+- [x] Worker processing logged with `[EMAIL][PROCESS]`
+- [x] Success logged with `[EMAIL][SENT]` and `[METRIC]`
+- [x] Failure logged with `[EMAIL][FAILED]` and `[METRIC]`
+- [x] DLQ logged with `[EMAIL][DLQ]` and `[METRIC]`
+- [x] All email addresses masked in logs
+- [x] Logs include orderId, template, attempt count where relevant
+- [x] Metric logs use key=value format
+- [x] No TypeScript errors
 
 ## Dev Notes
 
@@ -210,19 +210,34 @@ logger.info(`Sent to ${maskEmail(recipient)}`)
 
 ## Dev Agent Record
 
-_To be filled by implementing agent_
-
 ### Agent Model Used
-_Model name_
+
+BMad Code Reviewer (Gemini 2.5 Pro)
 
 ### Completion Notes
-_Implementation notes_
+
+Implementation was already complete. Code review verified comprehensive structured logging:
+
+- `email-queue.ts:72` - `[EMAIL][QUEUE]` log with masked email
+- `email-worker.ts:122-124` - `[EMAIL][RETRY]` and `[EMAIL][PROCESS]` logs
+- `email-worker.ts:134-135` - `[EMAIL][SENT]` + `[METRIC] email_sent`
+- `email-worker.ts:144-145` - `[EMAIL][FAILED]` + `[METRIC] email_failed`
+- `email-worker.ts:85-86,178,190` - `[EMAIL][DLQ]` + `[METRIC] email_dlq`
+
+Bonus: Also implements `[EMAIL][ALERT]` logging (Story 4.3 scope).
+
+Tests in `email-worker.unit.spec.ts` verify key log patterns (12 relevant tests).
 
 ### File List
+
 | File | Change |
 |------|--------|
-| `apps/backend/src/lib/email-queue.ts` | Modified - added logging |
-| `apps/backend/src/jobs/email-worker.ts` | Modified - added logging |
+| `apps/backend/src/lib/email-queue.ts` | Existing - verified logging at line 72 |
+| `apps/backend/src/jobs/email-worker.ts` | Existing - verified logging throughout |
+| `apps/backend/integration-tests/unit/email-worker.unit.spec.ts` | Existing - tests verify log patterns |
 
 ### Change Log
-_Code review follow-ups_
+
+- [2025-12-16] Code Review: Verified all 5 ACs implemented with tests
+- [2025-12-16] Updated story status from Ready-for-Dev to Done
+- [2025-12-16] Marked all tasks and DoD items as complete
