@@ -55,12 +55,13 @@ async function moveToDLQDirectly(
 ) {
   const { orderId, template, recipient } = job.data;
 
+  const errorMessage = error.message || "unknown_error";
   const dlqEntry = {
     jobId: job.id,
     orderId,
     template,
     recipient: maskEmail(recipient),
-    error: `Invalid email address: ${maskEmail(recipient)} - ${error.message}`,
+    error: `Invalid email address: ${maskEmail(recipient)} - ${errorMessage}`,
     failedAt: new Date().toISOString(),
     attempts: job.attemptsMade + 1,
     reason: "invalid_email",
@@ -71,11 +72,12 @@ async function moveToDLQDirectly(
     logger.warn(`[EMAIL][INVALID] Invalid email address for order ${orderId}, moved to DLQ`);
 
     const timestamp = new Date().toISOString();
+    const sanitizedError = errorMessage.replace(/\|/g, "-").replace(/\s/g, "_");
     logger.error(
         `[EMAIL][ALERT] Email delivery failed | ` +
         `order=${orderId} ` +
         `template=${template} ` +
-        `error=Invalid_email_${error.message.replace(/\|/g, "-").replace(/\s/g, "_")} ` +
+        `error=Invalid_email_${sanitizedError} ` +
         `attempts=${job.attemptsMade + 1} ` +
         `timestamp=${timestamp}`
     );
@@ -85,6 +87,8 @@ async function moveToDLQDirectly(
     logger.info(`[METRIC] email_alert order=${orderId} template=${template}`);
   } catch (dlqError: any) {
     logger.error(`[EMAIL][DLQ_ERROR] Failed to store job ${job.id} in DLQ: ${dlqError.message}`);
+    // Re-throw to prevent silent data loss - BullMQ will retry the job
+    throw new Error(`Failed to store invalid email in DLQ: ${dlqError.message}`);
   }
 }
 
@@ -194,4 +198,19 @@ export function startEmailWorker(container: MedusaContainer): Worker {
   console.log("[EMAIL] Email worker started");
 
   return emailWorker;
+}
+
+/**
+ * Shuts down the email worker and closes the DLQ Redis connection.
+ * Essential for testing to prevent open handles.
+ */
+export async function shutdownEmailWorker() {
+  if (emailWorker) {
+    await emailWorker.close();
+    emailWorker = null;
+  }
+  if (dlqRedis) {
+    await dlqRedis.quit();
+    dlqRedis = null;
+  }
 }

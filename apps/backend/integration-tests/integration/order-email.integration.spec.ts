@@ -1,9 +1,11 @@
-import { startEmailWorker } from "../../src/jobs/email-worker";
+import { startEmailWorker, shutdownEmailWorker } from "../../src/jobs/email-worker";
 import { getEmailQueue, enqueueEmail } from "../../src/lib/email-queue";
+import orderPlacedHandler from "../../src/subscribers/order-placed";
 import { Queue, Worker } from "bullmq";
 import { getRedisConnection } from "../../src/lib/redis";
 import Redis from "ioredis";
 import { modificationTokenService } from "../../src/services/modification-token";
+import { shutdownPaymentCaptureQueue } from "../../src/lib/payment-capture-queue";
 
 // NOTE: This test requires a running Redis instance
 // Assuming we are in an environment where REDIS_URL points to a valid Redis
@@ -12,9 +14,12 @@ describe("End-to-End Email Flow Integration", () => {
   let container: any;
   let resendService: any;
   let logger: any;
-  let worker: Worker;
+  // let worker: Worker; // Managed by email-worker module
   let queue: Queue;
   let redisClient: Redis;
+  let mockQuery: any;
+  let mockOrderService: any;
+  let mockModificationTokenService: any;
 
   beforeAll(async () => {
     // Check if we can connect to redis
@@ -42,20 +47,36 @@ describe("End-to-End Email Flow Integration", () => {
       send: jest.fn().mockResolvedValue({ id: "sent_e2e" }),
     };
 
+    mockQuery = {
+      graph: jest.fn()
+    };
+    
+    mockOrderService = {
+      updateOrders: jest.fn()
+    };
+    
+    mockModificationTokenService = {
+       generateToken: jest.fn().mockReturnValue("mock_token_integ")
+    };
+
     container = {
       resolve: (key: string) => {
         if (key === "logger") return logger;
         if (key === "resendNotificationProviderService") return resendService;
+        if (key === "query") return mockQuery;
+        if (key === "order") return mockOrderService;
+        if (key === "modificationTokenService") return mockModificationTokenService;
         return null;
       },
     };
 
     // Start worker
-    worker = startEmailWorker(container);
+    startEmailWorker(container);
   });
 
   afterAll(async () => {
-    if (worker) await worker.close();
+    await shutdownEmailWorker();
+    await shutdownPaymentCaptureQueue();
     if (queue) await queue.close();
     if (redisClient) await redisClient.quit();
   });
@@ -66,6 +87,55 @@ describe("End-to-End Email Flow Integration", () => {
         await redisClient.del("email:dlq");
         await queue.drain();
     }
+  });
+
+  describe("Subscriber to Worker Wiring", () => {
+    it("should process email when orderPlacedHandler is called", async () => {
+        if (!redisClient) return;
+
+        const orderId = `sub-test-${Date.now()}`;
+        
+        // Mock Query response for the order
+        mockQuery.graph.mockResolvedValue({
+            data: [{
+                id: orderId,
+                display_id: "9000",
+                email: "integrated@example.com",
+                currency_code: "usd",
+                total: 9900,
+                customer_id: "cust_1",
+                created_at: new Date(),
+                items: [{ title: "Integration Item", quantity: 1, unit_price: 9900 }],
+                payment_collections: [{ payments: [{ data: { id: "pi_real" } }] }],
+                metadata: { stripe_payment_intent_id: "pi_real" }
+            }]
+        });
+
+        // Invoke the subscriber manually (simulating EventBus)
+        await orderPlacedHandler({ 
+            event: { data: { id: orderId } }, 
+            container 
+        } as any);
+
+        // Wait for worker to process
+        await new Promise(r => setTimeout(r, 2000));
+
+        // Verify Resend was called
+        expect(resendService.send).toHaveBeenCalledWith(
+            expect.objectContaining({
+                to: "integrated@example.com",
+                template: "order_confirmation",
+                data: expect.objectContaining({
+                    orderNumber: "9000"
+                })
+            })
+        );
+
+        // Verify logger confirms queueing
+        expect(logger.info).toHaveBeenCalledWith(
+            expect.stringContaining("[EMAIL][QUEUE]")
+        );
+    });
   });
 
   describe("Guest Order Flow", () => {

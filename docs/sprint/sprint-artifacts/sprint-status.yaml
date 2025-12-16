@@ -285,47 +285,47 @@ development_status:
   # Existing Medusa Workflow implementation must be REPLACED with BullMQ.
   # See: docs/sprint/agent-prompt-transactional-email.md for migration details.
 
-  email-epic-1: ready-for-dev
+  email-epic-1: in-progress
   email-1-1-create-email-queue-service:
     path: docs/sprint/sprint-artifacts/email-1-1-create-email-queue-service.md
-    status: ready-for-dev
+    status: done
     meta: "Create BullMQ queue singleton + enqueueEmail() function"
   email-1-2-create-email-worker:
     path: docs/sprint/sprint-artifacts/email-1-2-create-email-worker.md
-    status: ready-for-dev
+    status: done
     meta: "Create BullMQ worker that processes email jobs via Resend"
   email-1-3-verify-non-blocking-behavior:
     path: docs/sprint/sprint-artifacts/email-1-3-verify-non-blocking-behavior.md
-    status: ready-for-dev
+    status: done
     meta: "Ensure email failures never block order flows"
   email-epic-1-retrospective: optional
 
   email-epic-2: ready-for-dev
   email-2-1-implement-exponential-backoff-retry:
     path: docs/sprint/sprint-artifacts/email-2-1-implement-exponential-backoff-retry.md
-    status: ready-for-dev
+    status: done
     meta: "3x retry with 1s, 2s, 4s exponential backoff delays"
   email-2-2-implement-dead-letter-queue:
     path: docs/sprint/sprint-artifacts/email-2-2-implement-dead-letter-queue.md
-    status: ready-for-dev
+    status: done
     meta: "Redis list email:dlq for failed emails after all retries"
   email-2-3-handle-invalid-email-addresses:
     path: docs/sprint/sprint-artifacts/email-2-3-handle-invalid-email-addresses.md
-    status: ready-for-dev
+    status: done
     meta: "Skip retry for invalid emails, go directly to DLQ"
   email-epic-2-retrospective: optional
 
   email-epic-3: ready-for-dev
   email-3-1-wire-order-placed-subscriber:
     path: docs/sprint/sprint-artifacts/email-3-1-wire-order-placed-subscriber.md
-    status: ready-for-dev
+    status: done
     meta: "REFACTOR REQUIRED - Replace sendOrderConfirmationWorkflow with enqueueEmail()"
     migration_note: "Existing workflow implementation must be replaced with BullMQ queue call"
   email-3-2-generate-magic-link-for-guests:
     path: docs/sprint/sprint-artifacts/email-3-2-generate-magic-link-for-guests.md
-    status: ready-for-dev
-    meta: "REFACTOR REQUIRED - Integrate magic link generation with BullMQ queue"
-    migration_note: "ModificationTokenService exists and works - integrate with new queue approach"
+    status: done
+    meta: "Integrated magic link generation with BullMQ queue - Refactor complete"
+    migration_note: "ModificationTokenService integrated with new queue approach"
   email-3-3-update-order-confirmation-template:
     path: docs/sprint/sprint-artifacts/email-3-3-update-order-confirmation-template.md
     status: done

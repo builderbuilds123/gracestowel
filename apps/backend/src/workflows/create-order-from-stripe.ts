@@ -64,15 +64,43 @@ const prepareOrderDataStep = createStep(
         console.log("[create-order-from-stripe] Using region", { id: region.id, name: region.name, currency_code: region.currency_code });
 
         // Transform cart items to order line items
-        const items = cartData.items.map((item) => ({
-            variant_id: item.variantId || undefined,
-            title: item.title,
-            quantity: item.quantity,
-            unit_price: parseFloat(item.price.replace("$", "")) * 100, // Convert to cents
-            metadata: {
-                color: item.color,
-                sku: item.sku,
-            },
+        // If variantId is missing, try to look it up from the product
+        const query = container.resolve("query");
+        const items = await Promise.all(cartData.items.map(async (item) => {
+            let variantId = item.variantId;
+
+            // If no variantId, try to find it by SKU or product title
+            if (!variantId && item.sku) {
+                try {
+                    const { data: variants } = await query.graph({
+                        entity: "product_variant",
+                        fields: ["id", "sku"],
+                        filters: { sku: item.sku },
+                    });
+                    if (variants.length > 0) {
+                        variantId = variants[0].id;
+                        console.log(`[create-order-from-stripe] Resolved variantId from SKU: ${item.sku} -> ${variantId}`);
+                    }
+                } catch (e) {
+                    console.warn(`[create-order-from-stripe] Failed to lookup variant by SKU: ${item.sku}`, e);
+                }
+            }
+
+            // If still no variantId, log warning but continue (order will have custom line item)
+            if (!variantId) {
+                console.warn(`[create-order-from-stripe] No variantId for item: ${item.title}. Order will have custom line item.`);
+            }
+
+            return {
+                variant_id: variantId || undefined,
+                title: item.title,
+                quantity: item.quantity,
+                unit_price: parseFloat(item.price.replace("$", "")) * 100, // Convert to cents
+                metadata: {
+                    color: item.color,
+                    sku: item.sku,
+                },
+            };
         }));
 
         console.log("[create-order-from-stripe] Prepared items", items);

@@ -46,7 +46,6 @@ export default async function orderPlacedHandler({
           "items.unit_price",
           "items.variant.title",
           "items.variant.product.title",
-          "items.variant.product.thumbnail",
           "payment_collections.payments.data"
         ],
         filters: { id: data.id },
@@ -77,8 +76,12 @@ export default async function orderPlacedHandler({
                         new Date(order.created_at)
                       );
 
-                      const storefrontUrl = process.env.STOREFRONT_URL || "http://localhost:5173";
-                      magicLink = `${storefrontUrl}/order/status/${order.id}?token=${token}`;
+                      const storefrontUrl = process.env.STOREFRONT_URL;
+                      if (!storefrontUrl) {
+                        logger.warn(`[EMAIL][WARN] STOREFRONT_URL not set - using localhost default for magic link`);
+                      }
+                      const baseUrl = storefrontUrl || "http://localhost:5173";
+                      magicLink = `${baseUrl}/order/status/${order.id}?token=${token}`;
 
                       logger.info(`[EMAIL] Magic link generated for guest order ${order.id}`);
                 } else {
@@ -86,7 +89,9 @@ export default async function orderPlacedHandler({
                 }
             } catch (error: any) {
                 // Log warning but continue - email will be sent without magic link
-                logger.warn(`[EMAIL][WARN] Failed to generate magic link for order ${order.id}: ${error.message}`);
+                // Sanitize error message to avoid PII leak
+                const safeErrorMessage = error.message ? error.message.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, '***') : 'Unknown error';
+                logger.warn(`[EMAIL][WARN] Failed to generate magic link for order ${order.id}: ${safeErrorMessage}`);
             }
         }
 

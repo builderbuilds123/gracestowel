@@ -1,7 +1,4 @@
-import { startEmailWorker, isRetryableError } from "../../src/jobs/email-worker";
 import { Job, Worker } from "bullmq";
-import { getRedisConnection } from "../../src/lib/redis";
-import { maskEmail } from "../../src/utils/email-masking";
 
 // Mock dependencies
 jest.mock("bullmq", () => {
@@ -67,7 +64,107 @@ describe("Email Worker", () => {
      jest.resetModules();
   });
 
-  describe("Failure Alerting", () => {
+  describe("Core Functionality (Story 1.2)", () => {
+    it("processes job and calls Resend service", async () => {
+      const { startEmailWorker } = require("../../src/jobs/email-worker");
+      const worker = startEmailWorker(mockContainer) as any;
+      const processor = worker.processor;
+
+      const mockJob = {
+        data: {
+          orderId: "ord_123",
+          template: "order_confirmation",
+          recipient: "test@example.com",
+          data: { foo: "bar" }
+        },
+        attemptsMade: 0,
+        id: "job_1",
+      };
+
+      await processor(mockJob);
+
+      expect(mockResendService.send).toHaveBeenCalledWith({
+        to: "test@example.com",
+        template: "order_confirmation",
+        data: { foo: "bar" },
+      });
+    });
+
+    it("logs success with masked email", async () => {
+      const { startEmailWorker } = require("../../src/jobs/email-worker");
+      const worker = startEmailWorker(mockContainer) as any;
+      const processor = worker.processor;
+
+      const mockJob = {
+        data: {
+          orderId: "ord_success",
+          template: "order_confirmation",
+          recipient: "test@example.com",
+          data: {}
+        },
+        attemptsMade: 0,
+        id: "job_success",
+      };
+
+      await processor(mockJob);
+
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.stringContaining("[EMAIL][SENT] Sent order_confirmation to m***@test.com for order ord_success")
+      );
+    });
+
+    it("logs failure and throws on Resend error", async () => {
+      const { startEmailWorker } = require("../../src/jobs/email-worker");
+      const worker = startEmailWorker(mockContainer) as any;
+      const processor = worker.processor;
+
+      mockResendService.send.mockRejectedValue(new Error("Resend Error"));
+
+      const mockJob = {
+        data: {
+          orderId: "ord_fail",
+          template: "order_confirmation",
+          recipient: "test@example.com",
+          data: {}
+        },
+        attemptsMade: 0,
+        id: "job_fail",
+      };
+
+      await expect(processor(mockJob)).rejects.toThrow("Resend Error");
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining("[EMAIL][FAILED] Failed order_confirmation for order ord_fail")
+      );
+    });
+  });
+
+  describe("Retry Logic (Story 2.1)", () => {
+    it("logs retry attempt when attemptsMade > 0", async () => {
+      const { startEmailWorker } = require("../../src/jobs/email-worker");
+      const worker = startEmailWorker(mockContainer) as any;
+      const processor = worker.processor;
+
+      const mockJob = {
+        data: {
+          orderId: "ord_retry",
+          template: "order_confirmation",
+          recipient: "test@example.com",
+          data: {}
+        },
+        attemptsMade: 1, // Second attempt
+        id: "job_retry",
+      };
+
+      await processor(mockJob);
+
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.stringContaining("[EMAIL][RETRY] Attempt 2/3 for order ord_retry")
+      );
+    });
+  });
+
+  describe("Failure Alerting (Story 4.3)", () => {
       it("logs alert when job moves to DLQ via 'failed' event", async () => {
         const { startEmailWorker } = require("../../src/jobs/email-worker");
         const worker = startEmailWorker(mockContainer) as any;
@@ -159,5 +256,93 @@ describe("Email Worker", () => {
             expect.stringContaining("error=Invalid_email")
         );
       });
+  });
+
+  describe("DLQ Storage (Story 2.2)", () => {
+    it("stores correct DLQ entry format with masked email", async () => {
+      const { startEmailWorker } = require("../../src/jobs/email-worker");
+      const worker = startEmailWorker(mockContainer) as any;
+      const failedHandler = worker.callbacks['failed'];
+
+      const mockJob = {
+        id: "job_dlq_test",
+        data: {
+          orderId: "ord_dlq_1",
+          template: "order_confirmation",
+          recipient: "unmasked@test.com",
+        },
+        attemptsMade: 3,
+      };
+      const mockError = new Error("Final Failure");
+
+      await failedHandler(mockJob, mockError);
+
+      expect(mockLpush).toHaveBeenCalledWith(
+        "email:dlq",
+        expect.stringContaining("jobId") // Basic check
+      );
+
+      const dlqEntryString = mockLpush.mock.calls[0][1];
+      const dlqEntry = JSON.parse(dlqEntryString);
+
+      expect(dlqEntry).toMatchObject({
+        jobId: "job_dlq_test",
+        orderId: "ord_dlq_1",
+        template: "order_confirmation",
+        recipient: "m***@test.com", // Checked by mock implementation
+        error: "Final Failure",
+        attempts: 3,
+      });
+      expect(dlqEntry.failedAt).toBeDefined();
+    });
+  });
+
+  describe("Invalid Email Handling (Story 2.3)", () => {
+    it("isRetryableError returns false for 400 status", () => {
+      const { isRetryableError } = require("../../src/jobs/email-worker");
+      expect(isRetryableError({ statusCode: 400 })).toBe(false);
+      expect(isRetryableError({ status: 400 })).toBe(false);
+      expect(isRetryableError({ response: { status: 400 } })).toBe(false);
+    });
+
+    it("isRetryableError returns false for specific error messages", () => {
+      const { isRetryableError } = require("../../src/jobs/email-worker");
+      expect(isRetryableError({ message: "Some invalid email error" })).toBe(false);
+      expect(isRetryableError({ message: "Email address is not valid" })).toBe(false);
+    });
+
+    it("isRetryableError returns true for 500/429/Network", () => {
+      const { isRetryableError } = require("../../src/jobs/email-worker");
+      expect(isRetryableError({ statusCode: 500 })).toBe(true);
+      expect(isRetryableError({ statusCode: 429 })).toBe(true);
+      expect(isRetryableError({ message: "Network timeout" })).toBe(true);
+    });
+
+    it("moves invalid email directly to DLQ without throwing", async () => {
+      const { startEmailWorker } = require("../../src/jobs/email-worker");
+      const worker = startEmailWorker(mockContainer) as any;
+      const processor = worker.processor;
+
+      mockResendService.send.mockRejectedValue({ statusCode: 400, message: "Invalid email" });
+
+      const mockJob = {
+        data: {
+          orderId: "ord_inv_1",
+          template: "order_confirmation",
+          recipient: "invalid@test.com",
+        },
+        attemptsMade: 0,
+        id: "job_inv_1",
+      };
+
+      // Should resolve (not throw)
+      await expect(processor(mockJob)).resolves.toBeUndefined();
+
+      // Check DLQ storage
+      expect(mockLpush).toHaveBeenCalledWith(
+        "email:dlq",
+        expect.stringContaining('"reason":"invalid_email"')
+      );
+    });
   });
 });

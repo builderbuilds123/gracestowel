@@ -18,9 +18,12 @@ describe("Order Placed Subscriber", () => {
   let mockLogger: any;
   let mockQuery: any;
   let mockModificationTokenService: any;
+  const originalEnv = process.env;
 
   beforeEach(() => {
     jest.clearAllMocks();
+    process.env = { ...originalEnv };
+    process.env.STOREFRONT_URL = "http://test-store.com";
 
     mockLogger = {
       info: jest.fn(),
@@ -42,6 +45,10 @@ describe("Order Placed Subscriber", () => {
     };
   });
 
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
   const createQueryMock = (orderData: any) => {
     mockQuery = {
       graph: jest.fn().mockResolvedValue({
@@ -50,7 +57,7 @@ describe("Order Placed Subscriber", () => {
     };
   };
 
-  it("generates magic link for guest orders", async () => {
+  it("generates magic link for guest orders with valid payment intent", async () => {
     const guestOrder = {
       id: "order_guest_1",
       display_id: "1001",
@@ -80,7 +87,7 @@ describe("Order Placed Subscriber", () => {
     expect(enqueueEmail).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
-          magicLink: expect.stringContaining("/order/status/order_guest_1?token=mock_token_123"),
+          magicLink: expect.stringContaining("http://test-store.com/order/status/order_guest_1?token=mock_token_123"),
           isGuest: true
         })
       })
@@ -120,7 +127,7 @@ describe("Order Placed Subscriber", () => {
     );
   });
 
-  it("handles magic link generation failure gracefully", async () => {
+  it("handles magic link generation failure gracefully and sanitizes PII", async () => {
     const guestOrder = {
       id: "order_fail_1",
       display_id: "1003",
@@ -138,15 +145,17 @@ describe("Order Placed Subscriber", () => {
     };
     createQueryMock(guestOrder);
 
+    // Mock error with PII
     mockModificationTokenService.generateToken.mockImplementationOnce(() => {
-      throw new Error("Token error");
+      throw new Error("Failed for user user@example.com because reason");
     });
 
     const event = { data: { id: "order_fail_1" } };
     await orderPlacedHandler({ event, container: mockContainer } as any);
 
+    // Expect warned logs with SANITIZED message
     expect(mockLogger.warn).toHaveBeenCalledWith(
-      expect.stringContaining("[EMAIL][WARN] Failed to generate magic link")
+      expect.stringMatching(/\[EMAIL\]\[WARN\] Failed to generate magic link for order order_fail_1: Failed for user \*\*\* because reason/)
     );
 
     // Should still enqueue email, just without link
@@ -157,6 +166,103 @@ describe("Order Placed Subscriber", () => {
           isGuest: true
         })
       })
+    );
+  });
+
+  it("skips magic link generation if payment intent ID is missing", async () => {
+    const guestOrderNoPayment = {
+      id: "order_nopay_1",
+      display_id: "1005",
+      email: "guest@example.com",
+      currency_code: "usd",
+      total: 5000,
+      customer_id: null,
+      created_at: new Date().toISOString(),
+      items: [],
+      payment_collections: [] // No payments
+    };
+    createQueryMock(guestOrderNoPayment);
+
+    const event = { data: { id: "order_nopay_1" } };
+    await orderPlacedHandler({ event, container: mockContainer } as any);
+
+    // Ensure token generation was skipped
+    expect(mockModificationTokenService.generateToken).not.toHaveBeenCalled();
+
+    // Ensure warning logged
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.stringContaining("Could not find payment intent ID for guest order")
+    );
+
+    // Email still sent
+    expect(enqueueEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          magicLink: null,
+          isGuest: true
+        })
+      })
+    );
+  });
+
+  it("uses localhost fallback if STOREFRONT_URL is missing", async () => {
+    delete process.env.STOREFRONT_URL;
+    
+    const guestOrder = {
+      id: "order_local_1",
+      display_id: "1006",
+      email: "guest@example.com",
+      currency_code: "usd",
+      total: 5000,
+      customer_id: null,
+      created_at: new Date().toISOString(),
+      items: [],
+      payment_collections: [{
+        payments: [{
+          data: { id: "pi_123" }
+        }]
+      }]
+    };
+    createQueryMock(guestOrder);
+
+    const event = { data: { id: "order_local_1" } };
+    await orderPlacedHandler({ event, container: mockContainer } as any);
+
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.stringContaining("STOREFRONT_URL not set")
+    );
+
+    expect(enqueueEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          magicLink: expect.stringContaining("http://localhost:5173/order/status/order_local_1"),
+        })
+      })
+    );
+  });
+
+  it("catches enqueueEmail errors and logs them without throwing", async () => {
+    const orderData = {
+      id: "order_queue_fail",
+      display_id: "1004",
+      email: "test@example.com",
+      items: [],
+      payment_collections: []
+    };
+    createQueryMock(orderData);
+
+    (enqueueEmail as jest.Mock).mockRejectedValueOnce(new Error("Queue full"));
+
+    const event = { data: { id: "order_queue_fail" } };
+    
+    // Should not throw
+    await expect(orderPlacedHandler({ event, container: mockContainer } as any)).resolves.not.toThrow();
+
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.stringContaining("[EMAIL][ERROR] Failed to queue confirmation")
+    );
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.stringContaining("Queue full")
     );
   });
 });
