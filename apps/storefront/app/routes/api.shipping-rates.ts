@@ -5,6 +5,15 @@ import { MedusaCartService } from "../services/medusa-cart";
 import type { CartItem, ProductId } from "../types/product";
 import { isMedusaId } from "../types/product";
 
+/**
+ * @deprecated Use the new RESTful cart endpoints instead:
+ * - POST /api/carts - Create cart
+ * - PATCH /api/carts/:id - Update cart items/address
+ * - GET /api/carts/:id/shipping-options - Get shipping options
+ * 
+ * This endpoint is maintained for backward compatibility.
+ */
+
 interface ShippingRatesRequest {
   cartItems: CartItem[];
   shippingAddress?: {

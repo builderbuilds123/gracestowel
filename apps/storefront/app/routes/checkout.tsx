@@ -271,7 +271,7 @@ export default function Checkout() {
     paymentIntentId,
   ]);
 
-  // Function to fetch shipping rates
+  // Fetch shipping rates using new RESTful cart endpoints
   const fetchShippingRates = useCallback(async (currentItems: typeof items, address: any) => {
     setIsCalculatingShipping(true);
 
@@ -285,54 +285,121 @@ export default function Checkout() {
     }
 
     try {
-      const response = await monitoredFetch("/api/shipping-rates", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          cartItems: currentItems,
-          shippingAddress: address ? {
-            first_name: address.firstName,
-            last_name: address.lastName,
-            address_1: address.address.line1,
-            address_2: address.address.line2,
-            city: address.address.city,
-            country_code: address.address.country,
-            postal_code: address.address.postal_code,
-            province: address.address.state,
-            phone: address.phone
-          } : undefined,
-          currency, // Ensure currency is used here
-          cartId // Pass the current cartId (state)
-        }),
-        label: 'fetch-shipping-rates',
-      });
+      // Step 1: Create or get cart
+      let currentCartId = cartId;
+      if (!currentCartId) {
+        if (isDevelopment) {
+          console.log('[Checkout] Step 1: Creating cart...');
+        }
+        const createResponse = await monitoredFetch("/api/carts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            currency,
+            country_code: address?.address?.country,
+          }),
+          label: 'create-cart',
+        });
 
-      if (response.ok) {
-          const data = (await response.json()) as { shippingOptions: ShippingOption[], cartId?: string };
-          setShippingOptions(data.shippingOptions);
+        if (!createResponse.ok) {
+          const error = await createResponse.json() as { error: string; details?: string };
+          console.error('[Checkout] Step 1 FAILED - Cart creation:', error);
+          throw new Error(`Cart creation failed: ${error.error}`);
+        }
 
-          if (data.cartId) {
-              setCartId(data.cartId);
-          }
-
-          if (data.shippingOptions.length > 0) {
-            // Preserve selected shipping if still available
-            setSelectedShipping(prev => {
-                const found = data.shippingOptions.find(o => o.id === prev?.id);
-                return found || data.shippingOptions[0];
-            });
-          }
-
-          // Cache results
-          shippingCache.current.set(cacheKey, { options: data.shippingOptions, cartId: data.cartId });
+        const { cart_id } = await createResponse.json() as { cart_id: string };
+        currentCartId = cart_id;
+        setCartId(cart_id);
+        if (isDevelopment) {
+          console.log('[Checkout] Step 1 SUCCESS - Cart created:', cart_id);
+        }
       }
 
+      // Step 2: Update cart with items and address
+      if (currentItems.length > 0 || address) {
+        if (isDevelopment) {
+          console.log('[Checkout] Step 2: Updating cart items/address...');
+        }
+        const updateResponse = await monitoredFetch(`/api/carts/${currentCartId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            items: currentItems,
+            shipping_address: address ? {
+              first_name: address.firstName || '',
+              last_name: address.lastName || '',
+              address_1: address.address?.line1 || '',
+              address_2: address.address?.line2,
+              city: address.address?.city || '',
+              country_code: address.address?.country || '',
+              postal_code: address.address?.postal_code || '',
+              province: address.address?.state,
+              phone: address.phone,
+            } : undefined,
+          }),
+          label: 'update-cart',
+        });
+
+        if (!updateResponse.ok) {
+          const error = await updateResponse.json() as { error: string; details?: string; code?: string };
+          console.error('[Checkout] Step 2 FAILED - Cart update:', error);
+          
+          // Handle region mismatch - need to create new cart
+          if (error.code === 'REGION_MISMATCH') {
+            console.log('[Checkout] Region mismatch detected, creating new cart...');
+            setCartId(undefined);
+            // Retry with new cart on next call
+            throw new Error(`Region mismatch: ${error.details}`);
+          }
+          throw new Error(`Cart update failed: ${error.error}`);
+        }
+        if (isDevelopment) {
+          console.log('[Checkout] Step 2 SUCCESS - Cart updated');
+        }
+      }
+
+      // Step 3: Get shipping options (cacheable GET request)
+      if (isDevelopment) {
+        console.log('[Checkout] Step 3: Fetching shipping options...');
+      }
+      const optionsResponse = await monitoredFetch(`/api/carts/${currentCartId}/shipping-options`, {
+        method: "GET",
+        label: 'get-shipping-options',
+      });
+
+      if (!optionsResponse.ok) {
+        const error = await optionsResponse.json() as { error: string; details?: string };
+        console.error('[Checkout] Step 3 FAILED - Fetching shipping options:', error);
+        throw new Error(`Shipping options fetch failed: ${error.error}`);
+      }
+
+      const { shipping_options } = await optionsResponse.json() as { 
+        shipping_options: ShippingOption[];
+        cart_id: string;
+      };
+      
+      if (isDevelopment) {
+        console.log('[Checkout] Step 3 SUCCESS - Got', shipping_options.length, 'shipping options');
+      }
+
+      setShippingOptions(shipping_options);
+
+      if (shipping_options.length > 0) {
+        setSelectedShipping(prev => {
+          const found = shipping_options.find(o => o.id === prev?.id);
+          return found || shipping_options[0];
+        });
+      }
+
+      // Cache results
+      shippingCache.current.set(cacheKey, { options: shipping_options, cartId: currentCartId });
+
     } catch (error) {
-      console.error("Error fetching shipping rates:", error);
+      console.error("[Checkout] Shipping rates error:", error);
     } finally {
       setIsCalculatingShipping(false);
     }
-  }, [currency, cartId]); // currency is in dependency array
+  }, [currency, cartId]);
 
   // Debounced fetch function
   const debouncedFetchShipping = useCallback(
