@@ -179,7 +179,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
     let regionId = "";
     const cart = await service.getCart(cartId);
     if (cart) {
-        regionId = cart.region_id;
+        regionId = cart.region_id ?? "";
     }
 
     let regionOptions: any[] = [];
