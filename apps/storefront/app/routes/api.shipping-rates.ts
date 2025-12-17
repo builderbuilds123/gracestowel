@@ -120,7 +120,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
     // 2. If no valid cartId, create one
     if (!cartId) {
-        // Fetch regions to find region_id for currency
+        // Fetch regions to find the appropriate region
         const regionsResponse = await monitoredFetch(`${medusaBackendUrl}/store/regions`, {
             method: "GET",
             headers: { "x-publishable-api-key": medusaPublishableKey },
@@ -130,7 +130,35 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
         if (regionsResponse.ok) {
              const { regions } = await regionsResponse.json() as { regions: any[] };
-             const region = regions.find((r: any) => r.currency_code.toUpperCase() === currency.toUpperCase()) || regions[0];
+             
+             // Priority 1: Find region that contains the shipping address country
+             let region = null;
+             if (shippingAddress?.country_code) {
+                 const countryCode = shippingAddress.country_code.toLowerCase();
+                 region = regions.find((r: any) => 
+                     r.countries?.some((c: any) => 
+                         c.iso_2?.toLowerCase() === countryCode || 
+                         c.iso_3?.toLowerCase() === countryCode
+                     )
+                 );
+                 if (region) {
+                     console.log(`Found region "${region.name}" for country ${shippingAddress.country_code}`);
+                 }
+             }
+             
+             // Priority 2: Fall back to currency match
+             if (!region) {
+                 region = regions.find((r: any) => r.currency_code.toUpperCase() === currency.toUpperCase());
+                 if (region) {
+                     console.log(`Using region "${region.name}" based on currency ${currency}`);
+                 }
+             }
+             
+             // Priority 3: Use first available region
+             if (!region && regions.length > 0) {
+                 region = regions[0];
+                 console.log(`Using fallback region "${region.name}"`);
+             }
 
              if (region) {
                  cartId = await service.getOrCreateCart(region.id, currency);
