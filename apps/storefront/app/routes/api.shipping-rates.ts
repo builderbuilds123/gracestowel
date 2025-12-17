@@ -104,13 +104,57 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
   try {
     let cartId = initialCartId;
+    let needNewCart = false;
 
-    // 1. If we have a cartId, try to use it
+    // Helper function to fetch regions
+    const fetchRegions = async () => {
+        const regionsResponse = await monitoredFetch(`${medusaBackendUrl}/store/regions`, {
+            method: "GET",
+            headers: { "x-publishable-api-key": medusaPublishableKey },
+            label: "medusa-regions",
+            cloudflareEnv: env,
+        });
+        if (!regionsResponse.ok) {
+            throw new Error("Failed to fetch regions");
+        }
+        return (await regionsResponse.json() as { regions: any[] }).regions;
+    };
+
+    // Helper function to find region for a country
+    const findRegionForCountry = (regions: any[], countryCode: string) => {
+        const code = countryCode.toLowerCase();
+        return regions.find((r: any) => 
+            r.countries?.some((c: any) => 
+                c.iso_2?.toLowerCase() === code || 
+                c.iso_3?.toLowerCase() === code
+            )
+        );
+    };
+
+    // 1. If we have a cartId, validate it and check region compatibility
     if (cartId) {
       try {
         const cart = await service.getCart(cartId);
         if (!cart) {
           cartId = undefined; // Cart expired or invalid
+        } else if (shippingAddress?.country_code) {
+          // Check if cart's region is compatible with shipping address country
+          const regions = await fetchRegions();
+          const cartRegion = regions.find((r: any) => r.id === cart.region_id);
+          
+          if (cartRegion) {
+            const countryCode = shippingAddress.country_code.toLowerCase();
+            const countryInRegion = cartRegion.countries?.some((c: any) => 
+              c.iso_2?.toLowerCase() === countryCode || 
+              c.iso_3?.toLowerCase() === countryCode
+            );
+            
+            if (!countryInRegion) {
+              console.log(`Cart region "${cartRegion.name}" does not contain country ${shippingAddress.country_code}, creating new cart`);
+              needNewCart = true;
+              cartId = undefined;
+            }
+          }
         }
       } catch (e) {
         console.warn("Error checking cart:", e);
@@ -118,55 +162,37 @@ export async function action({ request, context }: ActionFunctionArgs) {
       }
     }
 
-    // 2. If no valid cartId, create one
-    if (!cartId) {
-        // Fetch regions to find the appropriate region
-        const regionsResponse = await monitoredFetch(`${medusaBackendUrl}/store/regions`, {
-            method: "GET",
-            headers: { "x-publishable-api-key": medusaPublishableKey },
-            label: "medusa-regions",
-            cloudflareEnv: env,
-        });
+    // 2. If no valid cartId or need a new cart, create one with the correct region
+    if (!cartId || needNewCart) {
+        const regions = await fetchRegions();
+        
+        // Priority 1: Find region that contains the shipping address country
+        let region = null;
+        if (shippingAddress?.country_code) {
+            region = findRegionForCountry(regions, shippingAddress.country_code);
+            if (region) {
+                console.log(`Found region "${region.name}" for country ${shippingAddress.country_code}`);
+            }
+        }
+        
+        // Priority 2: Fall back to currency match
+        if (!region) {
+            region = regions.find((r: any) => r.currency_code.toUpperCase() === currency.toUpperCase());
+            if (region) {
+                console.log(`Using region "${region.name}" based on currency ${currency}`);
+            }
+        }
+        
+        // Priority 3: Use first available region
+        if (!region && regions.length > 0) {
+            region = regions[0];
+            console.log(`Using fallback region "${region.name}"`);
+        }
 
-        if (regionsResponse.ok) {
-             const { regions } = await regionsResponse.json() as { regions: any[] };
-             
-             // Priority 1: Find region that contains the shipping address country
-             let region = null;
-             if (shippingAddress?.country_code) {
-                 const countryCode = shippingAddress.country_code.toLowerCase();
-                 region = regions.find((r: any) => 
-                     r.countries?.some((c: any) => 
-                         c.iso_2?.toLowerCase() === countryCode || 
-                         c.iso_3?.toLowerCase() === countryCode
-                     )
-                 );
-                 if (region) {
-                     console.log(`Found region "${region.name}" for country ${shippingAddress.country_code}`);
-                 }
-             }
-             
-             // Priority 2: Fall back to currency match
-             if (!region) {
-                 region = regions.find((r: any) => r.currency_code.toUpperCase() === currency.toUpperCase());
-                 if (region) {
-                     console.log(`Using region "${region.name}" based on currency ${currency}`);
-                 }
-             }
-             
-             // Priority 3: Use first available region
-             if (!region && regions.length > 0) {
-                 region = regions[0];
-                 console.log(`Using fallback region "${region.name}"`);
-             }
-
-             if (region) {
-                 cartId = await service.getOrCreateCart(region.id, currency);
-             } else {
-                 throw new Error("No valid region found");
-             }
+        if (region) {
+            cartId = await service.getOrCreateCart(region.id, currency);
         } else {
-             throw new Error("Failed to fetch regions");
+            throw new Error("No valid region found");
         }
     }
 
