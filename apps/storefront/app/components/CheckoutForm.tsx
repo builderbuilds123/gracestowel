@@ -348,7 +348,7 @@ function ShippingMethodSelector({ options, selected, onSelect }: ShippingMethodS
                                 <span className="font-bold text-text-earthy">FREE</span>
                             ) : (
                                 <span className="font-semibold text-text-earthy">
-                                    ${(option.amount / 100).toFixed(2)}
+                                    ${option.amount.toFixed(2)}
                                 </span>
                             )}
                         </div>

@@ -55,10 +55,10 @@ describe('CheckoutForm', () => {
         }],
         cartTotal: 2000,
         shippingOptions: [
-            { id: 'standard', displayName: 'Standard', amount: 500, deliveryEstimate: '3-5 days' },
-            { id: 'express', displayName: 'Express', amount: 1500, deliveryEstimate: '1-2 days' }
+            { id: 'standard', displayName: 'Standard', amount: 5, deliveryEstimate: '3-5 days' },
+            { id: 'express', displayName: 'Express', amount: 15, deliveryEstimate: '1-2 days' }
         ],
-        selectedShipping: { id: 'standard', displayName: 'Standard', amount: 500 },
+        selectedShipping: { id: 'standard', displayName: 'Standard', amount: 5 },
         setSelectedShipping: vi.fn(),
         onAddressChange: vi.fn(),
     };
