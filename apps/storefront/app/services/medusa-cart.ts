@@ -207,15 +207,28 @@ export class MedusaCartService {
             cart_id: cartId,
         });
 
-        return (shipping_options || []).map((opt: any) => ({
-            id: opt.id,
-            name: opt.name,
-            amount: opt.amount || 0,
-            price_type: opt.price_type,
-            provider_id: opt.provider_id,
-            is_return: opt.is_return,
-            originalAmount: undefined
-        }));
+        return (shipping_options || []).map((opt: any) => {
+            // Medusa v2 should return amounts in cents, but some Admin UIs save in dollars
+            // If amount is suspiciously low (< 100), assume it's in dollars and convert to cents
+            let amount = opt.amount || 0;
+            
+            // Heuristic: If amount < 100, it's likely in dollars (e.g., 12 = $12, not 12 cents)
+            // Most shipping rates are > $1, so amounts < 100 are likely dollars
+            if (amount > 0 && amount < 100) {
+                console.log(`Converting shipping amount from dollars to cents: ${amount} -> ${amount * 100}`);
+                amount = amount * 100;
+            }
+            
+            return {
+                id: opt.id,
+                name: opt.name,
+                amount,
+                price_type: opt.price_type,
+                provider_id: opt.provider_id,
+                is_return: opt.is_return,
+                originalAmount: undefined
+            };
+        });
         } catch (error) {
         console.error("Error fetching shipping options:", error);
         throw error;
