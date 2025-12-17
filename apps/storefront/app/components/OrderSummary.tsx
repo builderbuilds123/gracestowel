@@ -65,11 +65,11 @@ export function OrderSummary({
                         <div className="flex items-center gap-2">
                             {selectedShipping.isFree && selectedShipping.originalAmount !== undefined && (
                                 <span className="text-text-earthy/40 line-through text-sm">
-                                    ${(selectedShipping.originalAmount / 100).toFixed(2)}
+                                    ${selectedShipping.originalAmount.toFixed(2)}
                                 </span>
                             )}
                             <span className={`font-medium ${selectedShipping.isFree ? 'text-green-600' : 'text-text-earthy'}`}>
-                                ${(selectedShipping.amount / 100).toFixed(2)}
+                                ${selectedShipping.amount.toFixed(2)}
                             </span>
                         </div>
                     ) : (
@@ -83,7 +83,7 @@ export function OrderSummary({
                     {shippingCost > 0 || selectedShipping?.isFree ? (
                         <div className="flex items-center gap-2">
                             <span className="text-text-earthy/40 line-through text-sm">
-                                ${(originalTotal + ((selectedShipping?.originalAmount || 0) / 100)).toFixed(2)}
+                                ${(originalTotal + (selectedShipping?.originalAmount || 0)).toFixed(2)}
                             </span>
                             <span className="text-green-600">${finalTotal.toFixed(2)}</span>
                         </div>
