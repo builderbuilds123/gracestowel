@@ -109,6 +109,11 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
   const { cartItems, shippingAddress, currency = "CAD", cartId: initialCartId } = body;
 
+  // Validate cartItems is an array
+  if (!cartItems || !Array.isArray(cartItems)) {
+    return data({ message: "cartItems array is required" }, { status: 400 });
+  }
+
   const service = new MedusaCartService(context);
 
   try {

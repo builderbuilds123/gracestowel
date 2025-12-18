@@ -70,7 +70,9 @@ export function CheckoutForm({
             'lastOrder',
             JSON.stringify({
                 items,
-                total: cartTotal,
+                subtotal: cartTotal,
+                shipping: selectedShipping?.amount || 0,
+                total: cartTotal + (selectedShipping?.amount || 0),
                 date: new Date().toLocaleDateString('en-US', {
                     year: 'numeric',
                     month: 'long',
@@ -242,18 +244,17 @@ export function CheckoutForm({
                     options={{
                         mode: 'shipping',
                         fields: { phone: 'always' },
-                        display: { name: 'split' },
+                        // Remove split name to use default full name field (Stripe Standard)
                         defaultValues: customerData ? {
-                            firstName: customerData.firstName || '',
-                            lastName: customerData.lastName || '',
-                            phone: customerData.phone || '',
+                            name: `${customerData.firstName || ''} ${customerData.lastName || ''}`.trim(),
+                            phone: customerData.phone ?? '',
                             address: customerData.address ? {
-                                line1: customerData.address.line1 || '',
-                                line2: customerData.address.line2 || '',
-                                city: customerData.address.city || '',
-                                state: customerData.address.state || '',
-                                postal_code: customerData.address.postal_code || '',
-                                country: customerData.address.country || 'US',
+                                line1: customerData.address.line1 ?? '',
+                                line2: customerData.address.line2 ?? '',
+                                city: customerData.address.city ?? '',
+                                state: customerData.address.state ?? '',
+                                postal_code: customerData.address.postal_code ?? '',
+                                country: customerData.address.country ?? 'US',
                             } : undefined,
                         } : undefined,
                     }}

@@ -61,6 +61,9 @@ interface StockValidationResult {
  * Generate deterministic idempotency key from cart contents
  * Uses FNV-1a hash for better distribution and includes timestamp bucket
  * to allow retries within a time window while preventing rapid duplicates
+ * 
+ * Note: Stripe caches idempotency keys for 24 hours. To avoid collisions
+ * we include a 1-minute time bucket and a random session nonce.
  */
 function generateIdempotencyKey(
   amount: number,
@@ -75,12 +78,13 @@ function generateIdempotencyKey(
         .join("|")
     : "empty";
   
-  // Include a 5-minute time bucket to allow new attempts after cache expires
-  // Stripe idempotency keys are valid for 24 hours, but we want to allow
-  // reasonable retries if parameters truly change
-  const timeBucket = Math.floor(Date.now() / (5 * 60 * 1000));
+  // Include a 1-minute time bucket to allow fresh attempts
+  const timeBucket = Math.floor(Date.now() / (60 * 1000));
   
-  const raw = `pi_${customerId || "guest"}_${amount}_${currency}_${cartHash}_${timeBucket}`;
+  // Add random nonce to prevent collisions across different sessions
+  const nonce = Math.random().toString(36).substring(2, 8);
+  
+  const raw = `pi_${customerId || "guest"}_${amount}_${currency}_${cartHash}_${timeBucket}_${nonce}`;
 
   // FNV-1a hash - better distribution than simple hash
   let hash = 2166136261; // FNV offset basis
@@ -96,6 +100,7 @@ function generateIdempotencyKey(
 
 /**
  * Validate stock availability for cart items
+ * In Medusa v2, we query products by variant ID and use *variants.inventory_quantity field
  */
 async function validateStock(
   cartItems: CartItem[],
@@ -116,9 +121,10 @@ async function validateStock(
         headers["x-publishable-api-key"] = publishableKey;
       }
 
+      // Medusa v2: Use products endpoint with variant filter to get inventory
       const response = await monitoredFetch(
-        `${medusaBackendUrl}/store/variants/${item.variantId}`,
-        { headers, method: "GET", label: "stock-variant", cloudflareEnv }
+        `${medusaBackendUrl}/store/products?variants.id=${encodeURIComponent(item.variantId)}&fields=*variants.inventory_quantity`,
+        { headers, method: "GET", label: "stock-check", cloudflareEnv }
       );
 
       if (!response.ok) {
@@ -133,9 +139,14 @@ async function validateStock(
       }
 
       const data = (await response.json()) as {
-        variant: { id: string; inventory_quantity?: number };
+        products: Array<{
+          variants: Array<{ id: string; inventory_quantity?: number }>;
+        }>;
       };
-      const variant = data.variant;
+      
+      // Find the variant in the product's variants array
+      const product = data.products?.[0];
+      const variant = product?.variants?.find(v => v.id === item.variantId);
 
       if (variant) {
         const available = variant.inventory_quantity ?? Infinity;
@@ -146,6 +157,13 @@ async function validateStock(
             available: Math.max(0, available),
           });
         }
+      } else if (!product) {
+        // Product not found - treat as out of stock
+        outOfStockItems.push({
+          title: item.title,
+          requested: item.quantity,
+          available: 0,
+        });
       }
     } catch (error) {
       // Log error but continue without blocking checkout
@@ -347,6 +365,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
     if (customerEmail) body.append("metadata[customer_email]", customerEmail);
     if (shippingAddress)
       body.append("metadata[shipping_address]", JSON.stringify(shippingAddress));
+    if (shipping) body.append("metadata[shipping_amount]", shipping.toString());
     
     // Add trace ID to metadata for backend correlation
     body.append("metadata[trace_id]", traceId);
@@ -419,14 +438,28 @@ export async function action({ request, context }: ActionFunctionArgs) {
         ? `Stripe error: ${errorMessage}`
         : GENERIC_ERROR_MESSAGE;
       
+      // Determine appropriate status code
+      // 400 (Bad Request) -> 400
+      // 402 (Request Failed) -> 402
+      // 401/403 (Auth/Permission) -> 500 (Server configuration error)
+      // 429 (Rate Limit) -> 429
+      // 5xx (Stripe Down) -> 502 (Bad Gateway)
+      let statusCode = 500;
+      
+      if (response.status === 400 || response.status === 402 || response.status === 429) {
+        statusCode = response.status;
+      } else if (response.status >= 500) {
+        statusCode = 502;
+      }
+
       return data(
         { 
-          message: "Payment initialization failed", 
+          message: statusCode === 500 ? "Payment system error" : "Payment failed",
           debugInfo,
           stripeErrorCode: errorCode || undefined,
           traceId 
         },
-        { status: 500 }
+        { status: statusCode }
       );
     }
 

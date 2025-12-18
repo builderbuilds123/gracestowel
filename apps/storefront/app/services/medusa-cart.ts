@@ -55,7 +55,6 @@ export interface ShippingOption {
   price_type?: string;
   provider_id?: string;
   is_return?: boolean;
-  originalAmount?: number; // Custom field for promotions
 }
 
 export class MedusaCartService {
@@ -189,8 +188,14 @@ export class MedusaCartService {
             shipping_address: address,
         });
         return cart;
-        } catch (error) {
+        } catch (error: any) {
         console.error("Error updating shipping address:", error);
+        
+        // Log deep error details if available (Medusa SDK often hides them)
+        if (error.response) {
+            console.error("Upstream Medusa Error Data:", JSON.stringify(error.response.data || {}, null, 2));
+        }
+
         throw error;
         }
     });
@@ -199,6 +204,9 @@ export class MedusaCartService {
   /**
    * Get shipping options for the cart
    * Uses Medusa v2 SDK: client.store.fulfillment.listCartOptions()
+   * 
+   * Medusa v2 returns tiered pricing via calculated_price object:
+   * - calculated_amount: The price after rules are applied (e.g., free shipping over $99)
    */
   async getShippingOptions(cartId: string): Promise<ShippingOption[]> {
     return retry(async () => {
@@ -207,15 +215,20 @@ export class MedusaCartService {
             cart_id: cartId,
         });
 
-        return (shipping_options || []).map((opt: any) => ({
-            id: opt.id,
-            name: opt.name,
-            amount: opt.amount || 0,
-            price_type: opt.price_type,
-            provider_id: opt.provider_id,
-            is_return: opt.is_return,
-            originalAmount: undefined
-        }));
+        return (shipping_options || []).map((opt: any) => {
+            // Medusa v2: Use calculated_price for tiered/rule-based pricing
+            const calculatedPrice = opt.calculated_price;
+            const amount = calculatedPrice?.calculated_amount ?? opt.amount ?? 0;
+            
+            return {
+                id: opt.id,
+                name: opt.name,
+                amount,
+                price_type: opt.price_type,
+                provider_id: opt.provider_id,
+                is_return: opt.is_return,
+            };
+        });
         } catch (error) {
         console.error("Error fetching shipping options:", error);
         throw error;

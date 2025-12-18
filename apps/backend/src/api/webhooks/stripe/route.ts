@@ -4,6 +4,7 @@ import Stripe from "stripe";
 import { getStripeClient } from "../../../utils/stripe";
 import { queueStripeEvent, isEventProcessed } from "../../../lib/stripe-event-queue";
 import { logger } from "../../../utils/logger";
+import { ensureStripeWorkerStarted } from "../../../loaders/stripe-event-worker";
 
 /**
  * Stripe Webhook Handler
@@ -50,6 +51,9 @@ export async function POST(
     req: MedusaRequest,
     res: MedusaResponse
 ): Promise<void> {
+    // Start worker lazily on first webhook (fallback for loader auto-discovery)
+    ensureStripeWorkerStarted(req.scope);
+    
     const stripe = getStripeClient();
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 

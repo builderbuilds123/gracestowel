@@ -36,6 +36,7 @@ export interface CreateOrderFromStripeInput {
         countryCode: string;
         phone?: string;
     };
+    shippingAmount?: number; // Shipping cost in cents
     amount: number;
     currency: string;
 }
@@ -46,7 +47,7 @@ export interface CreateOrderFromStripeInput {
 const prepareOrderDataStep = createStep(
     "prepare-order-data-from-stripe",
     async (input: CreateOrderFromStripeInput, { container }) => {
-        const { cartData, customerEmail, shippingAddress, amount, currency, paymentIntentId } = input;
+        const { cartData, customerEmail, shippingAddress, shippingAmount, amount, currency, paymentIntentId } = input;
 
         const regionService = container.resolve("region");
         const regions = await regionService.listRegions({
@@ -91,11 +92,35 @@ const prepareOrderDataStep = createStep(
                 console.warn(`[create-order-from-stripe] No variantId for item: ${item.title}. Order will have custom line item.`);
             }
 
+            // Parse price - extract dollar amount from formatted string like "$35.00"
+            // Medusa's createOrdersWorkflow expects unit_price in DOLLARS (it converts to cents internally)
+            let unitPrice: number;
+            if (typeof item.price === 'number') {
+                // If number, assume it's already in dollars
+                unitPrice = item.price;
+            } else if (typeof item.price === 'string') {
+                // Remove currency symbols and parse the number
+                // "$35.00" -> 35.00 (dollars)
+                const cleanPrice = item.price.replace(/[$€£,\s]/g, '').trim();
+                unitPrice = parseFloat(cleanPrice);
+            } else {
+                unitPrice = 0;
+                console.warn(`[create-order-from-stripe] Invalid price format for ${item.title}: ${item.price}`);
+            }
+
+            // Validate unitPrice is a valid number
+            if (isNaN(unitPrice) || !isFinite(unitPrice)) {
+                console.error(`[create-order-from-stripe] Invalid unit_price for ${item.title}: ${unitPrice}`);
+                unitPrice = 0;
+            }
+            
+            console.log(`[create-order-from-stripe] Price parsing: "${item.price}" -> ${unitPrice} dollars`);
+
             return {
                 variant_id: variantId || undefined,
                 title: item.title,
                 quantity: item.quantity,
-                unit_price: parseFloat(item.price.replace("$", "")) * 100, // Convert to cents
+                unit_price: unitPrice, // Dollar amount - Medusa converts to cents internally
                 metadata: {
                     color: item.color,
                     sku: item.sku,
@@ -120,14 +145,24 @@ const prepareOrderDataStep = createStep(
               }
             : undefined;
 
+        // Build shipping methods array if shipping amount exists
+        const shipping_methods = shippingAmount && shippingAmount > 0
+            ? [{
+                name: "Standard Shipping",
+                amount: shippingAmount,
+              }]
+            : undefined;
+
         const orderData = {
             region_id: region.id,
             email: customerEmail,
             items,
             shipping_address,
+            shipping_methods,
             status: "pending" as const,
             metadata: {
                 stripe_payment_intent_id: paymentIntentId,
+                shipping_amount: shippingAmount || 0,
             },
         };
 
@@ -136,6 +171,7 @@ const prepareOrderDataStep = createStep(
             email: orderData.email,
             items_count: orderData.items.length,
             has_shipping: !!orderData.shipping_address,
+            shipping_amount: shippingAmount,
             currency,
             amount,
         });
@@ -152,7 +188,18 @@ const emitEventStep = createStep(
     async (input: { eventName: string; data: any }, { container }) => {
         let eventBusModuleService: any;
         try {
-            eventBusModuleService = container.resolve("eventBus") as any;
+            // Try multiple resolution strategies for event bus (Medusa v2 compatibility)
+            try {
+                eventBusModuleService = container.resolve("eventBusModuleService") as any;
+            } catch {
+                try {
+                    eventBusModuleService = container.resolve("eventBus") as any;
+                } catch {
+                    // Try using Modules constant
+                    const { Modules } = await import("@medusajs/framework/utils");
+                    eventBusModuleService = container.resolve(Modules.EVENT_BUS) as any;
+                }
+            }
         } catch (err) {
             console.warn("[create-order-from-stripe] eventBus not configured, skipping emit", {
                 event: input.eventName,

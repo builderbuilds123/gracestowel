@@ -1,0 +1,328 @@
+{
+  "info": {
+    "name": "Stripe Webhooks",
+    "description": "Stripe webhook event simulators for testing payment event handling locally. This collection allows you to send simulated webhook events to your Medusa backend without making real Stripe transactions.\n\n## How Webhook Testing Works\n\n1. **Set your webhook secret**: Configure the `stripe_webhook_secret` environment variable with your Stripe webhook signing secret (starts with `whsec_`)\n\n2. **Pre-request script generates signature**: Each request automatically generates a valid `Stripe-Signature` header using HMAC-SHA256\n\n3. **Send the webhook**: The request is sent to your backend's webhook endpoint with the proper signature\n\n4. **Backend validates and processes**: Your Medusa backend validates the signature and processes the event\n\n## Getting Your Webhook Secret\n\n- **Local development**: Use Stripe CLI with `stripe listen --forward-to localhost:9000/hooks/stripe` and copy the webhook signing secret\n- **Staging/Production**: Get the signing secret from your Stripe Dashboard under Developers > Webhooks\n\n## Supported Events\n\n- `payment_intent.succeeded` - Payment completed successfully\n- `payment_intent.failed` - Payment failed\n- `checkout.session.completed` - Checkout session completed\n- Custom events via template request",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Stripe Webhook Signature Generator",
+          "// Generates a valid Stripe-Signature header for webhook testing",
+          "",
+          "const webhookSecret = pm.environment.get('stripe_webhook_secret') || pm.collectionVariables.get('stripe_webhook_secret');",
+          "",
+          "if (!webhookSecret) {",
+          "    console.error('ERROR: stripe_webhook_secret is not set. Please configure it in your environment.');",
+          "    throw new Error('stripe_webhook_secret environment variable is required');",
+          "}",
+          "",
+          "// Get the request body",
+          "const payload = pm.request.body.raw;",
+          "",
+          "if (!payload) {",
+          "    console.error('ERROR: Request body is empty');",
+          "    throw new Error('Request body is required for webhook signature generation');",
+          "}",
+          "",
+          "// Generate timestamp (seconds since epoch)",
+          "const timestamp = Math.floor(Date.now() / 1000);",
+          "",
+          "// Create the signed payload string: timestamp.payload",
+          "const signedPayload = `${timestamp}.${payload}`;",
+          "",
+          "// Generate HMAC-SHA256 signature using CryptoJS",
+          "const signature = CryptoJS.HmacSHA256(signedPayload, webhookSecret).toString(CryptoJS.enc.Hex);",
+          "",
+          "// Create the Stripe-Signature header value",
+          "// Format: t=timestamp,v1=signature",
+          "const stripeSignature = `t=${timestamp},v1=${signature}`;",
+          "",
+          "// Set the header for this request",
+          "pm.request.headers.upsert({",
+          "    key: 'Stripe-Signature',",
+          "    value: stripeSignature",
+          "});",
+          "",
+          "console.log('Stripe signature generated successfully');",
+          "console.log('Timestamp:', timestamp);",
+          "console.log('Signature header:', stripeSignature);"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "Payment Intent Events",
+      "description": "Webhook events related to payment intent lifecycle",
+      "item": [
+        {
+          "name": "payment_intent.succeeded",
+          "description": "Simulates a successful payment intent webhook event. This event is triggered when a payment is successfully completed. Use this to test order confirmation flows and payment success handling.",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"evt_test_webhook_{{$timestamp}}\",\n  \"object\": \"event\",\n  \"api_version\": \"2023-10-16\",\n  \"created\": {{$timestamp}},\n  \"type\": \"payment_intent.succeeded\",\n  \"data\": {\n    \"object\": {\n      \"id\": \"pi_test_{{$randomUUID}}\",\n      \"object\": \"payment_intent\",\n      \"amount\": 2999,\n      \"amount_received\": 2999,\n      \"currency\": \"usd\",\n      \"status\": \"succeeded\",\n      \"client_secret\": \"pi_test_secret_{{$randomUUID}}\",\n      \"metadata\": {\n        \"cart_id\": \"{{cart_id}}\",\n        \"resource_id\": \"{{cart_id}}\"\n      },\n      \"payment_method\": \"pm_test_{{$randomUUID}}\",\n      \"payment_method_types\": [\"card\"],\n      \"receipt_email\": \"customer@example.com\",\n      \"created\": {{$timestamp}},\n      \"livemode\": false\n    }\n  },\n  \"livemode\": false,\n  \"pending_webhooks\": 1,\n  \"request\": {\n    \"id\": \"req_test_{{$randomUUID}}\",\n    \"idempotency_key\": null\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/hooks/stripe",
+              "host": ["{{base_url}}"],
+              "path": ["hooks", "stripe"]
+            }
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"id\": \"evt_test_webhook_1234567890\",\n  \"object\": \"event\",\n  \"type\": \"payment_intent.succeeded\",\n  \"data\": {\n    \"object\": {\n      \"id\": \"pi_test_abc123\",\n      \"status\": \"succeeded\"\n    }\n  }\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/hooks/stripe",
+                  "host": ["{{base_url}}"],
+                  "path": ["hooks", "stripe"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"received\": true\n}"
+            },
+            {
+              "name": "Invalid Signature Response",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Stripe-Signature",
+                    "value": "t=1234567890,v1=invalid_signature"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/hooks/stripe",
+                  "host": ["{{base_url}}"],
+                  "path": ["hooks", "stripe"]
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"error\": \"Webhook signature verification failed\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "payment_intent.failed",
+          "description": "Simulates a failed payment intent webhook event. This event is triggered when a payment attempt fails. Use this to test payment failure handling, retry logic, and customer notification flows.",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"evt_test_webhook_{{$timestamp}}\",\n  \"object\": \"event\",\n  \"api_version\": \"2023-10-16\",\n  \"created\": {{$timestamp}},\n  \"type\": \"payment_intent.payment_failed\",\n  \"data\": {\n    \"object\": {\n      \"id\": \"pi_test_{{$randomUUID}}\",\n      \"object\": \"payment_intent\",\n      \"amount\": 2999,\n      \"amount_received\": 0,\n      \"currency\": \"usd\",\n      \"status\": \"requires_payment_method\",\n      \"client_secret\": \"pi_test_secret_{{$randomUUID}}\",\n      \"last_payment_error\": {\n        \"code\": \"card_declined\",\n        \"decline_code\": \"generic_decline\",\n        \"message\": \"Your card was declined.\",\n        \"type\": \"card_error\",\n        \"param\": null\n      },\n      \"metadata\": {\n        \"cart_id\": \"{{cart_id}}\",\n        \"resource_id\": \"{{cart_id}}\"\n      },\n      \"payment_method\": \"pm_test_{{$randomUUID}}\",\n      \"payment_method_types\": [\"card\"],\n      \"created\": {{$timestamp}},\n      \"livemode\": false\n    }\n  },\n  \"livemode\": false,\n  \"pending_webhooks\": 1,\n  \"request\": {\n    \"id\": \"req_test_{{$randomUUID}}\",\n    \"idempotency_key\": null\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/hooks/stripe",
+              "host": ["{{base_url}}"],
+              "path": ["hooks", "stripe"]
+            }
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"id\": \"evt_test_webhook_1234567890\",\n  \"object\": \"event\",\n  \"type\": \"payment_intent.payment_failed\",\n  \"data\": {\n    \"object\": {\n      \"id\": \"pi_test_abc123\",\n      \"status\": \"requires_payment_method\",\n      \"last_payment_error\": {\n        \"code\": \"card_declined\"\n      }\n    }\n  }\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/hooks/stripe",
+                  "host": ["{{base_url}}"],
+                  "path": ["hooks", "stripe"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"received\": true\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Checkout Session Events",
+      "description": "Webhook events related to Stripe Checkout sessions",
+      "item": [
+        {
+          "name": "checkout.session.completed",
+          "description": "Simulates a completed checkout session webhook event. This event is triggered when a customer successfully completes a Stripe Checkout session. Use this to test checkout completion flows.",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"evt_test_webhook_{{$timestamp}}\",\n  \"object\": \"event\",\n  \"api_version\": \"2023-10-16\",\n  \"created\": {{$timestamp}},\n  \"type\": \"checkout.session.completed\",\n  \"data\": {\n    \"object\": {\n      \"id\": \"cs_test_{{$randomUUID}}\",\n      \"object\": \"checkout.session\",\n      \"amount_total\": 2999,\n      \"currency\": \"usd\",\n      \"customer\": \"cus_test_{{$randomUUID}}\",\n      \"customer_email\": \"customer@example.com\",\n      \"mode\": \"payment\",\n      \"payment_intent\": \"pi_test_{{$randomUUID}}\",\n      \"payment_status\": \"paid\",\n      \"status\": \"complete\",\n      \"success_url\": \"{{storefront_url}}/checkout/success\",\n      \"cancel_url\": \"{{storefront_url}}/checkout/cancel\",\n      \"metadata\": {\n        \"cart_id\": \"{{cart_id}}\",\n        \"resource_id\": \"{{cart_id}}\"\n      },\n      \"shipping_details\": {\n        \"address\": {\n          \"city\": \"New York\",\n          \"country\": \"US\",\n          \"line1\": \"123 Main St\",\n          \"line2\": null,\n          \"postal_code\": \"10001\",\n          \"state\": \"NY\"\n        },\n        \"name\": \"John Doe\"\n      },\n      \"created\": {{$timestamp}},\n      \"livemode\": false\n    }\n  },\n  \"livemode\": false,\n  \"pending_webhooks\": 1,\n  \"request\": {\n    \"id\": \"req_test_{{$randomUUID}}\",\n    \"idempotency_key\": null\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/hooks/stripe",
+              "host": ["{{base_url}}"],
+              "path": ["hooks", "stripe"]
+            }
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"id\": \"evt_test_webhook_1234567890\",\n  \"object\": \"event\",\n  \"type\": \"checkout.session.completed\",\n  \"data\": {\n    \"object\": {\n      \"id\": \"cs_test_abc123\",\n      \"status\": \"complete\",\n      \"payment_status\": \"paid\"\n    }\n  }\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/hooks/stripe",
+                  "host": ["{{base_url}}"],
+                  "path": ["hooks", "stripe"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"received\": true\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Custom Webhook Template",
+      "description": "Template for testing custom Stripe webhook events",
+      "item": [
+        {
+          "name": "Custom Webhook Event (Template)",
+          "description": "A template request for testing any Stripe webhook event type. Modify the event type and data object to match the event you want to simulate.\n\n## How to Use\n\n1. Copy this request\n2. Change the `type` field to your desired event (e.g., `invoice.paid`, `customer.subscription.created`)\n3. Update the `data.object` to match the expected payload for that event type\n4. Send the request\n\n## Common Event Types\n\n- `invoice.paid` - Invoice payment succeeded\n- `invoice.payment_failed` - Invoice payment failed\n- `customer.subscription.created` - New subscription created\n- `customer.subscription.updated` - Subscription updated\n- `customer.subscription.deleted` - Subscription cancelled\n- `charge.refunded` - Charge was refunded",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"evt_test_webhook_{{$timestamp}}\",\n  \"object\": \"event\",\n  \"api_version\": \"2023-10-16\",\n  \"created\": {{$timestamp}},\n  \"type\": \"YOUR_EVENT_TYPE_HERE\",\n  \"data\": {\n    \"object\": {\n      \"id\": \"obj_test_{{$randomUUID}}\",\n      \"object\": \"YOUR_OBJECT_TYPE_HERE\",\n      \"metadata\": {\n        \"cart_id\": \"{{cart_id}}\"\n      },\n      \"livemode\": false\n    }\n  },\n  \"livemode\": false,\n  \"pending_webhooks\": 1,\n  \"request\": {\n    \"id\": \"req_test_{{$randomUUID}}\",\n    \"idempotency_key\": null\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/hooks/stripe",
+              "host": ["{{base_url}}"],
+              "path": ["hooks", "stripe"]
+            }
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"id\": \"evt_test_webhook_1234567890\",\n  \"object\": \"event\",\n  \"type\": \"custom.event\",\n  \"data\": {\n    \"object\": {}\n  }\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/hooks/stripe",
+                  "host": ["{{base_url}}"],
+                  "path": ["hooks", "stripe"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"received\": true\n}"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:9000",
+      "type": "string"
+    },
+    {
+      "key": "storefront_url",
+      "value": "http://localhost:5173",
+      "type": "string"
+    },
+    {
+      "key": "stripe_webhook_secret",
+      "value": "",
+      "type": "secret"
+    },
+    {
+      "key": "cart_id",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}

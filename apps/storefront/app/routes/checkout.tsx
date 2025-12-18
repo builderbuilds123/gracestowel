@@ -14,7 +14,7 @@ import { parsePrice } from "../lib/price";
 import { generateTraceId } from "../lib/logger";
 import { monitoredFetch } from "../utils/monitored-fetch";
 import { generateCartHash } from "../utils/cart-hash";
-import { debounce } from "../utils/debounce";
+
 
 // Check if in development mode (consistent with codebase pattern)
 const isDevelopment = import.meta.env.MODE === 'development';
@@ -401,28 +401,28 @@ export default function Checkout() {
     }
   }, [currency, cartId]);
 
-  // Debounced fetch function
-  const debouncedFetchShipping = useCallback(
-      debounce((items, address) => fetchShippingRates(items, address), 300),
-      [fetchShippingRates]
-  );
-
   // Effect to trigger shipping fetch when items or address change
+  // Uses direct setTimeout architecture for robust debouncing
   useEffect(() => {
-    if (items.length > 0) {
-        debouncedFetchShipping(items, shippingAddress);
-    }
-  }, [items, shippingAddress, debouncedFetchShipping]);
+    if (items.length === 0) return;
+
+    // specific debounce for address changes
+    const timer = setTimeout(() => {
+      fetchShippingRates(items, shippingAddress);
+    }, 600);
+
+    return () => clearTimeout(timer);
+  }, [items, shippingAddress, fetchShippingRates]);
 
   // Handler for address changes from Stripe Address Element
   const handleAddressChange = async (event: StripeAddressElementChangeEvent) => {
-    const addressValue = event.value;
-    if (!addressValue || !addressValue.address || !addressValue.address.country) {
+    // Only update and fetch rates if the address is fully complete
+    // This effectively defers the API call until the form is filled, similar to 'onBlur'
+    if (!event.complete) {
       return;
     }
 
-    // Only update if address substantially changed (country, state, zip) to avoid rapid re-fetches
-    // Or just pass the whole object and let debounce handle it
+    const addressValue = event.value;
     setShippingAddress(addressValue);
   };
 

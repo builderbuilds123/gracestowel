@@ -1,0 +1,303 @@
+{
+  "info": {
+    "name": "Admin API",
+    "description": "Medusa Admin API endpoints for administrative operations including products, orders, customers, and users management. These endpoints require authentication via JWT token.\n\n## Authentication\n\nAll requests in this collection require a valid JWT token. Set the `jwt_token` environment variable with your admin authentication token before making requests.\n\nTo obtain a JWT token:\n1. POST to /admin/auth with admin credentials\n2. Copy the token from the response\n3. Set it as the `jwt_token` environment variable\n\nThe collection automatically includes the Authorization header with Bearer token for all requests.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{jwt_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Products",
+      "description": "Product management endpoints for creating, updating, and listing products in the admin panel",
+      "item": [
+        {
+          "name": "List Products",
+          "description": "Retrieves a paginated list of all products in the store. Supports filtering, sorting, and pagination. Returns detailed product information including variants, options, and metadata.",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/admin/products",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "products"]
+            }
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/admin/products",
+                  "host": ["{{base_url}}"],
+                  "path": ["admin", "products"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"products\": [\n    {\n      \"id\": \"prod_01EXAMPLE\",\n      \"title\": \"Grace Stowel Premium Towel\",\n      \"subtitle\": null,\n      \"description\": \"A luxurious premium towel with superior absorbency\",\n      \"handle\": \"grace-stowel-premium-towel\",\n      \"is_giftcard\": false,\n      \"status\": \"published\",\n      \"thumbnail\": \"https://example.com/thumbnail.jpg\",\n      \"variants\": [\n        {\n          \"id\": \"variant_01EXAMPLE\",\n          \"title\": \"White / Large\",\n          \"sku\": \"TOWEL-WHT-LG\",\n          \"barcode\": null,\n          \"ean\": null,\n          \"upc\": null,\n          \"inventory_quantity\": 100,\n          \"manage_inventory\": true,\n          \"prices\": [\n            {\n              \"id\": \"price_01EXAMPLE\",\n              \"amount\": 2999,\n              \"currency_code\": \"usd\"\n            }\n          ]\n        }\n      ],\n      \"options\": [\n        {\n          \"id\": \"opt_01EXAMPLE\",\n          \"title\": \"Color\"\n        },\n        {\n          \"id\": \"opt_02EXAMPLE\",\n          \"title\": \"Size\"\n        }\n      ],\n      \"created_at\": \"2024-01-01T00:00:00.000Z\",\n      \"updated_at\": \"2024-01-01T00:00:00.000Z\"\n    }\n  ],\n  \"count\": 1,\n  \"offset\": 0,\n  \"limit\": 20\n}"
+            }
+          ]
+        },
+        {
+          "name": "Create Product",
+          "description": "Creates a new product in the store. Requires product title at minimum. Can include variants, options, images, and other product details.",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"New Premium Towel\",\n  \"description\": \"A new luxurious towel product\",\n  \"handle\": \"new-premium-towel\",\n  \"status\": \"draft\",\n  \"options\": [\n    {\n      \"title\": \"Color\"\n    },\n    {\n      \"title\": \"Size\"\n    }\n  ],\n  \"variants\": [\n    {\n      \"title\": \"White / Medium\",\n      \"sku\": \"TOWEL-WHT-MD\",\n      \"inventory_quantity\": 50,\n      \"prices\": [\n        {\n          \"amount\": 2499,\n          \"currency_code\": \"usd\"\n        }\n      ],\n      \"options\": [\n        {\n          \"value\": \"White\"\n        },\n        {\n          \"value\": \"Medium\"\n        }\n      ]\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/admin/products",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "products"]
+            }
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"title\": \"New Premium Towel\",\n  \"description\": \"A new luxurious towel product\",\n  \"handle\": \"new-premium-towel\",\n  \"status\": \"draft\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/admin/products",
+                  "host": ["{{base_url}}"],
+                  "path": ["admin", "products"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"product\": {\n    \"id\": \"prod_02NEWPROD\",\n    \"title\": \"New Premium Towel\",\n    \"description\": \"A new luxurious towel product\",\n    \"handle\": \"new-premium-towel\",\n    \"status\": \"draft\",\n    \"variants\": [\n      {\n        \"id\": \"variant_02NEWVAR\",\n        \"title\": \"White / Medium\",\n        \"sku\": \"TOWEL-WHT-MD\",\n        \"inventory_quantity\": 50,\n        \"prices\": [\n          {\n            \"amount\": 2499,\n            \"currency_code\": \"usd\"\n          }\n        ]\n      }\n    ],\n    \"created_at\": \"2024-01-15T00:00:00.000Z\",\n    \"updated_at\": \"2024-01-15T00:00:00.000Z\"\n  }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Orders",
+      "description": "Order management endpoints for viewing and managing customer orders",
+      "item": [
+        {
+          "name": "List Orders",
+          "description": "Retrieves a paginated list of all orders. Supports filtering by status, customer, date range, and other attributes. Returns order details including items, shipping, and payment information.",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/admin/orders",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "orders"]
+            }
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/admin/orders",
+                  "host": ["{{base_url}}"],
+                  "path": ["admin", "orders"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"orders\": [\n    {\n      \"id\": \"order_01EXAMPLE\",\n      \"display_id\": 1001,\n      \"status\": \"pending\",\n      \"fulfillment_status\": \"not_fulfilled\",\n      \"payment_status\": \"captured\",\n      \"email\": \"customer@example.com\",\n      \"customer_id\": \"cus_01EXAMPLE\",\n      \"shipping_address\": {\n        \"first_name\": \"John\",\n        \"last_name\": \"Doe\",\n        \"address_1\": \"123 Main St\",\n        \"city\": \"New York\",\n        \"province\": \"NY\",\n        \"postal_code\": \"10001\",\n        \"country_code\": \"us\"\n      },\n      \"items\": [\n        {\n          \"id\": \"item_01EXAMPLE\",\n          \"title\": \"Grace Stowel Premium Towel\",\n          \"variant_id\": \"variant_01EXAMPLE\",\n          \"quantity\": 2,\n          \"unit_price\": 2999,\n          \"subtotal\": 5998\n        }\n      ],\n      \"subtotal\": 5998,\n      \"shipping_total\": 500,\n      \"tax_total\": 540,\n      \"total\": 7038,\n      \"currency_code\": \"usd\",\n      \"created_at\": \"2024-01-10T00:00:00.000Z\",\n      \"updated_at\": \"2024-01-10T00:00:00.000Z\"\n    }\n  ],\n  \"count\": 1,\n  \"offset\": 0,\n  \"limit\": 20\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Customers",
+      "description": "Customer management endpoints for viewing and managing customer accounts",
+      "item": [
+        {
+          "name": "List Customers",
+          "description": "Retrieves a paginated list of all customers. Supports filtering by email, name, and other attributes. Returns customer details including contact information and order history summary.",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/admin/customers",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "customers"]
+            }
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/admin/customers",
+                  "host": ["{{base_url}}"],
+                  "path": ["admin", "customers"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"customers\": [\n    {\n      \"id\": \"cus_01EXAMPLE\",\n      \"email\": \"customer@example.com\",\n      \"first_name\": \"John\",\n      \"last_name\": \"Doe\",\n      \"phone\": \"+1-555-123-4567\",\n      \"has_account\": true,\n      \"orders\": [],\n      \"groups\": [],\n      \"metadata\": {},\n      \"created_at\": \"2024-01-01T00:00:00.000Z\",\n      \"updated_at\": \"2024-01-01T00:00:00.000Z\"\n    },\n    {\n      \"id\": \"cus_02EXAMPLE\",\n      \"email\": \"jane.smith@example.com\",\n      \"first_name\": \"Jane\",\n      \"last_name\": \"Smith\",\n      \"phone\": \"+1-555-987-6543\",\n      \"has_account\": true,\n      \"orders\": [],\n      \"groups\": [],\n      \"metadata\": {},\n      \"created_at\": \"2024-01-05T00:00:00.000Z\",\n      \"updated_at\": \"2024-01-05T00:00:00.000Z\"\n    }\n  ],\n  \"count\": 2,\n  \"offset\": 0,\n  \"limit\": 20\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "description": "Admin user management endpoints for creating and managing admin accounts",
+      "item": [
+        {
+          "name": "List Users",
+          "description": "Retrieves a list of all admin users. Returns user details including email, role, and permissions. Only accessible by users with appropriate admin privileges.",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/admin/users",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "users"]
+            }
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/admin/users",
+                  "host": ["{{base_url}}"],
+                  "path": ["admin", "users"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"users\": [\n    {\n      \"id\": \"usr_01ADMIN\",\n      \"email\": \"admin@gracestowel.com\",\n      \"first_name\": \"Admin\",\n      \"last_name\": \"User\",\n      \"role\": \"admin\",\n      \"created_at\": \"2024-01-01T00:00:00.000Z\",\n      \"updated_at\": \"2024-01-01T00:00:00.000Z\"\n    },\n    {\n      \"id\": \"usr_02MEMBER\",\n      \"email\": \"staff@gracestowel.com\",\n      \"first_name\": \"Staff\",\n      \"last_name\": \"Member\",\n      \"role\": \"member\",\n      \"created_at\": \"2024-01-02T00:00:00.000Z\",\n      \"updated_at\": \"2024-01-02T00:00:00.000Z\"\n    }\n  ],\n  \"count\": 2,\n  \"offset\": 0,\n  \"limit\": 20\n}"
+            }
+          ]
+        },
+        {
+          "name": "Create User",
+          "description": "Creates a new admin user account. Requires email and password. Can optionally specify role and other user details. The new user will receive an invitation email.",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"newadmin@gracestowel.com\",\n  \"password\": \"securePassword123!\",\n  \"first_name\": \"New\",\n  \"last_name\": \"Admin\",\n  \"role\": \"member\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/admin/users",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "users"]
+            }
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"newadmin@gracestowel.com\",\n  \"password\": \"securePassword123!\",\n  \"first_name\": \"New\",\n  \"last_name\": \"Admin\",\n  \"role\": \"member\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/admin/users",
+                  "host": ["{{base_url}}"],
+                  "path": ["admin", "users"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"user\": {\n    \"id\": \"usr_03NEWUSR\",\n    \"email\": \"newadmin@gracestowel.com\",\n    \"first_name\": \"New\",\n    \"last_name\": \"Admin\",\n    \"role\": \"member\",\n    \"created_at\": \"2024-01-15T00:00:00.000Z\",\n    \"updated_at\": \"2024-01-15T00:00:00.000Z\"\n  }\n}"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:9000",
+      "type": "string"
+    },
+    {
+      "key": "jwt_token",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}

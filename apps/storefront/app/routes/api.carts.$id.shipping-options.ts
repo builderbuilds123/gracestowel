@@ -49,9 +49,13 @@ export async function loader({ params, context }: LoaderFunctionArgs) {
 
   } catch (error: any) {
     console.error(`Error fetching shipping options for cart ${cartId}:`, error);
+    
+    // Handle specific error cases
+    const status = error.status === 404 || error.message?.includes("not found") ? 404 : 500;
+    
     return data({
-      error: "Failed to fetch shipping options",
-      details: error.message,
-    }, { status: 500 });
+      error: status === 404 ? "Resource not found" : "Failed to fetch shipping options",
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    }, { status });
   }
 }

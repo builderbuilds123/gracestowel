@@ -80,19 +80,34 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
   } catch (error: any) {
     console.error(`Error updating cart ${cartId}:`, error);
     
-    // Check for region mismatch error
-    if (error.message?.includes("Country") && error.message?.includes("not within region")) {
+    // Determine status code from upstream error
+    const status = error.status || 500;
+    
+    // Check for region mismatch error (broad text matching or 422 status with country/region keywords)
+    const isRegionMismatch = 
+      (error.message?.includes("Country") && error.message?.includes("not within region")) ||
+      (status === 422 && error.message?.toLowerCase().includes("region"));
+
+    if (isRegionMismatch) {
       return data({
         error: "Country not supported in cart region",
         details: error.message,
         code: "REGION_MISMATCH",
-      }, { status: 400 });
+      }, { status: 400 }); // Return 400 so frontend can handle it
+    }
+
+    // Forward upstream 4xx errors
+    if (status >= 400 && status < 500) {
+       return data({
+        error: error.message || "Invalid request",
+        details: error.details || undefined,
+      }, { status });
     }
 
     return data({
       error: "Failed to update cart",
-      details: error.message,
-    }, { status: 500 });
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    }, { status: 502 }); // 502 indicates upstream (Medusa) failure
   }
 }
 

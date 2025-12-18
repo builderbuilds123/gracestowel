@@ -39,7 +39,7 @@ describe("fallback-capture", () => {
     let mockQueryGraph: jest.Mock;
     let fallbackCaptureJob: any;
     const originalEnv = process.env;
-    const mockManager: any = {};
+    const mockPgConnection: any = { query: jest.fn() };
     
     // Mock logger for structured logging tests
     const mockLogger = {
@@ -65,7 +65,7 @@ describe("fallback-capture", () => {
                 if (key === "logger" || key === "LOGGER" || key.includes("LOGGER")) {
                     return mockLogger;
                 }
-                if (key === "manager") return mockManager;
+                if (key === "__pg_connection__") return mockPgConnection;
                 return { graph: mockQueryGraph };
             }),
         };
@@ -273,7 +273,7 @@ describe("fallback-capture", () => {
                 if (key === "logger" || key === "LOGGER" || key.includes("LOGGER")) {
                     return mockLogger;
                 }
-                if (key === "manager") return {};
+                if (key === "__pg_connection__") return {};
                 return { graph: freshMockQueryGraph };
             }),
         };
@@ -334,7 +334,7 @@ describe("fallback-capture", () => {
                         return mockLogger;
                     }
                     if (key === "query") return { graph: recoveryQueryGraph };
-                    if (key === "manager") return {};
+                    if (key === "__pg_connection__") return {};
                     if (key === "order") return mockOrderService;
                     return undefined;
                 }),

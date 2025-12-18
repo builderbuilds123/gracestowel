@@ -68,6 +68,54 @@ async function handleStripeEvent(event: Stripe.Event, container: MedusaContainer
     }
 }
 
+// Track if subscribers have been registered
+let subscribersRegistered = false;
+
+async function ensureSubscribersRegistered(container: MedusaContainer) {
+    if (subscribersRegistered) return;
+
+    try {
+        console.log("[SUBSCRIBERS] Registering project subscribers from Stripe worker...");
+        const { Modules } = await import("@medusajs/framework/utils");
+        const eventBusModuleService = container.resolve(Modules.EVENT_BUS);
+
+        // Use static imports instead of dynamic imports to avoid path issues
+        const orderPlacedModule = require("../subscribers/order-placed");
+        const customerCreatedModule = require("../subscribers/customer-created");
+        const fulfillmentCreatedModule = require("../subscribers/fulfillment-created");
+        const orderCanceledModule = require("../subscribers/order-canceled");
+
+        // Register order-placed subscriber
+        eventBusModuleService.subscribe(orderPlacedModule.config.event, async (data: any) => {
+            await orderPlacedModule.default({ event: { name: orderPlacedModule.config.event, data }, container });
+        });
+        console.log(`[SUBSCRIBERS] ✅ Registered: ${orderPlacedModule.config.event}`);
+
+        // Register customer-created subscriber
+        eventBusModuleService.subscribe(customerCreatedModule.config.event, async (data: any) => {
+            await customerCreatedModule.default({ event: { name: customerCreatedModule.config.event, data }, container });
+        });
+        console.log(`[SUBSCRIBERS] ✅ Registered: ${customerCreatedModule.config.event}`);
+
+        // Register fulfillment-created subscriber
+        eventBusModuleService.subscribe(fulfillmentCreatedModule.config.event, async (data: any) => {
+            await fulfillmentCreatedModule.default({ event: { name: fulfillmentCreatedModule.config.event, data }, container });
+        });
+        console.log(`[SUBSCRIBERS] ✅ Registered: ${fulfillmentCreatedModule.config.event}`);
+
+        // Register order-canceled subscriber
+        eventBusModuleService.subscribe(orderCanceledModule.config.event, async (data: any) => {
+            await orderCanceledModule.default({ event: { name: orderCanceledModule.config.event, data }, container });
+        });
+        console.log(`[SUBSCRIBERS] ✅ Registered: ${orderCanceledModule.config.event}`);
+
+        subscribersRegistered = true;
+        console.log("[SUBSCRIBERS] All subscribers registered successfully");
+    } catch (error) {
+        console.error("[SUBSCRIBERS] Failed to register subscribers:", error);
+    }
+}
+
 /**
  * Handle authorized payment intent (manual capture mode)
  * Updated 2025-12-12: Added idempotency check and structured logging
@@ -76,6 +124,9 @@ async function handlePaymentIntentAuthorized(
     paymentIntent: Stripe.PaymentIntent,
     container: MedusaContainer
 ): Promise<void> {
+    // Ensure subscribers are registered before processing (Medusa v2 workaround)
+    await ensureSubscribersRegistered(container);
+
     const traceId = paymentIntent.metadata?.trace_id || `webhook_${paymentIntent.id}`;
     const piId = paymentIntent.id;
 
@@ -229,6 +280,9 @@ async function createOrderFromPaymentIntent(
     }
 
     const customerEmail = metadata.customer_email || paymentIntent.receipt_email;
+    
+    // Extract shipping amount from metadata (stored in cents)
+    const shippingAmount = metadata.shipping_amount ? parseInt(metadata.shipping_amount, 10) : 0;
 
     let shippingAddress: z.infer<typeof ShippingAddressSchema> | undefined = undefined;
 
@@ -279,6 +333,7 @@ async function createOrderFromPaymentIntent(
         paymentIntentId: paymentIntent.id,
         itemCount: cartData.items.length,
         hasShipping: !!shippingAddress,
+        shippingAmount,
         amount: paymentIntent.amount,
         currency: paymentIntent.currency,
     });
@@ -289,6 +344,7 @@ async function createOrderFromPaymentIntent(
             cartData,
             customerEmail: customerEmail || undefined,
             shippingAddress,
+            shippingAmount,
             amount: paymentIntent.amount,
             currency: paymentIntent.currency,
         }
@@ -318,22 +374,87 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session):
     logger.info("stripe-worker", "Checkout session completed", { sessionId: session.id });
 }
 
+let workerStarted = false;
+
 /**
- * Loader function - called by Medusa on startup
+ * Ensure the Stripe event worker is started (idempotent)
+ * Can be called multiple times safely - only starts worker once
  */
-export default async function stripeEventWorkerLoader(container: MedusaContainer): Promise<void> {
-    // Only start worker if Redis is configured
+export function ensureStripeWorkerStarted(container: MedusaContainer): void {
+    if (workerStarted) {
+        return;
+    }
+
     if (!process.env.REDIS_URL) {
         logger.warn("stripe-worker", "REDIS_URL not configured - worker not started");
         return;
     }
 
     try {
-        logger.info("stripe-worker", "Starting Stripe event worker", { redisConfigured: true });
+        console.log("[stripe-worker] Starting Stripe event worker...");
         startStripeEventWorker(container, handleStripeEvent);
-        logger.info("stripe-worker", "Worker started successfully - ready to process events");
+        workerStarted = true;
+        console.log("[stripe-worker] Worker started successfully");
     } catch (error) {
         logger.critical("stripe-worker", "Failed to start worker", {}, error as Error);
-        // Don't throw - allow backend to start even if worker fails
+    }
+}
+
+/**
+ * Loader function - called by Medusa on startup
+ */
+export default async function stripeEventWorkerLoader(container: MedusaContainer): Promise<void> {
+    ensureStripeWorkerStarted(container);
+
+    // Register project subscribers (Story fix: Medusa v2 doesn't auto-discover subscribers)
+    try {
+        console.log("[SUBSCRIBERS] Registering project subscribers...");
+        const { Modules } = await import("@medusajs/framework/utils");
+        const eventBusModuleService = container.resolve(Modules.EVENT_BUS);
+
+        // Import and register order-placed subscriber
+        const orderPlacedModule = await import("../subscribers/order-placed");
+        const orderPlacedHandler = orderPlacedModule.default;
+        const orderPlacedConfig = orderPlacedModule.config;
+
+        eventBusModuleService.subscribe(orderPlacedConfig.event, async (data: any) => {
+            await orderPlacedHandler({ event: { name: orderPlacedConfig.event, data }, container });
+        });
+        console.log(`[SUBSCRIBERS] ✅ Registered: ${orderPlacedConfig.event}`);
+
+        // Import and register customer-created subscriber
+        const customerCreatedModule = await import("../subscribers/customer-created");
+        const customerCreatedHandler = customerCreatedModule.default;
+        const customerCreatedConfig = customerCreatedModule.config;
+
+        eventBusModuleService.subscribe(customerCreatedConfig.event, async (data: any) => {
+            await customerCreatedHandler({ event: { name: customerCreatedConfig.event, data }, container });
+        });
+        console.log(`[SUBSCRIBERS] ✅ Registered: ${customerCreatedConfig.event}`);
+
+        // Import and register fulfillment-created subscriber
+        const fulfillmentCreatedModule = await import("../subscribers/fulfillment-created");
+        const fulfillmentCreatedHandler = fulfillmentCreatedModule.default;
+        const fulfillmentCreatedConfig = fulfillmentCreatedModule.config;
+
+        eventBusModuleService.subscribe(fulfillmentCreatedConfig.event, async (data: any) => {
+            await fulfillmentCreatedHandler({ event: { name: fulfillmentCreatedConfig.event, data }, container });
+        });
+        console.log(`[SUBSCRIBERS] ✅ Registered: ${fulfillmentCreatedConfig.event}`);
+
+        // Import and register order-canceled subscriber
+        const orderCanceledModule = await import("../subscribers/order-canceled");
+        const orderCanceledHandler = orderCanceledModule.default;
+        const orderCanceledConfig = orderCanceledModule.config;
+
+        eventBusModuleService.subscribe(orderCanceledConfig.event, async (data: any) => {
+            await orderCanceledHandler({ event: { name: orderCanceledConfig.event, data }, container });
+        });
+        console.log(`[SUBSCRIBERS] ✅ Registered: ${orderCanceledConfig.event}`);
+
+        console.log("[SUBSCRIBERS] All subscribers registered successfully");
+    } catch (error) {
+        console.error("[SUBSCRIBERS] Failed to register subscribers:", error);
+        throw error;
     }
 }

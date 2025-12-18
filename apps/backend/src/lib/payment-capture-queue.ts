@@ -94,13 +94,19 @@ export async function schedulePaymentCapture(
     orderId: string,
     paymentIntentId: string
 ): Promise<Job<PaymentCaptureJobData>> {
+    console.log(`[CAPTURE_QUEUE] 📋 Scheduling payment capture for order ${orderId}, PI: ${paymentIntentId}`);
+
     const queue = getPaymentCaptureQueue();
-    
+
     const jobData: PaymentCaptureJobData = {
         orderId,
         paymentIntentId,
         scheduledAt: Date.now(),
     };
+
+    const delaySeconds = Math.round(PAYMENT_CAPTURE_DELAY_MS / 1000);
+    const delayMinutes = Math.round(delaySeconds / 60);
+    const captureTime = new Date(Date.now() + PAYMENT_CAPTURE_DELAY_MS).toISOString();
 
     const job = await queue.add(
         `capture-${orderId}`,
@@ -111,7 +117,13 @@ export async function schedulePaymentCapture(
         }
     );
 
-    console.log(`Scheduled payment capture for order ${orderId} in 1 hour (job ${job.id})`);
+    console.log(`[CAPTURE_QUEUE] ✅ Payment capture scheduled successfully!`);
+    console.log(`[CAPTURE_QUEUE]   Order: ${orderId}`);
+    console.log(`[CAPTURE_QUEUE]   Payment Intent: ${paymentIntentId}`);
+    console.log(`[CAPTURE_QUEUE]   Job ID: ${job.id}`);
+    console.log(`[CAPTURE_QUEUE]   Delay: ${delayMinutes} minutes (${delaySeconds} seconds)`);
+    console.log(`[CAPTURE_QUEUE]   Scheduled capture time: ${captureTime}`);
+
     return job;
 }
 

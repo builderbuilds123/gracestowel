@@ -120,4 +120,42 @@ describe("API Shipping Rates", () => {
     expect(responseData.message).toBe("Unable to calculate shipping rates. Please try again.");
     expect(responseData.error).toBe("Cart creation failed");
   });
+
+  it("should return 400 when cartItems is missing", async () => {
+    const request = new Request("http://localhost", {
+      method: "POST",
+      body: JSON.stringify({
+        currency: "USD",
+        shippingAddress: { country_code: "US" },
+      }),
+    });
+
+    const response = await action({ request, params: {}, context });
+    expect(response).toHaveProperty("data");
+    const responseData = (response as any).data;
+    expect(responseData.message).toBe("cartItems array is required");
+  });
+
+  it("should return 400 when cartItems is not an array", async () => {
+    const request = new Request("http://localhost", {
+      method: "POST",
+      body: JSON.stringify({
+        cartItems: "not-an-array",
+        currency: "USD",
+      }),
+    });
+
+    const response = await action({ request, params: {}, context });
+    expect(response).toHaveProperty("data");
+    const responseData = (response as any).data;
+    expect(responseData.message).toBe("cartItems array is required");
+  });
+
+  it("should return 405 for non-POST requests", async () => {
+    const request = new Request("http://localhost", { method: "GET" });
+    const response = await action({ request, params: {}, context });
+    expect(response).toHaveProperty("data");
+    const responseData = (response as any).data;
+    expect(responseData.message).toBe("Method not allowed");
+  });
 });
