@@ -269,24 +269,10 @@ export async function action({ request, context }: ActionFunctionArgs) {
     }
 
     const formattedOptions = shippingOptions.map(opt => {
-        let originalAmount = opt.originalAmount;
-
-        // If not present (it won't be from service usually), try to find it in regionOptions
-        if (originalAmount === undefined && regionOptions.length > 0) {
-            const regionOption = regionOptions.find((ro: any) => ro.id === opt.id);
-            if (regionOption) {
-                originalAmount = extractOriginalAmount(regionOption, regionId, currency);
-            }
-        }
-
-        // If explicitly free (amount 0) and we found an original amount, that's our strikethrough.
-        // If amount > 0 but different from original, that's a discount.
-
         return {
             id: opt.id,
             displayName: opt.name,
             amount: opt.amount,
-            originalAmount: originalAmount !== opt.amount ? originalAmount : undefined,
             isFree: opt.amount === 0,
             deliveryEstimate: null
         };

@@ -361,6 +361,13 @@ export default async function stripeEventWorkerLoader(container: MedusaContainer
         const { Modules } = await import("@medusajs/framework/utils");
         const eventBusModuleService = container.resolve(Modules.EVENT_BUS);
 
+        // Define strict contract for subscriber handlers to ensure type safety
+        type SubscriberHandler = (args: {
+            event: { name: string; data: any };
+            container: MedusaContainer;
+            pluginOptions: Record<string, unknown>;
+        }) => Promise<void>;
+
         // Import and register order-placed subscriber
         const orderPlacedModule = await import("../subscribers/order-placed.js");
         const orderPlacedHandler = orderPlacedModule.default;
@@ -369,7 +376,8 @@ export default async function stripeEventWorkerLoader(container: MedusaContainer
         const orderPlacedEvents = Array.isArray(orderPlacedConfig.event) ? orderPlacedConfig.event : [orderPlacedConfig.event];
         for (const eventName of orderPlacedEvents) {
             eventBusModuleService.subscribe(eventName, async (data: any) => {
-                await orderPlacedHandler({ event: { name: eventName, data }, container, pluginOptions: {} } as any);
+                const handler = orderPlacedHandler as unknown as SubscriberHandler;
+                await handler({ event: { name: eventName, data }, container, pluginOptions: {} });
             });
             console.log(`[SUBSCRIBERS] ✅ Registered: ${eventName}`);
         }
@@ -382,7 +390,8 @@ export default async function stripeEventWorkerLoader(container: MedusaContainer
         const customerCreatedEvents = Array.isArray(customerCreatedConfig.event) ? customerCreatedConfig.event : [customerCreatedConfig.event];
         for (const eventName of customerCreatedEvents) {
             eventBusModuleService.subscribe(eventName, async (data: any) => {
-                await customerCreatedHandler({ event: { name: eventName, data }, container, pluginOptions: {} } as any);
+                const handler = customerCreatedHandler as unknown as SubscriberHandler;
+                await handler({ event: { name: eventName, data }, container, pluginOptions: {} });
             });
             console.log(`[SUBSCRIBERS] ✅ Registered: ${eventName}`);
         }
@@ -395,7 +404,8 @@ export default async function stripeEventWorkerLoader(container: MedusaContainer
         const fulfillmentEvents = Array.isArray(fulfillmentCreatedConfig.event) ? fulfillmentCreatedConfig.event : [fulfillmentCreatedConfig.event];
         for (const eventName of fulfillmentEvents) {
             eventBusModuleService.subscribe(eventName, async (data: any) => {
-                await fulfillmentCreatedHandler({ event: { name: eventName, data }, container, pluginOptions: {} } as any);
+                const handler = fulfillmentCreatedHandler as unknown as SubscriberHandler;
+                await handler({ event: { name: eventName, data }, container, pluginOptions: {} });
             });
             console.log(`[SUBSCRIBERS] ✅ Registered: ${eventName}`);
         }
@@ -408,7 +418,8 @@ export default async function stripeEventWorkerLoader(container: MedusaContainer
         const orderCanceledEvents = Array.isArray(orderCanceledConfig.event) ? orderCanceledConfig.event : [orderCanceledConfig.event];
         for (const eventName of orderCanceledEvents) {
             eventBusModuleService.subscribe(eventName, async (data: any) => {
-                await orderCanceledHandler({ event: { name: eventName, data }, container, pluginOptions: {} } as any);
+                const handler = orderCanceledHandler as unknown as SubscriberHandler;
+                await handler({ event: { name: eventName, data }, container, pluginOptions: {} });
             });
             console.log(`[SUBSCRIBERS] ✅ Registered: ${eventName}`);
         }
