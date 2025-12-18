@@ -94,6 +94,14 @@ export async function schedulePaymentCapture(
     orderId: string,
     paymentIntentId: string
 ): Promise<Job<PaymentCaptureJobData>> {
+    if (!orderId || typeof orderId !== "string" || !orderId.startsWith("order_")) {
+        throw new Error(`Invalid orderId for scheduling payment capture: ${orderId}`);
+    }
+
+    if (!paymentIntentId || typeof paymentIntentId !== "string" || !paymentIntentId.startsWith("pi_")) {
+        throw new Error(`Invalid paymentIntentId for scheduling payment capture: ${paymentIntentId}`);
+    }
+
     console.log(`[CAPTURE_QUEUE] 📋 Scheduling payment capture for order ${orderId}, PI: ${paymentIntentId}`);
 
     const queue = getPaymentCaptureQueue();
@@ -108,14 +116,34 @@ export async function schedulePaymentCapture(
     const delayMinutes = Math.round(delaySeconds / 60);
     const captureTime = new Date(Date.now() + PAYMENT_CAPTURE_DELAY_MS).toISOString();
 
-    const job = await queue.add(
-        `capture-${orderId}`,
-        jobData,
-        {
-            delay: PAYMENT_CAPTURE_DELAY_MS,
-            jobId: `capture-${orderId}`, // Unique job ID to prevent duplicates
+    let job: Job<PaymentCaptureJobData> | null = null;
+    try {
+        job = await queue.add(
+            `capture-${orderId}`,
+            jobData,
+            {
+                delay: PAYMENT_CAPTURE_DELAY_MS,
+                jobId: `capture-${orderId}`, // Unique job ID to prevent duplicates
+            }
+        );
+    } catch (err: any) {
+        const message = err?.message || "";
+        const isDuplicate = err?.name === "JobIdAlreadyExistsError" || message.includes("already exists");
+        if (isDuplicate) {
+            const existing = await queue.getJob(`capture-${orderId}`);
+            if (existing) {
+                job = existing as any;
+            } else {
+                throw err;
+            }
+        } else {
+            throw err;
         }
-    );
+    }
+
+    if (!job) {
+        throw new Error(`Failed to schedule payment capture job for order ${orderId}`);
+    }
 
     console.log(`[CAPTURE_QUEUE] ✅ Payment capture scheduled successfully!`);
     console.log(`[CAPTURE_QUEUE]   Order: ${orderId}`);

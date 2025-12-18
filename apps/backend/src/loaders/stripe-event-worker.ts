@@ -4,6 +4,7 @@ import { startStripeEventWorker } from "../workers/stripe-event-worker";
 import { createOrderFromStripeWorkflow } from "../workflows/create-order-from-stripe";
 import { z } from "zod";
 import { logger } from "../utils/logger";
+import { registerProjectSubscribers } from "../utils/register-subscribers";
 
 const CartItemSchema = z.object({
   variantId: z.string().optional(),
@@ -330,6 +331,7 @@ let workerStarted = false;
  * Can be called multiple times safely - only starts worker once
  */
 export function ensureStripeWorkerStarted(container: MedusaContainer): void {
+    // Only start worker once
     if (workerStarted) {
         return;
     }
@@ -350,83 +352,15 @@ export function ensureStripeWorkerStarted(container: MedusaContainer): void {
 }
 
 /**
- * Loader function - called by Medusa on startup
+ * Loader function - called by Medusa on startup (if auto-discovery works)
+ * Currently not being auto-discovered by Medusa v2, so we trigger manually
  */
 export default async function stripeEventWorkerLoader(container: MedusaContainer): Promise<void> {
+    logger.info("stripe-event-worker-loader", "Stripe event worker loader starting");
+
+    // Register subscribers first
+    await registerProjectSubscribers(container);
+
+    // Then start worker
     ensureStripeWorkerStarted(container);
-
-    // Register project subscribers (Story fix: Medusa v2 doesn't auto-discover subscribers)
-    try {
-        console.log("[SUBSCRIBERS] Registering project subscribers...");
-        const { Modules } = await import("@medusajs/framework/utils");
-        const eventBusModuleService = container.resolve(Modules.EVENT_BUS);
-
-        // Define strict contract for subscriber handlers to ensure type safety
-        type SubscriberHandler = (args: {
-            event: { name: string; data: any };
-            container: MedusaContainer;
-            pluginOptions: Record<string, unknown>;
-        }) => Promise<void>;
-
-        // Import and register order-placed subscriber
-        const orderPlacedModule = await import("../subscribers/order-placed.js");
-        const orderPlacedHandler = orderPlacedModule.default;
-        const orderPlacedConfig = orderPlacedModule.config;
-
-        const orderPlacedEvents = Array.isArray(orderPlacedConfig.event) ? orderPlacedConfig.event : [orderPlacedConfig.event];
-        for (const eventName of orderPlacedEvents) {
-            eventBusModuleService.subscribe(eventName, async (data: any) => {
-                const handler = orderPlacedHandler as unknown as SubscriberHandler;
-                await handler({ event: { name: eventName, data }, container, pluginOptions: {} });
-            });
-            console.log(`[SUBSCRIBERS] ✅ Registered: ${eventName}`);
-        }
-
-        // Import and register customer-created subscriber
-        const customerCreatedModule = await import("../subscribers/customer-created.js");
-        const customerCreatedHandler = customerCreatedModule.default;
-        const customerCreatedConfig = customerCreatedModule.config;
-
-        const customerCreatedEvents = Array.isArray(customerCreatedConfig.event) ? customerCreatedConfig.event : [customerCreatedConfig.event];
-        for (const eventName of customerCreatedEvents) {
-            eventBusModuleService.subscribe(eventName, async (data: any) => {
-                const handler = customerCreatedHandler as unknown as SubscriberHandler;
-                await handler({ event: { name: eventName, data }, container, pluginOptions: {} });
-            });
-            console.log(`[SUBSCRIBERS] ✅ Registered: ${eventName}`);
-        }
-
-        // Import and register fulfillment-created subscriber
-        const fulfillmentCreatedModule = await import("../subscribers/fulfillment-created.js");
-        const fulfillmentCreatedHandler = fulfillmentCreatedModule.default;
-        const fulfillmentCreatedConfig = fulfillmentCreatedModule.config;
-
-        const fulfillmentEvents = Array.isArray(fulfillmentCreatedConfig.event) ? fulfillmentCreatedConfig.event : [fulfillmentCreatedConfig.event];
-        for (const eventName of fulfillmentEvents) {
-            eventBusModuleService.subscribe(eventName, async (data: any) => {
-                const handler = fulfillmentCreatedHandler as unknown as SubscriberHandler;
-                await handler({ event: { name: eventName, data }, container, pluginOptions: {} });
-            });
-            console.log(`[SUBSCRIBERS] ✅ Registered: ${eventName}`);
-        }
-
-        // Import and register order-canceled subscriber
-        const orderCanceledModule = await import("../subscribers/order-canceled.js");
-        const orderCanceledHandler = orderCanceledModule.default;
-        const orderCanceledConfig = orderCanceledModule.config;
-
-        const orderCanceledEvents = Array.isArray(orderCanceledConfig.event) ? orderCanceledConfig.event : [orderCanceledConfig.event];
-        for (const eventName of orderCanceledEvents) {
-            eventBusModuleService.subscribe(eventName, async (data: any) => {
-                const handler = orderCanceledHandler as unknown as SubscriberHandler;
-                await handler({ event: { name: eventName, data }, container, pluginOptions: {} });
-            });
-            console.log(`[SUBSCRIBERS] ✅ Registered: ${eventName}`);
-        }
-
-        console.log("[SUBSCRIBERS] All subscribers registered successfully");
-    } catch (error) {
-        console.error("[SUBSCRIBERS] Failed to register subscribers:", error);
-        throw error;
-    }
 }

@@ -1,5 +1,6 @@
 {
   "info": {
+    "_postman_id": "e1747f5e-96e9-439c-a2ef-2803ff7c8eec",
     "name": "Store API",
     "description": "Medusa Store API endpoints for storefront operations including products, carts, checkout, regions, and collections. These are public-facing endpoints used by the Grace Stowel storefront.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
@@ -7,11 +8,9 @@
   "item": [
     {
       "name": "Products",
-      "description": "Product catalog endpoints for browsing and searching products",
       "item": [
         {
           "name": "List Products",
-          "description": "Retrieves a paginated list of products available in the store. Supports filtering by category, collection, and other attributes.",
           "event": [
             {
               "listen": "test",
@@ -101,6 +100,7 @@
               }
             }
           ],
+          "id": "3f117411-d68b-48bb-9e6f-be67e20c34a2",
           "request": {
             "method": "GET",
             "header": [
@@ -112,32 +112,46 @@
             ],
             "url": {
               "raw": "{{base_url}}/store/products",
-              "host": ["{{base_url}}"],
-              "path": ["store", "products"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "store",
+                "products"
+              ]
             }
           },
           "response": [
             {
+              "id": "c65aac7e-0871-4c5a-837f-96c88a141253",
               "name": "Success Response",
               "originalRequest": {
                 "method": "GET",
                 "header": [],
                 "url": {
                   "raw": "{{base_url}}/store/products",
-                  "host": ["{{base_url}}"],
-                  "path": ["store", "products"]
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "store",
+                    "products"
+                  ]
                 }
               },
               "status": "OK",
               "code": 200,
               "_postman_previewlanguage": "json",
+              "header": null,
+              "cookie": [],
+              "responseTime": null,
               "body": "{\n  \"products\": [\n    {\n      \"id\": \"prod_01EXAMPLE\",\n      \"title\": \"Grace Stowel Premium Towel\",\n      \"handle\": \"grace-stowel-premium-towel\",\n      \"description\": \"A luxurious premium towel\",\n      \"thumbnail\": \"https://example.com/thumbnail.jpg\",\n      \"variants\": [\n        {\n          \"id\": \"variant_01EXAMPLE\",\n          \"title\": \"White / Large\",\n          \"prices\": [\n            {\n              \"amount\": 2999,\n              \"currency_code\": \"usd\"\n            }\n          ]\n        }\n      ]\n    }\n  ],\n  \"count\": 1,\n  \"offset\": 0,\n  \"limit\": 20\n}"
             }
           ]
         },
         {
           "name": "Get Product by Handle",
-          "description": "Retrieves a single product by its URL handle. Used for product detail pages.",
+          "id": "da7a3471-5987-449f-ab92-ef68de86e06c",
           "request": {
             "method": "GET",
             "header": [
@@ -149,8 +163,13 @@
             ],
             "url": {
               "raw": "{{base_url}}/store/products?handle={{product_handle}}",
-              "host": ["{{base_url}}"],
-              "path": ["store", "products"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "store",
+                "products"
+              ],
               "query": [
                 {
                   "key": "handle",
@@ -162,14 +181,20 @@
           },
           "response": [
             {
+              "id": "be2b4adf-4ab6-47dd-89a1-dcec825a7f7b",
               "name": "Success Response",
               "originalRequest": {
                 "method": "GET",
                 "header": [],
                 "url": {
                   "raw": "{{base_url}}/store/products?handle=grace-stowel-premium-towel",
-                  "host": ["{{base_url}}"],
-                  "path": ["store", "products"],
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "store",
+                    "products"
+                  ],
                   "query": [
                     {
                       "key": "handle",
@@ -181,19 +206,22 @@
               "status": "OK",
               "code": 200,
               "_postman_previewlanguage": "json",
+              "header": null,
+              "cookie": [],
+              "responseTime": null,
               "body": "{\n  \"products\": [\n    {\n      \"id\": \"prod_01EXAMPLE\",\n      \"title\": \"Grace Stowel Premium Towel\",\n      \"handle\": \"grace-stowel-premium-towel\",\n      \"description\": \"A luxurious premium towel with superior absorbency\",\n      \"thumbnail\": \"https://example.com/thumbnail.jpg\",\n      \"images\": [\n        {\n          \"id\": \"img_01EXAMPLE\",\n          \"url\": \"https://example.com/image1.jpg\"\n        }\n      ],\n      \"variants\": [\n        {\n          \"id\": \"variant_01EXAMPLE\",\n          \"title\": \"White / Large\",\n          \"sku\": \"TOWEL-WHT-LG\",\n          \"prices\": [\n            {\n              \"amount\": 2999,\n              \"currency_code\": \"usd\"\n            }\n          ],\n          \"inventory_quantity\": 100\n        }\n      ],\n      \"options\": [\n        {\n          \"id\": \"opt_01EXAMPLE\",\n          \"title\": \"Color\",\n          \"values\": [\"White\", \"Gray\", \"Navy\"]\n        },\n        {\n          \"id\": \"opt_02EXAMPLE\",\n          \"title\": \"Size\",\n          \"values\": [\"Small\", \"Medium\", \"Large\"]\n        }\n      ]\n    }\n  ],\n  \"count\": 1,\n  \"offset\": 0,\n  \"limit\": 1\n}"
             }
           ]
         }
-      ]
+      ],
+      "id": "a5612fed-7dd6-473f-9d9e-b67d3f3bb9ef",
+      "description": "Product catalog endpoints for browsing and searching products"
     },
     {
       "name": "Carts",
-      "description": "Shopping cart management endpoints for creating carts, adding items, and managing cart state",
       "item": [
         {
           "name": "Create Cart",
-          "description": "Creates a new shopping cart. The cart ID is automatically stored in collection variables for subsequent requests.",
           "event": [
             {
               "listen": "test",
@@ -215,6 +243,7 @@
               }
             }
           ],
+          "id": "dd1cd5c1-4762-4ec0-8582-5ebe00bb3bb6",
           "request": {
             "method": "POST",
             "header": [
@@ -230,12 +259,18 @@
             },
             "url": {
               "raw": "{{base_url}}/store/carts",
-              "host": ["{{base_url}}"],
-              "path": ["store", "carts"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "store",
+                "carts"
+              ]
             }
           },
           "response": [
             {
+              "id": "83b23f5d-6ca8-413e-b5eb-fb508cf2f603",
               "name": "Success Response",
               "originalRequest": {
                 "method": "POST",
@@ -251,20 +286,27 @@
                 },
                 "url": {
                   "raw": "{{base_url}}/store/carts",
-                  "host": ["{{base_url}}"],
-                  "path": ["store", "carts"]
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "store",
+                    "carts"
+                  ]
                 }
               },
               "status": "OK",
               "code": 200,
               "_postman_previewlanguage": "json",
+              "header": null,
+              "cookie": [],
+              "responseTime": null,
               "body": "{\n  \"cart\": {\n    \"id\": \"cart_01EXAMPLE\",\n    \"region_id\": \"reg_01EXAMPLE\",\n    \"items\": [],\n    \"subtotal\": 0,\n    \"tax_total\": 0,\n    \"total\": 0,\n    \"created_at\": \"2024-01-01T00:00:00.000Z\",\n    \"updated_at\": \"2024-01-01T00:00:00.000Z\"\n  }\n}"
             }
           ]
         },
         {
           "name": "Get Cart",
-          "description": "Retrieves the current cart by ID. Uses the cart_id stored in collection variables.",
           "event": [
             {
               "listen": "test",
@@ -361,6 +403,7 @@
               }
             }
           ],
+          "id": "a08fb1a7-bb21-4c4a-a8e8-317a7cd9877c",
           "request": {
             "method": "GET",
             "header": [
@@ -372,32 +415,47 @@
             ],
             "url": {
               "raw": "{{base_url}}/store/carts/{{cart_id}}",
-              "host": ["{{base_url}}"],
-              "path": ["store", "carts", "{{cart_id}}"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "store",
+                "carts",
+                "{{cart_id}}"
+              ]
             }
           },
           "response": [
             {
+              "id": "33d16fd5-9ed5-4e01-8dcd-3277d9be2cef",
               "name": "Success Response",
               "originalRequest": {
                 "method": "GET",
                 "header": [],
                 "url": {
                   "raw": "{{base_url}}/store/carts/cart_01EXAMPLE",
-                  "host": ["{{base_url}}"],
-                  "path": ["store", "carts", "cart_01EXAMPLE"]
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "store",
+                    "carts",
+                    "cart_01EXAMPLE"
+                  ]
                 }
               },
               "status": "OK",
               "code": 200,
               "_postman_previewlanguage": "json",
+              "header": null,
+              "cookie": [],
+              "responseTime": null,
               "body": "{\n  \"cart\": {\n    \"id\": \"cart_01EXAMPLE\",\n    \"region_id\": \"reg_01EXAMPLE\",\n    \"items\": [\n      {\n        \"id\": \"item_01EXAMPLE\",\n        \"cart_id\": \"cart_01EXAMPLE\",\n        \"variant_id\": \"variant_01EXAMPLE\",\n        \"quantity\": 2,\n        \"unit_price\": 2999,\n        \"subtotal\": 5998\n      }\n    ],\n    \"subtotal\": 5998,\n    \"tax_total\": 540,\n    \"shipping_total\": 500,\n    \"total\": 7038,\n    \"shipping_address\": null,\n    \"billing_address\": null\n  }\n}"
             }
           ]
         },
         {
           "name": "Add Line Item",
-          "description": "Adds a product variant to the cart. Requires variant_id and quantity in the request body.",
           "event": [
             {
               "listen": "test",
@@ -416,6 +474,7 @@
               }
             }
           ],
+          "id": "ed4a01fb-de58-462e-bc21-d87212421c7f",
           "request": {
             "method": "POST",
             "header": [
@@ -431,12 +490,20 @@
             },
             "url": {
               "raw": "{{base_url}}/store/carts/{{cart_id}}/line-items",
-              "host": ["{{base_url}}"],
-              "path": ["store", "carts", "{{cart_id}}", "line-items"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "store",
+                "carts",
+                "{{cart_id}}",
+                "line-items"
+              ]
             }
           },
           "response": [
             {
+              "id": "4502087d-2815-4116-a74d-260f07b05aba",
               "name": "Success Response",
               "originalRequest": {
                 "method": "POST",
@@ -452,30 +519,39 @@
                 },
                 "url": {
                   "raw": "{{base_url}}/store/carts/cart_01EXAMPLE/line-items",
-                  "host": ["{{base_url}}"],
-                  "path": ["store", "carts", "cart_01EXAMPLE", "line-items"]
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "store",
+                    "carts",
+                    "cart_01EXAMPLE",
+                    "line-items"
+                  ]
                 }
               },
               "status": "OK",
               "code": 200,
               "_postman_previewlanguage": "json",
+              "header": null,
+              "cookie": [],
+              "responseTime": null,
               "body": "{\n  \"cart\": {\n    \"id\": \"cart_01EXAMPLE\",\n    \"region_id\": \"reg_01EXAMPLE\",\n    \"items\": [\n      {\n        \"id\": \"item_01EXAMPLE\",\n        \"cart_id\": \"cart_01EXAMPLE\",\n        \"variant_id\": \"variant_01EXAMPLE\",\n        \"title\": \"Grace Stowel Premium Towel\",\n        \"quantity\": 1,\n        \"unit_price\": 2999,\n        \"subtotal\": 2999\n      }\n    ],\n    \"subtotal\": 2999,\n    \"tax_total\": 270,\n    \"total\": 3269\n  }\n}"
             }
           ]
         }
-      ]
+      ],
+      "id": "c42b8344-838e-4854-8bab-7e9ac9d75dd1",
+      "description": "Shopping cart management endpoints for creating carts, adding items, and managing cart state"
     },
     {
       "name": "Checkout",
-      "description": "Checkout flow endpoints for completing purchases",
       "item": [
         {
           "name": "Complete Checkout Flow",
-          "description": "Sequential requests to complete a full checkout: create cart → add line item → set shipping → create payment intent → complete checkout. Run this folder to execute the entire flow.",
           "item": [
             {
               "name": "1. Create Cart",
-              "description": "Step 1: Creates a new shopping cart for the checkout flow.",
               "event": [
                 {
                   "listen": "test",
@@ -497,6 +573,7 @@
                   }
                 }
               ],
+              "id": "efa8d334-faf8-414f-8ea0-c55dc6c8794a",
               "request": {
                 "method": "POST",
                 "header": [
@@ -512,23 +589,55 @@
                 },
                 "url": {
                   "raw": "{{base_url}}/store/carts",
-                  "host": ["{{base_url}}"],
-                  "path": ["store", "carts"]
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "store",
+                    "carts"
+                  ]
                 }
               },
               "response": [
                 {
+                  "id": "00b490cc-d125-4a12-ad3a-aa05c64a7894",
                   "name": "Success Response",
+                  "originalRequest": {
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"region_id\": \"{{region_id}}\"\n}"
+                    },
+                    "url": {
+                      "raw": "{{base_url}}/store/carts",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "store",
+                        "carts"
+                      ]
+                    }
+                  },
                   "status": "OK",
                   "code": 200,
                   "_postman_previewlanguage": "json",
+                  "header": null,
+                  "cookie": [],
+                  "responseTime": null,
                   "body": "{\n  \"cart\": {\n    \"id\": \"cart_01CHECKOUT\",\n    \"region_id\": \"reg_01EXAMPLE\",\n    \"items\": [],\n    \"subtotal\": 0,\n    \"total\": 0\n  }\n}"
                 }
               ]
             },
             {
               "name": "2. Add Line Item",
-              "description": "Step 2: Adds a product to the cart.",
               "event": [
                 {
                   "listen": "test",
@@ -547,6 +656,7 @@
                   }
                 }
               ],
+              "id": "08cd70d6-e6ed-4d30-83fa-055ec01c408f",
               "request": {
                 "method": "POST",
                 "header": [
@@ -562,23 +672,59 @@
                 },
                 "url": {
                   "raw": "{{base_url}}/store/carts/{{cart_id}}/line-items",
-                  "host": ["{{base_url}}"],
-                  "path": ["store", "carts", "{{cart_id}}", "line-items"]
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "store",
+                    "carts",
+                    "{{cart_id}}",
+                    "line-items"
+                  ]
                 }
               },
               "response": [
                 {
+                  "id": "4872a77b-e12b-4c52-a1d1-cfee1b90cec7",
                   "name": "Success Response",
+                  "originalRequest": {
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"variant_id\": \"{{variant_id}}\",\n  \"quantity\": 1\n}"
+                    },
+                    "url": {
+                      "raw": "{{base_url}}/store/carts/{{cart_id}}/line-items",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "store",
+                        "carts",
+                        "{{cart_id}}",
+                        "line-items"
+                      ]
+                    }
+                  },
                   "status": "OK",
                   "code": 200,
                   "_postman_previewlanguage": "json",
+                  "header": null,
+                  "cookie": [],
+                  "responseTime": null,
                   "body": "{\n  \"cart\": {\n    \"id\": \"cart_01CHECKOUT\",\n    \"items\": [\n      {\n        \"id\": \"item_01EXAMPLE\",\n        \"variant_id\": \"variant_01EXAMPLE\",\n        \"quantity\": 1,\n        \"unit_price\": 2999\n      }\n    ],\n    \"subtotal\": 2999,\n    \"total\": 3269\n  }\n}"
                 }
               ]
             },
             {
               "name": "3. Set Shipping Address",
-              "description": "Step 3: Sets the shipping address for the cart.",
               "event": [
                 {
                   "listen": "test",
@@ -597,6 +743,7 @@
                   }
                 }
               ],
+              "id": "e978ae07-2fca-4201-ab65-454926249dd5",
               "request": {
                 "method": "POST",
                 "header": [
@@ -612,23 +759,57 @@
                 },
                 "url": {
                   "raw": "{{base_url}}/store/carts/{{cart_id}}",
-                  "host": ["{{base_url}}"],
-                  "path": ["store", "carts", "{{cart_id}}"]
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "store",
+                    "carts",
+                    "{{cart_id}}"
+                  ]
                 }
               },
               "response": [
                 {
+                  "id": "73333cb8-54d8-4a92-b050-fe906184aad1",
                   "name": "Success Response",
+                  "originalRequest": {
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"shipping_address\": {\n    \"first_name\": \"John\",\n    \"last_name\": \"Doe\",\n    \"address_1\": \"123 Main St\",\n    \"city\": \"New York\",\n    \"province\": \"NY\",\n    \"postal_code\": \"10001\",\n    \"country_code\": \"us\",\n    \"phone\": \"555-1234\"\n  },\n  \"email\": \"john.doe@example.com\"\n}"
+                    },
+                    "url": {
+                      "raw": "{{base_url}}/store/carts/{{cart_id}}",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "store",
+                        "carts",
+                        "{{cart_id}}"
+                      ]
+                    }
+                  },
                   "status": "OK",
                   "code": 200,
                   "_postman_previewlanguage": "json",
+                  "header": null,
+                  "cookie": [],
+                  "responseTime": null,
                   "body": "{\n  \"cart\": {\n    \"id\": \"cart_01CHECKOUT\",\n    \"email\": \"john.doe@example.com\",\n    \"shipping_address\": {\n      \"first_name\": \"John\",\n      \"last_name\": \"Doe\",\n      \"address_1\": \"123 Main St\",\n      \"city\": \"New York\",\n      \"province\": \"NY\",\n      \"postal_code\": \"10001\",\n      \"country_code\": \"us\"\n    },\n    \"subtotal\": 2999,\n    \"shipping_total\": 500,\n    \"total\": 3769\n  }\n}"
                 }
               ]
             },
             {
               "name": "4. Create Payment Sessions",
-              "description": "Step 4: Initializes payment sessions for the cart. Stores the client_secret for Stripe payment.",
               "event": [
                 {
                   "listen": "test",
@@ -653,6 +834,7 @@
                   }
                 }
               ],
+              "id": "ea91a39c-f482-4b04-b845-2663cf1f0458",
               "request": {
                 "method": "POST",
                 "header": [
@@ -664,23 +846,55 @@
                 ],
                 "url": {
                   "raw": "{{base_url}}/store/carts/{{cart_id}}/payment-sessions",
-                  "host": ["{{base_url}}"],
-                  "path": ["store", "carts", "{{cart_id}}", "payment-sessions"]
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "store",
+                    "carts",
+                    "{{cart_id}}",
+                    "payment-sessions"
+                  ]
                 }
               },
               "response": [
                 {
+                  "id": "a9e0ad5d-3cfb-4791-97e2-778051b2c3b1",
                   "name": "Success Response",
+                  "originalRequest": {
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{base_url}}/store/carts/{{cart_id}}/payment-sessions",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "store",
+                        "carts",
+                        "{{cart_id}}",
+                        "payment-sessions"
+                      ]
+                    }
+                  },
                   "status": "OK",
                   "code": 200,
                   "_postman_previewlanguage": "json",
+                  "header": null,
+                  "cookie": [],
+                  "responseTime": null,
                   "body": "{\n  \"cart\": {\n    \"id\": \"cart_01CHECKOUT\",\n    \"payment_sessions\": [\n      {\n        \"id\": \"ps_01EXAMPLE\",\n        \"provider_id\": \"stripe\",\n        \"data\": {\n          \"client_secret\": \"pi_xxx_secret_xxx\"\n        }\n      }\n    ],\n    \"payment_session\": {\n      \"id\": \"ps_01EXAMPLE\",\n      \"provider_id\": \"stripe\",\n      \"data\": {\n        \"client_secret\": \"pi_xxx_secret_xxx\"\n      }\n    }\n  }\n}"
                 }
               ]
             },
             {
               "name": "5. Complete Cart",
-              "description": "Step 5: Completes the checkout and creates an order. This is the final step in the checkout flow.",
               "event": [
                 {
                   "listen": "test",
@@ -702,6 +916,7 @@
                   }
                 }
               ],
+              "id": "74cd3cd0-8df1-4e07-a5b3-c1f561905eed",
               "request": {
                 "method": "POST",
                 "header": [
@@ -713,31 +928,67 @@
                 ],
                 "url": {
                   "raw": "{{base_url}}/store/carts/{{cart_id}}/complete",
-                  "host": ["{{base_url}}"],
-                  "path": ["store", "carts", "{{cart_id}}", "complete"]
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "store",
+                    "carts",
+                    "{{cart_id}}",
+                    "complete"
+                  ]
                 }
               },
               "response": [
                 {
+                  "id": "79c18fd4-b8d5-466c-bcfb-f9ef41d3ac03",
                   "name": "Success Response",
+                  "originalRequest": {
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{base_url}}/store/carts/{{cart_id}}/complete",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "store",
+                        "carts",
+                        "{{cart_id}}",
+                        "complete"
+                      ]
+                    }
+                  },
                   "status": "OK",
                   "code": 200,
                   "_postman_previewlanguage": "json",
+                  "header": null,
+                  "cookie": [],
+                  "responseTime": null,
                   "body": "{\n  \"type\": \"order\",\n  \"order\": {\n    \"id\": \"order_01EXAMPLE\",\n    \"status\": \"pending\",\n    \"fulfillment_status\": \"not_fulfilled\",\n    \"payment_status\": \"awaiting\",\n    \"display_id\": 1001,\n    \"email\": \"john.doe@example.com\",\n    \"items\": [\n      {\n        \"id\": \"item_01EXAMPLE\",\n        \"title\": \"Grace Stowel Premium Towel\",\n        \"quantity\": 1,\n        \"unit_price\": 2999\n      }\n    ],\n    \"subtotal\": 2999,\n    \"shipping_total\": 500,\n    \"tax_total\": 270,\n    \"total\": 3769,\n    \"created_at\": \"2024-01-01T00:00:00.000Z\"\n  }\n}"
                 }
               ]
             }
-          ]
+          ],
+          "id": "d1d58afc-dc9f-42c5-a96e-60bff912b696",
+          "description": "Sequential requests to complete a full checkout: create cart → add line item → set shipping → create payment intent → complete checkout. Run this folder to execute the entire flow."
         }
-      ]
+      ],
+      "id": "2cdfdc2f-d5bb-44d2-aec7-3fc79360abf9",
+      "description": "Checkout flow endpoints for completing purchases"
     },
     {
       "name": "Regions",
-      "description": "Region endpoints for retrieving available shipping regions and their configurations",
       "item": [
         {
           "name": "List Regions",
-          "description": "Retrieves all available regions. Regions define shipping zones, currencies, and tax settings. Use the region_id when creating carts.",
+          "id": "d66d99d3-143a-4a0f-808e-30c7bbaa0d7d",
           "request": {
             "method": "GET",
             "header": [
@@ -749,38 +1000,53 @@
             ],
             "url": {
               "raw": "{{base_url}}/store/regions",
-              "host": ["{{base_url}}"],
-              "path": ["store", "regions"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "store",
+                "regions"
+              ]
             }
           },
           "response": [
             {
+              "id": "9fe5f02e-a829-4cad-b0b7-b1a4aff0d6c9",
               "name": "Success Response",
               "originalRequest": {
                 "method": "GET",
                 "header": [],
                 "url": {
                   "raw": "{{base_url}}/store/regions",
-                  "host": ["{{base_url}}"],
-                  "path": ["store", "regions"]
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "store",
+                    "regions"
+                  ]
                 }
               },
               "status": "OK",
               "code": 200,
               "_postman_previewlanguage": "json",
+              "header": null,
+              "cookie": [],
+              "responseTime": null,
               "body": "{\n  \"regions\": [\n    {\n      \"id\": \"reg_01EXAMPLE\",\n      \"name\": \"United States\",\n      \"currency_code\": \"usd\",\n      \"tax_rate\": 0,\n      \"tax_code\": null,\n      \"countries\": [\n        {\n          \"id\": 840,\n          \"iso_2\": \"us\",\n          \"iso_3\": \"usa\",\n          \"name\": \"UNITED STATES\",\n          \"display_name\": \"United States\"\n        }\n      ],\n      \"payment_providers\": [\n        {\n          \"id\": \"stripe\",\n          \"is_installed\": true\n        }\n      ],\n      \"fulfillment_providers\": [\n        {\n          \"id\": \"manual\",\n          \"is_installed\": true\n        }\n      ]\n    },\n    {\n      \"id\": \"reg_02EXAMPLE\",\n      \"name\": \"Europe\",\n      \"currency_code\": \"eur\",\n      \"tax_rate\": 20,\n      \"countries\": [\n        {\n          \"id\": 276,\n          \"iso_2\": \"de\",\n          \"name\": \"GERMANY\",\n          \"display_name\": \"Germany\"\n        },\n        {\n          \"id\": 250,\n          \"iso_2\": \"fr\",\n          \"name\": \"FRANCE\",\n          \"display_name\": \"France\"\n        }\n      ]\n    }\n  ],\n  \"count\": 2,\n  \"offset\": 0,\n  \"limit\": 20\n}"
             }
           ]
         }
-      ]
+      ],
+      "id": "cb4aaf0e-b73e-4a26-aa7e-ae2a92a77a63",
+      "description": "Region endpoints for retrieving available shipping regions and their configurations"
     },
     {
       "name": "Collections",
-      "description": "Product collection endpoints for browsing curated product groups",
       "item": [
         {
           "name": "List Collections",
-          "description": "Retrieves all product collections. Collections are curated groups of products used for merchandising and navigation.",
+          "id": "ca7d18ff-4101-44d8-b979-297119cf129f",
           "request": {
             "method": "GET",
             "header": [
@@ -792,59 +1058,81 @@
             ],
             "url": {
               "raw": "{{base_url}}/store/collections",
-              "host": ["{{base_url}}"],
-              "path": ["store", "collections"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "store",
+                "collections"
+              ]
             }
           },
           "response": [
             {
+              "id": "671cdd0e-f496-4499-8ff3-abd17a042c88",
               "name": "Success Response",
               "originalRequest": {
                 "method": "GET",
                 "header": [],
                 "url": {
                   "raw": "{{base_url}}/store/collections",
-                  "host": ["{{base_url}}"],
-                  "path": ["store", "collections"]
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "store",
+                    "collections"
+                  ]
                 }
               },
               "status": "OK",
               "code": 200,
               "_postman_previewlanguage": "json",
+              "header": null,
+              "cookie": [],
+              "responseTime": null,
               "body": "{\n  \"collections\": [\n    {\n      \"id\": \"pcol_01EXAMPLE\",\n      \"title\": \"Premium Towels\",\n      \"handle\": \"premium-towels\",\n      \"created_at\": \"2024-01-01T00:00:00.000Z\",\n      \"updated_at\": \"2024-01-01T00:00:00.000Z\"\n    },\n    {\n      \"id\": \"pcol_02EXAMPLE\",\n      \"title\": \"Bath Essentials\",\n      \"handle\": \"bath-essentials\",\n      \"created_at\": \"2024-01-01T00:00:00.000Z\",\n      \"updated_at\": \"2024-01-01T00:00:00.000Z\"\n    },\n    {\n      \"id\": \"pcol_03EXAMPLE\",\n      \"title\": \"New Arrivals\",\n      \"handle\": \"new-arrivals\",\n      \"created_at\": \"2024-01-01T00:00:00.000Z\",\n      \"updated_at\": \"2024-01-01T00:00:00.000Z\"\n    }\n  ],\n  \"count\": 3,\n  \"offset\": 0,\n  \"limit\": 20\n}"
             }
           ]
         }
-      ]
+      ],
+      "id": "b256074c-0903-456b-81e0-f839d4e90b3e",
+      "description": "Product collection endpoints for browsing curated product groups"
     }
   ],
   "variable": [
     {
+      "id": "518b4c50-0ba0-4f02-905d-b680766eead3",
       "key": "base_url",
       "value": "http://localhost:9000",
       "type": "string"
     },
     {
+      "id": "7ccc1e55-62b3-49b0-aae6-280870e2412b",
       "key": "product_handle",
       "value": "",
       "type": "string"
     },
     {
+      "id": "8e7fcaa7-7644-4d72-8064-b0f96a342b19",
       "key": "cart_id",
       "value": "",
       "type": "string"
     },
     {
+      "id": "ab7922bf-2f14-465e-8234-ab6174f23880",
       "key": "client_secret",
       "value": "",
       "type": "string"
     },
     {
+      "id": "86aeb4bb-538d-471f-b7bc-8991c6f2f2ad",
       "key": "region_id",
       "value": "",
       "type": "string"
     },
     {
+      "id": "3c2288d1-6a35-47dd-96a9-a819416e38be",
       "key": "variant_id",
       "value": "",
       "type": "string"

@@ -1,5 +1,6 @@
 {
   "info": {
+    "_postman_id": "8228ba11-8848-4663-b865-2d1705778a88",
     "name": "Custom Endpoints",
     "description": "Grace Stowel custom API endpoints including health checks and custom store/admin routes. These endpoints extend the standard Medusa API with application-specific functionality.\n\n## Endpoints Overview\n\n- **Health Check**: System health monitoring endpoint for deployment verification\n- **Store Custom**: Custom storefront-facing endpoints\n- **Admin Custom**: Custom admin endpoints (requires authentication)",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
@@ -7,11 +8,10 @@
   "item": [
     {
       "name": "Health Check",
-      "description": "System health monitoring endpoints for deployment verification and infrastructure monitoring",
       "item": [
         {
           "name": "Health Check",
-          "description": "Checks the health status of the Medusa backend service. Verifies database connectivity and Redis connectivity (if configured). Used by Railway for deployment health monitoring.\n\nReturns:\n- `healthy`: All critical services are operational\n- `unhealthy`: One or more critical services are failing\n\nThe response includes detailed latency metrics for each service check.",
+          "id": "abc6c457-f23c-46b8-81b4-9460dd828f83",
           "request": {
             "method": "GET",
             "header": [
@@ -23,54 +23,75 @@
             ],
             "url": {
               "raw": "{{base_url}}/health",
-              "host": ["{{base_url}}"],
-              "path": ["health"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "health"
+              ]
             }
           },
           "response": [
             {
+              "id": "a783057f-b075-4a00-9347-a1ee3e0c3bc4",
               "name": "Healthy Response",
               "originalRequest": {
                 "method": "GET",
                 "header": [],
                 "url": {
                   "raw": "{{base_url}}/health",
-                  "host": ["{{base_url}}"],
-                  "path": ["health"]
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "health"
+                  ]
                 }
               },
               "status": "OK",
               "code": 200,
               "_postman_previewlanguage": "json",
+              "header": null,
+              "cookie": [],
+              "responseTime": null,
               "body": "{\n  \"status\": \"healthy\",\n  \"service\": \"medusa-backend\",\n  \"timestamp\": \"2024-01-15T10:30:00.000Z\",\n  \"response_time_ms\": 45,\n  \"checks\": {\n    \"database\": {\n      \"status\": \"ok\",\n      \"latency_ms\": 12\n    },\n    \"redis\": {\n      \"status\": \"ok\",\n      \"latency_ms\": 8\n    }\n  }\n}"
             },
             {
+              "id": "1064bc30-59fb-4e7b-bba2-a596a726f4f7",
               "name": "Unhealthy Response",
               "originalRequest": {
                 "method": "GET",
                 "header": [],
                 "url": {
                   "raw": "{{base_url}}/health",
-                  "host": ["{{base_url}}"],
-                  "path": ["health"]
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "health"
+                  ]
                 }
               },
               "status": "Service Unavailable",
               "code": 503,
               "_postman_previewlanguage": "json",
+              "header": null,
+              "cookie": [],
+              "responseTime": null,
               "body": "{\n  \"status\": \"unhealthy\",\n  \"service\": \"medusa-backend\",\n  \"timestamp\": \"2024-01-15T10:30:00.000Z\",\n  \"response_time_ms\": 5023,\n  \"checks\": {\n    \"database\": {\n      \"status\": \"error\",\n      \"latency_ms\": 5000,\n      \"error\": \"Connection timeout\"\n    },\n    \"redis\": {\n      \"status\": \"not_configured\"\n    }\n  },\n  \"errors\": [\n    \"Database: Connection timeout\"\n  ]\n}"
             }
           ]
         }
-      ]
+      ],
+      "id": "1afcb16d-2b8f-4ced-9da8-3c6777c5a7e9",
+      "description": "System health monitoring endpoints for deployment verification and infrastructure monitoring"
     },
     {
       "name": "Store Custom",
-      "description": "Custom storefront-facing endpoints for Grace Stowel specific functionality",
       "item": [
         {
           "name": "Store Custom Endpoint",
-          "description": "Custom store endpoint for Grace Stowel storefront functionality. This endpoint is publicly accessible and does not require authentication.\n\nCurrently returns a 200 OK status to confirm the endpoint is available. Can be extended for custom storefront features.",
+          "id": "a6617bd2-852b-42c6-8b61-92f599618606",
           "request": {
             "method": "GET",
             "header": [
@@ -82,38 +103,53 @@
             ],
             "url": {
               "raw": "{{base_url}}/store/custom",
-              "host": ["{{base_url}}"],
-              "path": ["store", "custom"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "store",
+                "custom"
+              ]
             }
           },
           "response": [
             {
+              "id": "c9645475-1994-408f-8823-abed71ed7006",
               "name": "Success Response",
               "originalRequest": {
                 "method": "GET",
                 "header": [],
                 "url": {
                   "raw": "{{base_url}}/store/custom",
-                  "host": ["{{base_url}}"],
-                  "path": ["store", "custom"]
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "store",
+                    "custom"
+                  ]
                 }
               },
               "status": "OK",
               "code": 200,
               "_postman_previewlanguage": "text",
+              "header": null,
+              "cookie": [],
+              "responseTime": null,
               "body": "OK"
             }
           ]
         }
-      ]
+      ],
+      "id": "2b84a8d1-3d1d-4457-ba73-f312db636316",
+      "description": "Custom storefront-facing endpoints for Grace Stowel specific functionality"
     },
     {
       "name": "Admin Custom",
-      "description": "Custom admin endpoints for Grace Stowel administrative functionality. These endpoints require authentication.",
       "item": [
         {
           "name": "Admin Custom Endpoint",
-          "description": "Custom admin endpoint for Grace Stowel administrative functionality. Requires authentication via JWT token.\n\nCurrently returns a 200 OK status to confirm the endpoint is available. Can be extended for custom admin features.",
+          "id": "8f570fa4-7536-481e-a33c-1a7a26fc36b6",
           "request": {
             "method": "GET",
             "header": [
@@ -131,12 +167,18 @@
             ],
             "url": {
               "raw": "{{base_url}}/admin/custom",
-              "host": ["{{base_url}}"],
-              "path": ["admin", "custom"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "custom"
+              ]
             }
           },
           "response": [
             {
+              "id": "c685fcb7-556c-48cc-9438-332562618636",
               "name": "Success Response",
               "originalRequest": {
                 "method": "GET",
@@ -148,43 +190,64 @@
                 ],
                 "url": {
                   "raw": "{{base_url}}/admin/custom",
-                  "host": ["{{base_url}}"],
-                  "path": ["admin", "custom"]
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "custom"
+                  ]
                 }
               },
               "status": "OK",
               "code": 200,
               "_postman_previewlanguage": "text",
+              "header": null,
+              "cookie": [],
+              "responseTime": null,
               "body": "OK"
             },
             {
+              "id": "3d773e6c-e82d-4807-927a-38eb5ad5f567",
               "name": "Unauthorized Response",
               "originalRequest": {
                 "method": "GET",
                 "header": [],
                 "url": {
                   "raw": "{{base_url}}/admin/custom",
-                  "host": ["{{base_url}}"],
-                  "path": ["admin", "custom"]
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "custom"
+                  ]
                 }
               },
               "status": "Unauthorized",
               "code": 401,
               "_postman_previewlanguage": "json",
+              "header": null,
+              "cookie": [],
+              "responseTime": null,
               "body": "{\n  \"type\": \"unauthorized\",\n  \"message\": \"Unauthorized\"\n}"
             }
           ]
         }
-      ]
+      ],
+      "id": "ef449fcc-debb-43d8-af63-6dd2602bcbe0",
+      "description": "Custom admin endpoints for Grace Stowel administrative functionality. These endpoints require authentication."
     }
   ],
   "variable": [
     {
+      "id": "d6e9f1e8-e4a9-43e3-8f3c-8bd3e8138919",
       "key": "base_url",
       "value": "http://localhost:9000",
       "type": "string"
     },
     {
+      "id": "011903ac-1321-4409-8738-c5c60145dfa7",
       "key": "jwt_token",
       "value": "",
       "type": "string"

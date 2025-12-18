@@ -4,65 +4,26 @@ import {
     type MedusaRequest,
     type MedusaResponse,
 } from "@medusajs/framework/http";
-import { MedusaError, Modules } from "@medusajs/framework/utils";
+import { MedusaError } from "@medusajs/framework/utils";
 import { captureBackendError } from "../utils/posthog";
 import { logger } from "../utils/logger";
+import { registerProjectSubscribers } from "../utils/register-subscribers";
 
-// Subscriber registration flag
-let subscribersRegistered = false;
-
-/**
- * Subscriber Registration Middleware
- *
- * Registers all project subscribers on first API request.
- * This is a workaround for Medusa v2 not auto-discovering project subscribers.
- */
-async function registerSubscribersMiddleware(
+function normalizeCartCountryCodesMiddleware(
     req: MedusaRequest,
     res: MedusaResponse,
     next: MedusaNextFunction
 ) {
-    // Run subscriber registration asynchronously but don't block request
-    if (!subscribersRegistered) {
-        subscribersRegistered = true; // Set immediately to prevent duplicate attempts
+    const body = (req as any).body as any;
 
-        // Register subscribers in background
-        setImmediate(async () => {
-            try {
-                console.log("[SubscriberMiddleware] Registering project subscribers...");
-                const eventBusModuleService = req.scope.resolve(Modules.EVENT_BUS);
+    const normalizeAddress = (address: any) => {
+        if (address?.country_code && typeof address.country_code === "string") {
+            address.country_code = address.country_code.toLowerCase();
+        }
+    };
 
-                // Use require for CommonJS compatibility
-                const orderPlacedModule = require("../subscribers/order-placed");
-                const customerCreatedModule = require("../subscribers/customer-created");
-                const fulfillmentCreatedModule = require("../subscribers/fulfillment-created");
-                const orderCanceledModule = require("../subscribers/order-canceled");
-
-                const subscribers = [
-                    { module: orderPlacedModule, name: "order-placed" },
-                    { module: customerCreatedModule, name: "customer-created" },
-                    { module: fulfillmentCreatedModule, name: "fulfillment-created" },
-                    { module: orderCanceledModule, name: "order-canceled" },
-                ];
-
-                // Register each subscriber
-                for (const { module, name } of subscribers) {
-                    eventBusModuleService.subscribe(module.config.event, async (data: any) => {
-                        await module.default({
-                            event: { name: module.config.event, data },
-                            container: req.scope
-                        });
-                    });
-                    console.log(`[SubscriberMiddleware] ✅ Registered: ${module.config.event} (${name})`);
-                }
-
-                console.log(`[SubscriberMiddleware] Successfully registered ${subscribers.length} subscribers`);
-            } catch (error) {
-                console.error("[SubscriberMiddleware] Failed to register subscribers:", error);
-                subscribersRegistered = false; // Reset on failure to allow retry
-            }
-        });
-    }
+    normalizeAddress(body?.shipping_address);
+    normalizeAddress(body?.billing_address);
 
     next();
 }
@@ -100,6 +61,27 @@ function errorHandlerMiddleware(
 }
 
 /**
+ * Global Subscriber Registration Middleware
+ *
+ * Ensures project subscribers are registered on first API request
+ * Medusa v2 doesn't auto-discover project-level subscribers, so we register manually
+ */
+async function registerSubscribersMiddleware(
+    req: MedusaRequest,
+    res: MedusaResponse,
+    next: MedusaNextFunction
+) {
+    // Register subscribers using the request's container scope
+    // This ensures all scopes share the same event bus (via Redis)
+    try {
+        await registerProjectSubscribers(req.scope);
+    } catch (error) {
+        logger.error("middleware", "Failed to register subscribers", {}, error as Error);
+    }
+    next();
+}
+
+/**
  * Middleware configuration for custom API routes
  *
  * The Stripe webhook endpoint needs bodyParser disabled so we can
@@ -114,7 +96,11 @@ export default defineMiddlewares({
             bodyParser: false,
         },
         {
-            // Register subscribers on all routes (runs once on first request)
+            matcher: "/store/carts*",
+            middlewares: [normalizeCartCountryCodesMiddleware],
+        },
+        {
+            // Global middleware to register subscribers on first request
             matcher: "*",
             middlewares: [registerSubscribersMiddleware],
         },

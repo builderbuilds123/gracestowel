@@ -208,7 +208,11 @@ const emitEventStep = createStep(
             return new StepResponse({ success: false, skipped: true });
         }
 
-        await eventBusModuleService.emit(input.eventName, input.data);
+        try {
+            await eventBusModuleService.emit({ name: input.eventName, data: input.data });
+        } catch (err) {
+            await eventBusModuleService.emit(input.eventName, input.data);
+        }
         console.log(`Event ${input.eventName} emitted with data:`, input.data);
         return new StepResponse({ success: true });
     }

@@ -1,0 +1,131 @@
+# Grace Stowel API Contract Tests
+# Runs Postman collections via Newman on pull requests
+# Requirements: 5.1, 5.2, 5.5
+
+name: API Contract Tests
+
+on:
+  pull_request:
+    branches: [main, staging]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to test against'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - local
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "24"
+
+jobs:
+  api-contract-tests:
+    name: API Contract Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+
+      - name: Install Newman and HTML Reporter
+        run: |
+          npm install -g newman newman-reporter-htmlextra
+
+      - name: Create reports directory
+        run: mkdir -p newman-reports
+
+      - name: Run Store API Contract Tests
+        env:
+          BASE_URL: ${{ secrets.STAGING_BASE_URL || 'https://api-staging.gracestowel.com' }}
+          STOREFRONT_URL: ${{ secrets.STAGING_STOREFRONT_URL || 'https://staging.gracestowel.com' }}
+        run: |
+          newman run postman/collections/store-api.postman_collection.json \
+            --environment postman/environments/staging.postman_environment.json \
+            --env-var "base_url=$BASE_URL" \
+            --env-var "storefront_url=$STOREFRONT_URL" \
+            --reporters cli,htmlextra \
+            --reporter-htmlextra-export newman-reports/store-api-report.html \
+            --timeout-request 30000 \
+            --delay-request 100 \
+            --bail
+        continue-on-error: true
+        id: store-api-tests
+
+      - name: Run Admin API Contract Tests
+        env:
+          BASE_URL: ${{ secrets.STAGING_BASE_URL || 'https://api-staging.gracestowel.com' }}
+          JWT_TOKEN: ${{ secrets.STAGING_JWT_TOKEN }}
+        run: |
+          newman run postman/collections/admin-api.postman_collection.json \
+            --environment postman/environments/staging.postman_environment.json \
+            --env-var "base_url=$BASE_URL" \
+            --env-var "jwt_token=$JWT_TOKEN" \
+            --reporters cli,htmlextra \
+            --reporter-htmlextra-export newman-reports/admin-api-report.html \
+            --timeout-request 30000 \
+            --delay-request 100 \
+            --bail
+        continue-on-error: true
+        id: admin-api-tests
+
+      - name: Run Custom Endpoints Contract Tests
+        env:
+          BASE_URL: ${{ secrets.STAGING_BASE_URL || 'https://api-staging.gracestowel.com' }}
+          JWT_TOKEN: ${{ secrets.STAGING_JWT_TOKEN }}
+        run: |
+          newman run postman/collections/custom-endpoints.postman_collection.json \
+            --environment postman/environments/staging.postman_environment.json \
+            --env-var "base_url=$BASE_URL" \
+            --env-var "jwt_token=$JWT_TOKEN" \
+            --reporters cli,htmlextra \
+            --reporter-htmlextra-export newman-reports/custom-endpoints-report.html \
+            --timeout-request 30000 \
+            --delay-request 100 \
+            --bail
+        continue-on-error: true
+        id: custom-endpoints-tests
+
+      - name: Upload Newman HTML Reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: newman-reports
+          path: newman-reports/
+          retention-days: 14
+
+      - name: Check Test Results
+        if: always()
+        run: |
+          echo "=== API Contract Test Results ==="
+          echo "Store API Tests: ${{ steps.store-api-tests.outcome }}"
+          echo "Admin API Tests: ${{ steps.admin-api-tests.outcome }}"
+          echo "Custom Endpoints Tests: ${{ steps.custom-endpoints-tests.outcome }}"
+          
+          if [ "${{ steps.store-api-tests.outcome }}" == "failure" ] || \
+             [ "${{ steps.admin-api-tests.outcome }}" == "failure" ] || \
+             [ "${{ steps.custom-endpoints-tests.outcome }}" == "failure" ]; then
+            echo ""
+            echo "❌ One or more API contract tests failed!"
+            echo "Check the Newman HTML reports artifact for detailed results."
+            exit 1
+          fi
+          
+          echo ""
+          echo "✅ All API contract tests passed!"

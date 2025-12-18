@@ -84,3 +84,34 @@ This document outlines the testing strategy for the Grace Stowel e-commerce plat
 ## 6. CI/CD Integration
 *   **Pull Requests**: Run Unit & Integration tests. Block merge on failure.
 *   **Nightly/Release**: Run E2E tests against a staging environment.
+
+## 7. API Contract Testing with Postman
+
+In addition to the testing pyramid, we use Postman collections for API contract testing.
+
+### Overview
+- **Collections**: Organized by domain (Store API, Admin API, Custom Endpoints, Stripe Webhooks)
+- **Environments**: Pre-configured for Local, Staging, and Production
+- **Contract Tests**: JSON schema validation embedded in requests
+- **CI Integration**: Newman runs on every pull request
+
+### Key Features
+- Request chaining for multi-step flows (checkout flow)
+- Stripe webhook signature generation for local testing
+- Automated variable passing between requests
+- HTML report generation
+
+### Documentation
+See the [Postman README](../postman/README.md) for:
+- Import and setup instructions
+- Environment configuration
+- Running collections manually and via CLI
+- Adding new requests
+- Troubleshooting guide
+
+### CI/CD Workflow
+The `.github/workflows/api-contract-tests.yml` workflow:
+- Runs on pull requests to `main` and `staging`
+- Executes Store API, Admin API, and Custom Endpoints collections
+- Generates HTML reports as build artifacts
+- Blocks PR merge on contract test failures

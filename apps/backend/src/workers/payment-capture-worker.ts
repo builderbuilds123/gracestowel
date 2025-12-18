@@ -26,6 +26,29 @@ let worker: Worker<PaymentCaptureJobData> | null = null;
 let shutdownHandler: (() => Promise<void>) | null = null;
 let containerRef: MedusaContainer | null = null;
 
+async function getOrderMetadata(orderId: string): Promise<Record<string, any>> {
+    if (!containerRef) {
+        return {};
+    }
+
+    try {
+        const query = containerRef.resolve("query");
+        const { data: orders } = await query.graph({
+            entity: "order",
+            fields: ["id", "metadata"],
+            filters: { id: orderId },
+        });
+
+        const metadata = (orders?.[0]?.metadata || {}) as Record<string, any>;
+        if (metadata && typeof metadata === "object") {
+            return metadata;
+        }
+        return {};
+    } catch {
+        return {};
+    }
+}
+
 /**
  * Fetch the current order data from Medusa
  * Story 2.3: Ensures we capture the ACTUAL order total, not the original PaymentIntent amount
@@ -122,23 +145,14 @@ export async function setOrderEditStatus(
     }
 
     try {
+        const currentMetadata = await getOrderMetadata(orderId);
+
         // Optimistic locking: check current state if expected status specified
         if (expectCurrentStatus !== undefined) {
-            const query = containerRef.resolve("query");
-            const { data: orders } = await query.graph({
-                entity: "order",
-                fields: ["id", "metadata"],
-                filters: { id: orderId },
-            });
-
-            if (orders.length > 0) {
-                const currentStatus = (orders[0].metadata as any)?.edit_status;
-                // Only acquire lock if current status is editable, idle, or undefined
-                // Reject if already locked_for_capture
-                if (currentStatus === "locked_for_capture") {
-                    console.warn(`[PaymentCapture] Order ${orderId}: Already locked ('${currentStatus}'), skipping lock acquisition`);
-                    return false;
-                }
+            const currentStatus = (currentMetadata as any)?.edit_status;
+            if (currentStatus === "locked_for_capture") {
+                console.warn(`[PaymentCapture] Order ${orderId}: Already locked ('${currentStatus}'), skipping lock acquisition`);
+                return false;
             }
         }
 
@@ -146,6 +160,7 @@ export async function setOrderEditStatus(
         await orderService.updateOrders([{
             id: orderId,
             metadata: {
+                ...currentMetadata,
                 edit_status: editStatus,
                 edit_status_updated_at: new Date().toISOString(),
             },
@@ -171,10 +186,13 @@ export async function updateOrderAfterCapture(orderId: string, amountCaptured: n
     }
 
     try {
+        const currentMetadata = await getOrderMetadata(orderId);
         const orderService = containerRef.resolve("order");
         await orderService.updateOrders([{
             id: orderId,
             metadata: {
+                ...currentMetadata,
+                payment_status: "captured",
                 payment_captured_at: new Date().toISOString(),
                 payment_amount_captured: amountCaptured,
             },
@@ -196,6 +214,16 @@ export async function processPaymentCapture(job: Job<PaymentCaptureJobData>): Pr
     const { orderId, paymentIntentId, scheduledAt } = job.data;
     
     console.log(`[PaymentCapture] Processing capture for order ${orderId}`);
+
+    if (!orderId || typeof orderId !== "string" || !orderId.startsWith("order_")) {
+        console.error(`[PaymentCapture][CRITICAL] Invalid orderId in job ${job.id}:`, orderId);
+        return;
+    }
+
+    if (!paymentIntentId || typeof paymentIntentId !== "string" || !paymentIntentId.startsWith("pi_")) {
+        console.error(`[PaymentCapture][CRITICAL] Invalid paymentIntentId for order ${orderId} in job ${job.id}:`, paymentIntentId);
+        return;
+    }
     
     const stripe = getStripeClient();
     
@@ -216,6 +244,11 @@ export async function processPaymentCapture(job: Job<PaymentCaptureJobData>): Pr
         
         if (paymentIntent.status === "succeeded") {
             console.log(`[PaymentCapture] Order ${orderId}: Payment was already captured`);
+            const alreadyCapturedAmount =
+                typeof paymentIntent.amount_received === "number" && paymentIntent.amount_received > 0
+                    ? paymentIntent.amount_received
+                    : paymentIntent.amount;
+            await updateOrderAfterCapture(orderId, alreadyCapturedAmount);
             return;
         }
         

@@ -12,6 +12,7 @@ import type {
     StripeExpressCheckoutElementShippingAddressChangeEvent,
     StripeExpressCheckoutElementShippingRateChangeEvent,
     StripeAddressElementChangeEvent,
+    StripeLinkAuthenticationElementChangeEvent,
 } from '@stripe/stripe-js';
 import type { CartItem } from '../context/CartContext';
 
@@ -43,6 +44,7 @@ export interface CheckoutFormProps {
     items: CartItem[];
     cartTotal: number;
     onAddressChange?: (event: StripeAddressElementChangeEvent) => void;
+    onEmailChange?: (email: string) => void;
     shippingOptions: ShippingOption[];
     selectedShipping: ShippingOption | null;
     setSelectedShipping: (option: ShippingOption) => void;
@@ -54,6 +56,7 @@ export function CheckoutForm({
     items,
     cartTotal,
     onAddressChange,
+    onEmailChange,
     shippingOptions,
     selectedShipping,
     setSelectedShipping,
@@ -64,6 +67,16 @@ export function CheckoutForm({
     const elements = useElements();
     const [message, setMessage] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+
+    const handleEmailChange = useCallback(
+        (event: StripeLinkAuthenticationElementChangeEvent) => {
+            const email = event.value?.email;
+            if (event.complete && email && onEmailChange) {
+                onEmailChange(email);
+            }
+        },
+        [onEmailChange]
+    );
 
     const saveOrderToLocalStorage = () => {
         localStorage.setItem(
@@ -127,15 +140,10 @@ export function CheckoutForm({
                     })),
                 });
             } else {
-                // Provide a default shipping rate if none available yet
+                // If no shipping rates are available, resolve with empty array
+                // The wallet UI will usually show pending state or no options
                 event.resolve({
-                    shippingRates: [
-                        {
-                            id: 'standard',
-                            displayName: 'Standard Shipping',
-                            amount: 999, // $9.99 in cents
-                        },
-                    ],
+                    shippingRates: [],
                 });
             }
         },
@@ -233,6 +241,7 @@ export function CheckoutForm({
                 <LinkAuthenticationElement
                     id="link-authentication-element"
                     options={customerData?.email ? { defaultValues: { email: customerData.email } } : undefined}
+                    onChange={handleEmailChange}
                 />
             </div>
 

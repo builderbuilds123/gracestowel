@@ -184,8 +184,13 @@ export class MedusaCartService {
   async updateShippingAddress(cartId: string, address: ShippingAddress): Promise<Cart> {
     return retry(async () => {
         try {
+        const normalizedAddress: ShippingAddress = {
+          ...address,
+          country_code: (address.country_code || "").toLowerCase(),
+        };
+
         const { cart } = await this.client.store.cart.update(cartId, {
-            shipping_address: address,
+            shipping_address: normalizedAddress,
         });
         return cart;
         } catch (error: any) {

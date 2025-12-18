@@ -90,7 +90,7 @@
     - Mark sensitive variables as type "secret"
     - _Requirements: 2.1, 2.4_
 
-- [-] 7. Create Stripe Webhooks collection
+- [x] 7. Create Stripe Webhooks collection
   - [x] 7.1 Create Stripe Webhooks collection with signature generation
     - Create `postman/collections/stripe-webhooks.postman_collection.json`
     - Add collection-level pre-request script for Stripe signature generation using CryptoJS
@@ -106,53 +106,53 @@
     - **Property 6: Webhook Signature Generation**
     - **Validates: Requirements 6.1, 6.2**
 
-- [-] 8. Add contract tests to collections
-  - [-] 8.1 Add JSON schema contract tests to Store API collection
+- [x] 8. Add contract tests to collections
+  - [x] 8.1 Add JSON schema contract tests to Store API collection
     - Add test scripts with JSON schema validation for product list response
     - Add test scripts with JSON schema validation for cart response
     - Use pm.expect().to.have.jsonSchema() for validation
     - _Requirements: 4.1, 4.2, 4.3, 4.4_
-  - [ ] 8.2 Add JSON schema contract tests to Admin API collection
+  - [x] 8.2 Add JSON schema contract tests to Admin API collection
     - Add test scripts with JSON schema validation for admin product response
     - Add test scripts with JSON schema validation for orders response
     - _Requirements: 4.1, 4.2_
-  - [ ] 8.3 Write property test for contract test schema presence
+  - [x] 8.3 Write property test for contract test schema presence
     - **Property 5: Contract Test Schema Presence**
     - **Validates: Requirements 4.1**
 
-- [ ] 9. Checkpoint - Ensure all tests pass
+- [x] 9. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 10. Create Newman CI/CD workflow
-  - [ ] 10.1 Create GitHub Actions workflow for Newman
+- [x] 10. Create Newman CI/CD workflow
+  - [x] 10.1 Create GitHub Actions workflow for Newman
     - Create `.github/workflows/api-contract-tests.yml`
     - Configure trigger on pull_request events
     - Add Newman installation step using npm
     - Add Newman run step with staging environment
     - _Requirements: 5.1, 5.2_
-  - [ ] 10.2 Configure environment variables and secrets
+  - [x] 10.2 Configure environment variables and secrets
     - Reference GitHub Secrets for jwt_token and stripe_webhook_secret
     - Set base_url from environment or secret
     - Add timeout configuration for Newman
     - _Requirements: 5.2_
-  - [ ] 10.3 Add HTML report generation and artifact upload
+  - [x] 10.3 Add HTML report generation and artifact upload
     - Install newman-reporter-htmlextra
     - Configure Newman to generate HTML report
     - Add upload-artifact step to store report
     - _Requirements: 5.5_
 
-- [ ] 11. Create documentation and README
-  - [ ] 11.1 Create Postman README with setup instructions
+- [x] 11. Create documentation and README
+  - [x] 11.1 Create Postman README with setup instructions
     - Create `postman/README.md` with import instructions
     - Document environment setup process
     - Explain how to run collections manually
     - Document how to add new requests
     - _Requirements: 7.1, 7.2_
-  - [ ] 11.2 Update project documentation
+  - [x] 11.2 Update project documentation
     - Add Postman section to main README.md
     - Link to Postman README from docs/TESTING_STRATEGY.md
     - _Requirements: 7.1_
 
-- [ ] 12. Final Checkpoint - Ensure all tests pass
+- [x] 12. Final Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 

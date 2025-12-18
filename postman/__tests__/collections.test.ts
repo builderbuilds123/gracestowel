@@ -1098,3 +1098,706 @@ describe('Property 4: Variable Chaining in Checkout Flow (Integration)', () => {
     ).toBeGreaterThan(0);
   });
 });
+
+
+/**
+ * Property 5: Contract Test Schema Presence
+ * 
+ * **Feature: postman-integration, Property 5: Contract Test Schema Presence**
+ * **Validates: Requirements 4.1**
+ * 
+ * For any request with contract tests, the test script SHALL contain a JSON schema
+ * definition and a call to tv4.validate() or pm.expect().to.have.jsonSchema()
+ * for response validation.
+ */
+
+// Helper function to check if a test script contains JSON schema validation
+function hasJsonSchemaValidation(scriptExec: string[]): boolean {
+  const scriptContent = scriptExec.join('\n');
+  
+  // Check for schema definition (object with 'type' and 'properties' or 'required')
+  const hasSchemaDefinition = (
+    scriptContent.includes('type:') && 
+    (scriptContent.includes('properties:') || scriptContent.includes('required:'))
+  );
+  
+  // Check for tv4.validate() call
+  const hasTv4Validate = /tv4\.validate\s*\(/.test(scriptContent);
+  
+  // Check for pm.expect().to.have.jsonSchema() call
+  const hasJsonSchemaExpect = /\.to\.have\.jsonSchema\s*\(/.test(scriptContent);
+  
+  // Must have schema definition AND at least one validation method
+  return hasSchemaDefinition && (hasTv4Validate || hasJsonSchemaExpect);
+}
+
+// Helper function to check if a request item has contract tests
+function hasContractTests(item: PostmanItem): boolean {
+  // If it's a folder, check all nested items
+  if (item.item && Array.isArray(item.item)) {
+    return item.item.some(hasContractTests);
+  }
+  
+  // If it's a request item with test events
+  if (item.request && item.event) {
+    const testEvent = item.event.find(e => e.listen === 'test');
+    if (testEvent && testEvent.script && testEvent.script.exec) {
+      return hasJsonSchemaValidation(testEvent.script.exec);
+    }
+  }
+  
+  return false;
+}
+
+// Helper to extract all requests with contract tests from a collection
+function extractRequestsWithContractTests(items: PostmanItem[]): PostmanItem[] {
+  const requests: PostmanItem[] = [];
+  
+  for (const item of items) {
+    if (item.item && Array.isArray(item.item)) {
+      // It's a folder - recurse
+      requests.push(...extractRequestsWithContractTests(item.item));
+    } else if (item.request && item.event) {
+      // It's a request - check if it has contract tests
+      const testEvent = item.event.find(e => e.listen === 'test');
+      if (testEvent && testEvent.script && testEvent.script.exec) {
+        const scriptContent = testEvent.script.exec.join('\n');
+        // Check if this looks like a contract test (has schema-related content)
+        if (scriptContent.toLowerCase().includes('contract') || 
+            scriptContent.includes('Schema') ||
+            scriptContent.includes('tv4.validate')) {
+          requests.push(item);
+        }
+      }
+    }
+  }
+  
+  return requests;
+}
+
+// Arbitrary for generating request with valid contract test
+const requestWithContractTestArb: fc.Arbitrary<PostmanItem> = fc.record({
+  name: fc.string({ minLength: 1, maxLength: 50 }),
+  description: fc.string({ minLength: 10, maxLength: 200 }),
+  request: postmanRequestArb,
+  response: fc.array(
+    fc.record({
+      name: fc.string({ minLength: 1 }),
+      status: fc.constant('OK'),
+      code: fc.constant(200),
+      body: fc.string(),
+    }),
+    { minLength: 1, maxLength: 2 }
+  ),
+  event: fc.constant([
+    {
+      listen: 'test' as const,
+      script: {
+        type: 'text/javascript',
+        exec: [
+          "// JSON Schema Contract Test",
+          "const responseSchema = {",
+          "    type: 'object',",
+          "    required: ['data'],",
+          "    properties: {",
+          "        data: { type: 'object' },",
+          "        count: { type: 'number' }",
+          "    }",
+          "};",
+          "",
+          "pm.test('Response status is 200', function () {",
+          "    pm.response.to.have.status(200);",
+          "});",
+          "",
+          "pm.test('Contract Test: Response matches schema', function () {",
+          "    const response = pm.response.json();",
+          "    pm.expect(tv4.validate(response, responseSchema)).to.be.true;",
+          "});"
+        ],
+      },
+    },
+  ]),
+});
+
+// Arbitrary for generating request WITHOUT valid contract test (invalid)
+const requestWithoutContractTestArb: fc.Arbitrary<PostmanItem> = fc.oneof(
+  // No event at all
+  fc.record({
+    name: fc.string({ minLength: 1, maxLength: 50 }),
+    description: fc.string({ minLength: 10, maxLength: 200 }),
+    request: postmanRequestArb,
+    response: fc.array(
+      fc.record({
+        name: fc.string({ minLength: 1 }),
+        status: fc.constant('OK'),
+        code: fc.constant(200),
+        body: fc.string(),
+      }),
+      { minLength: 1, maxLength: 2 }
+    ),
+  }),
+  // Has test event but no schema validation
+  fc.record({
+    name: fc.string({ minLength: 1, maxLength: 50 }),
+    description: fc.string({ minLength: 10, maxLength: 200 }),
+    request: postmanRequestArb,
+    response: fc.array(
+      fc.record({
+        name: fc.string({ minLength: 1 }),
+        status: fc.constant('OK'),
+        code: fc.constant(200),
+        body: fc.string(),
+      }),
+      { minLength: 1, maxLength: 2 }
+    ),
+    event: fc.constant([
+      {
+        listen: 'test' as const,
+        script: {
+          type: 'text/javascript',
+          exec: [
+            "pm.test('Response status is 200', function () {",
+            "    pm.response.to.have.status(200);",
+            "});",
+            // No schema definition or validation
+          ],
+        },
+      },
+    ]),
+  }),
+  // Has schema definition but no validation call
+  fc.record({
+    name: fc.string({ minLength: 1, maxLength: 50 }),
+    description: fc.string({ minLength: 10, maxLength: 200 }),
+    request: postmanRequestArb,
+    response: fc.array(
+      fc.record({
+        name: fc.string({ minLength: 1 }),
+        status: fc.constant('OK'),
+        code: fc.constant(200),
+        body: fc.string(),
+      }),
+      { minLength: 1, maxLength: 2 }
+    ),
+    event: fc.constant([
+      {
+        listen: 'test' as const,
+        script: {
+          type: 'text/javascript',
+          exec: [
+            "const schema = {",
+            "    type: 'object',",
+            "    properties: { id: { type: 'string' } }",
+            "};",
+            "pm.test('Response status is 200', function () {",
+            "    pm.response.to.have.status(200);",
+            "});",
+            // Schema defined but no tv4.validate() or jsonSchema call
+          ],
+        },
+      },
+    ]),
+  })
+);
+
+describe('Property 5: Contract Test Schema Presence', () => {
+  /**
+   * **Feature: postman-integration, Property 5: Contract Test Schema Presence**
+   * **Validates: Requirements 4.1**
+   */
+
+  it('should validate that requests with proper contract tests pass validation', () => {
+    fc.assert(
+      fc.property(requestWithContractTestArb, (requestItem) => {
+        // Property: Requests with schema definition and tv4.validate() should pass
+        expect(hasContractTests(requestItem)).toBe(true);
+      }),
+      { numRuns: 100 }
+    );
+  });
+
+  it('should reject requests without proper contract test schema validation', () => {
+    fc.assert(
+      fc.property(requestWithoutContractTestArb, (requestItem) => {
+        // Property: Requests without proper schema validation should fail
+        expect(hasContractTests(requestItem)).toBe(false);
+      }),
+      { numRuns: 100 }
+    );
+  });
+
+  it('should validate that contract tests include both schema definition and validation call', () => {
+    fc.assert(
+      fc.property(requestWithContractTestArb, (requestItem) => {
+        const testEvent = requestItem.event?.find(e => e.listen === 'test');
+        if (testEvent) {
+          const scriptContent = testEvent.script.exec.join('\n');
+          
+          // Must have schema definition
+          const hasSchema = scriptContent.includes('type:') && 
+                           (scriptContent.includes('properties:') || scriptContent.includes('required:'));
+          expect(hasSchema).toBe(true);
+          
+          // Must have validation call
+          const hasValidation = /tv4\.validate\s*\(/.test(scriptContent) || 
+                               /\.to\.have\.jsonSchema\s*\(/.test(scriptContent);
+          expect(hasValidation).toBe(true);
+        }
+        return true;
+      }),
+      { numRuns: 100 }
+    );
+  });
+
+  it('should validate schema definitions include required type property', () => {
+    fc.assert(
+      fc.property(requestWithContractTestArb, (requestItem) => {
+        const testEvent = requestItem.event?.find(e => e.listen === 'test');
+        if (testEvent) {
+          const scriptContent = testEvent.script.exec.join('\n');
+          // Schema must include 'type:' property
+          expect(scriptContent).toContain('type:');
+        }
+        return true;
+      }),
+      { numRuns: 100 }
+    );
+  });
+});
+
+describe('Property 5: Contract Test Schema Presence (Integration)', () => {
+  const collectionsDir = path.join(__dirname, '..', 'collections');
+
+  it('should validate Store API collection has contract tests with proper schema validation', () => {
+    const storeApiPath = path.join(collectionsDir, 'store-api.postman_collection.json');
+    
+    // Skip if store-api collection doesn't exist yet
+    if (!fs.existsSync(storeApiPath)) {
+      return;
+    }
+
+    const content = fs.readFileSync(storeApiPath, 'utf-8');
+    const collection = JSON.parse(content) as PostmanCollection;
+
+    // Extract requests that have contract tests
+    const contractTestRequests = extractRequestsWithContractTests(collection.item);
+
+    // Each contract test request must have proper schema validation
+    for (const request of contractTestRequests) {
+      expect(
+        hasContractTests(request),
+        `Request "${request.name}" has contract test markers but missing proper schema validation (tv4.validate or jsonSchema)`
+      ).toBe(true);
+    }
+  });
+
+  it('should validate Admin API collection has contract tests with proper schema validation', () => {
+    const adminApiPath = path.join(collectionsDir, 'admin-api.postman_collection.json');
+    
+    // Skip if admin-api collection doesn't exist yet
+    if (!fs.existsSync(adminApiPath)) {
+      return;
+    }
+
+    const content = fs.readFileSync(adminApiPath, 'utf-8');
+    const collection = JSON.parse(content) as PostmanCollection;
+
+    // Extract requests that have contract tests
+    const contractTestRequests = extractRequestsWithContractTests(collection.item);
+
+    // Each contract test request must have proper schema validation
+    for (const request of contractTestRequests) {
+      expect(
+        hasContractTests(request),
+        `Request "${request.name}" has contract test markers but missing proper schema validation (tv4.validate or jsonSchema)`
+      ).toBe(true);
+    }
+  });
+
+  it('should validate all collections with contract tests use tv4.validate() or jsonSchema()', () => {
+    // Skip if no collection files exist yet
+    if (!fs.existsSync(collectionsDir)) {
+      return;
+    }
+
+    const files = fs.readdirSync(collectionsDir)
+      .filter(f => f.endsWith('.postman_collection.json'));
+
+    for (const file of files) {
+      const filePath = path.join(collectionsDir, file);
+      const content = fs.readFileSync(filePath, 'utf-8');
+      const collection = JSON.parse(content) as PostmanCollection;
+
+      // Extract requests that have contract tests
+      const contractTestRequests = extractRequestsWithContractTests(collection.item);
+
+      // Each contract test request must have proper schema validation
+      for (const request of contractTestRequests) {
+        expect(
+          hasContractTests(request),
+          `Request "${request.name}" in ${file} has contract test markers but missing proper schema validation`
+        ).toBe(true);
+      }
+    }
+  });
+});
+
+
+/**
+ * Property 6: Webhook Signature Generation
+ * 
+ * **Feature: postman-integration, Property 6: Webhook Signature Generation**
+ * **Validates: Requirements 6.1, 6.2**
+ * 
+ * For any request in the Stripe Webhooks collection, the pre-request script SHALL
+ * generate a valid Stripe-Signature header using HMAC-SHA256 with the webhook secret
+ * and include the timestamp and signature in the correct format (t=timestamp,v1=signature).
+ */
+
+// Helper function to check if a pre-request script generates Stripe signature
+function hasStripeSignatureGeneration(scriptExec: string[]): boolean {
+  const scriptContent = scriptExec.join('\n');
+  
+  // Must reference stripe_webhook_secret
+  const hasWebhookSecret = scriptContent.includes('stripe_webhook_secret');
+  
+  // Must generate timestamp
+  const hasTimestamp = scriptContent.includes('timestamp') || scriptContent.includes('Date.now()');
+  
+  // Must use HMAC-SHA256 (CryptoJS.HmacSHA256)
+  const hasHmacSha256 = scriptContent.includes('HmacSHA256') || scriptContent.includes('HMAC');
+  
+  // Must create signature in format t=timestamp,v1=signature
+  const hasSignatureFormat = (
+    scriptContent.includes('t=') && 
+    scriptContent.includes('v1=')
+  ) || scriptContent.includes('Stripe-Signature');
+  
+  return hasWebhookSecret && hasTimestamp && hasHmacSha256 && hasSignatureFormat;
+}
+
+// Helper function to validate Stripe signature format
+function isValidStripeSignatureFormat(signature: string): boolean {
+  // Format: t=timestamp,v1=signature
+  const pattern = /^t=\d+,v1=[a-f0-9]{64}$/;
+  return pattern.test(signature);
+}
+
+// Helper function to check if collection has pre-request script for signature generation
+function hasCollectionLevelPreRequestScript(collection: PostmanCollection): boolean {
+  if (!collection.event) return false;
+  
+  const preRequestEvent = collection.event.find(e => e.listen === 'prerequest');
+  if (!preRequestEvent || !preRequestEvent.script || !preRequestEvent.script.exec) {
+    return false;
+  }
+  
+  return hasStripeSignatureGeneration(preRequestEvent.script.exec);
+}
+
+// Helper to check if a collection is the Stripe Webhooks collection
+function isStripeWebhooksCollection(collection: PostmanCollection): boolean {
+  return collection.info.name.toLowerCase().includes('stripe') && 
+         collection.info.name.toLowerCase().includes('webhook');
+}
+
+// Arbitrary for generating valid Stripe signature components
+const timestampArb = fc.integer({ min: 1600000000, max: 2000000000 }); // Unix timestamps
+const webhookSecretArb = fc.string({ minLength: 20, maxLength: 50 }).map(s => `whsec_${s}`);
+const payloadArb = fc.json();
+
+// Arbitrary for generating Stripe webhook collection with proper signature generation
+const stripeWebhookCollectionArb: fc.Arbitrary<PostmanCollection> = fc.record({
+  info: fc.record({
+    name: fc.constant('Stripe Webhooks'),
+    description: fc.string({ minLength: 10, maxLength: 500 }),
+    schema: fc.constant(POSTMAN_SCHEMA_V2_1),
+  }),
+  event: fc.constant([
+    {
+      listen: 'prerequest' as const,
+      script: {
+        type: 'text/javascript',
+        exec: [
+          "// Stripe Webhook Signature Generator",
+          "const webhookSecret = pm.environment.get('stripe_webhook_secret');",
+          "const payload = pm.request.body.raw;",
+          "const timestamp = Math.floor(Date.now() / 1000);",
+          "const signedPayload = `${timestamp}.${payload}`;",
+          "const signature = CryptoJS.HmacSHA256(signedPayload, webhookSecret).toString();",
+          "const stripeSignature = `t=${timestamp},v1=${signature}`;",
+          "pm.request.headers.upsert({",
+          "    key: 'Stripe-Signature',",
+          "    value: stripeSignature",
+          "});"
+        ],
+      },
+    },
+  ]),
+  item: fc.array(postmanFolderArb, { minLength: 1, maxLength: 3 }),
+  variable: fc.constant([
+    { key: 'base_url', value: 'http://localhost:9000' },
+    { key: 'stripe_webhook_secret', value: '', type: 'secret' as const },
+  ]),
+});
+
+// Arbitrary for generating Stripe webhook collection WITHOUT proper signature generation (invalid)
+const stripeWebhookCollectionNoSignatureArb: fc.Arbitrary<PostmanCollection> = fc.oneof(
+  // Missing pre-request event entirely
+  fc.record({
+    info: fc.record({
+      name: fc.constant('Stripe Webhooks'),
+      description: fc.string({ minLength: 10, maxLength: 500 }),
+      schema: fc.constant(POSTMAN_SCHEMA_V2_1),
+    }),
+    item: fc.array(postmanFolderArb, { minLength: 1, maxLength: 3 }),
+  }),
+  // Has pre-request but no HMAC
+  fc.record({
+    info: fc.record({
+      name: fc.constant('Stripe Webhooks'),
+      description: fc.string({ minLength: 10, maxLength: 500 }),
+      schema: fc.constant(POSTMAN_SCHEMA_V2_1),
+    }),
+    event: fc.constant([
+      {
+        listen: 'prerequest' as const,
+        script: {
+          type: 'text/javascript',
+          exec: [
+            "// Missing HMAC signature generation",
+            "console.log('Pre-request script running');",
+          ],
+        },
+      },
+    ]),
+    item: fc.array(postmanFolderArb, { minLength: 1, maxLength: 3 }),
+  }),
+  // Has HMAC but missing webhook secret reference
+  fc.record({
+    info: fc.record({
+      name: fc.constant('Stripe Webhooks'),
+      description: fc.string({ minLength: 10, maxLength: 500 }),
+      schema: fc.constant(POSTMAN_SCHEMA_V2_1),
+    }),
+    event: fc.constant([
+      {
+        listen: 'prerequest' as const,
+        script: {
+          type: 'text/javascript',
+          exec: [
+            "const timestamp = Math.floor(Date.now() / 1000);",
+            "const signature = CryptoJS.HmacSHA256('payload', 'hardcoded-secret').toString();",
+            // Missing stripe_webhook_secret reference
+          ],
+        },
+      },
+    ]),
+    item: fc.array(postmanFolderArb, { minLength: 1, maxLength: 3 }),
+  })
+);
+
+describe('Property 6: Webhook Signature Generation', () => {
+  /**
+   * **Feature: postman-integration, Property 6: Webhook Signature Generation**
+   * **Validates: Requirements 6.1, 6.2**
+   */
+
+  it('should validate that Stripe webhook collections with proper signature generation pass validation', () => {
+    fc.assert(
+      fc.property(stripeWebhookCollectionArb, (collection) => {
+        // Property: Webhook collections with proper HMAC-SHA256 signature generation should pass
+        expect(hasCollectionLevelPreRequestScript(collection)).toBe(true);
+      }),
+      { numRuns: 100 }
+    );
+  });
+
+  it('should reject Stripe webhook collections without proper signature generation', () => {
+    fc.assert(
+      fc.property(stripeWebhookCollectionNoSignatureArb, (collection) => {
+        // Property: Webhook collections without proper signature generation should fail
+        expect(hasCollectionLevelPreRequestScript(collection)).toBe(false);
+      }),
+      { numRuns: 100 }
+    );
+  });
+
+  it('should validate Stripe signature format is t=timestamp,v1=signature', () => {
+    fc.assert(
+      fc.property(
+        timestampArb,
+        fc.hexaString({ minLength: 64, maxLength: 64 }),
+        (timestamp, hexSignature) => {
+          const signature = `t=${timestamp},v1=${hexSignature}`;
+          // Property: Valid signatures must match the expected format
+          expect(isValidStripeSignatureFormat(signature)).toBe(true);
+        }
+      ),
+      { numRuns: 100 }
+    );
+  });
+
+  it('should reject invalid Stripe signature formats', () => {
+    fc.assert(
+      fc.property(
+        fc.oneof(
+          // Missing t= prefix
+          fc.tuple(timestampArb, fc.hexaString({ minLength: 64, maxLength: 64 }))
+            .map(([ts, sig]) => `${ts},v1=${sig}`),
+          // Missing v1= prefix
+          fc.tuple(timestampArb, fc.hexaString({ minLength: 64, maxLength: 64 }))
+            .map(([ts, sig]) => `t=${ts},${sig}`),
+          // Wrong signature length
+          fc.tuple(timestampArb, fc.hexaString({ minLength: 10, maxLength: 30 }))
+            .map(([ts, sig]) => `t=${ts},v1=${sig}`),
+          // Non-hex signature
+          fc.tuple(timestampArb, fc.string({ minLength: 64, maxLength: 64 }))
+            .filter(([_, s]) => !/^[a-f0-9]+$/.test(s))
+            .map(([ts, sig]) => `t=${ts},v1=${sig}`)
+        ),
+        (invalidSignature) => {
+          // Property: Invalid signature formats should fail validation
+          expect(isValidStripeSignatureFormat(invalidSignature)).toBe(false);
+        }
+      ),
+      { numRuns: 100 }
+    );
+  });
+
+  it('should validate pre-request script references stripe_webhook_secret variable', () => {
+    fc.assert(
+      fc.property(stripeWebhookCollectionArb, (collection) => {
+        const preRequestEvent = collection.event?.find(e => e.listen === 'prerequest');
+        if (preRequestEvent && preRequestEvent.script) {
+          const scriptContent = preRequestEvent.script.exec.join('\n');
+          // Property: Script must reference the webhook secret variable
+          expect(scriptContent).toContain('stripe_webhook_secret');
+        }
+        return true;
+      }),
+      { numRuns: 100 }
+    );
+  });
+
+  it('should validate pre-request script uses HMAC-SHA256 algorithm', () => {
+    fc.assert(
+      fc.property(stripeWebhookCollectionArb, (collection) => {
+        const preRequestEvent = collection.event?.find(e => e.listen === 'prerequest');
+        if (preRequestEvent && preRequestEvent.script) {
+          const scriptContent = preRequestEvent.script.exec.join('\n');
+          // Property: Script must use HMAC-SHA256 for signature generation
+          expect(scriptContent).toContain('HmacSHA256');
+        }
+        return true;
+      }),
+      { numRuns: 100 }
+    );
+  });
+
+  it('should validate pre-request script generates timestamp', () => {
+    fc.assert(
+      fc.property(stripeWebhookCollectionArb, (collection) => {
+        const preRequestEvent = collection.event?.find(e => e.listen === 'prerequest');
+        if (preRequestEvent && preRequestEvent.script) {
+          const scriptContent = preRequestEvent.script.exec.join('\n');
+          // Property: Script must generate a timestamp
+          const hasTimestamp = scriptContent.includes('timestamp') || 
+                              scriptContent.includes('Date.now()');
+          expect(hasTimestamp).toBe(true);
+        }
+        return true;
+      }),
+      { numRuns: 100 }
+    );
+  });
+});
+
+describe('Property 6: Webhook Signature Generation (Integration)', () => {
+  const collectionsDir = path.join(__dirname, '..', 'collections');
+
+  it('should validate Stripe Webhooks collection has proper signature generation', () => {
+    const stripeWebhooksPath = path.join(collectionsDir, 'stripe-webhooks.postman_collection.json');
+    
+    // Skip if stripe-webhooks collection doesn't exist yet
+    if (!fs.existsSync(stripeWebhooksPath)) {
+      return;
+    }
+
+    const content = fs.readFileSync(stripeWebhooksPath, 'utf-8');
+    const collection = JSON.parse(content) as PostmanCollection;
+
+    // Stripe Webhooks collection must have collection-level pre-request script
+    expect(
+      hasCollectionLevelPreRequestScript(collection),
+      'Stripe Webhooks collection must have pre-request script with HMAC-SHA256 signature generation'
+    ).toBe(true);
+  });
+
+  it('should validate Stripe Webhooks collection pre-request script includes all required components', () => {
+    const stripeWebhooksPath = path.join(collectionsDir, 'stripe-webhooks.postman_collection.json');
+    
+    // Skip if stripe-webhooks collection doesn't exist yet
+    if (!fs.existsSync(stripeWebhooksPath)) {
+      return;
+    }
+
+    const content = fs.readFileSync(stripeWebhooksPath, 'utf-8');
+    const collection = JSON.parse(content) as PostmanCollection;
+
+    const preRequestEvent = collection.event?.find(e => e.listen === 'prerequest');
+    expect(preRequestEvent, 'Collection must have pre-request event').toBeDefined();
+    
+    if (preRequestEvent && preRequestEvent.script) {
+      const scriptContent = preRequestEvent.script.exec.join('\n');
+      
+      // Must reference webhook secret
+      expect(
+        scriptContent.includes('stripe_webhook_secret'),
+        'Pre-request script must reference stripe_webhook_secret'
+      ).toBe(true);
+      
+      // Must use HMAC-SHA256
+      expect(
+        scriptContent.includes('HmacSHA256'),
+        'Pre-request script must use HmacSHA256 for signature generation'
+      ).toBe(true);
+      
+      // Must generate timestamp
+      expect(
+        scriptContent.includes('timestamp') || scriptContent.includes('Date.now()'),
+        'Pre-request script must generate timestamp'
+      ).toBe(true);
+      
+      // Must set Stripe-Signature header
+      expect(
+        scriptContent.includes('Stripe-Signature'),
+        'Pre-request script must set Stripe-Signature header'
+      ).toBe(true);
+    }
+  });
+
+  it('should validate all webhook collections use proper signature generation', () => {
+    // Skip if no collection files exist yet
+    if (!fs.existsSync(collectionsDir)) {
+      return;
+    }
+
+    const files = fs.readdirSync(collectionsDir)
+      .filter(f => f.endsWith('.postman_collection.json'));
+
+    for (const file of files) {
+      const filePath = path.join(collectionsDir, file);
+      const content = fs.readFileSync(filePath, 'utf-8');
+      const collection = JSON.parse(content) as PostmanCollection;
+
+      // Only check webhook collections
+      if (isStripeWebhooksCollection(collection)) {
+        expect(
+          hasCollectionLevelPreRequestScript(collection),
+          `Webhook collection "${file}" must have pre-request script with proper signature generation`
+        ).toBe(true);
+      }
+    }
+  });
+});

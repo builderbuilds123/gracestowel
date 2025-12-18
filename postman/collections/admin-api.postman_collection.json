@@ -1,27 +1,125 @@
 {
   "info": {
+    "_postman_id": "b55eafe2-a6cd-4058-982c-6ea3f0e061ca",
     "name": "Admin API",
     "description": "Medusa Admin API endpoints for administrative operations including products, orders, customers, and users management. These endpoints require authentication via JWT token.\n\n## Authentication\n\nAll requests in this collection require a valid JWT token. Set the `jwt_token` environment variable with your admin authentication token before making requests.\n\nTo obtain a JWT token:\n1. POST to /admin/auth with admin credentials\n2. Copy the token from the response\n3. Set it as the `jwt_token` environment variable\n\nThe collection automatically includes the Authorization header with Bearer token for all requests.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
-  "auth": {
-    "type": "bearer",
-    "bearer": [
-      {
-        "key": "token",
-        "value": "{{jwt_token}}",
-        "type": "string"
-      }
-    ]
-  },
   "item": [
     {
       "name": "Products",
-      "description": "Product management endpoints for creating, updating, and listing products in the admin panel",
       "item": [
         {
           "name": "List Products",
-          "description": "Retrieves a paginated list of all products in the store. Supports filtering, sorting, and pagination. Returns detailed product information including variants, options, and metadata.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// JSON Schema for Admin Product List Response - Contract Test",
+                  "// Validates: Requirements 4.1, 4.2",
+                  "const adminProductListSchema = {",
+                  "    type: 'object',",
+                  "    required: ['products', 'count', 'offset', 'limit'],",
+                  "    properties: {",
+                  "        products: {",
+                  "            type: 'array',",
+                  "            items: {",
+                  "                type: 'object',",
+                  "                required: ['id', 'title', 'handle', 'status'],",
+                  "                properties: {",
+                  "                    id: { type: 'string' },",
+                  "                    title: { type: 'string' },",
+                  "                    subtitle: { type: ['string', 'null'] },",
+                  "                    description: { type: ['string', 'null'] },",
+                  "                    handle: { type: 'string' },",
+                  "                    is_giftcard: { type: 'boolean' },",
+                  "                    status: { type: 'string', enum: ['draft', 'proposed', 'published', 'rejected'] },",
+                  "                    thumbnail: { type: ['string', 'null'] },",
+                  "                    variants: {",
+                  "                        type: 'array',",
+                  "                        items: {",
+                  "                            type: 'object',",
+                  "                            required: ['id'],",
+                  "                            properties: {",
+                  "                                id: { type: 'string' },",
+                  "                                title: { type: ['string', 'null'] },",
+                  "                                sku: { type: ['string', 'null'] },",
+                  "                                barcode: { type: ['string', 'null'] },",
+                  "                                inventory_quantity: { type: 'number' },",
+                  "                                manage_inventory: { type: 'boolean' },",
+                  "                                prices: {",
+                  "                                    type: 'array',",
+                  "                                    items: {",
+                  "                                        type: 'object',",
+                  "                                        properties: {",
+                  "                                            id: { type: 'string' },",
+                  "                                            amount: { type: 'number' },",
+                  "                                            currency_code: { type: 'string' }",
+                  "                                        }",
+                  "                                    }",
+                  "                                }",
+                  "                            }",
+                  "                        }",
+                  "                    },",
+                  "                    options: {",
+                  "                        type: 'array',",
+                  "                        items: {",
+                  "                            type: 'object',",
+                  "                            properties: {",
+                  "                                id: { type: 'string' },",
+                  "                                title: { type: 'string' }",
+                  "                            }",
+                  "                        }",
+                  "                    },",
+                  "                    created_at: { type: 'string' },",
+                  "                    updated_at: { type: 'string' }",
+                  "                }",
+                  "            }",
+                  "        },",
+                  "        count: { type: 'number' },",
+                  "        offset: { type: 'number' },",
+                  "        limit: { type: 'number' }",
+                  "    }",
+                  "};",
+                  "",
+                  "pm.test('Response status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Admin product list response matches schema', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(tv4.validate(response, adminProductListSchema)).to.be.true;",
+                  "    if (!tv4.validate(response, adminProductListSchema)) {",
+                  "        console.log('Schema validation error:', tv4.error);",
+                  "    }",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Products have required admin fields', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.products).to.be.an('array');",
+                  "    if (response.products.length > 0) {",
+                  "        const product = response.products[0];",
+                  "        pm.expect(product).to.have.property('id');",
+                  "        pm.expect(product).to.have.property('title');",
+                  "        pm.expect(product).to.have.property('handle');",
+                  "        pm.expect(product).to.have.property('status');",
+                  "    }",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Product status is valid enum value', function () {",
+                  "    const response = pm.response.json();",
+                  "    const validStatuses = ['draft', 'proposed', 'published', 'rejected'];",
+                  "    response.products.forEach(function(product) {",
+                  "        pm.expect(validStatuses).to.include(product.status);",
+                  "    });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "id": "6ad4d38f-4a2e-42c1-aaa8-552597eea1ff",
           "request": {
             "method": "GET",
             "header": [
@@ -33,32 +131,46 @@
             ],
             "url": {
               "raw": "{{base_url}}/admin/products",
-              "host": ["{{base_url}}"],
-              "path": ["admin", "products"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "products"
+              ]
             }
           },
           "response": [
             {
+              "id": "cfd259da-389f-4445-82d3-a3fee2bfb99c",
               "name": "Success Response",
               "originalRequest": {
                 "method": "GET",
                 "header": [],
                 "url": {
                   "raw": "{{base_url}}/admin/products",
-                  "host": ["{{base_url}}"],
-                  "path": ["admin", "products"]
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "products"
+                  ]
                 }
               },
               "status": "OK",
               "code": 200,
               "_postman_previewlanguage": "json",
+              "header": null,
+              "cookie": [],
+              "responseTime": null,
               "body": "{\n  \"products\": [\n    {\n      \"id\": \"prod_01EXAMPLE\",\n      \"title\": \"Grace Stowel Premium Towel\",\n      \"subtitle\": null,\n      \"description\": \"A luxurious premium towel with superior absorbency\",\n      \"handle\": \"grace-stowel-premium-towel\",\n      \"is_giftcard\": false,\n      \"status\": \"published\",\n      \"thumbnail\": \"https://example.com/thumbnail.jpg\",\n      \"variants\": [\n        {\n          \"id\": \"variant_01EXAMPLE\",\n          \"title\": \"White / Large\",\n          \"sku\": \"TOWEL-WHT-LG\",\n          \"barcode\": null,\n          \"ean\": null,\n          \"upc\": null,\n          \"inventory_quantity\": 100,\n          \"manage_inventory\": true,\n          \"prices\": [\n            {\n              \"id\": \"price_01EXAMPLE\",\n              \"amount\": 2999,\n              \"currency_code\": \"usd\"\n            }\n          ]\n        }\n      ],\n      \"options\": [\n        {\n          \"id\": \"opt_01EXAMPLE\",\n          \"title\": \"Color\"\n        },\n        {\n          \"id\": \"opt_02EXAMPLE\",\n          \"title\": \"Size\"\n        }\n      ],\n      \"created_at\": \"2024-01-01T00:00:00.000Z\",\n      \"updated_at\": \"2024-01-01T00:00:00.000Z\"\n    }\n  ],\n  \"count\": 1,\n  \"offset\": 0,\n  \"limit\": 20\n}"
             }
           ]
         },
         {
           "name": "Create Product",
-          "description": "Creates a new product in the store. Requires product title at minimum. Can include variants, options, images, and other product details.",
+          "id": "8453c625-75f1-4094-8ca4-2f47585480bd",
           "request": {
             "method": "POST",
             "header": [
@@ -74,12 +186,18 @@
             },
             "url": {
               "raw": "{{base_url}}/admin/products",
-              "host": ["{{base_url}}"],
-              "path": ["admin", "products"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "products"
+              ]
             }
           },
           "response": [
             {
+              "id": "16b5a166-a1a0-4ea8-ae87-e11ee6a377b7",
               "name": "Success Response",
               "originalRequest": {
                 "method": "POST",
@@ -95,26 +213,153 @@
                 },
                 "url": {
                   "raw": "{{base_url}}/admin/products",
-                  "host": ["{{base_url}}"],
-                  "path": ["admin", "products"]
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "products"
+                  ]
                 }
               },
               "status": "OK",
               "code": 200,
               "_postman_previewlanguage": "json",
+              "header": null,
+              "cookie": [],
+              "responseTime": null,
               "body": "{\n  \"product\": {\n    \"id\": \"prod_02NEWPROD\",\n    \"title\": \"New Premium Towel\",\n    \"description\": \"A new luxurious towel product\",\n    \"handle\": \"new-premium-towel\",\n    \"status\": \"draft\",\n    \"variants\": [\n      {\n        \"id\": \"variant_02NEWVAR\",\n        \"title\": \"White / Medium\",\n        \"sku\": \"TOWEL-WHT-MD\",\n        \"inventory_quantity\": 50,\n        \"prices\": [\n          {\n            \"amount\": 2499,\n            \"currency_code\": \"usd\"\n          }\n        ]\n      }\n    ],\n    \"created_at\": \"2024-01-15T00:00:00.000Z\",\n    \"updated_at\": \"2024-01-15T00:00:00.000Z\"\n  }\n}"
             }
           ]
         }
-      ]
+      ],
+      "id": "ecf641f1-a9f0-4cdd-9833-7fb7dd7509ce",
+      "description": "Product management endpoints for creating, updating, and listing products in the admin panel"
     },
     {
       "name": "Orders",
-      "description": "Order management endpoints for viewing and managing customer orders",
       "item": [
         {
           "name": "List Orders",
-          "description": "Retrieves a paginated list of all orders. Supports filtering by status, customer, date range, and other attributes. Returns order details including items, shipping, and payment information.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// JSON Schema for Admin Orders List Response - Contract Test",
+                  "// Validates: Requirements 4.1, 4.2",
+                  "const adminOrdersListSchema = {",
+                  "    type: 'object',",
+                  "    required: ['orders', 'count', 'offset', 'limit'],",
+                  "    properties: {",
+                  "        orders: {",
+                  "            type: 'array',",
+                  "            items: {",
+                  "                type: 'object',",
+                  "                required: ['id', 'status', 'fulfillment_status', 'payment_status'],",
+                  "                properties: {",
+                  "                    id: { type: 'string' },",
+                  "                    display_id: { type: 'number' },",
+                  "                    status: { type: 'string' },",
+                  "                    fulfillment_status: { type: 'string' },",
+                  "                    payment_status: { type: 'string' },",
+                  "                    email: { type: ['string', 'null'] },",
+                  "                    customer_id: { type: ['string', 'null'] },",
+                  "                    shipping_address: {",
+                  "                        type: ['object', 'null'],",
+                  "                        properties: {",
+                  "                            first_name: { type: 'string' },",
+                  "                            last_name: { type: 'string' },",
+                  "                            address_1: { type: 'string' },",
+                  "                            city: { type: 'string' },",
+                  "                            province: { type: ['string', 'null'] },",
+                  "                            postal_code: { type: 'string' },",
+                  "                            country_code: { type: 'string' }",
+                  "                        }",
+                  "                    },",
+                  "                    items: {",
+                  "                        type: 'array',",
+                  "                        items: {",
+                  "                            type: 'object',",
+                  "                            required: ['id', 'quantity'],",
+                  "                            properties: {",
+                  "                                id: { type: 'string' },",
+                  "                                title: { type: 'string' },",
+                  "                                variant_id: { type: ['string', 'null'] },",
+                  "                                quantity: { type: 'number' },",
+                  "                                unit_price: { type: 'number' },",
+                  "                                subtotal: { type: 'number' }",
+                  "                            }",
+                  "                        }",
+                  "                    },",
+                  "                    subtotal: { type: 'number' },",
+                  "                    shipping_total: { type: ['number', 'null'] },",
+                  "                    tax_total: { type: ['number', 'null'] },",
+                  "                    total: { type: 'number' },",
+                  "                    currency_code: { type: 'string' },",
+                  "                    created_at: { type: 'string' },",
+                  "                    updated_at: { type: 'string' }",
+                  "                }",
+                  "            }",
+                  "        },",
+                  "        count: { type: 'number' },",
+                  "        offset: { type: 'number' },",
+                  "        limit: { type: 'number' }",
+                  "    }",
+                  "};",
+                  "",
+                  "pm.test('Response status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Admin orders list response matches schema', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(tv4.validate(response, adminOrdersListSchema)).to.be.true;",
+                  "    if (!tv4.validate(response, adminOrdersListSchema)) {",
+                  "        console.log('Schema validation error:', tv4.error);",
+                  "    }",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Orders have required status fields', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.orders).to.be.an('array');",
+                  "    if (response.orders.length > 0) {",
+                  "        const order = response.orders[0];",
+                  "        pm.expect(order).to.have.property('id');",
+                  "        pm.expect(order).to.have.property('status');",
+                  "        pm.expect(order).to.have.property('fulfillment_status');",
+                  "        pm.expect(order).to.have.property('payment_status');",
+                  "    }",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Order totals are valid numbers', function () {",
+                  "    const response = pm.response.json();",
+                  "    response.orders.forEach(function(order) {",
+                  "        pm.expect(order.subtotal).to.be.a('number');",
+                  "        pm.expect(order.total).to.be.a('number');",
+                  "        pm.expect(order.subtotal).to.be.at.least(0);",
+                  "        pm.expect(order.total).to.be.at.least(0);",
+                  "    });",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Order items have valid structure', function () {",
+                  "    const response = pm.response.json();",
+                  "    response.orders.forEach(function(order) {",
+                  "        pm.expect(order.items).to.be.an('array');",
+                  "        order.items.forEach(function(item) {",
+                  "            pm.expect(item).to.have.property('id');",
+                  "            pm.expect(item).to.have.property('quantity');",
+                  "            pm.expect(item.quantity).to.be.a('number');",
+                  "            pm.expect(item.quantity).to.be.at.least(1);",
+                  "        });",
+                  "    });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "id": "448cc210-fabb-4e98-bbab-d47b9bcce550",
           "request": {
             "method": "GET",
             "header": [
@@ -126,38 +371,53 @@
             ],
             "url": {
               "raw": "{{base_url}}/admin/orders",
-              "host": ["{{base_url}}"],
-              "path": ["admin", "orders"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "orders"
+              ]
             }
           },
           "response": [
             {
+              "id": "82f63f5c-148c-4188-be57-84770cc15e97",
               "name": "Success Response",
               "originalRequest": {
                 "method": "GET",
                 "header": [],
                 "url": {
                   "raw": "{{base_url}}/admin/orders",
-                  "host": ["{{base_url}}"],
-                  "path": ["admin", "orders"]
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "orders"
+                  ]
                 }
               },
               "status": "OK",
               "code": 200,
               "_postman_previewlanguage": "json",
+              "header": null,
+              "cookie": [],
+              "responseTime": null,
               "body": "{\n  \"orders\": [\n    {\n      \"id\": \"order_01EXAMPLE\",\n      \"display_id\": 1001,\n      \"status\": \"pending\",\n      \"fulfillment_status\": \"not_fulfilled\",\n      \"payment_status\": \"captured\",\n      \"email\": \"customer@example.com\",\n      \"customer_id\": \"cus_01EXAMPLE\",\n      \"shipping_address\": {\n        \"first_name\": \"John\",\n        \"last_name\": \"Doe\",\n        \"address_1\": \"123 Main St\",\n        \"city\": \"New York\",\n        \"province\": \"NY\",\n        \"postal_code\": \"10001\",\n        \"country_code\": \"us\"\n      },\n      \"items\": [\n        {\n          \"id\": \"item_01EXAMPLE\",\n          \"title\": \"Grace Stowel Premium Towel\",\n          \"variant_id\": \"variant_01EXAMPLE\",\n          \"quantity\": 2,\n          \"unit_price\": 2999,\n          \"subtotal\": 5998\n        }\n      ],\n      \"subtotal\": 5998,\n      \"shipping_total\": 500,\n      \"tax_total\": 540,\n      \"total\": 7038,\n      \"currency_code\": \"usd\",\n      \"created_at\": \"2024-01-10T00:00:00.000Z\",\n      \"updated_at\": \"2024-01-10T00:00:00.000Z\"\n    }\n  ],\n  \"count\": 1,\n  \"offset\": 0,\n  \"limit\": 20\n}"
             }
           ]
         }
-      ]
+      ],
+      "id": "e136a15b-3aba-4716-8720-395435764d92",
+      "description": "Order management endpoints for viewing and managing customer orders"
     },
     {
       "name": "Customers",
-      "description": "Customer management endpoints for viewing and managing customer accounts",
       "item": [
         {
           "name": "List Customers",
-          "description": "Retrieves a paginated list of all customers. Supports filtering by email, name, and other attributes. Returns customer details including contact information and order history summary.",
+          "id": "e48fa757-abe8-4e33-afc3-4e5a6ab68d72",
           "request": {
             "method": "GET",
             "header": [
@@ -169,38 +429,53 @@
             ],
             "url": {
               "raw": "{{base_url}}/admin/customers",
-              "host": ["{{base_url}}"],
-              "path": ["admin", "customers"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "customers"
+              ]
             }
           },
           "response": [
             {
+              "id": "9e0111ed-bd4b-4e8f-afbb-d5f6a146cb7a",
               "name": "Success Response",
               "originalRequest": {
                 "method": "GET",
                 "header": [],
                 "url": {
                   "raw": "{{base_url}}/admin/customers",
-                  "host": ["{{base_url}}"],
-                  "path": ["admin", "customers"]
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "customers"
+                  ]
                 }
               },
               "status": "OK",
               "code": 200,
               "_postman_previewlanguage": "json",
+              "header": null,
+              "cookie": [],
+              "responseTime": null,
               "body": "{\n  \"customers\": [\n    {\n      \"id\": \"cus_01EXAMPLE\",\n      \"email\": \"customer@example.com\",\n      \"first_name\": \"John\",\n      \"last_name\": \"Doe\",\n      \"phone\": \"+1-555-123-4567\",\n      \"has_account\": true,\n      \"orders\": [],\n      \"groups\": [],\n      \"metadata\": {},\n      \"created_at\": \"2024-01-01T00:00:00.000Z\",\n      \"updated_at\": \"2024-01-01T00:00:00.000Z\"\n    },\n    {\n      \"id\": \"cus_02EXAMPLE\",\n      \"email\": \"jane.smith@example.com\",\n      \"first_name\": \"Jane\",\n      \"last_name\": \"Smith\",\n      \"phone\": \"+1-555-987-6543\",\n      \"has_account\": true,\n      \"orders\": [],\n      \"groups\": [],\n      \"metadata\": {},\n      \"created_at\": \"2024-01-05T00:00:00.000Z\",\n      \"updated_at\": \"2024-01-05T00:00:00.000Z\"\n    }\n  ],\n  \"count\": 2,\n  \"offset\": 0,\n  \"limit\": 20\n}"
             }
           ]
         }
-      ]
+      ],
+      "id": "b07be0b0-b34a-4bae-8bf2-5357732bc4be",
+      "description": "Customer management endpoints for viewing and managing customer accounts"
     },
     {
       "name": "Users",
-      "description": "Admin user management endpoints for creating and managing admin accounts",
       "item": [
         {
           "name": "List Users",
-          "description": "Retrieves a list of all admin users. Returns user details including email, role, and permissions. Only accessible by users with appropriate admin privileges.",
+          "id": "ccdd1852-c579-4690-acb8-a3a84597fdc0",
           "request": {
             "method": "GET",
             "header": [
@@ -212,32 +487,46 @@
             ],
             "url": {
               "raw": "{{base_url}}/admin/users",
-              "host": ["{{base_url}}"],
-              "path": ["admin", "users"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "users"
+              ]
             }
           },
           "response": [
             {
+              "id": "2655f29a-dafe-4e81-8b67-3d4dee1138e7",
               "name": "Success Response",
               "originalRequest": {
                 "method": "GET",
                 "header": [],
                 "url": {
                   "raw": "{{base_url}}/admin/users",
-                  "host": ["{{base_url}}"],
-                  "path": ["admin", "users"]
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "users"
+                  ]
                 }
               },
               "status": "OK",
               "code": 200,
               "_postman_previewlanguage": "json",
+              "header": null,
+              "cookie": [],
+              "responseTime": null,
               "body": "{\n  \"users\": [\n    {\n      \"id\": \"usr_01ADMIN\",\n      \"email\": \"admin@gracestowel.com\",\n      \"first_name\": \"Admin\",\n      \"last_name\": \"User\",\n      \"role\": \"admin\",\n      \"created_at\": \"2024-01-01T00:00:00.000Z\",\n      \"updated_at\": \"2024-01-01T00:00:00.000Z\"\n    },\n    {\n      \"id\": \"usr_02MEMBER\",\n      \"email\": \"staff@gracestowel.com\",\n      \"first_name\": \"Staff\",\n      \"last_name\": \"Member\",\n      \"role\": \"member\",\n      \"created_at\": \"2024-01-02T00:00:00.000Z\",\n      \"updated_at\": \"2024-01-02T00:00:00.000Z\"\n    }\n  ],\n  \"count\": 2,\n  \"offset\": 0,\n  \"limit\": 20\n}"
             }
           ]
         },
         {
           "name": "Create User",
-          "description": "Creates a new admin user account. Requires email and password. Can optionally specify role and other user details. The new user will receive an invitation email.",
+          "id": "9dd5251f-c269-4942-bd29-e59b5fa8b356",
           "request": {
             "method": "POST",
             "header": [
@@ -253,12 +542,18 @@
             },
             "url": {
               "raw": "{{base_url}}/admin/users",
-              "host": ["{{base_url}}"],
-              "path": ["admin", "users"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "users"
+              ]
             }
           },
           "response": [
             {
+              "id": "41b73b9a-0afd-484e-9622-8ebd352d9646",
               "name": "Success Response",
               "originalRequest": {
                 "method": "POST",
@@ -274,27 +569,49 @@
                 },
                 "url": {
                   "raw": "{{base_url}}/admin/users",
-                  "host": ["{{base_url}}"],
-                  "path": ["admin", "users"]
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "users"
+                  ]
                 }
               },
               "status": "OK",
               "code": 200,
               "_postman_previewlanguage": "json",
+              "header": null,
+              "cookie": [],
+              "responseTime": null,
               "body": "{\n  \"user\": {\n    \"id\": \"usr_03NEWUSR\",\n    \"email\": \"newadmin@gracestowel.com\",\n    \"first_name\": \"New\",\n    \"last_name\": \"Admin\",\n    \"role\": \"member\",\n    \"created_at\": \"2024-01-15T00:00:00.000Z\",\n    \"updated_at\": \"2024-01-15T00:00:00.000Z\"\n  }\n}"
             }
           ]
         }
-      ]
+      ],
+      "id": "8d487907-bf87-4d8b-a361-d12d985f2c70",
+      "description": "Admin user management endpoints for creating and managing admin accounts"
     }
   ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{jwt_token}}",
+        "type": "string"
+      }
+    ]
+  },
   "variable": [
     {
+      "id": "3a4e9783-25ac-43e9-ac85-01d454fc781a",
       "key": "base_url",
       "value": "http://localhost:9000",
       "type": "string"
     },
     {
+      "id": "7f31b602-f97f-40df-8c18-b69dbb9c7533",
       "key": "jwt_token",
       "value": "",
       "type": "string"

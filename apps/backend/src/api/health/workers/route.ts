@@ -1,5 +1,7 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { logger } from "../../../utils/logger";
+import { getStripeEventQueue } from "../../../lib/stripe-event-queue";
+import { getPaymentCaptureQueue } from "../../../lib/payment-capture-queue";
 
 /**
  * GET /health/workers
@@ -41,68 +43,59 @@ export async function GET(
   };
 
   // Check Redis connectivity and queue status
+  // Note: We use static imports here to avoid NodeNext dynamic-import extension pitfalls
+  // and runtime module-not-found errors during development.
+
+  // Test Stripe Event Queue
   try {
-    const { getStripeEventQueue } = await import(
-      "../../../lib/stripe-event-queue.js"
-    );
-    const { getPaymentCaptureQueue } = await import(
-      "../../../lib/payment-capture-queue.js"
-    );
+    const stripeQueue = getStripeEventQueue();
+    const [waiting, active, delayed, completed, failed] = await Promise.all([
+      stripeQueue.getWaitingCount(),
+      stripeQueue.getActiveCount(),
+      stripeQueue.getDelayedCount(),
+      stripeQueue.getCompletedCount(),
+      stripeQueue.getFailedCount(),
+    ]);
 
-    // Test Stripe Event Queue
-    try {
-      const stripeQueue = getStripeEventQueue();
-      const [waiting, active, delayed, completed, failed] = await Promise.all([
-        stripeQueue.getWaitingCount(),
-        stripeQueue.getActiveCount(),
-        stripeQueue.getDelayedCount(),
-        stripeQueue.getCompletedCount(),
-        stripeQueue.getFailedCount(),
-      ]);
+    status.stripeEventQueue = { waiting, active, delayed, completed, failed };
+    status.redis.connected = true;
 
-      status.stripeEventQueue = { waiting, active, delayed, completed, failed };
-      status.redis.connected = true;
+    logger.info("health", "Stripe event queue status", {
+      waiting,
+      active,
+      delayed,
+      completed,
+      failed,
+    });
+  } catch (stripeQueueError: any) {
+    status.errors.push(`Stripe queue error: ${stripeQueueError.message}`);
+    logger.error("health", "Failed to get stripe queue status", {}, stripeQueueError);
+  }
 
-      logger.info("health", "Stripe event queue status", {
-        waiting,
-        active,
-        delayed,
-        completed,
-        failed,
-      });
-    } catch (stripeQueueError: any) {
-      status.errors.push(`Stripe queue error: ${stripeQueueError.message}`);
-      logger.error("health", "Failed to get stripe queue status", {}, stripeQueueError);
-    }
+  // Test Payment Capture Queue
+  try {
+    const captureQueue = getPaymentCaptureQueue();
+    const [waiting, active, delayed, completed, failed] = await Promise.all([
+      captureQueue.getWaitingCount(),
+      captureQueue.getActiveCount(),
+      captureQueue.getDelayedCount(),
+      captureQueue.getCompletedCount(),
+      captureQueue.getFailedCount(),
+    ]);
 
-    // Test Payment Capture Queue
-    try {
-      const captureQueue = getPaymentCaptureQueue();
-      const [waiting, active, delayed, completed, failed] = await Promise.all([
-        captureQueue.getWaitingCount(),
-        captureQueue.getActiveCount(),
-        captureQueue.getDelayedCount(),
-        captureQueue.getCompletedCount(),
-        captureQueue.getFailedCount(),
-      ]);
+    status.paymentCaptureQueue = { waiting, active, delayed, completed, failed };
+    status.redis.connected = true;
 
-      status.paymentCaptureQueue = { waiting, active, delayed, completed, failed };
-      status.redis.connected = true;
-
-      logger.info("health", "Payment capture queue status", {
-        waiting,
-        active,
-        delayed,
-        completed,
-        failed,
-      });
-    } catch (captureQueueError: any) {
-      status.errors.push(`Capture queue error: ${captureQueueError.message}`);
-      logger.error("health", "Failed to get capture queue status", {}, captureQueueError);
-    }
-  } catch (importError: any) {
-    status.errors.push(`Import error: ${importError.message}`);
-    logger.error("health", "Failed to import queue modules", {}, importError);
+    logger.info("health", "Payment capture queue status", {
+      waiting,
+      active,
+      delayed,
+      completed,
+      failed,
+    });
+  } catch (captureQueueError: any) {
+    status.errors.push(`Capture queue error: ${captureQueueError.message}`);
+    logger.error("health", "Failed to get capture queue status", {}, captureQueueError);
   }
 
   // Determine overall health

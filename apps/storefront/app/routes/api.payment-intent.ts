@@ -362,7 +362,11 @@ export async function action({ request, context }: ActionFunctionArgs) {
       );
     }
     if (customerId) body.append("metadata[customer_id]", customerId);
-    if (customerEmail) body.append("metadata[customer_email]", customerEmail);
+    if (customerEmail) {
+      body.append("metadata[customer_email]", customerEmail);
+      // Also set receipt_email so Stripe receipts and backend fallback work
+      body.append("receipt_email", customerEmail);
+    }
     if (shippingAddress)
       body.append("metadata[shipping_address]", JSON.stringify(shippingAddress));
     if (shipping) body.append("metadata[shipping_amount]", shipping.toString());

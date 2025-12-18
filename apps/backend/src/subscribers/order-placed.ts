@@ -23,6 +23,13 @@ export default async function orderPlacedHandler({
   ensureStripeWorkerStarted(container)
 
   const logger = container.resolve(ContainerRegistrationKeys.LOGGER)
+
+  if (!data?.id || typeof data.id !== "string") {
+    logger.error(`[ORDER_PLACED][CRITICAL] Missing order id in event payload - skipping`)
+    console.error("[ORDER_PLACED][CRITICAL] Missing order id in event payload - skipping", data)
+    return
+  }
+
   logger.info(`[ORDER_PLACED] 🎯 Order placed event received: ${data.id}`)
 
   // Log masked token for audit trail (Story 4.1 requirement) - logged BEFORE email attempt
@@ -41,6 +48,7 @@ export default async function orderPlacedHandler({
           "id",
           "display_id",
           "email",
+          "metadata",
           "currency_code",
           "total",
           "customer_id",
@@ -68,7 +76,18 @@ export default async function orderPlacedHandler({
                 const payment = paymentCollection?.payments?.[0];
                 const paymentData = payment?.data as any;
 
-                const paymentIntentId = paymentData?.id;
+                const paymentIntentIdFromPaymentCollection =
+                  typeof paymentData?.id === "string" && paymentData.id.startsWith("pi_")
+                    ? paymentData.id
+                    : undefined
+
+                const paymentIntentIdFromMetadata =
+                  typeof order.metadata?.stripe_payment_intent_id === "string" &&
+                  order.metadata.stripe_payment_intent_id.startsWith("pi_")
+                    ? order.metadata.stripe_payment_intent_id
+                    : undefined
+
+                const paymentIntentId = paymentIntentIdFromPaymentCollection || paymentIntentIdFromMetadata
 
                 if (paymentIntentId) {
                      // Resolve service from container instead of importing singleton

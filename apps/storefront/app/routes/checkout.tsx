@@ -51,6 +51,7 @@ export default function Checkout() {
   const [paymentIntentId, setPaymentIntentId] = useState<string | null>(null);
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [lastTraceId, setLastTraceId] = useState<string | null>(null);
+  const [guestEmail, setGuestEmail] = useState<string | undefined>(undefined);
 
   // Shipping & Cart state
   // Initialize cartId from sessionStorage if available (client-side only)
@@ -138,7 +139,7 @@ export default function Checkout() {
           currency: currency.toLowerCase(),
           shipping: selectedShipping?.amount ?? 0,
           customerId: isAuthenticated ? customer?.id : undefined,
-          customerEmail: isAuthenticated ? customer?.email : undefined,
+          customerEmail: isAuthenticated ? customer?.email : (guestEmail || undefined),
           cartItems: items.map((item) => ({
             id: item.id,
             variantId: item.variantId,
@@ -268,14 +269,19 @@ export default function Checkout() {
     isAuthenticated,
     customer?.id,
     customer?.email,
+    guestEmail,
     paymentIntentId,
   ]);
 
   // Fetch shipping rates using new RESTful cart endpoints
-  const fetchShippingRates = useCallback(async (currentItems: typeof items, address: any) => {
+  const fetchShippingRates = useCallback(async (currentItems: typeof items, address: any, currentTotal: number) => {
     setIsCalculatingShipping(true);
 
-    const cacheKey = generateCartHash(currentItems, address, currency);
+    const cacheKey = generateCartHash(currentItems, address ? {
+        country_code: address.address?.country,
+        province: address.address?.state,
+        postal_code: address.address?.postal_code
+    } : undefined, currency, currentTotal);
     if (shippingCache.current.has(cacheKey)) {
         const cached = shippingCache.current.get(cacheKey)!;
         setShippingOptions(cached.options);
@@ -408,11 +414,11 @@ export default function Checkout() {
 
     // specific debounce for address changes
     const timer = setTimeout(() => {
-      fetchShippingRates(items, shippingAddress);
+      fetchShippingRates(items, shippingAddress, cartTotal);
     }, 600);
 
     return () => clearTimeout(timer);
-  }, [items, shippingAddress, fetchShippingRates]);
+  }, [items, shippingAddress, cartTotal, fetchShippingRates]);
 
   // Handler for address changes from Stripe Address Element
   const handleAddressChange = async (event: StripeAddressElementChangeEvent) => {
@@ -529,6 +535,7 @@ export default function Checkout() {
                     items={items}
                     cartTotal={cartTotal}
                     onAddressChange={handleAddressChange}
+                    onEmailChange={setGuestEmail}
                     shippingOptions={shippingOptions}
                     selectedShipping={selectedShipping}
                     setSelectedShipping={setSelectedShipping}
