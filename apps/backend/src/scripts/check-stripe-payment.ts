@@ -15,13 +15,13 @@ async function checkPayment() {
         console.log(`Status: ${paymentIntent.status}`);
         console.log(`Capture Method: ${paymentIntent.capture_method}`);
         console.log(`Amount: $${(paymentIntent.amount / 100).toFixed(2)} ${paymentIntent.currency.toUpperCase()}`);
-        console.log(`Amount Captured: $${((paymentIntent.amount_captured || 0) / 100).toFixed(2)}`);
+        console.log(`Amount Captured: $${((paymentIntent.amount_received || 0) / 100).toFixed(2)}`);
         console.log(`Amount Capturable: $${((paymentIntent.amount_capturable || 0) / 100).toFixed(2)}`);
         console.log(`Created: ${new Date(paymentIntent.created * 1000).toISOString()}`);
 
-        if (paymentIntent.charges?.data?.length) {
+        if ((paymentIntent as any).charges?.data?.length) {
             console.log("\n=== Charges ===");
-            paymentIntent.charges.data.forEach((charge, i) => {
+            (paymentIntent as any).charges.data.forEach((charge: any, i: number) => {
                 console.log(`\nCharge ${i + 1}:`);
                 console.log(`  ID: ${charge.id}`);
                 console.log(`  Status: ${charge.status}`);

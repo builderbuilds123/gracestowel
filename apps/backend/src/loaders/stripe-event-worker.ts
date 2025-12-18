@@ -68,54 +68,6 @@ async function handleStripeEvent(event: Stripe.Event, container: MedusaContainer
     }
 }
 
-// Track if subscribers have been registered
-let subscribersRegistered = false;
-
-async function ensureSubscribersRegistered(container: MedusaContainer) {
-    if (subscribersRegistered) return;
-
-    try {
-        console.log("[SUBSCRIBERS] Registering project subscribers from Stripe worker...");
-        const { Modules } = await import("@medusajs/framework/utils");
-        const eventBusModuleService = container.resolve(Modules.EVENT_BUS);
-
-        // Use static imports instead of dynamic imports to avoid path issues
-        const orderPlacedModule = require("../subscribers/order-placed");
-        const customerCreatedModule = require("../subscribers/customer-created");
-        const fulfillmentCreatedModule = require("../subscribers/fulfillment-created");
-        const orderCanceledModule = require("../subscribers/order-canceled");
-
-        // Register order-placed subscriber
-        eventBusModuleService.subscribe(orderPlacedModule.config.event, async (data: any) => {
-            await orderPlacedModule.default({ event: { name: orderPlacedModule.config.event, data }, container });
-        });
-        console.log(`[SUBSCRIBERS] ✅ Registered: ${orderPlacedModule.config.event}`);
-
-        // Register customer-created subscriber
-        eventBusModuleService.subscribe(customerCreatedModule.config.event, async (data: any) => {
-            await customerCreatedModule.default({ event: { name: customerCreatedModule.config.event, data }, container });
-        });
-        console.log(`[SUBSCRIBERS] ✅ Registered: ${customerCreatedModule.config.event}`);
-
-        // Register fulfillment-created subscriber
-        eventBusModuleService.subscribe(fulfillmentCreatedModule.config.event, async (data: any) => {
-            await fulfillmentCreatedModule.default({ event: { name: fulfillmentCreatedModule.config.event, data }, container });
-        });
-        console.log(`[SUBSCRIBERS] ✅ Registered: ${fulfillmentCreatedModule.config.event}`);
-
-        // Register order-canceled subscriber
-        eventBusModuleService.subscribe(orderCanceledModule.config.event, async (data: any) => {
-            await orderCanceledModule.default({ event: { name: orderCanceledModule.config.event, data }, container });
-        });
-        console.log(`[SUBSCRIBERS] ✅ Registered: ${orderCanceledModule.config.event}`);
-
-        subscribersRegistered = true;
-        console.log("[SUBSCRIBERS] All subscribers registered successfully");
-    } catch (error) {
-        console.error("[SUBSCRIBERS] Failed to register subscribers:", error);
-    }
-}
-
 /**
  * Handle authorized payment intent (manual capture mode)
  * Updated 2025-12-12: Added idempotency check and structured logging
@@ -124,9 +76,6 @@ async function handlePaymentIntentAuthorized(
     paymentIntent: Stripe.PaymentIntent,
     container: MedusaContainer
 ): Promise<void> {
-    // Ensure subscribers are registered before processing (Medusa v2 workaround)
-    await ensureSubscribersRegistered(container);
-
     const traceId = paymentIntent.metadata?.trace_id || `webhook_${paymentIntent.id}`;
     const piId = paymentIntent.id;
 
@@ -413,44 +362,56 @@ export default async function stripeEventWorkerLoader(container: MedusaContainer
         const eventBusModuleService = container.resolve(Modules.EVENT_BUS);
 
         // Import and register order-placed subscriber
-        const orderPlacedModule = await import("../subscribers/order-placed");
+        const orderPlacedModule = await import("../subscribers/order-placed.js");
         const orderPlacedHandler = orderPlacedModule.default;
         const orderPlacedConfig = orderPlacedModule.config;
 
-        eventBusModuleService.subscribe(orderPlacedConfig.event, async (data: any) => {
-            await orderPlacedHandler({ event: { name: orderPlacedConfig.event, data }, container });
-        });
-        console.log(`[SUBSCRIBERS] ✅ Registered: ${orderPlacedConfig.event}`);
+        const orderPlacedEvents = Array.isArray(orderPlacedConfig.event) ? orderPlacedConfig.event : [orderPlacedConfig.event];
+        for (const eventName of orderPlacedEvents) {
+            eventBusModuleService.subscribe(eventName, async (data: any) => {
+                await orderPlacedHandler({ event: { name: eventName, data }, container, pluginOptions: {} } as any);
+            });
+            console.log(`[SUBSCRIBERS] ✅ Registered: ${eventName}`);
+        }
 
         // Import and register customer-created subscriber
-        const customerCreatedModule = await import("../subscribers/customer-created");
+        const customerCreatedModule = await import("../subscribers/customer-created.js");
         const customerCreatedHandler = customerCreatedModule.default;
         const customerCreatedConfig = customerCreatedModule.config;
 
-        eventBusModuleService.subscribe(customerCreatedConfig.event, async (data: any) => {
-            await customerCreatedHandler({ event: { name: customerCreatedConfig.event, data }, container });
-        });
-        console.log(`[SUBSCRIBERS] ✅ Registered: ${customerCreatedConfig.event}`);
+        const customerCreatedEvents = Array.isArray(customerCreatedConfig.event) ? customerCreatedConfig.event : [customerCreatedConfig.event];
+        for (const eventName of customerCreatedEvents) {
+            eventBusModuleService.subscribe(eventName, async (data: any) => {
+                await customerCreatedHandler({ event: { name: eventName, data }, container, pluginOptions: {} } as any);
+            });
+            console.log(`[SUBSCRIBERS] ✅ Registered: ${eventName}`);
+        }
 
         // Import and register fulfillment-created subscriber
-        const fulfillmentCreatedModule = await import("../subscribers/fulfillment-created");
+        const fulfillmentCreatedModule = await import("../subscribers/fulfillment-created.js");
         const fulfillmentCreatedHandler = fulfillmentCreatedModule.default;
         const fulfillmentCreatedConfig = fulfillmentCreatedModule.config;
 
-        eventBusModuleService.subscribe(fulfillmentCreatedConfig.event, async (data: any) => {
-            await fulfillmentCreatedHandler({ event: { name: fulfillmentCreatedConfig.event, data }, container });
-        });
-        console.log(`[SUBSCRIBERS] ✅ Registered: ${fulfillmentCreatedConfig.event}`);
+        const fulfillmentEvents = Array.isArray(fulfillmentCreatedConfig.event) ? fulfillmentCreatedConfig.event : [fulfillmentCreatedConfig.event];
+        for (const eventName of fulfillmentEvents) {
+            eventBusModuleService.subscribe(eventName, async (data: any) => {
+                await fulfillmentCreatedHandler({ event: { name: eventName, data }, container, pluginOptions: {} } as any);
+            });
+            console.log(`[SUBSCRIBERS] ✅ Registered: ${eventName}`);
+        }
 
         // Import and register order-canceled subscriber
-        const orderCanceledModule = await import("../subscribers/order-canceled");
+        const orderCanceledModule = await import("../subscribers/order-canceled.js");
         const orderCanceledHandler = orderCanceledModule.default;
         const orderCanceledConfig = orderCanceledModule.config;
 
-        eventBusModuleService.subscribe(orderCanceledConfig.event, async (data: any) => {
-            await orderCanceledHandler({ event: { name: orderCanceledConfig.event, data }, container });
-        });
-        console.log(`[SUBSCRIBERS] ✅ Registered: ${orderCanceledConfig.event}`);
+        const orderCanceledEvents = Array.isArray(orderCanceledConfig.event) ? orderCanceledConfig.event : [orderCanceledConfig.event];
+        for (const eventName of orderCanceledEvents) {
+            eventBusModuleService.subscribe(eventName, async (data: any) => {
+                await orderCanceledHandler({ event: { name: eventName, data }, container, pluginOptions: {} } as any);
+            });
+            console.log(`[SUBSCRIBERS] ✅ Registered: ${eventName}`);
+        }
 
         console.log("[SUBSCRIBERS] All subscribers registered successfully");
     } catch (error) {

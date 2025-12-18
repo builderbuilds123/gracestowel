@@ -50,7 +50,7 @@ export default async function fallbackCaptureJob(container: MedusaContainer) {
     
     const query = container.resolve("query");
     // Use PG_CONNECTION for raw SQL queries in Medusa v2
-    const pgConnection = container.resolve(ContainerRegistrationKeys.PG_CONNECTION) as PgConnection;
+    const pgConnection = container.resolve(ContainerRegistrationKeys.PG_CONNECTION) as unknown as PgConnection;
     const orderService = container.resolve("order");
     const stripe = getStripeClient();
     const posthog = getPostHog();

@@ -9,49 +9,10 @@ import { getPostHog } from "../utils/posthog"
 import { enqueueEmail } from "../lib/email-queue"
 import type { ModificationTokenService } from "../services/modification-token"
 import { ensureStripeWorkerStarted } from "../loaders/stripe-event-worker"
-import { Modules } from "@medusajs/framework/utils"
 
 interface OrderPlacedEventData {
   id: string;
   modification_token?: string;
-}
-
-// Track if subscribers have been registered (Medusa v2 doesn't auto-discover them)
-let subscribersRegistered = false;
-
-async function ensureSubscribersRegistered(container: any) {
-  if (subscribersRegistered) return;
-
-  try {
-    console.log("[SUBSCRIBERS] Registering project subscribers via order-placed handler...");
-    const eventBusModuleService = container.resolve(Modules.EVENT_BUS);
-
-    // Import and register customer-created subscriber
-    const customerCreatedModule = await import("./customer-created");
-    eventBusModuleService.subscribe(customerCreatedModule.config.event, async (data: any) => {
-      await customerCreatedModule.default({ event: { name: customerCreatedModule.config.event, data }, container });
-    });
-    console.log(`[SUBSCRIBERS] ✅ Registered: ${customerCreatedModule.config.event}`);
-
-    // Import and register fulfillment-created subscriber
-    const fulfillmentCreatedModule = await import("./fulfillment-created");
-    eventBusModuleService.subscribe(fulfillmentCreatedModule.config.event, async (data: any) => {
-      await fulfillmentCreatedModule.default({ event: { name: fulfillmentCreatedModule.config.event, data }, container });
-    });
-    console.log(`[SUBSCRIBERS] ✅ Registered: ${fulfillmentCreatedModule.config.event}`);
-
-    // Import and register order-canceled subscriber
-    const orderCanceledModule = await import("./order-canceled");
-    eventBusModuleService.subscribe(orderCanceledModule.config.event, async (data: any) => {
-      await orderCanceledModule.default({ event: { name: orderCanceledModule.config.event, data }, container });
-    });
-    console.log(`[SUBSCRIBERS] ✅ Registered: ${orderCanceledModule.config.event}`);
-
-    subscribersRegistered = true;
-    console.log("[SUBSCRIBERS] All subscribers registered successfully");
-  } catch (error) {
-    console.error("[SUBSCRIBERS] Failed to register subscribers:", error);
-  }
 }
 
 export default async function orderPlacedHandler({
@@ -60,9 +21,6 @@ export default async function orderPlacedHandler({
 }: SubscriberArgs<OrderPlacedEventData>) {
   // Ensure Stripe worker is running (lazy init if loaders aren't auto-discovered)
   ensureStripeWorkerStarted(container)
-
-  // Ensure other subscribers are registered (Medusa v2 workaround)
-  await ensureSubscribersRegistered(container)
 
   const logger = container.resolve(ContainerRegistrationKeys.LOGGER)
   logger.info(`[ORDER_PLACED] 🎯 Order placed event received: ${data.id}`)

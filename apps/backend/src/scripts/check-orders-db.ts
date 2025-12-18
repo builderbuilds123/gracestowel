@@ -12,10 +12,9 @@ async function checkOrdersInDb() {
     try {
         // Load Medusa container
         const loader = new MedusaAppLoader({
-            directory: process.cwd(),
-            loadApp: false,
+            cwd: process.cwd(),
         });
-        const { container } = await loader.load();
+        const { container } = await loader.load() as any;
 
         const query = container.resolve("query");
 
