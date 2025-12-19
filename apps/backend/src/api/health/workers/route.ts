@@ -2,6 +2,7 @@ import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { logger } from "../../../utils/logger";
 import { getStripeEventQueue } from "../../../lib/stripe-event-queue";
 import { getPaymentCaptureQueue } from "../../../lib/payment-capture-queue";
+import { startPaymentCaptureWorker } from "../../../workers/payment-capture-worker";
 
 /**
  * GET /health/workers
@@ -18,6 +19,10 @@ export async function GET(
   req: MedusaRequest,
   res: MedusaResponse
 ): Promise<void> {
+  // Health check endpoints should be read-only and idempotent
+  // Workers should be started via loaders, not health endpoints
+  // Removed side effect: startPaymentCaptureWorker(req.scope as any)
+
   const status: {
     redis: { connected: boolean; error?: string };
     stripeEventQueue: {
@@ -34,6 +39,14 @@ export async function GET(
       completed: number;
       failed: number;
     } | null;
+    paymentCaptureDelayedJobs?: Array<{
+      id: string | number | null;
+      orderId?: string;
+      paymentIntentId?: string;
+      attemptsMade: number;
+      scheduledFor?: string;
+      delayMs?: number;
+    }>;
     errors: string[];
   } = {
     redis: { connected: false },
@@ -43,8 +56,6 @@ export async function GET(
   };
 
   // Check Redis connectivity and queue status
-  // Note: We use static imports here to avoid NodeNext dynamic-import extension pitfalls
-  // and runtime module-not-found errors during development.
 
   // Test Stripe Event Queue
   try {
@@ -82,6 +93,24 @@ export async function GET(
       captureQueue.getCompletedCount(),
       captureQueue.getFailedCount(),
     ]);
+
+    const delayedJobs = await captureQueue.getDelayed(0, 9);
+
+    status.paymentCaptureDelayedJobs = delayedJobs.map((job) => {
+      const delayMs = job.opts.delay || 0;
+      const scheduledFor = delayMs
+        ? new Date(job.timestamp + delayMs).toISOString()
+        : undefined;
+
+      return {
+        id: job.id ?? null,
+        orderId: job.data?.orderId,
+        paymentIntentId: job.data?.paymentIntentId,
+        attemptsMade: job.attemptsMade,
+        scheduledFor,
+        delayMs,
+      };
+    });
 
     status.paymentCaptureQueue = { waiting, active, delayed, completed, failed };
     status.redis.connected = true;

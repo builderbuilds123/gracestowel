@@ -185,6 +185,76 @@ export async function action({ params, request, context }: ActionFunctionArgs) {
             return data({ success: true, action: "address_updated", address });
         }
 
+        if (intent === "UPDATE_QUANTITY") {
+            let updates: Array<{ item_id: string; quantity: number }>;
+            try {
+                const updateData = JSON.parse(formData.get("items") as string);
+                if (!Array.isArray(updateData) || !updateData.every(item => 
+                    item && typeof item.item_id === 'string' && typeof item.quantity === 'number'
+                )) {
+                    return data({ success: false, error: "Invalid updates format." }, { status: 400 });
+                }
+                updates = updateData;
+            } catch {
+                return data({ success: false, error: "Invalid updates format." }, { status: 400 });
+            }
+
+            if (updates.length === 0) {
+                return data({ success: false, error: "No changes to save" }, { status: 400 });
+            }
+
+            let lastResult: { new_total?: number } | null = null;
+            let itemsUpdated = 0;
+
+            for (const update of updates) {
+                const response = await monitoredFetch(`${medusaBackendUrl}/store/orders/${id}/line-items/update`, {
+                    method: "POST",
+                    headers,
+                    body: JSON.stringify({ item_id: update.item_id, quantity: update.quantity }),
+                    label: "order-update-quantity",
+                    cloudflareEnv: env,
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json() as { message?: string; type?: string; retryable?: boolean };
+                    if (response.status === 401 || response.status === 403) {
+                         return data(
+                            { success: false, error: errorData.message || "Authorization failed", itemsUpdated },
+                            { status: response.status, headers: { "Set-Cookie": await clearGuestToken(id!) } }
+                        );
+                    }
+                    
+                    if (response.status === 402) {
+                         const partialNote = itemsUpdated > 0 
+                            ? ` (${itemsUpdated} item${itemsUpdated > 1 ? 's' : ''} updated before this error)`
+                            : '';
+                        return data({ 
+                            success: false, 
+                            error: `${errorData.message}${partialNote}`,
+                            retryable: errorData.retryable,
+                            errorType: "payment_error",
+                            itemsUpdated
+                        }, { status: 402 });
+                    }
+
+                    const partialNote = itemsUpdated > 0 
+                        ? ` (${itemsUpdated} item${itemsUpdated > 1 ? 's' : ''} updated before this error)`
+                        : '';
+                    return data({ success: false, error: `${errorData.message || "Failed to update item"}${partialNote}`, itemsUpdated }, { status: 400 });
+                }
+
+                lastResult = await response.json() as { new_total?: number };
+                itemsUpdated++;
+            }
+
+            return data({ 
+                success: true, 
+                action: "items_updated", 
+                new_total: lastResult?.new_total,
+                itemsUpdated
+            });
+        }
+
         if (intent === "ADD_ITEMS") {
             // JIT logistics: Process all items for smooth UX
             // Each item is added sequentially to maintain order integrity
@@ -336,6 +406,7 @@ export default function OrderStatus() {
                             orderId={orderDetails.id}
                             orderNumber={orderDetails.display_id}
                             currencyCode={orderDetails.currency_code}
+                            items={orderDetails.items}
                             currentAddress={shippingAddress}
                             onOrderUpdated={handleOrderUpdate}
                             onAddressUpdated={setShippingAddress}

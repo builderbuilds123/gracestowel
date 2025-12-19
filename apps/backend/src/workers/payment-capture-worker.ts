@@ -9,7 +9,7 @@
  * - Story 6.3: Edit status locking for race condition handling
  */
 
-import { Worker, Job } from "bullmq";
+import { Worker, Job, Queue } from "bullmq";
 import { MedusaContainer } from "@medusajs/framework/types";
 import { getStripeClient } from "../utils/stripe";
 import { PaymentCaptureJobData } from "../types/queue-types";
@@ -25,6 +25,9 @@ const IS_JEST = process.env.JEST_WORKER_ID !== undefined;
 let worker: Worker<PaymentCaptureJobData> | null = null;
 let shutdownHandler: (() => Promise<void>) | null = null;
 let containerRef: MedusaContainer | null = null;
+
+let promoterQueue: Queue<PaymentCaptureJobData> | null = null;
+let promoterInterval: NodeJS.Timeout | null = null;
 
 async function getOrderMetadata(orderId: string): Promise<Record<string, any>> {
     if (!containerRef) {
@@ -49,6 +52,38 @@ async function getOrderMetadata(orderId: string): Promise<Record<string, any>> {
     }
 }
 
+async function getOrderStatus(orderId: string): Promise<string | undefined> {
+    if (!containerRef) {
+        return undefined;
+    }
+
+    try {
+        const query = containerRef.resolve("query");
+        const { data: orders } = await query.graph({
+            entity: "order",
+            fields: ["id", "status"],
+            filters: { id: orderId },
+        });
+
+        const status = orders?.[0]?.status as string | undefined;
+        return typeof status === "string" ? status : undefined;
+    } catch {
+        return undefined;
+    }
+}
+
+async function promoteDueCaptureJobs(): Promise<void> {
+    if (!promoterQueue) {
+        return;
+    }
+
+    try {
+        await promoterQueue.promoteJobs();
+    } catch (err) {
+        console.warn("[PaymentCapture] Failed to promote delayed jobs:", (err as Error)?.message || err);
+    }
+}
+
 /**
  * Fetch the current order data from Medusa
  * Story 2.3: Ensures we capture the ACTUAL order total, not the original PaymentIntent amount
@@ -61,44 +96,95 @@ async function getOrderMetadata(orderId: string): Promise<Record<string, any>> {
  */
 export async function fetchOrderTotal(orderId: string): Promise<{ totalCents: number; currencyCode: string; status: string } | null> {
     if (!containerRef) {
-        console.error("[PaymentCapture] Container not initialized - cannot fetch order");
-        return null;
+        // console.error("[PaymentCapture] Container not initialized - cannot fetch order");
+        throw new Error("Container not initialized");
     }
 
     try {
         const query = containerRef.resolve("query");
         const { data: orders } = await query.graph({
             entity: "order",
-            fields: ["id", "total", "currency_code", "status", "metadata"],
+            fields: ["id", "total", "summary", "currency_code", "status", "metadata"],
             filters: { id: orderId },
         });
 
         if (orders.length === 0) {
-            console.error(`[PaymentCapture] Order ${orderId} not found`);
-            return null;
+            // console.error(`[PaymentCapture] Order ${orderId} not found`);
+            throw new Error(`Order ${orderId} not found in DB via query.graph`);
         }
 
         const order = orders[0];
         
         // Story 3.2: Check metadata.updated_total first for orders modified during grace period
         // The add-item workflow stores updated totals in metadata when items are added
-        let total: number;
         const metadata = order.metadata as Record<string, any> | undefined;
-        
-        if (metadata?.updated_total !== undefined && typeof metadata.updated_total === "number") {
-            total = metadata.updated_total;
-            console.log(`[PaymentCapture] Order ${orderId}: Using metadata.updated_total=${total} (modified during grace period)`);
-        } else {
-            total = order.total;
+        let total: number | undefined;
+
+        console.log(`[PaymentCapture] Parsing total for order ${orderId}...`);
+
+        // Story 3.2: Check metadata.updated_total first for orders modified during grace period
+        const rawUpdatedTotal = metadata?.updated_total as unknown;
+        if (rawUpdatedTotal !== undefined && rawUpdatedTotal !== null) {
+            const parsed = typeof rawUpdatedTotal === "number" 
+                ? rawUpdatedTotal 
+                : parseFloat(String(rawUpdatedTotal));
+            
+            if (Number.isFinite(parsed)) {
+                total = parsed;
+                console.log(`[PaymentCapture]   - Using metadata.updated_total: ${total} (original: ${String(rawUpdatedTotal)})`);
+            } else {
+                console.log(`[PaymentCapture]   - metadata.updated_total found but invalid: ${String(rawUpdatedTotal)}`);
+            }
         }
 
-        if (typeof total !== "number") {
-            console.error(`[PaymentCapture] Order ${orderId} has invalid total: ${total}`);
-            return null;
+        // Fallback to order.summary if available (Medusa v2 preferred)
+        if (total === undefined && order.summary?.current_order_total !== undefined && order.summary?.current_order_total !== null) {
+            const summaryTotal = order.summary.current_order_total;
+            const parsed = typeof summaryTotal === "number" 
+                ? summaryTotal 
+                : parseFloat(String(summaryTotal));
+                
+            if (Number.isFinite(parsed)) {
+                total = parsed;
+                console.log(`[PaymentCapture]   - Using summary.current_order_total: ${total} (original: ${String(summaryTotal)})`);
+            } else {
+                console.log(`[PaymentCapture]   - summary.current_order_total found but invalid: ${String(summaryTotal)}`);
+            }
         }
 
-        // Support both integer (cents) and float (dollars) totals (Story 2.3 AC #2)
-        const totalCents = Number.isInteger(total) ? total : Math.round(total * 100);
+        // Fallback to order.total
+        if (total === undefined) {
+            const rawTotal = (order as any).total;
+            const parsed = typeof rawTotal === "number" 
+                ? rawTotal 
+                : typeof rawTotal === "object" && rawTotal !== null && "numeric_" in rawTotal
+                    ? (rawTotal as any).numeric_
+                    : parseFloat(String(rawTotal));
+                
+            if (Number.isFinite(parsed)) {
+                total = parsed;
+                console.log(`[PaymentCapture]   - Using order.total: ${total} (original: ${String(rawTotal)})`);
+            } else {
+                console.log(`[PaymentCapture]   - order.total found but invalid: ${String(rawTotal)}`);
+            }
+        }
+
+        if (total === undefined || !Number.isFinite(total)) {
+            const rawTotalForLog = (order as any).total;
+            const debugInfo = {
+                rawTotalType: typeof rawTotalForLog,
+                rawTotalString: String(rawTotalForLog),
+                summaryExists: !!order.summary,
+                updatedTotalExists: rawUpdatedTotal !== undefined
+            };
+            console.error(`[PaymentCapture] Order ${orderId} has invalid total calculation:`, debugInfo);
+            throw new Error(`Order ${orderId} has invalid total: ${JSON.stringify(rawTotalForLog)} (Debug: ${JSON.stringify(debugInfo)})`);
+        }
+
+        // Story 2.3 AC #2: Medusa v2 BigNumber totals are unit amounts (e.g., 147.00 USD).
+        // We MUST multiply by 100 to get cents for capture.
+        // We no longer guess based on Number.isInteger because "147" (integer) is $147.00, not 147 cents.
+        const totalCents = Math.round(total * 100);
 
         // M1: Fail if currency is missing instead of falling back to USD
         if (!order.currency_code) {
@@ -112,8 +198,8 @@ export async function fetchOrderTotal(orderId: string): Promise<{ totalCents: nu
             status: order.status || "unknown",
         };
     } catch (error) {
-        console.error(`[PaymentCapture] Error fetching order ${orderId}:`, error);
-        return null;
+        // console.error(`[PaymentCapture] Error fetching order ${orderId}:`, error);
+        throw error;
     }
 }
 
@@ -187,8 +273,16 @@ export async function updateOrderAfterCapture(orderId: string, amountCaptured: n
 
     try {
         const currentMetadata = await getOrderMetadata(orderId);
+        const currentStatus = await getOrderStatus(orderId);
+
+        if (currentStatus === "canceled") {
+            console.warn(`[PaymentCapture] Order ${orderId}: Order is canceled in Medusa, not updating status after capture`);
+            return;
+        }
+
         const orderService = containerRef.resolve("order");
-        await orderService.updateOrders([{
+
+        const update: any = {
             id: orderId,
             metadata: {
                 ...currentMetadata,
@@ -196,7 +290,13 @@ export async function updateOrderAfterCapture(orderId: string, amountCaptured: n
                 payment_captured_at: new Date().toISOString(),
                 payment_amount_captured: amountCaptured,
             },
-        }]);
+        };
+
+        if (currentStatus !== "completed") {
+            update.status = "completed";
+        }
+
+        await orderService.updateOrders([update]);
         console.log(`[PaymentCapture] Order ${orderId}: Updated metadata with capture info`);
     } catch (error) {
         console.error(`[PaymentCapture] Error updating order ${orderId} after capture:`, error);
@@ -381,6 +481,15 @@ export function startPaymentCaptureWorker(container?: MedusaContainer): Worker<P
         }
     );
 
+    if (!IS_JEST) {
+        promoterQueue = new Queue<PaymentCaptureJobData>(PAYMENT_CAPTURE_QUEUE, { connection });
+        void promoteDueCaptureJobs();
+        promoterInterval = setInterval(() => {
+            void promoteDueCaptureJobs();
+        }, 5000);
+        promoterInterval.unref?.();
+    }
+
     worker.on("completed", (job) => {
         console.log(`[PaymentCapture] Job ${job.id} completed`);
     });
@@ -413,6 +522,16 @@ export function startPaymentCaptureWorker(container?: MedusaContainer): Worker<P
         shutdownHandler = async () => {
             console.log("[PaymentCapture] Shutting down worker...");
             await worker?.close();
+
+            if (promoterInterval) {
+                clearInterval(promoterInterval);
+                promoterInterval = null;
+            }
+
+            if (promoterQueue) {
+                await promoterQueue.close();
+                promoterQueue = null;
+            }
         };
         process.on("SIGTERM", shutdownHandler);
         process.on("SIGINT", shutdownHandler);

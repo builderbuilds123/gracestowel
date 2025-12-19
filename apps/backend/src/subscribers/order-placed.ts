@@ -9,6 +9,7 @@ import { getPostHog } from "../utils/posthog"
 import { enqueueEmail } from "../lib/email-queue"
 import type { ModificationTokenService } from "../services/modification-token"
 import { ensureStripeWorkerStarted } from "../loaders/stripe-event-worker"
+import { startPaymentCaptureWorker } from "../workers/payment-capture-worker"
 
 interface OrderPlacedEventData {
   id: string;
@@ -21,6 +22,10 @@ export default async function orderPlacedHandler({
 }: SubscriberArgs<OrderPlacedEventData>) {
   // Ensure Stripe worker is running (lazy init if loaders aren't auto-discovered)
   ensureStripeWorkerStarted(container)
+
+  if (process.env.REDIS_URL) {
+    startPaymentCaptureWorker(container)
+  }
 
   const logger = container.resolve(ContainerRegistrationKeys.LOGGER)
 

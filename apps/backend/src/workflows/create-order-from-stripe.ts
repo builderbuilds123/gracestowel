@@ -153,6 +153,21 @@ const prepareOrderDataStep = createStep(
               }]
             : undefined;
 
+        // Resolve default Sales Channel
+        const salesChannelService = container.resolve("sales_channel");
+        let salesChannelId: string | undefined;
+        try {
+            const salesChannels = await salesChannelService.listSalesChannels({}, { take: 1 });
+            if (salesChannels.length > 0) {
+                salesChannelId = salesChannels[0].id;
+                console.log("[create-order-from-stripe] Using default Sales Channel:", salesChannelId);
+            } else {
+                console.warn("[create-order-from-stripe] No sales channels found");
+            }
+        } catch (e) {
+            console.warn("[create-order-from-stripe] Failed to list sales channels:", e);
+        }
+
         const orderData = {
             region_id: region.id,
             email: customerEmail,
@@ -160,11 +175,14 @@ const prepareOrderDataStep = createStep(
             shipping_address,
             shipping_methods,
             status: "pending" as const,
+            sales_channel_id: salesChannelId, // Optional but recommended
+            currency_code: currency.toLowerCase(), // Explicitly set currency code
             metadata: {
                 stripe_payment_intent_id: paymentIntentId,
                 shipping_amount: shippingAmount || 0,
             },
         };
+
 
         console.log("[create-order-from-stripe] Prepared order data", {
             region_id: orderData.region_id,

@@ -40,10 +40,21 @@ let queue: Queue<PaymentCaptureJobData> | null = null;
  * Get Redis connection options from environment
  * Exported for use by worker
  */
+/**
+ * Custom error for when Redis is not configured
+ * Used for type-safe error checking instead of string matching
+ */
+export class RedisNotConfiguredError extends Error {
+    constructor(message: string = "REDIS_URL is not configured") {
+        super(message);
+        this.name = "RedisNotConfiguredError";
+    }
+}
+
 export function getRedisConnection() {
     const redisUrl = process.env.REDIS_URL;
     if (!redisUrl) {
-        throw new Error("REDIS_URL is not configured");
+        throw new RedisNotConfiguredError("REDIS_URL is not configured");
     }
     
     // Parse Redis URL for connection options
@@ -89,10 +100,12 @@ export function getPaymentCaptureQueue(): Queue<PaymentCaptureJobData> {
  * Schedule a payment capture job for an order
  * @param orderId - The Medusa order ID
  * @param paymentIntentId - The Stripe PaymentIntent ID
+ * @param delayOverride - Optional delay override in ms (Story 6.3)
  */
 export async function schedulePaymentCapture(
     orderId: string,
-    paymentIntentId: string
+    paymentIntentId: string,
+    delayOverride?: number
 ): Promise<Job<PaymentCaptureJobData>> {
     if (!orderId || typeof orderId !== "string" || !orderId.startsWith("order_")) {
         throw new Error(`Invalid orderId for scheduling payment capture: ${orderId}`);
@@ -112,9 +125,10 @@ export async function schedulePaymentCapture(
         scheduledAt: Date.now(),
     };
 
-    const delaySeconds = Math.round(PAYMENT_CAPTURE_DELAY_MS / 1000);
+    const finalDelay = delayOverride !== undefined ? delayOverride : PAYMENT_CAPTURE_DELAY_MS;
+    const delaySeconds = Math.round(finalDelay / 1000);
     const delayMinutes = Math.round(delaySeconds / 60);
-    const captureTime = new Date(Date.now() + PAYMENT_CAPTURE_DELAY_MS).toISOString();
+    const captureTime = new Date(Date.now() + finalDelay).toISOString();
 
     let job: Job<PaymentCaptureJobData> | null = null;
     try {
@@ -122,7 +136,7 @@ export async function schedulePaymentCapture(
             `capture-${orderId}`,
             jobData,
             {
-                delay: PAYMENT_CAPTURE_DELAY_MS,
+                delay: finalDelay,
                 jobId: `capture-${orderId}`, // Unique job ID to prevent duplicates
             }
         );
