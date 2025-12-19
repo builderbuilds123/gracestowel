@@ -137,10 +137,11 @@ describe("Story 6.3: Race Condition Handling", () => {
                 amount: 5000,
                 currency: "usd",
             });
+            // Order total is in dollars (50.00), which converts to 5000 cents
             mockQueryGraph.mockResolvedValue({
                 data: [{
                     id: "order_lock_test",
-                    total: 5000,
+                    total: 50.00,
                     currency_code: "usd",
                     status: "pending",
                     metadata: { edit_status: "editable" },
@@ -168,10 +169,11 @@ describe("Story 6.3: Race Condition Handling", () => {
                 amount: 5000,
                 currency: "usd",
             });
+            // Order total is in dollars (50.00), which converts to 5000 cents
             mockQueryGraph.mockResolvedValue({
                 data: [{
                     id: "order_lock_test",
-                    total: 5000,
+                    total: 50.00,
                     currency_code: "usd",
                     status: "pending",
                     metadata: {},
@@ -196,10 +198,11 @@ describe("Story 6.3: Race Condition Handling", () => {
                 amount: 5000,
                 currency: "usd",
             });
+            // Order total is in dollars (60.00), which converts to 6000 cents - exceeds authorized 5000
             mockQueryGraph.mockResolvedValue({
                 data: [{
                     id: "order_lock_test",
-                    total: 6000, // Exceeds authorized - will fail
+                    total: 60.00, // Exceeds authorized - will fail (60.00 * 100 = 6000 > 5000)
                     currency_code: "usd",
                     status: "pending",
                     metadata: {},
@@ -247,11 +250,12 @@ describe("Story 6.3: Race Condition Handling", () => {
             const { validatePreconditionsHandler, OrderLockedError } = require("../../src/workflows/add-item-to-order");
 
             // Mock order with locked status
+            // Order total is in dollars (50.00), which converts to 5000 cents
             mockQueryGraph.mockResolvedValue({
                 data: [{
                     id: "order_locked",
                     status: "pending",
-                    total: 5000,
+                    total: 50.00,
                     currency_code: "usd",
                     metadata: {
                         stripe_payment_intent_id: "pi_123",

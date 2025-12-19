@@ -13,6 +13,7 @@ jest.mock("../../src/workers/payment-capture-worker", () => ({
 // Import after mock setup
 import paymentCaptureWorkerLoader from "../../src/loaders/payment-capture-worker"
 import { startPaymentCaptureWorker } from "../../src/workers/payment-capture-worker"
+import { RedisNotConfiguredError } from "../../src/lib/payment-capture-queue"
 
 // Get typed mock reference
 const mockStartPaymentCaptureWorker = startPaymentCaptureWorker as jest.Mock
@@ -58,7 +59,7 @@ describe("paymentCaptureWorkerLoader", () => {
         beforeEach(() => {
             delete process.env.REDIS_URL
             mockStartPaymentCaptureWorker.mockImplementationOnce(() => {
-                throw new Error("REDIS_URL is not configured")
+                throw new RedisNotConfiguredError()
             })
         })
 

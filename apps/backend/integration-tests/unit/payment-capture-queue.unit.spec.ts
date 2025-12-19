@@ -171,8 +171,9 @@ describe("payment-capture-queue", () => {
 
         it("should return correct data when order exists and valid", async () => {
             startPaymentCaptureWorker(mockContainer);
+            // Total is in dollars (50.00), which converts to 5000 cents
             mockQueryGraph.mockResolvedValue({ 
-                data: [{ id: "ord_valid", total: 5000, currency_code: "usd", status: "pending" }] 
+                data: [{ id: "ord_valid", total: 50.00, currency_code: "usd", status: "pending" }] 
             });
 
             const result = await fetchOrderTotal("ord_valid");
@@ -269,7 +270,7 @@ describe("payment-capture-queue", () => {
                 currency: "usd" 
             });
             mockQueryGraph.mockResolvedValue({ 
-                data: [{ id: "order_123", total: 5000, currency_code: "eur" }] 
+                data: [{ id: "order_123", total: 50.00, currency_code: "eur", status: "pending" }] 
             });
 
             await expect(processPaymentCapture(mockJob as Job))
@@ -355,7 +356,7 @@ describe("payment-capture-queue", () => {
         it("should skip capture if order is canceled in Medusa", async () => {
             mockStripeRetrieve.mockResolvedValue({ status: "requires_capture", amount: 1000, currency: "usd" });
             mockQueryGraph.mockResolvedValue({
-                data: [{ id: "order_123", total: 1000, currency_code: "usd", status: "canceled" }]
+                data: [{ id: "order_123", total: 10.00, currency_code: "usd", status: "canceled" }]
             });
 
             await processPaymentCapture(mockJob as Job);
@@ -373,13 +374,13 @@ describe("payment-capture-queue", () => {
         it("should update order metadata after successful capture", async () => {
             mockStripeRetrieve.mockResolvedValue({ status: "requires_capture", amount: 1000, currency: "usd" });
             mockQueryGraph.mockResolvedValue({
-                data: [{ id: "order_123", total: 1000, currency_code: "usd", status: "pending" }]
+                data: [{ id: "order_123", total: 10.00, currency_code: "usd", status: "pending" }]
             });
             mockStripeCapture.mockResolvedValue({ status: "succeeded" });
 
             await processPaymentCapture(mockJob as Job);
 
-            // Should have called updateOrders to set metadata
+            // Should have called updateOrders to set metadata (amount is in cents: 1000)
             expect((global as any).mockUpdateOrders).toHaveBeenCalledWith([
                 expect.objectContaining({
                     id: "order_123",
@@ -419,10 +420,10 @@ describe("payment-capture-queue", () => {
             const scheduledData = mockQueueAdd.mock.calls[mockQueueAdd.mock.calls.length - 1][1];
             const mockJob = { data: scheduledData } as Job;
 
-            // Setup mocks for successful processing
+            // Setup mocks for successful processing (total in dollars, converts to 1000 cents)
             mockStripeRetrieve.mockResolvedValue({ status: "requires_capture", amount: 1000, currency: "usd" });
             mockQueryGraph.mockResolvedValue({
-                data: [{ id: "order_wiring", total: 1000, currency_code: "usd", status: "pending" }]
+                data: [{ id: "order_wiring", total: 10.00, currency_code: "usd", status: "pending" }]
             });
             mockStripeCapture.mockResolvedValue({ status: "succeeded" });
 
