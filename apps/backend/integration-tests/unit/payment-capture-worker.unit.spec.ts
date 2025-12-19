@@ -57,12 +57,15 @@ describe("paymentCaptureWorkerLoader", () => {
     describe("when REDIS_URL is NOT configured", () => {
         beforeEach(() => {
             delete process.env.REDIS_URL
+            mockStartPaymentCaptureWorker.mockImplementationOnce(() => {
+                throw new Error("REDIS_URL is not configured")
+            })
         })
 
-        it("should NOT start the payment capture worker", async () => {
+        it("should attempt to start the worker (but fail gracefully)", async () => {
             await paymentCaptureWorkerLoader(mockContainer)
 
-            expect(mockStartPaymentCaptureWorker).not.toHaveBeenCalled()
+            expect(mockStartPaymentCaptureWorker).toHaveBeenCalled()
         })
 
         it("should log a warning about missing REDIS_URL", async () => {

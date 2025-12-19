@@ -9,7 +9,7 @@
  * - Story 6.3: Edit status locking for race condition handling
  */
 
-import { Worker, Job } from "bullmq";
+import { Worker, Job, Queue } from "bullmq";
 import { MedusaContainer } from "@medusajs/framework/types";
 import { getStripeClient } from "../utils/stripe";
 import { PaymentCaptureJobData } from "../types/queue-types";
@@ -25,6 +25,9 @@ const IS_JEST = process.env.JEST_WORKER_ID !== undefined;
 let worker: Worker<PaymentCaptureJobData> | null = null;
 let shutdownHandler: (() => Promise<void>) | null = null;
 let containerRef: MedusaContainer | null = null;
+
+let promoterQueue: Queue<PaymentCaptureJobData> | null = null;
+let promoterInterval: NodeJS.Timeout | null = null;
 
 async function getOrderMetadata(orderId: string): Promise<Record<string, any>> {
     if (!containerRef) {
@@ -46,6 +49,38 @@ async function getOrderMetadata(orderId: string): Promise<Record<string, any>> {
         return {};
     } catch {
         return {};
+    }
+}
+
+async function getOrderStatus(orderId: string): Promise<string | undefined> {
+    if (!containerRef) {
+        return undefined;
+    }
+
+    try {
+        const query = containerRef.resolve("query");
+        const { data: orders } = await query.graph({
+            entity: "order",
+            fields: ["id", "status"],
+            filters: { id: orderId },
+        });
+
+        const status = orders?.[0]?.status as string | undefined;
+        return typeof status === "string" ? status : undefined;
+    } catch {
+        return undefined;
+    }
+}
+
+async function promoteDueCaptureJobs(): Promise<void> {
+    if (!promoterQueue) {
+        return;
+    }
+
+    try {
+        await promoterQueue.promoteJobs();
+    } catch (err) {
+        console.warn("[PaymentCapture] Failed to promote delayed jobs:", (err as Error)?.message || err);
     }
 }
 
@@ -85,15 +120,32 @@ export async function fetchOrderTotal(orderId: string): Promise<{ totalCents: nu
         let total: number;
         const metadata = order.metadata as Record<string, any> | undefined;
         
-        if (metadata?.updated_total !== undefined && typeof metadata.updated_total === "number") {
-            total = metadata.updated_total;
+        const rawUpdatedTotal = metadata?.updated_total as unknown;
+
+        const parsedUpdatedTotal =
+            typeof rawUpdatedTotal === "number"
+                ? rawUpdatedTotal
+                : typeof rawUpdatedTotal === "string"
+                    ? parseFloat(rawUpdatedTotal)
+                    : NaN;
+
+        if (rawUpdatedTotal !== undefined && Number.isFinite(parsedUpdatedTotal)) {
+            total = parsedUpdatedTotal;
             console.log(`[PaymentCapture] Order ${orderId}: Using metadata.updated_total=${total} (modified during grace period)`);
         } else {
-            total = order.total;
+            const rawTotal = (order as any).total as unknown;
+            const parsedTotal =
+                typeof rawTotal === "number"
+                    ? rawTotal
+                    : typeof rawTotal === "string"
+                        ? parseFloat(rawTotal)
+                        : NaN;
+            total = parsedTotal;
         }
 
-        if (typeof total !== "number") {
-            console.error(`[PaymentCapture] Order ${orderId} has invalid total: ${total}`);
+        if (!Number.isFinite(total)) {
+            const rawTotalForLog = (order as any).total;
+            console.error(`[PaymentCapture] Order ${orderId} has invalid total: ${rawTotalForLog}`);
             return null;
         }
 
@@ -187,8 +239,16 @@ export async function updateOrderAfterCapture(orderId: string, amountCaptured: n
 
     try {
         const currentMetadata = await getOrderMetadata(orderId);
+        const currentStatus = await getOrderStatus(orderId);
+
+        if (currentStatus === "canceled") {
+            console.warn(`[PaymentCapture] Order ${orderId}: Order is canceled in Medusa, not updating status after capture`);
+            return;
+        }
+
         const orderService = containerRef.resolve("order");
-        await orderService.updateOrders([{
+
+        const update: any = {
             id: orderId,
             metadata: {
                 ...currentMetadata,
@@ -196,7 +256,13 @@ export async function updateOrderAfterCapture(orderId: string, amountCaptured: n
                 payment_captured_at: new Date().toISOString(),
                 payment_amount_captured: amountCaptured,
             },
-        }]);
+        };
+
+        if (currentStatus !== "completed") {
+            update.status = "completed";
+        }
+
+        await orderService.updateOrders([update]);
         console.log(`[PaymentCapture] Order ${orderId}: Updated metadata with capture info`);
     } catch (error) {
         console.error(`[PaymentCapture] Error updating order ${orderId} after capture:`, error);
@@ -381,6 +447,15 @@ export function startPaymentCaptureWorker(container?: MedusaContainer): Worker<P
         }
     );
 
+    if (!IS_JEST) {
+        promoterQueue = new Queue<PaymentCaptureJobData>(PAYMENT_CAPTURE_QUEUE, { connection });
+        void promoteDueCaptureJobs();
+        promoterInterval = setInterval(() => {
+            void promoteDueCaptureJobs();
+        }, 5000);
+        promoterInterval.unref?.();
+    }
+
     worker.on("completed", (job) => {
         console.log(`[PaymentCapture] Job ${job.id} completed`);
     });
@@ -413,6 +488,16 @@ export function startPaymentCaptureWorker(container?: MedusaContainer): Worker<P
         shutdownHandler = async () => {
             console.log("[PaymentCapture] Shutting down worker...");
             await worker?.close();
+
+            if (promoterInterval) {
+                clearInterval(promoterInterval);
+                promoterInterval = null;
+            }
+
+            if (promoterQueue) {
+                await promoterQueue.close();
+                promoterQueue = null;
+            }
         };
         process.on("SIGTERM", shutdownHandler);
         process.on("SIGINT", shutdownHandler);

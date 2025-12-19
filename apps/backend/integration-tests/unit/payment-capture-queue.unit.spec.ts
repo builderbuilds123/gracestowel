@@ -187,7 +187,7 @@ describe("payment-capture-queue", () => {
         // H2. Missing Tests for processPaymentCapture Dynamic Amount Logic
 
         const mockJobData = {
-            orderId: "ord_123",
+            orderId: "order_123",
             paymentIntentId: "pi_123",
             scheduledAt: 100000,
         };
@@ -207,7 +207,7 @@ describe("payment-capture-queue", () => {
                 currency: "usd" 
             });
             mockQueryGraph.mockResolvedValue({ 
-                data: [{ id: "ord_123", total: 5000, currency_code: "usd" }] 
+                data: [{ id: "order_123", total: 5000, currency_code: "usd" }] 
             });
             mockStripeCapture.mockResolvedValue({ status: "succeeded" });
 
@@ -217,7 +217,7 @@ describe("payment-capture-queue", () => {
             expect(mockStripeCapture).toHaveBeenCalledWith(
                 "pi_123", 
                 { amount_to_capture: 5000 }, 
-                expect.objectContaining({ idempotencyKey: "capture_ord_123_100000" })
+                expect.objectContaining({ idempotencyKey: "capture_order_123_100000" })
             );
         });
 
@@ -230,7 +230,7 @@ describe("payment-capture-queue", () => {
                 currency: "usd" 
             });
             mockQueryGraph.mockResolvedValue({ 
-                data: [{ id: "ord_123", total: 4000, currency_code: "usd" }] 
+                data: [{ id: "order_123", total: 4000, currency_code: "usd" }] 
             });
             mockStripeCapture.mockResolvedValue({ status: "succeeded" });
 
@@ -253,7 +253,7 @@ describe("payment-capture-queue", () => {
                 currency: "usd" 
             });
             mockQueryGraph.mockResolvedValue({ 
-                data: [{ id: "ord_123", total: 6000, currency_code: "usd" }] 
+                data: [{ id: "order_123", total: 6000, currency_code: "usd" }] 
             });
 
             await expect(processPaymentCapture(mockJob as Job))
@@ -272,7 +272,7 @@ describe("payment-capture-queue", () => {
                 currency: "usd" 
             });
             mockQueryGraph.mockResolvedValue({ 
-                data: [{ id: "ord_123", total: 5000, currency_code: "eur" }] 
+                data: [{ id: "order_123", total: 5000, currency_code: "eur" }] 
             });
 
             await expect(processPaymentCapture(mockJob as Job))
@@ -309,7 +309,7 @@ describe("payment-capture-queue", () => {
                 currency: "usd" 
             });
             mockQueryGraph.mockResolvedValue({ 
-                data: [{ id: "ord_123", total: 5000, currency_code: "usd" }] 
+                data: [{ id: "order_123", total: 5000, currency_code: "usd" }] 
             });
 
             // Create error with type/code properties (robust property-based check)
@@ -359,7 +359,7 @@ describe("payment-capture-queue", () => {
         it("should skip capture if order is canceled in Medusa", async () => {
             mockStripeRetrieve.mockResolvedValue({ status: "requires_capture", amount: 1000, currency: "usd" });
             mockQueryGraph.mockResolvedValue({
-                data: [{ id: "ord_123", total: 1000, currency_code: "usd", status: "canceled" }]
+                data: [{ id: "order_123", total: 1000, currency_code: "usd", status: "canceled" }]
             });
 
             await processPaymentCapture(mockJob as Job);
@@ -377,7 +377,7 @@ describe("payment-capture-queue", () => {
         it("should update order metadata after successful capture", async () => {
             mockStripeRetrieve.mockResolvedValue({ status: "requires_capture", amount: 1000, currency: "usd" });
             mockQueryGraph.mockResolvedValue({
-                data: [{ id: "ord_123", total: 1000, currency_code: "usd", status: "pending" }]
+                data: [{ id: "order_123", total: 1000, currency_code: "usd", status: "pending" }]
             });
             mockStripeCapture.mockResolvedValue({ status: "succeeded" });
 
@@ -386,7 +386,7 @@ describe("payment-capture-queue", () => {
             // Should have called updateOrders to set metadata
             expect((global as any).mockUpdateOrders).toHaveBeenCalledWith([
                 expect.objectContaining({
-                    id: "ord_123",
+                    id: "order_123",
                     metadata: expect.objectContaining({
                         payment_captured_at: expect.any(String),
                         payment_amount_captured: 1000,
@@ -399,19 +399,19 @@ describe("payment-capture-queue", () => {
     describe("Queue & Worker (Story 2.2 Coverage)", () => {
         // Keep existing coverage for completeness logic
         it("should schedule job correctly", async () => {
-            await schedulePaymentCapture("ord_1", "pi_1");
+            await schedulePaymentCapture("order_1", "pi_1");
             expect(mockQueueAdd).toHaveBeenCalled();
         });
 
         it("should verify wiring from schedule to process (AC5)", async () => {
             // 1. Schedule
-            await schedulePaymentCapture("ord_wiring", "pi_wiring");
+            await schedulePaymentCapture("order_wiring", "pi_wiring");
             
             // Verify what was added to queue matches what worker expects
             expect(mockQueueAdd).toHaveBeenCalledWith(
-                "capture-ord_wiring",
+                "capture-order_wiring",
                 expect.objectContaining({
-                    orderId: "ord_wiring",
+                    orderId: "order_wiring",
                     paymentIntentId: "pi_wiring"
                 }),
                 expect.objectContaining({
@@ -426,7 +426,7 @@ describe("payment-capture-queue", () => {
             // Setup mocks for successful processing
             mockStripeRetrieve.mockResolvedValue({ status: "requires_capture", amount: 1000, currency: "usd" });
             mockQueryGraph.mockResolvedValue({
-                data: [{ id: "ord_wiring", total: 1000, currency_code: "usd", status: "pending" }]
+                data: [{ id: "order_wiring", total: 1000, currency_code: "usd", status: "pending" }]
             });
             mockStripeCapture.mockResolvedValue({ status: "succeeded" });
 
@@ -439,7 +439,7 @@ describe("payment-capture-queue", () => {
             // 3. Verify Metadata set (End of flow)
             expect((global as any).mockUpdateOrders).toHaveBeenCalledWith([
                 expect.objectContaining({
-                    id: "ord_wiring",
+                    id: "order_wiring",
                     metadata: expect.objectContaining({
                         payment_captured_at: expect.any(String)
                     })

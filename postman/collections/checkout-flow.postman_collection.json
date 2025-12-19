@@ -146,6 +146,10 @@
 							"pm.test(\"Shipping options returned\", function () {",
 							"    pm.expect(jsonData.shipping_options).to.be.an('array');",
 							"    pm.expect(jsonData.shipping_options.length).to.be.above(0);",
+							"    if (jsonData.shipping_options.length > 0) {",
+							"        pm.environment.set(\"shipping_option_id\", jsonData.shipping_options[0].id);",
+							"        console.log(\"Shipping Option ID set to:\", jsonData.shipping_options[0].id);",
+							"    }",
 							"});"
 						],
 						"type": "text/javascript"
@@ -175,6 +179,41 @@
 				}
 			}
 		},
+
+		{
+			"name": "4.5 Select Shipping Method",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "x-publishable-api-key",
+						"value": "{{publishable_api_key}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"option_id\": \"{{shipping_option_id}}\"\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/store/carts/{{cart_id}}/shipping-methods",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"store",
+						"carts",
+						"{{cart_id}}",
+						"shipping-methods"
+					]
+				}
+			}
+		},
 		{
 			"name": "5. Create Payment Intent",
 			"event": [
@@ -188,7 +227,11 @@
 							"var jsonData = pm.response.json();",
 							"pm.test(\"Client Secret returned\", function () {",
 							"    pm.expect(jsonData.clientSecret).to.exist;",
-							"});"
+							"});",
+							"if (jsonData.paymentIntentId) {",
+							"    pm.environment.set(\"payment_intent_id\", jsonData.paymentIntentId);",
+							"    console.log(\"Payment Intent ID set to:\", jsonData.paymentIntentId);",
+							"}"
 						],
 						"type": "text/javascript"
 					}
@@ -223,6 +266,264 @@
 					]
 				}
 			}
+		},
+		{
+			"name": "5.5 Confirm Payment Intent",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{stripe_secret_key}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/x-www-form-urlencoded",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "urlencoded",
+					"urlencoded": [
+						{
+							"key": "payment_method",
+							"value": "pm_card_visa",
+							"type": "text"
+						},
+						{
+							"key": "return_url",
+							"value": "https://localhost:5173/checkout/success",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://api.stripe.com/v1/payment_intents/{{payment_intent_id}}/confirm",
+					"protocol": "https",
+					"host": [
+						"api",
+						"stripe",
+						"com"
+					],
+					"path": [
+						"v1",
+						"payment_intents",
+						"{{payment_intent_id}}",
+						"confirm"
+					]
+				}
+			}
+		},
+		{
+			"name": "6. Complete Cart",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"var jsonData = pm.response.json();",
+							"if (jsonData.type === 'order' && jsonData.data.id) {",
+							"    pm.environment.set('order_id', jsonData.data.id);",
+							"    if (jsonData.data.items && jsonData.data.items.length > 0) {",
+							"        pm.environment.set('line_item_id', jsonData.data.items[0].id);",
+							"    }",
+							"    // Generate Modification Token (HS256)",
+							"    var orderId = jsonData.data.id;",
+							"    var paymentIntentId = pm.environment.get('payment_intent_id');",
+							"    var secret = 'dev-secret';",
+							"    var header = { \"alg\": \"HS256\", \"typ\": \"JWT\" };",
+							"    var iat = Math.floor(Date.now() / 1000);",
+							"    var exp = iat + 3600; // 1 hr",
+							"    var payload = {",
+							"        \"order_id\": orderId,",
+							"        \"payment_intent_id\": paymentIntentId,",
+							"        \"iat\": iat,",
+							"        \"exp\": exp",
+							"    };",
+							"    var stringifiedHeader = CryptoJS.enc.Utf8.parse(JSON.stringify(header));",
+							"    var encodedHeader = base64url(stringifiedHeader);",
+							"    var stringifiedPayload = CryptoJS.enc.Utf8.parse(JSON.stringify(payload));",
+							"    var encodedPayload = base64url(stringifiedPayload);",
+							"    var signature = encodedHeader + \".\" + encodedPayload;",
+							"    signature = CryptoJS.HmacSHA256(signature, secret);",
+							"    signature = base64url(signature);",
+							"    var jwt = encodedHeader + \".\" + encodedPayload + \".\" + signature;",
+							"    pm.environment.set('modification_token', jwt);",
+							"    pm.cookies.jar().set(pm.request.url, \"x-modification-token\", jwt);",
+							"    console.log(\"Generated Token:\", jwt);",
+							"}",
+							"function base64url(source) {",
+							"    var encodedSource = CryptoJS.enc.Base64.stringify(source);",
+							"    encodedSource = encodedSource.replace(/=+$/, '');",
+							"    encodedSource = encodedSource.replace(/\\+/g, '-');",
+							"    encodedSource = encodedSource.replace(/\\//g, '_');",
+							"    return encodedSource;",
+							"}",
+							"pm.test('Status code is 200', function () {",
+							"    pm.response.to.have.status(200);",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/store/carts/{{cart_id}}/complete",
+					"host": ["{{base_url}}"],
+					"path": ["store", "carts", "{{cart_id}}", "complete"]
+				}
+			}
+		},
+		{
+			"name": "Modification Flow",
+			"item": [
+				{
+					"name": "7. Get Order Status Page (Token)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Generate Modification Token (HS256) if order_id exists",
+									"var orderId = pm.environment.get('order_id');",
+									"if (orderId) {",
+									"    var paymentIntentId = pm.environment.get('payment_intent_id') || 'pi_test_dummy'; // Provide fallback",
+									"    var secret = 'dev-secret';",
+									"    var header = { \"alg\": \"HS256\", \"typ\": \"JWT\" };",
+									"    var iat = Math.floor(Date.now() / 1000);",
+									"    var exp = iat + 3600; // 1 hr",
+									"    var payload = {",
+									"        \"order_id\": orderId,",
+									"        \"payment_intent_id\": paymentIntentId,",
+									"        \"iat\": iat,",
+									"        \"exp\": exp",
+									"    };",
+									"    var stringifiedHeader = CryptoJS.enc.Utf8.parse(JSON.stringify(header));",
+									"    var encodedHeader = base64url(stringifiedHeader);",
+									"    var stringifiedPayload = CryptoJS.enc.Utf8.parse(JSON.stringify(payload));",
+									"    var encodedPayload = base64url(stringifiedPayload);",
+									"    var signature = encodedHeader + \".\" + encodedPayload;",
+									"    signature = CryptoJS.HmacSHA256(signature, secret);",
+									"    signature = base64url(signature);",
+									"    var jwt = encodedHeader + \".\" + encodedPayload + \".\" + signature;",
+									"    pm.environment.set('modification_token', jwt);",
+									"    pm.cookies.jar().set(pm.request.url, \"x-modification-token\", jwt);",
+									"    console.log(\"Generated Token:\", jwt);",
+									"}",
+									"function base64url(source) {",
+									"    var encodedSource = CryptoJS.enc.Base64.stringify(source);",
+									"    encodedSource = encodedSource.replace(/=+$/, '');",
+									"    encodedSource = encodedSource.replace(/\\+/g, '-');",
+									"    encodedSource = encodedSource.replace(/\\//g, '_');",
+									"    return encodedSource;",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{storefront_url}}/order/status/{{order_id}}",
+							"host": ["{{storefront_url}}"],
+							"path": ["order", "status", "{{order_id}}"]
+						}
+					}
+				},
+				{
+					"name": "8. Update Line Item Quantity",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "x-modification-token",
+								"value": "{{modification_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"item_id\": \"{{line_item_id}}\",\n    \"quantity\": 2\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/store/orders/{{order_id}}/line-items/update",
+							"host": ["{{base_url}}"],
+							"path": ["store", "orders", "{{order_id}}", "line-items", "update"]
+						}
+					}
+				},
+				{
+					"name": "9. Add Item to Order",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "x-modification-token",
+								"value": "{{modification_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"variant_id\": \"{{variant_id}}\",\n    \"quantity\": 1\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/store/orders/{{order_id}}/line-items",
+							"host": ["{{base_url}}"],
+							"path": ["store", "orders", "{{order_id}}", "line-items"]
+						}
+					}
+				},
+				{
+					"name": "10. Cancel Order",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "x-modification-token",
+								"value": "{{modification_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/store/orders/{{order_id}}/cancel",
+							"host": ["{{base_url}}"],
+							"path": ["store", "orders", "{{order_id}}", "cancel"]
+						}
+					}
+				}
+			]
 		}
 	]
 }

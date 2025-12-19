@@ -3,7 +3,8 @@ import { useFetcher } from "react-router";
 import { CancelOrderDialog } from "../CancelOrderDialog";
 import { EditAddressDialog } from "../EditAddressDialog";
 import { AddItemsDialog } from "../AddItemsDialog";
-import { Pencil, Plus } from "lucide-react";
+import { EditItemsDialog } from "./EditItemsDialog";
+import { Pencil, Plus, ShoppingBag } from "lucide-react";
 
 interface Address {
     first_name: string;
@@ -27,12 +28,24 @@ interface ActionData {
     retryable?: boolean;
     errorType?: string;
     itemsAdded?: number;
+    itemsUpdated?: number;
+}
+
+interface OrderItem {
+    id: string;
+    title: string;
+    thumbnail?: string;
+    quantity: number;
+    unit_price: number;
+    variant_id: string;
+    variant_title?: string;
 }
 
 interface OrderModificationDialogsProps {
     orderId: string;
     orderNumber: string;
     currencyCode: string;
+    items?: OrderItem[]; // Made optional to prevent breaking if not passed yet
     currentAddress?: Address;
     onOrderUpdated: (newTotal?: number) => void;
     onAddressUpdated: (address: Address) => void;
@@ -51,6 +64,7 @@ export function OrderModificationDialogs({
     orderId,
     orderNumber,
     currencyCode,
+    items = [],
     currentAddress,
     onOrderUpdated,
     onAddressUpdated,
@@ -59,6 +73,7 @@ export function OrderModificationDialogs({
     const [showCancelDialog, setShowCancelDialog] = useState(false);
     const [showEditAddressDialog, setShowEditAddressDialog] = useState(false);
     const [showAddItemsDialog, setShowAddItemsDialog] = useState(false);
+    const [showEditItemsDialog, setShowEditItemsDialog] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [isRetryable, setIsRetryable] = useState<boolean>(false);
     const [isPaymentError, setIsPaymentError] = useState<boolean>(false);
@@ -80,6 +95,9 @@ export function OrderModificationDialogs({
                     onAddressUpdated(fetcher.data.address);
                 } else if (fetcher.data.action === "items_added") {
                     setShowAddItemsDialog(false);
+                    onOrderUpdated(fetcher.data.new_total);
+                } else if (fetcher.data.action === "items_updated") {
+                    setShowEditItemsDialog(false);
                     onOrderUpdated(fetcher.data.new_total);
                 }
             } else if (fetcher.data.error) {
@@ -117,6 +135,14 @@ export function OrderModificationDialogs({
         );
     };
 
+    const handleUpdateQuantities = async (updates: Array<{ item_id: string; quantity: number }>) => {
+        setError(null);
+        fetcher.submit(
+            { intent: "UPDATE_QUANTITY", items: JSON.stringify(updates) },
+            { method: "POST" }
+        );
+    };
+
     return (
         <>
             {/* Error Display - Story 6.4: Different styling for payment errors */}
@@ -146,6 +172,14 @@ export function OrderModificationDialogs({
                 >
                     <Plus className="w-4 h-4" />
                     Add Items
+                </button>
+                <button
+                    onClick={() => setShowEditItemsDialog(true)}
+                    disabled={isSubmitting || items.length === 0}
+                    className="px-4 py-2 text-accent-earthy border border-accent-earthy rounded-lg hover:bg-accent-earthy/10 transition-colors text-sm font-medium flex items-center gap-2 disabled:opacity-50"
+                >
+                    <ShoppingBag className="w-4 h-4" />
+                    Edit Quantities
                 </button>
                 <button
                     onClick={() => setShowEditAddressDialog(true)}
@@ -183,6 +217,14 @@ export function OrderModificationDialogs({
                 isOpen={showAddItemsDialog}
                 onClose={() => setShowAddItemsDialog(false)}
                 onAdd={handleAddItems}
+                currencyCode={currencyCode}
+            />
+
+            <EditItemsDialog
+                isOpen={showEditItemsDialog}
+                onClose={() => setShowEditItemsDialog(false)}
+                onUpdate={handleUpdateQuantities}
+                items={items}
                 currencyCode={currencyCode}
             />
         </>

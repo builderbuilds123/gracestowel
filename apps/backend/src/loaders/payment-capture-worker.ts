@@ -11,14 +11,15 @@ import { startPaymentCaptureWorker } from "../workers/payment-capture-worker";
  */
 export default async function paymentCaptureWorkerLoader(container: MedusaContainer) {
     try {
-        // Only start the worker if Redis is configured
-        if (process.env.REDIS_URL) {
-            // Pass container to worker for accessing Medusa services (Story 2.3)
-            startPaymentCaptureWorker(container);
-        } else {
-            console.warn("REDIS_URL not configured - payment capture worker not started");
-        }
+        // Pass container to worker for accessing Medusa services (Story 2.3)
+        startPaymentCaptureWorker(container);
     } catch (error) {
+        const message = (error as Error)?.message || "";
+        if (message.includes("REDIS_URL is not configured")) {
+            console.warn("REDIS_URL not configured - payment capture worker not started");
+            return;
+        }
+
         // H2: Fail loudness
         console.error("CRITICAL: Failed to start payment capture worker:", error);
         throw error;

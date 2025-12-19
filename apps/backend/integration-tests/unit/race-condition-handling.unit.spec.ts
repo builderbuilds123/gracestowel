@@ -120,7 +120,7 @@ describe("Story 6.3: Race Condition Handling", () => {
 
     describe("Task 1: Optimistic Locking / State Management (AC 1, 3, 8)", () => {
         const mockJobData = {
-            orderId: "ord_lock_test",
+            orderId: "order_lock_test",
             paymentIntentId: "pi_lock_test",
             scheduledAt: Date.now(),
         };
@@ -139,7 +139,7 @@ describe("Story 6.3: Race Condition Handling", () => {
             });
             mockQueryGraph.mockResolvedValue({
                 data: [{
-                    id: "ord_lock_test",
+                    id: "order_lock_test",
                     total: 5000,
                     currency_code: "usd",
                     status: "pending",
@@ -170,7 +170,7 @@ describe("Story 6.3: Race Condition Handling", () => {
             });
             mockQueryGraph.mockResolvedValue({
                 data: [{
-                    id: "ord_lock_test",
+                    id: "order_lock_test",
                     total: 5000,
                     currency_code: "usd",
                     status: "pending",
@@ -198,7 +198,7 @@ describe("Story 6.3: Race Condition Handling", () => {
             });
             mockQueryGraph.mockResolvedValue({
                 data: [{
-                    id: "ord_lock_test",
+                    id: "order_lock_test",
                     total: 6000, // Exceeds authorized - will fail
                     currency_code: "usd",
                     status: "pending",
@@ -225,7 +225,7 @@ describe("Story 6.3: Race Condition Handling", () => {
                     validateToken: jest.fn().mockReturnValue({
                         valid: true,
                         expired: false,
-                        payload: { order_id: "ord_locked" },
+                        payload: { order_id: "order_locked" },
                     }),
                 },
             }));
@@ -249,7 +249,7 @@ describe("Story 6.3: Race Condition Handling", () => {
             // Mock order with locked status
             mockQueryGraph.mockResolvedValue({
                 data: [{
-                    id: "ord_locked",
+                    id: "order_locked",
                     status: "pending",
                     total: 5000,
                     currency_code: "usd",
@@ -262,7 +262,7 @@ describe("Story 6.3: Race Condition Handling", () => {
             });
 
             const input = {
-                orderId: "ord_locked",
+                orderId: "order_locked",
                 modificationToken: "valid_token",
                 variantId: "var_123",
                 quantity: 1,
