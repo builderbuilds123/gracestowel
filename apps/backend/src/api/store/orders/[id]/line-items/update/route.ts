@@ -163,6 +163,10 @@ export async function POST(
              res.status(422).json({ code: error.code, message: error.message });
              return;
         }
+        if (error instanceof PaymentIntentMissingError) {
+            res.status(422).json({ code: error.code, message: error.message });
+            return;
+        }
 
         // 401/403 Auth Errors
         if (error instanceof TokenExpiredError) {

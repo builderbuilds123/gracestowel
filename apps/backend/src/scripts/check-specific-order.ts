@@ -1,6 +1,5 @@
 
 import { ExecArgs } from "@medusajs/framework/types";
-import { Modules } from "@medusajs/framework/utils";
 
 export default async function checkSpecificOrder({ container }: ExecArgs) {
   const query = container.resolve("query");
@@ -8,7 +7,7 @@ export default async function checkSpecificOrder({ container }: ExecArgs) {
   
   const { data: orders } = await query.graph({
     entity: "order",
-    fields: ["id", "status", "payment_status", "total", "created_at", "metadata"],
+    fields: ["id", "status", "total", "created_at", "metadata", "currency_code", "region_id"],
     filters: { id: orderId }
   });
 
@@ -17,7 +16,7 @@ export default async function checkSpecificOrder({ container }: ExecArgs) {
     return;
   }
 
-  const latest = orders[0];
+  const latest = orders[0] as any;
   console.log("ORDER FOUND:");
   console.log("ID:", latest.id);
   console.log("CREATED_AT:", latest.created_at);
@@ -26,7 +25,8 @@ export default async function checkSpecificOrder({ container }: ExecArgs) {
   console.log("REGION_ID:", latest.region_id);
   console.log("TOTAL:", latest.total);
 
-  console.log("PAYMENT_STATUS:", latest.payment_status);
+  // Payment status is stored in metadata for this project
+  console.log("PAYMENT_STATUS:", latest.metadata?.payment_status || "N/A");
 
   console.log("METADATA:", JSON.stringify(latest.metadata, null, 2));
 }

@@ -19,9 +19,9 @@ export async function GET(
   req: MedusaRequest,
   res: MedusaResponse
 ): Promise<void> {
-  if (process.env.REDIS_URL) {
-    startPaymentCaptureWorker(req.scope as any)
-  }
+  // Health check endpoints should be read-only and idempotent
+  // Workers should be started via loaders, not health endpoints
+  // Removed side effect: startPaymentCaptureWorker(req.scope as any)
 
   const status: {
     redis: { connected: boolean; error?: string };

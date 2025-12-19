@@ -40,10 +40,21 @@ let queue: Queue<PaymentCaptureJobData> | null = null;
  * Get Redis connection options from environment
  * Exported for use by worker
  */
+/**
+ * Custom error for when Redis is not configured
+ * Used for type-safe error checking instead of string matching
+ */
+export class RedisNotConfiguredError extends Error {
+    constructor(message: string = "REDIS_URL is not configured") {
+        super(message);
+        this.name = "RedisNotConfiguredError";
+    }
+}
+
 export function getRedisConnection() {
     const redisUrl = process.env.REDIS_URL;
     if (!redisUrl) {
-        throw new Error("REDIS_URL is not configured");
+        throw new RedisNotConfiguredError("REDIS_URL is not configured");
     }
     
     // Parse Redis URL for connection options

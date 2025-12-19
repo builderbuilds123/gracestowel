@@ -1,4 +1,4 @@
-import { ExecArgs } from "@medusajs/types";
+import { ExecArgs } from "@medusajs/framework/types";
 
 export default async function({ container }: ExecArgs) {
   const orderId = "order_01KCT8TAZD9TNC6BD53ZFQQSK3";
@@ -14,14 +14,14 @@ export default async function({ container }: ExecArgs) {
 
       console.log(`Found ${orders.length} orders.`);
       if(orders.length > 0) {
-          const o = orders[0];
+          const o = orders[0] as any;
           console.log("Total:", o.total);
           console.log("String(Total):", String(o.total));
           console.log("Summary exists:", !!o.summary);
           console.log("Summary:", JSON.stringify(o.summary, null, 2));
           console.log("Type of Total:", typeof o.total);
-          if (typeof o.total === 'object') {
-              console.log("Is Object. Constructor:", o.total.constructor.name);
+          if (typeof o.total === 'object' && o.total !== null) {
+              console.log("Is Object. Constructor:", (o.total as object).constructor.name);
               console.log("Stringified:", JSON.stringify(o.total));
           }
       } else {
