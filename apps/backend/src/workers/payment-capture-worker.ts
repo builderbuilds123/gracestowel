@@ -96,61 +96,95 @@ async function promoteDueCaptureJobs(): Promise<void> {
  */
 export async function fetchOrderTotal(orderId: string): Promise<{ totalCents: number; currencyCode: string; status: string } | null> {
     if (!containerRef) {
-        console.error("[PaymentCapture] Container not initialized - cannot fetch order");
-        return null;
+        // console.error("[PaymentCapture] Container not initialized - cannot fetch order");
+        throw new Error("Container not initialized");
     }
 
     try {
         const query = containerRef.resolve("query");
         const { data: orders } = await query.graph({
             entity: "order",
-            fields: ["id", "total", "currency_code", "status", "metadata"],
+            fields: ["id", "total", "summary", "currency_code", "status", "metadata"],
             filters: { id: orderId },
         });
 
         if (orders.length === 0) {
-            console.error(`[PaymentCapture] Order ${orderId} not found`);
-            return null;
+            // console.error(`[PaymentCapture] Order ${orderId} not found`);
+            throw new Error(`Order ${orderId} not found in DB via query.graph`);
         }
 
         const order = orders[0];
         
         // Story 3.2: Check metadata.updated_total first for orders modified during grace period
         // The add-item workflow stores updated totals in metadata when items are added
-        let total: number;
         const metadata = order.metadata as Record<string, any> | undefined;
-        
+        let total: number | undefined;
+
+        console.log(`[PaymentCapture] Parsing total for order ${orderId}...`);
+
+        // Story 3.2: Check metadata.updated_total first for orders modified during grace period
         const rawUpdatedTotal = metadata?.updated_total as unknown;
-
-        const parsedUpdatedTotal =
-            typeof rawUpdatedTotal === "number"
-                ? rawUpdatedTotal
-                : typeof rawUpdatedTotal === "string"
-                    ? parseFloat(rawUpdatedTotal)
-                    : NaN;
-
-        if (rawUpdatedTotal !== undefined && Number.isFinite(parsedUpdatedTotal)) {
-            total = parsedUpdatedTotal;
-            console.log(`[PaymentCapture] Order ${orderId}: Using metadata.updated_total=${total} (modified during grace period)`);
-        } else {
-            const rawTotal = (order as any).total as unknown;
-            const parsedTotal =
-                typeof rawTotal === "number"
-                    ? rawTotal
-                    : typeof rawTotal === "string"
-                        ? parseFloat(rawTotal)
-                        : NaN;
-            total = parsedTotal;
+        if (rawUpdatedTotal !== undefined && rawUpdatedTotal !== null) {
+            const parsed = typeof rawUpdatedTotal === "number" 
+                ? rawUpdatedTotal 
+                : parseFloat(String(rawUpdatedTotal));
+            
+            if (Number.isFinite(parsed)) {
+                total = parsed;
+                console.log(`[PaymentCapture]   - Using metadata.updated_total: ${total} (original: ${String(rawUpdatedTotal)})`);
+            } else {
+                console.log(`[PaymentCapture]   - metadata.updated_total found but invalid: ${String(rawUpdatedTotal)}`);
+            }
         }
 
-        if (!Number.isFinite(total)) {
+        // Fallback to order.summary if available (Medusa v2 preferred)
+        if (total === undefined && order.summary?.current_order_total !== undefined && order.summary?.current_order_total !== null) {
+            const summaryTotal = order.summary.current_order_total;
+            const parsed = typeof summaryTotal === "number" 
+                ? summaryTotal 
+                : parseFloat(String(summaryTotal));
+                
+            if (Number.isFinite(parsed)) {
+                total = parsed;
+                console.log(`[PaymentCapture]   - Using summary.current_order_total: ${total} (original: ${String(summaryTotal)})`);
+            } else {
+                console.log(`[PaymentCapture]   - summary.current_order_total found but invalid: ${String(summaryTotal)}`);
+            }
+        }
+
+        // Fallback to order.total
+        if (total === undefined) {
+            const rawTotal = (order as any).total;
+            const parsed = typeof rawTotal === "number" 
+                ? rawTotal 
+                : typeof rawTotal === "object" && rawTotal !== null && "numeric_" in rawTotal
+                    ? (rawTotal as any).numeric_
+                    : parseFloat(String(rawTotal));
+                
+            if (Number.isFinite(parsed)) {
+                total = parsed;
+                console.log(`[PaymentCapture]   - Using order.total: ${total} (original: ${String(rawTotal)})`);
+            } else {
+                console.log(`[PaymentCapture]   - order.total found but invalid: ${String(rawTotal)}`);
+            }
+        }
+
+        if (total === undefined || !Number.isFinite(total)) {
             const rawTotalForLog = (order as any).total;
-            console.error(`[PaymentCapture] Order ${orderId} has invalid total: ${rawTotalForLog}`);
-            return null;
+            const debugInfo = {
+                rawTotalType: typeof rawTotalForLog,
+                rawTotalString: String(rawTotalForLog),
+                summaryExists: !!order.summary,
+                updatedTotalExists: rawUpdatedTotal !== undefined
+            };
+            console.error(`[PaymentCapture] Order ${orderId} has invalid total calculation:`, debugInfo);
+            throw new Error(`Order ${orderId} has invalid total: ${JSON.stringify(rawTotalForLog)} (Debug: ${JSON.stringify(debugInfo)})`);
         }
 
-        // Support both integer (cents) and float (dollars) totals (Story 2.3 AC #2)
-        const totalCents = Number.isInteger(total) ? total : Math.round(total * 100);
+        // Story 2.3 AC #2: Medusa v2 BigNumber totals are unit amounts (e.g., 147.00 USD).
+        // We MUST multiply by 100 to get cents for capture.
+        // We no longer guess based on Number.isInteger because "147" (integer) is $147.00, not 147 cents.
+        const totalCents = Math.round(total * 100);
 
         // M1: Fail if currency is missing instead of falling back to USD
         if (!order.currency_code) {
@@ -164,8 +198,8 @@ export async function fetchOrderTotal(orderId: string): Promise<{ totalCents: nu
             status: order.status || "unknown",
         };
     } catch (error) {
-        console.error(`[PaymentCapture] Error fetching order ${orderId}:`, error);
-        return null;
+        // console.error(`[PaymentCapture] Error fetching order ${orderId}:`, error);
+        throw error;
     }
 }
 

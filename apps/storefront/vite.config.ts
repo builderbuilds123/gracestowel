@@ -21,7 +21,7 @@ export default defineConfig({
   },
   plugins: [
     // Only use mkcert for local development (not in CI/production builds)
-    !isProduction && !isCI && mkcert(),
+    // !isProduction && !isCI && mkcert(),
     cloudflare({ viteEnvironment: { name: "ssr" } }),
     tailwindcss(),
     reactRouter(),

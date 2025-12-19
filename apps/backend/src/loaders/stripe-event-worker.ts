@@ -218,8 +218,7 @@ async function createOrderFromPaymentIntent(
                     paymentIntentId: paymentIntent.id,
                     zodError: parsed.error.message,
                 });
-                // Fail safe - do not process invalid cart data
-                return;
+                throw new Error(`Invalid cart_data schema: ${parsed.error.message}`);
             }
         } catch (e) {
             logger.error("stripe-worker", "Failed to parse cart_data JSON", {

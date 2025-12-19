@@ -253,7 +253,8 @@ export const validateUpdatePreconditionsStep = createStep(
             const { data: variants } = await query.graph({
                 entity: "product_variant",
                 fields: ["id", "inventory_items.inventory_item_id"],
-                filters: { id: lineItem.variant_id },
+                filters: { id: lineItem.variant_id || "" },
+
             });
 
             if (variants.length) {
@@ -273,7 +274,8 @@ export const validateUpdatePreconditionsStep = createStep(
                     }
 
                     if (totalAvailable < quantityDiff) {
-                        throw new InsufficientStockError(lineItem.variant_id, totalAvailable, quantityDiff);
+                        throw new InsufficientStockError(lineItem.variant_id || "unknown", totalAvailable, quantityDiff);
+
                     }
                 }
             }
@@ -292,11 +294,13 @@ export const validateUpdatePreconditionsStep = createStep(
             },
             lineItem: {
                 id: lineItem.id,
-                variant_id: lineItem.variant_id,
+                variant_id: lineItem.variant_id || "",
+
                 title: lineItem.title,
                 quantity: lineItem.quantity,
                 unit_price: lineItem.unit_price,
-                thumbnail: lineItem.thumbnail,
+                thumbnail: lineItem.thumbnail || undefined,
+
             },
             paymentIntent: {
                 id: paymentIntent.id,
@@ -357,140 +361,7 @@ const calculateUpdateTotalsStep = createStep(
 /**
  * Step 3: Update Stripe PaymentIntent
  */
-const updateStripeAuthStep = createStep(
-    "update-stripe-auth",
-    async (
-        input: {
-            paymentIntentId: string;
-            currentAmount: number;
-            newAmount: number;
-            orderId: string;
-            itemId: string;
-            quantity: number;
-            requestId: string;
-        }
-    ): Promise<StepResponse<StripeUpdateResult>> => {
-        const stripe = getStripeClient();
-        const idempotencyKey = generateIdempotencyKey(input.orderId, input.itemId, input.quantity, input.requestId);
-        
-        if (input.currentAmount === input.newAmount) {
-            return new StepResponse({
-                success: true,
-                previousAmount: input.currentAmount,
-                newAmount: input.currentAmount,
-                skipped: true,
-                paymentIntentId: input.paymentIntentId,
-                idempotencyKey,
-            });
-        }
 
-        try {
-            const updatedPaymentIntent = await retryWithBackoff(
-                async () => {
-                    // Update amount - works for both increment and decrement if uncaptured
-                    return stripe.paymentIntents.update(
-                        input.paymentIntentId,
-                        { amount: input.newAmount },
-                        { idempotencyKey }
-                    );
-                },
-                {shouldRetry: isRetryableStripeError}
-            );
-
-            console.log(`[update-item-qty] Stripe updated: ${input.currentAmount} -> ${input.newAmount}`);
-
-            return new StepResponse({
-                success: true,
-                previousAmount: input.currentAmount,
-                newAmount: updatedPaymentIntent.amount,
-                skipped: false,
-                paymentIntentId: input.paymentIntentId,
-                idempotencyKey,
-            });
-
-        } catch (error: any) {
-            if (error instanceof Stripe.errors.StripeCardError) {
-                console.log(`[METRIC] payment_update_decline_count reason=${error.decline_code} order=${input.orderId}`);
-                throw new CardDeclinedError(
-                    error.message || "Card was declined",
-                    error.code || "card_declined",
-                    error.decline_code
-                );
-            }
-             if (error.type === "idempotency_error") {
-                const currentPI = await stripe.paymentIntents.retrieve(input.paymentIntentId);
-                return new StepResponse({
-                    success: true,
-                    previousAmount: input.currentAmount,
-                    newAmount: currentPI.amount,
-                    skipped: false,
-                    paymentIntentId: input.paymentIntentId,
-                    idempotencyKey,
-                });
-            }
-            throw error;
-        }
-    }
-);
-
-/**
- * Step 4: Update Order in DB
- */
-const updateOrderDbStep = createStep(
-    "update-order-db",
-    async (
-        input: {
-            orderId: string;
-            itemId: string;
-            quantity: number;
-            newTotal: number;
-            stripeSucceeded: boolean;
-            paymentIntentId: string;
-        },
-        { container }
-    ): Promise<StepResponse<{ success: boolean }>> => {
-        const orderService = container.resolve("order");
-
-        try {
-
-             // 1. Update Line Item Quantity - SKIPPED for now to unblock
-             // (Would require correct method name e.g. updateLineItem or updateOrderChange)
-             console.log(`[DEV] Skipping real DB item update for ${input.itemId} to ${input.quantity}`);
-
-             // 2. Update Order Metadata
-             await orderService.updateOrders([
-                {
-                    id: input.orderId,
-                    metadata: {
-                        last_modified_action: "update_quantity",
-                        last_modified_item: input.itemId,
-                        last_modified_qty: input.quantity,
-                        updated_total: input.newTotal,
-                        updated_at: new Date().toISOString()
-                    }
-                },
-            ]);
-
-            return new StepResponse({ success: true });
-
-        } catch (error) {
-             if (input.stripeSucceeded) {
-                 const criticalError = new AuthMismatchError(
-                    input.orderId,
-                    input.paymentIntentId,
-                    `DB commit failed after Stripe update. Amount: ${input.newTotal}. Error: ${(error as Error).message}`
-                 );
-                 console.error("🚨 CRITICAL AUDIT ALERT: AUTH_MISMATCH_OVERSOLD 🚨");
-                 throw criticalError;
-             }
-             throw error;
-        }
-    },
-    // COMPENSATING STEP (Empty as Stripe compensation is handled by previous step's compensator)
-    async () => {
-        // No-op
-    }
-);
 
 // Add Compensator to Stripe Step
 // We need to detach logic to attach compensator properly using `createStep` robustly or `addCompensation`.
@@ -532,19 +403,29 @@ const updateStripeAuthStepWithComp = createStep(
          }
          
          try {
-             if (input.paymentIntentId.startsWith("pi_mock_")) {
-                 console.log(`[DEV] Mock Stripe Update: ${input.currentAmount} -> ${input.newAmount}`);
-                 return new StepResponse({
-                     success: true,
-                     paymentIntentId: input.paymentIntentId,
-                     previousAmount: input.currentAmount,
-                     newAmount: input.newAmount,
-                     idempotencyKey,
-                     skipped: false
-                 }, {
-                     paymentIntentId: input.paymentIntentId,
-                     amountToRevertTo: input.currentAmount
-                 });
+             const currentPI = await stripe.paymentIntents.retrieve(input.paymentIntentId);
+             
+             // If authorized (requires_capture), we cannot update amount directly.
+             // If new amount is LOWER, we rely on partial capture later.
+             if (currentPI.status === "requires_capture") {
+                if (input.newAmount <= currentPI.amount) {
+                    console.log(`[update-item-qty] Authorized PI ${input.paymentIntentId}. New Amount ${input.newAmount} <= Auth ${currentPI.amount}. Skipping update (will partial capture).`);
+                    return new StepResponse({
+                        success: true,
+                        paymentIntentId: input.paymentIntentId,
+                        previousAmount: input.currentAmount,
+                        newAmount: input.newAmount, // We report new logic amount
+                        idempotencyKey,
+                        skipped: true 
+                    }, {
+                         paymentIntentId: input.paymentIntentId,
+                         amountToRevertTo: input.currentAmount
+                    });
+                } else {
+                    // Increasing amount on authorized PI is not supported by update.
+                    // We'd need to cancel and re-auth, or use overcapture if enabled (not standard).
+                    throw new Error(`Cannot increase amount of authorized PaymentIntent (${currentPI.amount} -> ${input.newAmount}). Cancel and reorder.`);
+                }
              }
 
              // We need to cast the retry return type or expected output
@@ -553,6 +434,7 @@ const updateStripeAuthStepWithComp = createStep(
                  { amount: input.newAmount },
                  { idempotencyKey }
              );
+
              
              return new StepResponse(
                  { 
@@ -580,6 +462,69 @@ const updateStripeAuthStepWithComp = createStep(
             compInput.paymentIntentId,
             { amount: compInput.amountToRevertTo }
         );
+    }
+);
+
+/**
+ * Step 4: Update Order in DB
+ */
+const updateOrderDbStep = createStep(
+    "update-order-db",
+    async (
+        input: {
+            orderId: string;
+            itemId: string;
+            quantity: number;
+            newTotal: number;
+            stripeSucceeded: boolean;
+            paymentIntentId: string;
+        },
+        { container }
+    ): Promise<StepResponse<{ success: boolean }>> => {
+        const orderService = container.resolve("order");
+
+
+        try {
+
+             // 1. Update Line Item Quantity via Order Service
+             // We use updateOrderLineItems for specific line item updates
+             await (orderService as any).updateOrderLineItems(input.itemId, {
+                 quantity: input.quantity
+             });
+
+             // 2. Update Order Metadata
+             await orderService.updateOrders([
+                {
+                    id: input.orderId,
+                    metadata: {
+                        last_modified_action: "update_quantity",
+                        last_modified_item: input.itemId,
+                        last_modified_qty: input.quantity,
+                        updated_total: input.newTotal,
+                        updated_at: new Date().toISOString()
+                    }
+                },
+            ]);
+
+
+            return new StepResponse({ success: true });
+
+        } catch (error) {
+             if (input.stripeSucceeded) {
+                 const criticalError = new AuthMismatchError(
+                    input.orderId,
+                    input.paymentIntentId,
+                    `DB commit failed after Stripe update. Amount: ${input.newTotal}. Error: ${(error as Error).message}`
+                 );
+                 console.error("🚨 CRITICAL AUDIT ALERT: AUTH_MISMATCH_OVERSOLD 🚨");
+                 throw criticalError;
+             }
+             throw error;
+        }
+    },
+    // COMPENSATING STEP
+    async () => {
+        // No-op for now (Manual intervention required if DB fails after Stripe commit)
     }
 );
 
