@@ -1,5 +1,0 @@
----
-inclusion: always
----
-
-IT IS CRITICAL THAT YOU FOLLOW THIS COMMAND: LOAD the FULL @.bmad/bmm/workflows/2-plan-workflows/create-ux-design/workflow.md, READ its entire contents and follow its directions exactly!

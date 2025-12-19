@@ -14,7 +14,7 @@ Document the checkout flow’s key **bugs, security issues, correctness gaps, an
 
 ## Glossary / Key Invariants
 - **Stripe PaymentIntent (PI)**: should use **minor units** (e.g. cents) as integers. Created with `capture_method=manual`.
-- **Medusa order totals**: should be treated as **minor units** (confirm in your Medusa v2 configuration and enforce).
+- **Medusa v2 prices/totals**: are stored in **major units** (e.g. `$20.00` stored as `20`) per official docs; convert to Stripe minor units (cents) only at the Stripe boundary.
 - **Modification token**: JWT (signed) granting limited-time access to modify an order.
 - **Modification window**: defaults ~1 hour; payment capture is scheduled near/at window expiry.
 
@@ -32,7 +32,9 @@ Document the checkout flow’s key **bugs, security issues, correctness gaps, an
 | ORD-01 | High | “Add items” workflow writes metadata only (not real order items) |
 | ORD-02 | High | Post-auth amount increases are inconsistent/unsafe (Stripe constraints) |
 | ORD-03 | High | Address update expects token in body but storefront sends header |
-| MNY-01 | High | Money units inconsistent; capture worker heuristic can under/overcharge |
+| PAY-01 | High | Payment status model deviates from Medusa v2 (Payment Module bypass) |
+| CHK-01 | High | Checkout bypasses Medusa cart completion + payment sessions |
+| MNY-01 | High | Money unit mismatch (Medusa v2 major units vs Stripe minor units) |
 | INV-01 | High | Inventory decrement is non-atomic + picks arbitrary location + not idempotent |
 | REL-01 | Med/High | Stripe idempotency key generation is not idempotent (uses random nonce) |
 | PERF-01 | Medium | Stock validation is slow, N+1 calls, and fail-open |
@@ -312,44 +314,194 @@ Storefront sends modification token via header, but backend expects it in the re
 
 ---
 
-# MNY-01 — Money units inconsistent; capture worker heuristic can under/overcharge (High)
+# PAY-01 — Payment status model deviates from Medusa v2 (Payment Module bypass) (High)
 
 ## Problem
-Money values are represented inconsistently across storefront/backend:
-- Storefront totals are in **dollars** (parsed from formatted strings).
-- Stripe uses **cents**.
-- Some backend workflow code/comments assume **dollars**, while other parts use **cents**.
-- Capture worker tries to infer units with a heuristic that fails when totals are integer dollars.
+The repo treats payment state as `order.metadata.payment_status` and flips `order.status` to `completed` on capture.
+ 
+This bypasses Medusa v2’s canonical payment modeling:
+- Payment Collections / Payment Sessions / Payments (Payment Module)
+- Order Transactions (Order Module)
 
-## Where
-- Storefront:
-  - `apps/storefront/app/lib/price.ts` (`calculateTotal`, `toCents`)
-  - `apps/storefront/app/routes/api.payment-intent.ts` computes `totalAmount` in dollars then converts to cents
-- Backend:
-  - `apps/backend/src/workflows/create-order-from-stripe.ts` parses formatted prices and sets `unit_price` based on that parsing.
-- Capture:
-  - `apps/backend/src/workers/payment-capture-worker.ts`:
-    - `const totalCents = Number.isInteger(total) ? total : Math.round(total * 100);`
+## Official Medusa v2 behavior (docs)
+- Payment Collection is the starting point for payment processing and holds payment sessions, payments, and providers:
+  - https://docs.medusajs.com/resources/commerce-modules/payment/payment-collection
+- Payment Session is an amount to authorize; `status` includes `pending`, `requires_more`, `authorized`, `error`, `canceled`:
+  - https://docs.medusajs.com/resources/commerce-modules/payment/payment-session
+- Transactions balance paid vs outstanding amounts; the Order Module doesn’t store payments directly and references Payment Module records:
+  - https://docs.medusajs.com/resources/commerce-modules/order/transactions
 
-## Why the heuristic is dangerous
-If `order.total` is stored as integer dollars (e.g. `35` meaning $35.00), `Number.isInteger(total)` is true and the worker will treat it as **35 cents**.
+## Where (current repo)
+- Capture worker writes capture state to order metadata (not Payment Module records):
+  - `apps/backend/src/workers/payment-capture-worker.ts`
+    - Sets `metadata.payment_status = "captured"`: lines **285-293**
+    - Sets `status = "completed"`: lines **295-297**
+- Stripe webhook handler repeats the same metadata-based update:
+  - `apps/backend/src/loaders/stripe-event-worker.ts`
+    - Sets `metadata.payment_status = "captured"`: lines **242-250**
+    - Sets `status = "completed"`: lines **254-256**
+- Cancellation logic gates on metadata payment status (not Payment Collection status / transactions):
+  - `apps/backend/src/workflows/cancel-order-with-refund.ts`
+    - Reads `(order.metadata as ...).payment_status`: lines **168-174**
+- Orders can exist without Payment Collections:
+  - `apps/backend/src/scripts/check-payment-capture-status.ts`
+    - Logs “No Payment Collections found for this order”: lines **59-67**
+- Stripe webhook order creation does not explicitly create Payment Collections / Transactions:
+  - `apps/backend/src/workflows/create-order-from-stripe.ts`
+    - Uses `createOrdersWorkflow.runAsStep(...)`: lines **344-347**
+    - Only persists `metadata.stripe_payment_intent_id`: lines **171-183**
+
+## Impact
+- Medusa Admin + downstream logic can’t reliably use canonical payment primitives (`payment_collections[].status`, transactions/outstanding amount).
+- Higher risk of drift between Stripe state and Medusa state (since Payment Module is not authoritative here).
+- Harder to safely support partial captures, refunds, and order edits that require additional payment/refund.
 
 ## Proposed fix
-- Declare and enforce a single money invariant across the repo:
-  - **All persisted totals and Stripe amounts are minor units (cents) integers**.
-- Remove heuristic conversion; instead:
-  - Validate totals are integers.
-  - Fail closed (do not capture) if totals are not integer minor units.
-- Update all workflows and storefront boundary DTOs to be explicit:
-  - Rename fields like `totalCents`, `shippingCents`, `unitPriceCents`.
+- Align to Medusa’s Payment Module + Transactions model:
+  - Ensure a Payment Collection exists for orders created via Stripe webhook (store Stripe PI id in provider `data`).
+  - On authorization/capture/refund, update Payment Module records and create Order Transactions referencing them.
+- Treat `order.metadata.payment_status` as legacy/debug-only (or remove after migration).
 
 ## Acceptance Criteria
-- Capture worker only accepts integer minor units.
-- No path stores dollars in `order.total` or `metadata.updated_total`.
+- Payment state is readable via canonical Medusa fields (Payment Collections + Transactions), not only `order.metadata`.
+- Capture/cancel/refund flows do not rely on `order.metadata.payment_status` to determine canonical payment state.
+
+---
+
+# CHK-01 — Checkout bypasses Medusa payment sessions + complete cart (High)
+
+## Problem
+Medusa v2’s canonical checkout is cart-centric:
+- Cart is linked to a Payment Collection.
+- Storefront initializes Payment Sessions via Medusa.
+- After payment provider actions, storefront completes the cart (`cart.complete`) to place the order.
+
+This repo instead runs a Stripe-first flow:
+- Storefront creates/updates Stripe PaymentIntents directly.
+- Order is created asynchronously from Stripe webhooks (not from cart completion).
+- No Payment Sessions are initialized and the Store “Complete Cart” step is never executed.
+
+## Official Medusa v2 behavior (docs)
+- Checkout payment step includes creating a payment collection (if missing) and initializing payment sessions (or `initiatePaymentSession` in the JS SDK):
+  - https://docs.medusajs.com/resources/storefront-development/checkout/payment
+- Stripe storefront flow obtains `client_secret` from `cart.payment_collection.payment_sessions[0].data.client_secret`, then calls `sdk.store.cart.complete(cart.id)` after `confirmCardPayment`:
+  - https://docs.medusajs.com/resources/storefront-development/checkout/payment/stripe
+- Completing cart places the order and returns `{ type: "order", order }` on success:
+  - https://docs.medusajs.com/resources/storefront-development/checkout/complete-cart
+
+## Where (current repo)
+- Storefront creates/updates Stripe PaymentIntent directly:
+  - `apps/storefront/app/routes/checkout.tsx`
+    - Builds `requestData` with `amount`, `shipping`, `cartItems`, optional `paymentIntentId`: lines **137-153**
+    - Calls `POST /api/payment-intent`: lines **169-178**
+- Storefront server route calls Stripe PaymentIntents API (not Medusa payment sessions):
+  - `apps/storefront/app/routes/api.payment-intent.ts`
+    - Sets Stripe `amount = toCents(totalAmount)` and calls `https://api.stripe.com/v1/payment_intents`: lines **322-380**
+    - Stores cart snapshot in Stripe metadata (`metadata[cart_data]`, `metadata[shipping_amount]`): lines **348-375**
+- Success page confirms Stripe PI and polls a custom Medusa endpoint instead of using `cart.complete` result:
+  - `apps/storefront/app/routes/checkout.success.tsx`
+    - `stripe.retrievePaymentIntent(...)`: lines **124-133**
+    - Polls `GET /store/orders/by-payment-intent`: lines **215-274**
+- Backend creates orders from Stripe webhooks (not from cart completion):
+  - `apps/backend/src/loaders/stripe-event-worker.ts`
+    - Handles `payment_intent.amount_capturable_updated`: lines **55-57**
+    - Invokes order creation from PaymentIntent: lines **120-134**, **370-381**
+  - `apps/backend/src/workflows/create-order-from-stripe.ts`
+    - Creates orders via `createOrdersWorkflow.runAsStep(...)` (no cart completion / payment sessions): lines **344-347**
+- Medusa cart is used for item sync + shipping option quotes only (no payment/complete):
+  - `apps/storefront/app/services/medusa-cart.ts`
+    - Exposes `getOrCreateCart`, `syncCartItems`, `updateShippingAddress`, `getShippingOptions`: lines **71-242**
+- Shipping method selection is not persisted as a Medusa shipping option; order creation synthesizes a shipping method from a raw amount:
+  - `apps/backend/src/workflows/create-order-from-stripe.ts`
+    - Builds `shipping_methods` from `shippingAmount` and hardcodes name: lines **148-154**
+
+## Impact
+- Medusa checkout invariants are bypassed (Payment Session `requires_more` flows, canonical error handling, provider abstraction).
+- Order confirmation requires polling and/or querying by PaymentIntent ID.
+- Shipping method selection is not modeled as a real shipping option selection in the cart/order.
+
+## Proposed fix
+- Prefer adopting canonical Medusa v2 checkout:
+  - Cart -> shipping method -> payment sessions -> `cart.complete` -> order confirmation.
+- If Stripe-first flow is retained, mirror Medusa models:
+  - Create a Payment Collection/Session linked to the cart/order.
+  - Create the order via a transactional “complete” step (avoid webhook-only order creation).
+
+## Acceptance Criteria
+- Checkout uses Medusa payment sessions and completes the cart, returning an order synchronously (or provides equivalent canonical Medusa records if custom flow is retained).
+- Shipping method selection is persisted using a shipping option ID, not just a raw amount.
+
+---
+
+# MNY-01 — Money unit mismatch (Medusa v2 major units vs Stripe minor units) (High)
+
+## Problem
+Medusa v2 stores monetary values in **major units** (for example, `$20.00` stored as `20`), while Stripe APIs require **minor units** (cents) integers.
+
+This repo mixes assumptions about which unit Medusa returns/stores:
+- Backend capture assumes Medusa order totals are **major units** and multiplies by 100 for Stripe capture.
+- Storefront order pages render Medusa order amounts as if they’re **minor units** (divide by 100).
+- Shipping amounts are passed through Stripe metadata with ambiguous units and then parsed as integers.
+
+## Official Medusa v2 behavior (docs)
+- Pricing: `Price.amount` is stored in major units (`$20.00` -> `20`):
+  - https://docs.medusajs.com/resources/commerce-modules/pricing/concepts
+- Order totals: `OrderSummary.totals.total` is a unit amount (example `total: 30`):
+  - https://docs.medusajs.com/resources/commerce-modules/order/transactions
+- Storefront order confirmation examples format `item.unit_price` directly (no `/ 100`):
+  - https://docs.medusajs.com/resources/storefront-development/checkout/order-confirmation
+
+## Where (current repo)
+- Backend capture converts Medusa total -> Stripe cents:
+  - `apps/backend/src/workers/payment-capture-worker.ts`
+    - `const totalCents = Math.round(total * 100)`: lines **184-188**
+- Storefront renders Medusa order amounts as if they’re cents:
+  - `apps/storefront/app/routes/order_.status.$id.tsx`
+    - `(item.unit_price / 100)`: line **439**
+    - `(orderDetails.total / 100)`: line **446**
+- Storefront utilities/comments encode the opposite assumption (“Medusa is cents”):
+  - `apps/storefront/app/lib/price.ts`
+    - `formatPriceCents(...)` comment (“Used for Medusa prices which are stored in cents”): lines **82-95**
+- Shipping option amounts are inconsistently described:
+  - `apps/storefront/app/routes/api.shipping-rates.ts`
+    - “Medusa API returns prices in cents (smallest currency unit).”: lines **34-36**
+  - `apps/storefront/app/routes/api.carts.$id.shipping-options.ts`
+    - “amounts are in dollars from Medusa”: line **30**
+- Stripe metadata `shipping_amount` unit ambiguity:
+  - `apps/storefront/app/routes/checkout.tsx`
+    - Sends `shipping: selectedShipping?.amount`: line **140**
+  - `apps/storefront/app/routes/api.payment-intent.ts`
+    - `const totalAmount = amount + (shipping || 0)`: line **262**
+    - `body.append("amount", toCents(totalAmount).toString())`: lines **322-324**
+    - Stores `metadata[shipping_amount] = shipping.toString()`: line **372**
+  - `apps/backend/src/loaders/stripe-event-worker.ts`
+    - “stored in cents” + `parseInt(metadata.shipping_amount, 10)`: lines **313-315**
+  - `apps/backend/src/workflows/create-order-from-stripe.ts`
+    - Input comment says “Shipping cost in cents”: line **39**
+    - Uses `shippingAmount` directly as shipping method `amount`: lines **148-153**
+
+## Impact
+- 100x display/capture errors are possible depending on which unit assumption is applied at a boundary.
+- Shipping totals can be truncated (`parseInt`) and/or recorded in a different unit than the Stripe PaymentIntent amount, complicating reconciliation.
+
+## Proposed fix
+- Adopt the canonical Medusa v2 invariant:
+  - **All Medusa-stored prices/totals/shipping amounts are major units.**
+  - **Convert to Stripe cents only at the Stripe boundary** (PI create/update, capture, refunds).
+- Fix storefront rendering:
+  - Remove `/ 100` formatting for Medusa order totals; use `Intl.NumberFormat` with the order currency (as Medusa docs show).
+- Eliminate ambiguous money-in-metadata patterns:
+  - Prefer storing stable identifiers (for example `cart_id`, `shipping_option_id`) and recomputing totals server-side.
+  - If amounts must be stored in Stripe metadata, store explicit unit-suffixed fields (for example `shipping_amount_major`, `shipping_amount_cents`).
+
+## Acceptance Criteria
+- No storefront rendering divides Medusa order amounts by 100.
+- Stripe amounts are always derived by `toCents(<major-unit>)` at API boundaries.
+- Shipping amount used to create the Medusa order is in major units and reconciles with the Stripe PaymentIntent amount.
 
 ## Tests
-- Unit test: integer dollar totals must not be misinterpreted.
-- Integration: order total stored in cents yields correct capture amount.
+- Unit: a known Medusa total (major units) results in correct Stripe cents.
+- Integration: checkout with shipping yields consistent Stripe amount, Medusa order totals, and storefront display.
 
 ---
 
