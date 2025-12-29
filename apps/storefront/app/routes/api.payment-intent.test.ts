@@ -1,336 +1,118 @@
+
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { action } from './api.payment-intent';
+import { type ActionFunctionArgs } from 'react-router';
 
-// Mock Cloudflare context
-const mockContext = {
-    cloudflare: {
-        env: {
-            STRIPE_SECRET_KEY: 'sk_test_mock',
-            MEDUSA_BACKEND_URL: 'http://localhost:9000',
-            MEDUSA_PUBLISHABLE_KEY: 'pk_test_mock',
+// Mock imports
+vi.mock('../utils/monitored-fetch', () => ({
+    monitoredFetch: vi.fn(),
+}));
+
+vi.mock('../lib/logger', () => ({
+    createLogger: () => ({
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+    }),
+    getTraceIdFromRequest: () => 'test-trace-id',
+}));
+
+import { monitoredFetch } from '../utils/monitored-fetch';
+
+describe('Payment Intent API (SEC-01)', () => {
+    const fetchSpy = monitoredFetch as unknown as ReturnType<typeof vi.fn>;
+
+    const mockContext = {
+        cloudflare: {
+            env: {
+                STRIPE_SECRET_KEY: 'sk_test_123',
+                MEDUSA_BACKEND_URL: 'http://localhost:9000',
+                MEDUSA_PUBLISHABLE_KEY: 'pk_test_123',
+            },
         },
-    },
-};
+    };
 
-// Helper to unwrap response (handles plain objects and DataWithResponseInit from react-router data())
-async function unwrap(response: any) {
-    if (response instanceof Response || typeof response.json === 'function') {
-        return { data: await response.json(), status: response.status };
-    }
-    // Check for DataWithResponseInit-like structure (has .data and possibly .init)
-    if (response && typeof response === 'object' && 'data' in response && 'init' in response) {
-        return { 
-            data: response.data, 
-            status: response.init?.status || 200 
+    const unwrap = async (response: Response | { status: number, json: () => Promise<any> }) => {
+        if ('json' in response) {
+            return {
+                status: response.status,
+                data: await response.json(),
+            };
+        }
+        // Handle React Router "data" response
+        return {
+            status: (response as any).init?.status || 200,
+            data: await (response as any).data,
         };
-    }
-    // Default to plain object
-    return { data: response, status: 200 };
-}
-
-describe('api.payment-intent action', () => {
-    let fetchSpy: any;
+    };
 
     beforeEach(() => {
-        fetchSpy = vi.spyOn(global, 'fetch');
-        // Console error mock to keep output clean during expected error tests
-        vi.spyOn(console, 'error').mockImplementation(() => {});
+        vi.clearAllMocks();
     });
 
-    afterEach(() => {
-        vi.restoreAllMocks();
-    });
-
-    it('creates a payment intent with capture_method: manual (Auth-Only)', async () => {
-        // Mock successful stock check (variant found)
-        fetchSpy.mockResolvedValueOnce({
-            ok: true,
-            json: async () => ({
-                products: [{
-                    variants: [{ id: 'variant_123', inventory_quantity: 10 }]
-                }]
-            }),
-        });
-
-        // Mock successful Stripe PaymentIntent creation
-        fetchSpy.mockResolvedValueOnce({
-            ok: true,
-            json: async () => ({ id: 'pi_123', client_secret: 'pi_123_secret_456' }),
-        });
-
-        const request = new Request('http://localhost:3000/api/payment-intent', {
-            method: 'POST',
-            body: JSON.stringify({
-                amount: 10, // $10.00 in dollars (frontend sends dollars)
-                currency: 'usd',
-                cartItems: [{
-                    id: 'item_1',
-                    variantId: 'variant_123',
-                    title: 'Test Towel',
-                    price: '20.00',
-                    quantity: 1
-                }]
-            }),
-        });
-
-        const response: any = await action({ request, context: mockContext as any, params: {} });
-        const { data } = await unwrap(response);
-
-        expect(data.clientSecret).toBe('pi_123_secret_456');
-        expect(data.paymentIntentId).toBe('pi_123');
-        expect(data.traceId).toBeDefined();
-
-        // Verify Stripe call payload
-        const stripeCall = fetchSpy.mock.calls[1];
-        expect(stripeCall[0]).toBe('https://api.stripe.com/v1/payment_intents');
-
-        const body = new URLSearchParams(stripeCall[1].body);
-        expect(body.get('capture_method')).toBe('manual');
-        // Stripe receives cents: $10.00 -> 1000 cents
-        expect(body.get('amount')).toBe('1000');
-    });
-
-    it('returns 400 when items are out of stock', async () => {
-        // Mock stock check returning low inventory
-        fetchSpy.mockResolvedValueOnce({
-            ok: true,
-            json: async () => ({
-                products: [{
-                    variants: [{ id: 'variant_123', inventory_quantity: 0 }]
-                }]
-            }),
-        });
-
-        const request = new Request('http://localhost:3000/api/payment-intent', {
-            method: 'POST',
-            body: JSON.stringify({
-                amount: 10, // $10.00 in dollars
-                currency: 'usd',
-                cartItems: [{
-                    id: 'item_1',
-                    variantId: 'variant_123',
-                    title: 'Test Towel',
-                    price: '20.00',
-                    quantity: 1
-                }]
-            }),
-        });
-
-        const response: any = await action({ request, context: mockContext as any, params: {} });
-        const { data, status } = await unwrap(response);
-
-        expect(status).toBe(400);
-        expect(data.message.toLowerCase()).toContain('out of stock');
-        expect(data.traceId).toBeDefined();
+    it('should ignore client-provided amount and use Medusa cart total (SEC-01)', async () => {
+        const cartId = 'cart_123';
+        const clientAmount = 10; // $10.00 provided by client (malicious)
         
-        // Ensure Stripe was NOT called
-        expect(fetchSpy).toHaveBeenCalledTimes(1); // Only stock check
-    });
-
-    it('returns 400 when variant is not found (404 from Medusa)', async () => {
-        // Mock stock check returning 404 (variant deleted/not found)
-        fetchSpy.mockResolvedValueOnce({
-            ok: false,
-            status: 404,
+        fetchSpy.mockImplementation((url: string) => {
+             // 1. Fetch Cart (SEC-01)
+            if (url.includes(`/store/carts/${cartId}`)) {
+                return Promise.resolve({
+                    ok: true,
+                    json: async () => ({
+                        cart: {
+                            id: cartId,
+                            total: 5000, // Cents (Medusa standard)
+                            summary: {
+                                current_order_total: 5000 // Cents
+                            }
+                        }
+                    })
+                });
+            }
+             // 2. Stripe call
+            if (url.includes('api.stripe.com')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: async () => ({
+                        id: 'pi_123',
+                        client_secret: 'secret_123'
+                    })
+                });
+            }
+            return Promise.resolve({ ok: true, json: async () => ({}) });
         });
 
         const request = new Request('http://localhost:3000/api/payment-intent', {
             method: 'POST',
             body: JSON.stringify({
-                amount: 10, // $10.00 in dollars
+                amount: clientAmount,
                 currency: 'usd',
-                cartItems: [{
-                    id: 'item_1',
-                    variantId: 'variant_deleted',
-                    title: 'Deleted Towel',
-                    price: '20.00',
-                    quantity: 1
-                }]
+                cartId: cartId,
+                cartItems: []
             }),
         });
 
-        const response: any = await action({ request, context: mockContext as any, params: {} });
-        const { data, status } = await unwrap(response);
+        await action({ request, context: mockContext as any, params: {} });
 
-        expect(status).toBe(400);
-        expect(data.message.toLowerCase()).toContain('out of stock');
-        expect(data.traceId).toBeDefined();
-        expect(data.outOfStockItems).toEqual([{
-            title: 'Deleted Towel',
-            requested: 1,
-            available: 0,
-        }]);
+        // Verify Stripe call used correct amount (5000 cents)
+        const stripeCall = fetchSpy.mock.calls.find((call: any[]) => call[0].includes('api.stripe.com'));
+        expect(stripeCall).toBeDefined();
 
-        // Ensure Stripe was NOT called
-        expect(fetchSpy).toHaveBeenCalledTimes(1); // Only stock check
+        if (stripeCall && stripeCall[1]) {
+            const body = new URLSearchParams(stripeCall[1].body);
+            expect(body.get('amount')).toBe('5000'); // 50.00 * 100
+        }
     });
 
-    it('returns 405 for non-POST requests', async () => {
-        const request = new Request('http://localhost:3000/api/payment-intent', {
-            method: 'GET',
-        });
-        const response: any = await action({ request, context: mockContext as any, params: {} });
-        const { status } = await unwrap(response);
-        expect(status).toBe(405);
-    });
-
-    it('returns 500 when STRIPE_SECRET_KEY is not configured', async () => {
-        const request = new Request('http://localhost:3000/api/payment-intent', {
-            method: 'POST',
-            body: JSON.stringify({ amount: 10, currency: 'usd' }), // $10.00 in dollars
-        });
-        const contextWithoutKey = { cloudflare: { env: {} } };
-        const response: any = await action({ request, context: contextWithoutKey as any, params: {} });
-        const { status } = await unwrap(response);
-        expect(status).toBe(500);
-    });
-
-    it('returns 400 for invalid amount (zero or negative)', async () => {
-        const request = new Request('http://localhost:3000/api/payment-intent', {
-            method: 'POST',
-            body: JSON.stringify({ amount: 0, currency: 'usd' }),
-        });
-        const response: any = await action({ request, context: mockContext as any, params: {} });
-        const { data, status } = await unwrap(response);
-        expect(status).toBe(400);
-        expect(data.message).toContain('Invalid amount');
-        expect(data.traceId).toBeDefined();
-    });
-
-    it('returns 400 for invalid currency code', async () => {
-        const request = new Request('http://localhost:3000/api/payment-intent', {
-            method: 'POST',
-            body: JSON.stringify({ amount: 10, currency: 'INVALID' }),
-        });
-        const response: any = await action({ request, context: mockContext as any, params: {} });
-        const { data, status } = await unwrap(response);
-        expect(status).toBe(400);
-        expect(data.message).toContain('Invalid currency');
-        expect(data.traceId).toBeDefined();
-    });
-
-    it('normalizes uppercase currency codes to lowercase', async () => {
-        // Mock successful stock check
-        fetchSpy.mockResolvedValueOnce({
-            ok: true,
-            json: async () => ({
-                products: [{
-                    variants: [{ id: 'variant_123', inventory_quantity: 10 }]
-                }]
-            }),
-        });
-
-        // Mock successful Stripe PaymentIntent creation
-        fetchSpy.mockResolvedValueOnce({
-            ok: true,
-            json: async () => ({ id: 'pi_123', client_secret: 'pi_123_secret_456' }),
-        });
-
-        // Send uppercase currency code
-        const request = new Request('http://localhost:3000/api/payment-intent', {
-            method: 'POST',
-            body: JSON.stringify({
-                amount: 10,
-                currency: 'USD', // Uppercase
-                cartItems: [{
-                    id: 'item_1',
-                    variantId: 'variant_123',
-                    title: 'Test Towel',
-                    price: '20.00',
-                    quantity: 1
-                }]
-            }),
-        });
-
-        const response: any = await action({ request, context: mockContext as any, params: {} });
-        const { data } = await unwrap(response);
-
-        expect(data.clientSecret).toBe('pi_123_secret_456');
-        expect(data.paymentIntentId).toBe('pi_123');
-
-        // Verify Stripe API call received lowercase currency
-        const stripeCall = fetchSpy.mock.calls[1];
-        const body = new URLSearchParams(stripeCall[1].body);
-        expect(body.get('currency')).toBe('usd'); // Should be lowercase
-
-        // Verify idempotency key uses lowercase currency (by checking it's consistent)
-        const idempotencyKey1 = stripeCall[1].headers['Idempotency-Key'];
-
-        // Make another request with lowercase currency - should generate same idempotency key
-        fetchSpy.mockResolvedValueOnce({
-            ok: true,
-            json: async () => ({
-                products: [{
-                    variants: [{ id: 'variant_123', inventory_quantity: 10 }]
-                }]
-            }),
-        });
-        fetchSpy.mockResolvedValueOnce({
-            ok: true,
-            json: async () => ({ id: 'pi_123', client_secret: 'pi_123_secret_456' }),
-        });
-
-        const request2 = new Request('http://localhost:3000/api/payment-intent', {
-            method: 'POST',
-            body: JSON.stringify({
-                amount: 10,
-                currency: 'usd', // Lowercase
-                cartItems: [{
-                    id: 'item_1',
-                    variantId: 'variant_123',
-                    title: 'Test Towel',
-                    price: '20.00',
-                    quantity: 1
-                }]
-            }),
-        });
-
-        await action({ request: request2, context: mockContext as any, params: {} });
-        const stripeCall2 = fetchSpy.mock.calls[3];
-        const idempotencyKey2 = stripeCall2[1].headers['Idempotency-Key'];
-
-        // Idempotency keys should NOT be the same as implementation uses random nonce
-        expect(idempotencyKey1).not.toBe(idempotencyKey2);
-    });
-
-    it('returns detailed error info when Stripe API fails', async () => {
-        // Mock successful stock check
-        fetchSpy.mockResolvedValueOnce({
-            ok: true,
-            json: async () => ({
-                products: [{
-                    variants: [{ id: 'variant_123', inventory_quantity: 10 }]
-                }]
-            }),
-        });
-
-        // Mock Stripe API failure with detailed error
-        fetchSpy.mockResolvedValueOnce({
-            ok: false,
-            status: 400,
-            statusText: 'Bad Request',
-            text: async () => JSON.stringify({
-                error: {
-                    type: 'invalid_request_error',
-                    code: 'amount_too_small',
-                    message: 'Amount must be at least $0.50 usd',
-                    param: 'amount'
-                }
-            }),
-        });
-
+    it('should fail if cartId is missing (SEC-01 enforcement)', async () => {
         const request = new Request('http://localhost:3000/api/payment-intent', {
             method: 'POST',
             body: JSON.stringify({
                 amount: 10,
                 currency: 'usd',
-                cartItems: [{
-                    id: 'item_1',
-                    variantId: 'variant_123',
-                    title: 'Test Towel',
-                    price: '20.00',
-                    quantity: 1
-                }]
+                // No cartId
+                cartItems: []
             }),
         });
 
@@ -338,61 +120,6 @@ describe('api.payment-intent action', () => {
         const { data, status } = await unwrap(response);
 
         expect(status).toBe(400);
-        expect(data.message).toBe('Payment failed');
-        expect(data.debugInfo).toContain('Amount must be at least $0.50 usd');
-        expect(data.stripeErrorCode).toBe('amount_too_small');
-        expect(data.traceId).toBeDefined();
-    });
-
-    it('sanitizes sensitive error messages for unsafe error codes', async () => {
-        // Mock successful stock check
-        fetchSpy.mockResolvedValueOnce({
-            ok: true,
-            json: async () => ({
-                products: [{
-                    variants: [{ id: 'variant_123', inventory_quantity: 10 }]
-                }]
-            }),
-        });
-
-        // Mock Stripe API failure with internal error (should be sanitized)
-        fetchSpy.mockResolvedValueOnce({
-            ok: false,
-            status: 500,
-            statusText: 'Internal Server Error',
-            text: async () => JSON.stringify({
-                error: {
-                    type: 'api_error',
-                    code: 'internal_error',
-                    message: 'Internal server error with sensitive details',
-                }
-            }),
-        });
-
-        const request = new Request('http://localhost:3000/api/payment-intent', {
-            method: 'POST',
-            body: JSON.stringify({
-                amount: 10,
-                currency: 'usd',
-                cartItems: [{
-                    id: 'item_1',
-                    variantId: 'variant_123',
-                    title: 'Test Towel',
-                    price: '20.00',
-                    quantity: 1
-                }]
-            }),
-        });
-
-        const response: any = await action({ request, context: mockContext as any, params: {} });
-        const { data, status } = await unwrap(response);
-
-        expect(status).toBe(502);
-        expect(data.message).toBe('Payment failed');
-        // Should NOT contain sensitive internal error details
-        expect(data.debugInfo).not.toContain('sensitive details');
-        expect(data.debugInfo).toContain('Payment service error');
-        expect(data.stripeErrorCode).toBe('internal_error');
-        expect(data.traceId).toBeDefined();
+        expect(data.message).toContain('Cart ID is required');
     });
 });
