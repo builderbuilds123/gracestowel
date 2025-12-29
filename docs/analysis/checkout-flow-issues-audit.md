@@ -34,6 +34,10 @@ Document the checkout flow’s key **bugs, security issues, correctness gaps, an
 | ORD-03 | High | Address update expects token in body but storefront sends header |
 | PAY-01 | High | Payment status model deviates from Medusa v2 (Payment Module bypass) |
 | CHK-01 | High | Checkout bypasses Medusa cart completion + payment sessions |
+| SHP-01 | High | Shipping option selection not persisted (amount-only shipping method) |
+| TAX-01 | High | Taxes not modeled end-to-end (checkout + modifications) |
+| RET-01 | High | Returns/refunds not modeled (no Return + Order Transactions; refunds are manual) |
+| FUL-01 | Medium | Fulfillment creation/tracking is out-of-band; shipping confirmation depends on manual fulfillment |
 | MNY-01 | High | Money unit mismatch (Medusa v2 major units vs Stripe minor units) |
 | INV-01 | High | Inventory decrement is non-atomic + picks arbitrary location + not idempotent |
 | REL-01 | Med/High | Stripe idempotency key generation is not idempotent (uses random nonce) |
@@ -427,9 +431,196 @@ This repo instead runs a Stripe-first flow:
   - Create a Payment Collection/Session linked to the cart/order.
   - Create the order via a transactional “complete” step (avoid webhook-only order creation).
 
+ ## Acceptance Criteria
+ - Checkout uses Medusa payment sessions and completes the cart, returning an order synchronously (or provides equivalent canonical Medusa records if custom flow is retained).
+ - Shipping method selection is persisted using a shipping option ID, not just a raw amount.
+ 
+ ---
+
+ # SHP-01 — Shipping option selection is not persisted; order shipping method is synthesized from amount (High)
+
+ ## Problem
+ The storefront fetches Medusa shipping options but never persists the selected option as the cart’s shipping method (by `shipping_option_id`). Instead, it passes only a raw `shipping` amount into Stripe and stores it in PaymentIntent metadata. The backend then creates an order with a synthesized `shipping_methods` entry using the raw amount (hardcoded name, no shipping option/provider context).
+
+ This bypasses the Fulfillment Module’s shipping option invariants (service zones, rules, tiered pricing, provider-specific `data`). It is also entangled with `MNY-01`: `shipping_amount` is treated as a major-unit amount in the storefront but commented/parsed as cents in the backend, and decimals can be truncated.
+
+ ## Official Medusa v2 behavior (docs)
+ - Checkout shipping step: list shipping options then set the cart’s shipping method using the “Add Shipping Method to Cart” API route (with a shipping option ID):
+  - https://docs.medusajs.com/resources/storefront-development/checkout/shipping
+ - Shipping option rules/service zones and provider `data`:
+  - https://docs.medusajs.com/resources/commerce-modules/fulfillment/shipping-option
+
+## Where (current repo)
+- Storefront fetches options but never sets shipping method on cart:
+  - `apps/storefront/app/routes/checkout.tsx`
+    - Sends `shipping: selectedShipping?.amount` to PI API: line **140**
+    - Fetches `/api/carts/:id/shipping-options` and only updates local state (no “add shipping method” call): lines **367-399**
+- Cart update endpoint does not accept a shipping option / shipping method payload:
+  - `apps/storefront/app/routes/api.carts.$id.ts`
+    - `UpdateCartRequest` includes only `items` + `shipping_address` (no shipping method): lines **6-18**
+    - Action only syncs items/address: lines **63-76**
+- Medusa cart service only lists options:
+  - `apps/storefront/app/services/medusa-cart.ts`
+    - `getShippingOptions` uses `client.store.fulfillment.listCartOptions` and returns `calculated_price.calculated_amount`: lines **209-236**
+- Stripe metadata roundtrip:
+  - `apps/storefront/app/routes/api.payment-intent.ts`
+    - Stores `metadata[shipping_amount] = shipping.toString()`: line **372**
+  - `apps/backend/src/loaders/stripe-event-worker.ts`
+    - `parseInt(metadata.shipping_amount, 10)`: lines **313-315**
+- Backend order creation synthesizes shipping method from raw amount:
+  - `apps/backend/src/workflows/create-order-from-stripe.ts`
+    - Input comment says “Shipping cost in cents”: line **39**
+    - Builds `shipping_methods` with hardcoded name + `amount: shippingAmount`: lines **148-154**
+- Seed creates real shipping options (major-unit decimals + rules), but checkout/order creation bypasses them:
+  - `apps/backend/src/scripts/seed.ts`
+    - Shipping option prices `amount: 8.95` / `14.95` etc: lines **279-336**
+    - Shipping option rules set `is_return=false`: lines **303-314**
+
+## Impact
+- Shipping price rules (tiered/free shipping) are not enforced server-side.
+- Provider-specific shipping `data` cannot be captured/passed, blocking real carrier integrations.
+- Order shipping methods may not map to a service zone/provider, making fulfillment harder/impossible.
+
+## Proposed fix
+- Persist shipping option selection in Medusa:
+  - Add storefront call to Medusa “Add Shipping Method to Cart” using `shipping_option_id` (and `data` if needed).
+  - Store stable identifiers in Stripe metadata (`cart_id`, `shipping_option_id`) and recompute totals server-side.
+- If Stripe-first flow is retained:
+  - Validate `shipping_option_id` belongs to the cart’s region/service zone and derive shipping amount from Medusa calculated price (major units).
+
 ## Acceptance Criteria
-- Checkout uses Medusa payment sessions and completes the cart, returning an order synchronously (or provides equivalent canonical Medusa records if custom flow is retained).
-- Shipping method selection is persisted using a shipping option ID, not just a raw amount.
+- The selected shipping option is persisted as a real cart shipping method (by ID), not just an amount.
+- Orders created from Stripe webhook include a shipping method traceable to a shipping option/provider.
+- No integer parsing of decimal monetary amounts without explicit unit guarantees.
+
+---
+
+# TAX-01 — Taxes not modeled end-to-end (checkout + modifications) (High)
+
+## Problem
+Tax calculation is not authoritative or consistent across checkout and order modifications.
+
+The system seeds tax regions (`tp_system`), but the checkout flow bypasses Medusa cart totals and does not include tax in the Stripe PaymentIntent amount. Modification workflows recalculate totals ad hoc (variant `calculated_price` or `unit_price * quantity`) without recomputing order-level tax/discount/shipping totals.
+
+## Official Medusa v2 behavior (docs)
+- Medusa uses a Tax Module Provider whenever it calculates tax lines for a cart or order. The system provider (`tp_system`) is a placeholder/basic provider:
+  - https://docs.medusajs.com/resources/commerce-modules/tax/tax-provider
+
+## Where (current repo)
+- Tax regions are seeded but checkout does not rely on cart tax lines:
+  - `apps/backend/src/scripts/seed.ts`
+    - Creates tax regions with `provider_id: "tp_system"`: lines **146-152**
+- Checkout PI amount is computed as `cartTotal + shipping` (no tax):
+  - `apps/storefront/app/routes/checkout.tsx`
+    - `amount: cartTotal` and `shipping: selectedShipping?.amount`: lines **137-141**
+  - `apps/storefront/app/routes/api.payment-intent.ts`
+    - `const totalAmount = amount + (shipping || 0)`: line **262**
+    - `body.append("amount", toCents(totalAmount).toString())`: lines **322-324**
+- Add-item workflow reads variant tax fields but does not reprice the whole order:
+  - `apps/backend/src/workflows/add-item-to-order.ts`
+    - Fetches `calculated_price.calculated_amount_with_tax` and `calculated_price.tax_total`: lines **468-478**
+    - Uses `unitPrice = calculated_amount_with_tax || calculated_amount` and `taxAmount = tax_total || 0`: lines **494-510**
+- Update-quantity workflow explicitly skips tax/discount recomputation and uses manual cents arithmetic:
+  - `apps/backend/src/workflows/update-line-item-quantity.ts`
+    - “assumes no complex tax/discount recalculation”: lines **289-292**
+    - Converts `unit_price` dollars -> cents and applies delta to Stripe PI amount: lines **293-318**
+
+## Impact
+- Taxes can be omitted from Stripe authorization/capture.
+- Tax-inclusive vs tax-exclusive behavior cannot be supported reliably.
+- Modifications can drift PI amount away from what Medusa would calculate (compliance/reconciliation risk).
+
+## Proposed fix
+- Make Medusa cart/order totals authoritative for payment amounts (including `tax_total` and `shipping_total`).
+- Recompute totals via Medusa for any modification that changes taxable base (items, address, shipping option).
+- Record captures/refunds as Order Transactions (ties into `PAY-01`/`RET-01`).
+
+## Acceptance Criteria
+- Stripe PI amounts always match server-side totals including taxes.
+- Modifications reprice/re-tax via Medusa, not ad hoc arithmetic.
+
+---
+
+# RET-01 — Returns/refunds not modeled (no Return + Order Transactions; refunds are manual) (High)
+
+## Problem
+The repo implements a narrow “cancel before capture” flow (void Stripe PaymentIntent). Once captured, the system blocks cancellation and instructs the customer to contact support.
+
+There is no modeled Return flow and no automated refund issuance/recording using Medusa’s canonical Order Transactions primitives. Stripe webhook processing also ignores refund-related events.
+
+## Official Medusa v2 behavior (docs)
+- Returns are represented by Return/ReturnItem. Return shipping methods are created only from shipping options with `is_return` enabled. Refunds for returns are represented by Order Transactions:
+  - https://docs.medusajs.com/resources/commerce-modules/order/return
+- Transactions represent captures/refunds and determine outstanding amount:
+  - https://docs.medusajs.com/resources/commerce-modules/order/transactions
+
+## Where (current repo)
+- Cancellation flow is void-only; captured/partial-capture cases require manual refund:
+  - `apps/backend/src/workflows/cancel-order-with-refund.ts`
+    - Late cancel message: “Please contact support for refund.”: lines **17-21**
+    - Partial capture: “Manual refund required.”: lines **25-30**, **176-180**
+    - `PaymentCancellationResult` includes `"refunded"` but workflow only voids PI: lines **73-80**, **215-248**
+- Stripe webhook worker does not handle refund-related events:
+  - `apps/backend/src/loaders/stripe-event-worker.ts`
+    - Handles only `payment_intent.*` and `checkout.session.completed`: lines **50-69**
+- No return shipping options are seeded (required for Return shipping methods):
+  - `apps/backend/src/scripts/seed.ts`
+    - Shipping option rules set `is_return=false`: lines **303-314**
+
+## Impact
+- No customer self-serve returns (RMA) flow; returns/refunds become manual support processes.
+- No canonical accounting of refunds/outstanding amount (Order Transactions), making reconciliation and reporting difficult.
+- Exchange/claim flows (which use returns + transactions) cannot be safely added later without major refactor.
+
+## Proposed fix
+- Implement returns using Medusa Order Module primitives (Return/ReturnItem/Return shipping methods).
+- Create return shipping options (`is_return=true`) where needed.
+- Implement refunds via Payment Module + Order Transactions; reconcile Stripe refund events to Medusa transactions.
+
+## Acceptance Criteria
+- A Return can be requested and marked received, updating inventory and order version as Medusa expects.
+- Refunds are issued and recorded as Order Transactions tied to Payment Module references.
+- Stripe refund-related events are processed and reconciled idempotently.
+
+---
+
+# FUL-01 — Fulfillment creation/tracking is out-of-band; shipping confirmation depends on manual fulfillment (Medium)
+
+## Problem
+The backend sends shipping confirmation emails only when a `fulfillment.created` event is emitted, but the repo does not automate fulfillment creation in the checkout/payment flow.
+
+Since orders are created with synthesized shipping methods (amount/name only), fulfillments may lack the shipping option/provider context and provider-specific `data` needed for carrier integrations and tracking.
+
+## Official Medusa v2 behavior (docs)
+- When setting the cart’s shipping method, you can pass provider-relevant `data` that is stored and used later during fulfillment processing:
+  - https://docs.medusajs.com/resources/storefront-development/checkout/shipping
+  - https://docs.medusajs.com/resources/commerce-modules/fulfillment/shipping-option
+
+## Where (current repo)
+- Fulfillment email flow exists:
+  - `apps/backend/src/subscribers/fulfillment-created.ts`
+    - Listens for `fulfillment.created` and triggers workflow: lines **7-18**, **25-27**
+  - `apps/backend/src/workflows/send-shipping-confirmation.ts`
+    - Queries fulfillment + order shipping address and sends notification: lines **16-33**, **35-66**
+- Order creation does not create fulfillments and does not attach shipping option/provider data:
+  - `apps/backend/src/workflows/create-order-from-stripe.ts`
+    - Creates order + inventory updates + emits `order.placed` only: lines **338-397**
+    - Shipping methods synthesized from amount (no shipping option/provider data): lines **148-154**
+
+## Impact
+- Fulfillment creation/tracking must be manual (Admin/outside system), otherwise customers never get shipping confirmations.
+- Hard to integrate with real fulfillment providers requiring data/service zone/shipping option context.
+- Increased operational burden and higher likelihood of missing shipment notifications.
+
+## Proposed fix
+- Ensure order shipping methods are derived from shipping options (persisted on cart).
+- Define and document the system-of-record for fulfillment creation:
+  - Make fulfillment admin-only/manual with monitoring for missing fulfillments, or
+  - Implement an owned workflow that creates fulfillments on order placement/capture.
+
+## Acceptance Criteria
+- Every shipped order triggers `fulfillment.created` and therefore a shipping confirmation email (or an alternative explicit notification flow).
+- Fulfillments have enough context (shipping option/provider `data`) for downstream processing/tracking.
 
 ---
 
