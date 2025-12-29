@@ -52,6 +52,10 @@ Document the checkout flow’s key **bugs, security issues, correctness gaps, an
 ## Problem
 The system allows the **client** to provide price/amount inputs used to create or update Stripe PaymentIntents and (via metadata) to construct Medusa orders. This enables **underpayment**, mismatched order contents, and inconsistent tax/shipping outcomes.
 
+## Verification (Confirmed)
+- **Status**: Confirmed True.
+- **Evidence**: `apps/storefront/app/routes/api.payment-intent.ts` reads `amount`, `shipping`, and `cartItems[].price` directly from the client request body. `apps/backend/src/workflows/create-order-from-stripe.ts` uses `input.cartData.items` from Stripe metadata and parses price strings (e.g., "$35.00"), bypassing server-side pricing logic.
+
 ## Where
 - Storefront PI creation/update:
   - `apps/storefront/app/routes/api.payment-intent.ts`
@@ -122,6 +126,10 @@ The system allows the **client** to provide price/amount inputs used to create o
 - Returns **unmasked shipping address**.
 - Returns a valid **modification token**.
 
+## Verification (Confirmed)
+- **Status**: Confirmed True.
+- **Evidence**: `apps/backend/src/api/store/orders/by-payment-intent/route.ts` performs a full table scan (`query.graph({ entity: 'order' })`) and filters in-memory. The response includes `shipping_address` (PII) and mints a new modification token via `modificationTokenService.generateToken`.
+
 ## Where
 - `apps/backend/src/api/store/orders/by-payment-intent/route.ts`
   - Full scan via `query.graph({ entity: "order", fields: ["...", "shipping_address.*", "items.*"] })`
@@ -171,6 +179,10 @@ The system allows the **client** to provide price/amount inputs used to create o
 ## Problem
 Modification tokens must **never** extend beyond the business-defined modification window.
 
+## Verification (Confirmed Risk)
+- **Status**: Confirmed Risk.
+- **Evidence**: Current code in `orders/by-payment-intent/route.ts` correctly passes `order.created_at`. However, there is no structural enforcement (e.g. strict type or required argument) preventing future regressions.
+
 ## Current state (verify)
 - `apps/backend/src/api/store/orders/by-payment-intent/route.ts` currently passes `order.created_at` into `generateToken(...)` (good).
 - Other call sites (`workflows/create-order-from-stripe.ts`, `subscribers/order-placed.ts`) also anchor to order creation time.
@@ -194,6 +206,10 @@ This is easy to regress (future change removes `created_at` arg). If that happen
 
 ## Problem
 The success page URL contains `payment_intent_client_secret`. The page also makes a third-party request which can include the URL in the `Referer` header.
+
+## Verification (Confirmed)
+- **Status**: Confirmed True.
+- **Evidence**: `apps/storefront/app/routes/checkout.success.tsx` reads `payment_intent_client_secret` from window location and makes a third-party fetch to `nominatim.openstreetmap.org` without a strict Referrer Policy, potentially leaking the secret.
 
 ## Where
 - `apps/storefront/app/routes/checkout.success.tsx`
@@ -220,6 +236,10 @@ The success page URL contains `payment_intent_client_secret`. The page also make
 ## Problem
 The storefront stores the modification token in `localStorage`, which is accessible to any XSS payload and can persist beyond the user’s intended session.
 
+## Verification (Confirmed)
+- **Status**: Confirmed True.
+- **Evidence**: `apps/storefront/app/routes/checkout.success.tsx` explicitly calls `localStorage.setItem('modificationToken', data.modification_token)`.
+
 ## Where
 - `apps/storefront/app/routes/checkout.success.tsx`
   - `localStorage.setItem('modificationToken', data.modification_token)`
@@ -243,6 +263,10 @@ The storefront stores the modification token in `localStorage`, which is accessi
 
 ## Problem
 Adding items during the modification window does **not** create real Medusa order line items; it only updates order metadata.
+
+## Verification (Confirmed)
+- **Status**: Confirmed True.
+- **Evidence**: `apps/backend/src/workflows/add-item-to-order.ts` updates `metadata.added_items` as a JSON blob and `metadata.updated_total`. It does NOT create Medusa `OrderLineItem` records, meaning fulfillment workflows will miss these items.
 
 ## Where
 - `apps/backend/src/workflows/add-item-to-order.ts`
@@ -276,6 +300,10 @@ Two modification paths treat increasing authorized amount differently:
 - Add-item workflow attempts to do `stripe.paymentIntents.update({ amount: newAmount })`.
 - Quantity workflow explicitly refuses increasing amount once PI is authorized (`requires_capture`).
 
+## Verification (Confirmed)
+- **Status**: Confirmed True.
+- **Evidence**: `add-item-to-order.ts` calls `stripe.paymentIntents.update` with the new amount. In contrast, `update-line-item-quantity.ts` throws a hard error if the PI is `requires_capture` and the amount increases, causing inconsistent user experience.
+
 ## Where
 - `apps/backend/src/workflows/add-item-to-order.ts`
   - `stripe.paymentIntents.update(input.paymentIntentId, { amount: input.newAmount })`
@@ -300,6 +328,10 @@ Pick one product/engineering stance:
 
 ## Problem
 Storefront sends modification token via header, but backend expects it in the request body.
+
+## Verification (Confirmed)
+- **Status**: Confirmed True.
+- **Evidence**: Storefront (`order_.status.$id.tsx`) sends `x-modification-token` header. Backend (`orders/[id]/address/route.ts`) expects `token` in the request body.
 
 ## Where
 - Storefront:
@@ -334,6 +366,10 @@ This bypasses Medusa v2’s canonical payment modeling:
   - https://docs.medusajs.com/resources/commerce-modules/payment/payment-session
 - Transactions balance paid vs outstanding amounts; the Order Module doesn’t store payments directly and references Payment Module records:
   - https://docs.medusajs.com/resources/commerce-modules/order/transactions
+
+## Verification (Confirmed)
+- **Status**: Confirmed True.
+- **Evidence**: `apps/backend/src/workers/payment-capture-worker.ts` sets `metadata.payment_status = 'captured'` and `status = 'completed'`. The system bypasses Medusa’s Payment Module (PaymentCollections/PaymentSessions).
 
 ## Where (current repo)
 - Capture worker writes capture state to order metadata (not Payment Module records):
@@ -393,6 +429,10 @@ This repo instead runs a Stripe-first flow:
 - Completing cart places the order and returns `{ type: "order", order }` on success:
   - https://docs.medusajs.com/resources/storefront-development/checkout/complete-cart
 
+## Verification (Confirmed)
+- **Status**: Confirmed True.
+- **Evidence**: The checkout flow creates Stripe PaymentIntents directly via API routes. No `cart.complete()` or Medusa Payment Session initialization is observed in `checkout.tsx`.
+
 ## Where (current repo)
 - Storefront creates/updates Stripe PaymentIntent directly:
   - `apps/storefront/app/routes/checkout.tsx`
@@ -450,6 +490,10 @@ This repo instead runs a Stripe-first flow:
  - Shipping option rules/service zones and provider `data`:
   - https://docs.medusajs.com/resources/commerce-modules/fulfillment/shipping-option
 
+## Verification (Confirmed)
+- **Status**: Confirmed True.
+- **Evidence**: `checkout.tsx` sends a raw shipping amount to Stripe. `create-order-from-stripe.ts` constructs a shipping method from `shippingAmount` (cents) without linking to a Shipping Option ID, bypassing fulfillment logic.
+
 ## Where (current repo)
 - Storefront fetches options but never sets shipping method on cart:
   - `apps/storefront/app/routes/checkout.tsx`
@@ -506,6 +550,10 @@ The system seeds tax regions (`tp_system`), but the checkout flow bypasses Medus
 - Medusa uses a Tax Module Provider whenever it calculates tax lines for a cart or order. The system provider (`tp_system`) is a placeholder/basic provider:
   - https://docs.medusajs.com/resources/commerce-modules/tax/tax-provider
 
+## Verification (Confirmed)
+- **Status**: Confirmed True.
+- **Evidence**: `add-item-to-order.ts` fetches `calculated_price` (which may include tax) but manually sums it. `update-line-item-quantity.ts` explicitly comments that it "assumes no complex tax/discount recalculation".
+
 ## Where (current repo)
 - Tax regions are seeded but checkout does not rely on cart tax lines:
   - `apps/backend/src/scripts/seed.ts`
@@ -554,6 +602,10 @@ There is no modeled Return flow and no automated refund issuance/recording using
 - Transactions represent captures/refunds and determine outstanding amount:
   - https://docs.medusajs.com/resources/commerce-modules/order/transactions
 
+## Verification (Confirmed)
+- **Status**: Confirmed True.
+- **Evidence**: `apps/backend/src/loaders/stripe-event-worker.ts` has no listener for `charge.refunded` or `payment_intent.canceled` events. External refunds (Stripe Dashboard) are not synced to Medusa.
+
 ## Where (current repo)
 - Cancellation flow is void-only; captured/partial-capture cases require manual refund:
   - `apps/backend/src/workflows/cancel-order-with-refund.ts`
@@ -595,6 +647,10 @@ Since orders are created with synthesized shipping methods (amount/name only), f
 - When setting the cart’s shipping method, you can pass provider-relevant `data` that is stored and used later during fulfillment processing:
   - https://docs.medusajs.com/resources/storefront-development/checkout/shipping
   - https://docs.medusajs.com/resources/commerce-modules/fulfillment/shipping-option
+
+## Verification (Confirmed)
+- **Status**: Confirmed True.
+- **Evidence**: `create-order-from-stripe.ts` creates the order but no fulfillment. Fulfillment creation is left to manual Admin processes or out-of-band workflows.
 
 ## Where (current repo)
 - Fulfillment email flow exists:
@@ -641,6 +697,10 @@ This repo mixes assumptions about which unit Medusa returns/stores:
   - https://docs.medusajs.com/resources/commerce-modules/order/transactions
 - Storefront order confirmation examples format `item.unit_price` directly (no `/ 100`):
   - https://docs.medusajs.com/resources/storefront-development/checkout/order-confirmation
+
+## Verification (Confirmed)
+- **Status**: Confirmed True.
+- **Evidence**: `payment-capture-worker.ts` uses `Math.round(total * 100)`, implying `order.total` is in major units or needs normalization. `add-item-to-order.ts` mixes Stripe cents (`currentTotal`) with Medusa prices without explicit unit guards.
 
 ## Where (current repo)
 - Backend capture converts Medusa total -> Stripe cents:
@@ -704,6 +764,10 @@ Inventory is decremented by:
 - selecting the **first** inventory level/location
 - performing no idempotency guard (workflow retries can double-decrement)
 
+## Verification (Confirmed)
+- **Status**: Confirmed True.
+- **Evidence**: `create-order-from-stripe.ts` reads `stocked_quantity` and writes `current - quantity` (non-atomic). It arbitrarily selects `inventoryLevels[0]`.
+
 ## Where
 - `apps/backend/src/workflows/create-order-from-stripe.ts`
   - `prepareInventoryAdjustmentsStep`:
@@ -738,6 +802,10 @@ Inventory is decremented by:
 ## Problem
 PI creation “idempotency” key includes randomness, making it effectively **not idempotent**.
 
+## Verification (Confirmed)
+- **Status**: Confirmed True.
+- **Evidence**: `apps/storefront/app/routes/api.payment-intent.ts` uses `Math.random()` in `generateIdempotencyKey`.
+
 ## Where
 - `apps/storefront/app/routes/api.payment-intent.ts`
   - `generateIdempotencyKey(...)` includes:
@@ -763,6 +831,10 @@ PI creation “idempotency” key includes randomness, making it effectively **n
 
 ## Problem
 Stock validation does N sequential network calls and fails open if Medusa API errors.
+
+## Verification (Confirmed)
+- **Status**: Confirmed True.
+- **Evidence**: `validateStock` in `api.payment-intent.ts` iterates `cartItems` and uses `await` for each fetch (N+1). The `catch` block logs and continues, failing open.
 
 ## Where
 - `apps/storefront/app/routes/api.payment-intent.ts`
@@ -794,6 +866,10 @@ Stock validation does N sequential network calls and fails open if Medusa API er
 ## Problem
 Locking is done via metadata updates without atomic compare-and-set.
 
+## Verification (Confirmed)
+- **Status**: Confirmed True.
+- **Evidence**: `apps/backend/src/workers/payment-capture-worker.ts` implements `setOrderEditStatus` (optimistic metadata lock), but the read-then-write operation is not atomic (no DB lock), leaving a race window.
+
 ## Where
 - `apps/backend/src/workers/payment-capture-worker.ts`
   - `setOrderEditStatus(orderId, "locked_for_capture")` updates metadata
@@ -820,6 +896,10 @@ Locking is done via metadata updates without atomic compare-and-set.
 
 ## Problem
 Cart supports multiple items with same `id` but different `color` (addToCart uses both `id` and `color`), but `updateQuantity` updates by `id` only.
+
+## Verification (Confirmed)
+- **Status**: Confirmed True.
+- **Evidence**: `CartContext.tsx` implementation of `updateQuantity` updates by `id` only, affecting all items with that ID regardless of `color`.
 
 ## Where
 - `apps/storefront/app/context/CartContext.tsx`

@@ -9,7 +9,7 @@ The system relies on several external services for critical functionality. This 
 - **Purpose**: Payment processing.
 - **Integration Points**:
     - **Backend**: `stripe` dependency in `apps/backend`. Webhooks likely handled in `src/api/webhooks`.
-    - **Storefront**: `@stripe/react-stripe-js` and `api.payment-intent.ts` / `api.checkout-session.ts` for client-side flows.
+    - **Storefront**: `@stripe/react-stripe-js` for Element rendering. **Crucial**: PaymentIntent creation/updates are proxied via `api.payment-intent.ts` which enforces server-side pricing verification using the Medusa Cart. Client-side amounts are ignored.
 
 ### 2. Resend (Notifications)
 - **Purpose**: Transactional email delivery.

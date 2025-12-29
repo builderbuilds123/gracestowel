@@ -29,10 +29,9 @@ The application uses file-system based routing:
 The storefront includes server-side resource routes (loaders/actions) that act as a Backend-for-Frontend (BFF) to securely interact with third-party services or abstract complex backend calls:
 - `api.checkout-session.ts`: Manages Stripe checkout sessions.
 - `api.payment-intent.ts`: Manages Stripe PaymentIntent lifecycle (create OR update).
-  - Accepts optional `paymentIntentId` for updates (reuse existing intent)
-  - Returns both `clientSecret` and `paymentIntentId`
-  - Uses deterministic idempotency keys for creates (based on cart hash)
-  - **Updated 2025-12-12**: Implements Stripe best practice "create once, update on changes"
+  - **Security**: Ignores client-provided `amount`. Fetches canonical `medusa_cart_id` to calculate totals server-side.
+  - **Pattern**: "Create once, update on changes" with server-side attributes.
+  - **Idempotency**: Generates keys based on `hash(cartId + cart.total)` to prevent duplicates.
 - `api.shipping-rates.ts`: Fetches shipping options.
 - `api.health.ts`: Health check endpoint.
 

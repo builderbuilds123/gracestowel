@@ -31,20 +31,39 @@ The backend exposes API endpoints in `src/api`:
 - No custom models found in `src/models` (likely using module-specific models inside `src/modules`).
 
 ## Payment Processing Architecture
-We implement a **Delayed Capture** pattern for payments to allow for a 1-hour customer "grace period" for order edits.
+(Updated Post-Audit 2025-12-22)
+
+We implement a **Delayed Capture** pattern with a strict adherence to Medusa's Payment Module to ensure data integrity and reconciliation.
 
 - **Provider**: Stripe (via `@medusajs/payment-stripe`).
-- **Authorization**: All payments are authorized (`capture_method: manual`) at checkout.
-- **Grace Period Management**:
-  - Redis keys (`capture_intent:{order_id}`) set with 1-hour TTL on purchase.
-  - Redis Keyspace Notifications (`notify-keyspace-events Ex`) trigger the capture workflow.
-- **Capture Trigger**:
-  - **Primary**: Redis expiration event listener triggers the capture of the standard Medusa order.
-  - **Fallback**: Cron job runs periodically to capture any orders authorized > 65 minutes ago.
-- **Order Edits**: Modifications during the grace period update the order total. If the total increases, we trigger `increment_authorization` on Stripe.
+- **Data Model**:
+  - **Payment Collection**: Created during checkout initialization. Tracks the total amount and links to Payment Sessions.
+  - **Payment Session**: Represents the intent with Stripe. Linked to the Stripe PaymentIntent ID.
+  - **Payment**: Created upon successful authorization. Status tracked as `authorized` -> `captured`.
+  - **Transaction**: Recorded for every financial movement (auth, capture, refund).
 
-### Webhook Idempotency (Updated 2025-12-12)
-- **Order Creation**: Webhook handler checks for existing order with same `stripe_payment_intent_id` before creating
-- **Duplicate Prevention**: If order already exists, handler returns early without error
-- **Structured Logging**: All webhook operations logged with trace IDs for debugging
-- **Error Recovery**: Errors are re-thrown to trigger Stripe webhook retry mechanism
+### Checkout Flow (Canonical)
+1. **Initialization**: Storefront calls `cart.createPaymentSessions()`. Backend creates Stripe PaymentIntent via Medusa logic.
+2. **Pricing**: **Server-Side Only**. The PaymentIntent amount is derived strictly from `cart.total` (including tax/shipping). Client-provided prices are ignored.
+3. **Completion**: Storefront calls `cart.complete()` after Stripe confirmation. Backend validates the payment status and creates the Order.
+
+### Grace Period & Capture
+- **Mechanism**: Redis keys (`capture_intent:{order_id}`) with 1-hour TTL.
+- **Trigger**: Redis Keyspace Notification (`Ex`) triggers the `payment-capture-worker`.
+- **Capture Logic**: Worker retrieves the **Order**, verifies the **Payment** status, and calls `paymentModuleService.capturePayment()`. It does *not* rely on metadata for status.
+
+## Order Management & Modifications
+
+### Order Edits
+- **Mechanism**: Standard Medusa Order Edits (or `orderService.update` with line items).
+- **Metadata usage**: Strictly for UI hints or non-functional data. **Never** for line items or prices.
+- **Inventory**: Atomic reservations using `inventoryService` during any addition/removal of items.
+
+### Pricing & Taxes
+- **Source of Truth**: Medusa Tax Module.
+- **Updates**: Any modification (add item, quantity) triggers a tax re-calculation sequence to ensure `order.tax_total` is correct.
+
+## Security & Data Integrity
+- **Pricing**: All prices derived from server-side `PriceList` or `ProductVariant`.
+- **PII**: Read-only endpoints (e.g., `orders/by-payment-intent`) are distinct and return strict subsets of data (no PII).
+- **Idempotency**: Webhook handlers and critical mutation endpoints use deterministic keys (e.g., `hash(cartId + amount)`) to prevent duplication.
