@@ -85,7 +85,7 @@ Storefront → Stripe API → Stripe Webhook → create-order-from-stripe.ts
 ### Phase 2: Capture Refactor
 - [x] 2.1 Research `paymentModuleService` APIs and PaymentCollectionStatus enum
 - [x] 2.2 Refactor `payment-capture-worker.ts` to update PaymentCollection status
-- [ ] 2.3 Ensure OrderTransaction is created for capture (deferred - requires further research)
+- [x] 2.3 Create OrderTransaction on capture via `orderModuleService.addOrderTransactions()`
 - [x] 2.4 Keep `metadata.payment_status` for backward compatibility (not deprecated)
 
 ### Phase 3: Downstream Alignment

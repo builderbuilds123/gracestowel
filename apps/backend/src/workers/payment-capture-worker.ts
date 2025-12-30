@@ -266,7 +266,7 @@ export async function setOrderEditStatus(
  * 
  * PAY-01: Also updates PaymentCollection status to "captured"
  * AC3: Payment capture uses Payment Module APIs
- * AC4: Creates canonical payment status (keeps metadata for backward compatibility)
+ * AC4: Creates OrderTransaction for capture (for downstream RET-01 compatibility)
  * 
  * @param orderId - The Medusa order ID
  * @param amountCaptured - Amount captured in cents
@@ -277,6 +277,8 @@ export async function updateOrderAfterCapture(orderId: string, amountCaptured: n
         return;
     }
 
+    let currencyCode = "usd"; // Default fallback
+
     try {
         const currentMetadata = await getOrderMetadata(orderId);
         const currentStatus = await getOrderStatus(orderId);
@@ -284,6 +286,21 @@ export async function updateOrderAfterCapture(orderId: string, amountCaptured: n
         if (currentStatus === "canceled") {
             console.warn(`[PaymentCapture] Order ${orderId}: Order is canceled in Medusa, not updating status after capture`);
             return;
+        }
+
+        // Get currency code for OrderTransaction
+        try {
+            const query = containerRef.resolve("query");
+            const { data: orders } = await query.graph({
+                entity: "order",
+                fields: ["id", "currency_code"],
+                filters: { id: orderId },
+            });
+            if (orders?.[0]?.currency_code) {
+                currencyCode = orders[0].currency_code;
+            }
+        } catch {
+            // Fall back to USD if we can't get currency
         }
 
         const orderService = containerRef.resolve("order");
@@ -306,8 +323,11 @@ export async function updateOrderAfterCapture(orderId: string, amountCaptured: n
         await orderService.updateOrders([update]);
         console.log(`[PaymentCapture] Order ${orderId}: Updated metadata with capture info`);
 
-        // PAY-01: Update PaymentCollection status
-        await updatePaymentCollectionOnCapture(orderId, amountCaptured);
+        // PAY-01: Update PaymentCollection status and get ID for OrderTransaction
+        const paymentCollectionId = await updatePaymentCollectionOnCapture(orderId, amountCaptured);
+
+        // PAY-01 AC4: Create OrderTransaction for capture
+        await createOrderTransactionOnCapture(orderId, amountCaptured, currencyCode, paymentCollectionId);
 
     } catch (error) {
         console.error(`[PaymentCapture] Error updating order ${orderId} after capture:`, error);
@@ -324,10 +344,11 @@ export async function updateOrderAfterCapture(orderId: string, amountCaptured: n
  * 
  * @param orderId - The Medusa order ID
  * @param amountCaptured - Amount captured in cents
+ * @returns The PaymentCollection ID if found, null otherwise
  */
-async function updatePaymentCollectionOnCapture(orderId: string, amountCaptured: number): Promise<void> {
+async function updatePaymentCollectionOnCapture(orderId: string, amountCaptured: number): Promise<string | null> {
     if (!containerRef) {
-        return;
+        return null;
     }
 
     try {
@@ -347,21 +368,21 @@ async function updatePaymentCollectionOnCapture(orderId: string, amountCaptured:
         const order = orders?.[0];
         if (!order) {
             console.warn(`[PAY-01] Order ${orderId} not found for PaymentCollection update`);
-            return;
+            return null;
         }
 
         const paymentCollection = order.payment_collections?.[0];
         if (!paymentCollection) {
             // Graceful degradation for pre-PAY-01 orders
             console.log(`[PAY-01] Order ${orderId}: No PaymentCollection found (pre-PAY-01 order)`);
-            return;
+            return null;
         }
 
         // PaymentCollectionStatus.COMPLETED is the captured state in Medusa v2
         const capturedStatuses = ["completed", "partially_captured"];
         if (capturedStatuses.includes(paymentCollection.status as string)) {
             console.log(`[PAY-01] Order ${orderId}: PaymentCollection already in final state: ${paymentCollection.status}`);
-            return;
+            return paymentCollection.id as string;
         }
 
         // Update PaymentCollection status via Payment Module
@@ -380,9 +401,59 @@ async function updatePaymentCollectionOnCapture(orderId: string, amountCaptured:
             `(amount: ${amountCaptured} cents)`
         );
 
+        return paymentCollection.id as string;
+
     } catch (error) {
         // Log but don't throw - payment was captured via Stripe, PC update is secondary
         console.error(`[PAY-01][ERROR] Failed to update PaymentCollection for order ${orderId}:`, error);
+        return null;
+    }
+}
+
+/**
+ * PAY-01: Create OrderTransaction record on capture
+ * 
+ * AC4: Capture creates an OrderTransaction record of type "capture"
+ * This enables downstream features like RET-01 (Returns/Refunds) which need
+ * to query OrderTransactions to calculate refundable amounts.
+ * 
+ * @param orderId - The Medusa order ID
+ * @param amountCaptured - Amount captured in cents
+ * @param currencyCode - The currency code (e.g., "usd")
+ * @param paymentCollectionId - The PaymentCollection ID (used as reference)
+ */
+async function createOrderTransactionOnCapture(
+    orderId: string, 
+    amountCaptured: number,
+    currencyCode: string,
+    paymentCollectionId: string | null
+): Promise<void> {
+    if (!containerRef) {
+        return;
+    }
+
+    try {
+        const orderModuleService = containerRef.resolve(Modules.ORDER) as any;
+        
+        // Create OrderTransaction with reference to the capture
+        // Using payment_collection_id as reference_id since we're doing direct Stripe capture
+        // (not using Payment Module's Capture model)
+        await orderModuleService.addOrderTransactions({
+            order_id: orderId,
+            amount: amountCaptured / 100, // Convert cents to dollars (Medusa uses decimal amounts)
+            currency_code: currencyCode,
+            reference: "capture",
+            reference_id: paymentCollectionId || `stripe_capture_${orderId}`,
+        });
+
+        console.log(
+            `[PAY-01] Order ${orderId}: Created OrderTransaction for capture ` +
+            `(amount: ${amountCaptured / 100} ${currencyCode}, reference_id: ${paymentCollectionId || `stripe_capture_${orderId}`})`
+        );
+
+    } catch (error) {
+        // Log but don't throw - OrderTransaction is for downstream features, not critical
+        console.error(`[PAY-01][ERROR] Failed to create OrderTransaction for order ${orderId}:`, error);
     }
 }
 
