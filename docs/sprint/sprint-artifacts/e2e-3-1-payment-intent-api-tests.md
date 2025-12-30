@@ -1,7 +1,7 @@
 # Story 3-1: Create PaymentIntent API Test Suite
 
 **Epic:** Epic 3 - Payment Intent Flow Testing  
-**Status:** drafted  
+**Status:** done
 **Created:** 2025-12-14  
 **Requirements:** FR12.4, FR12.5, FR14.3
 
@@ -217,13 +217,13 @@ test.describe('PaymentIntent Amount Validation', () => {
 
 ## Definition of Done
 
-- [ ] PaymentIntent creation returns correct amount
-- [ ] PaymentIntent update preserves ID and clientSecret
-- [ ] Idempotency key prevents duplicate creation
-- [ ] Status transitions work correctly
-- [ ] Amount validation rejects invalid values
-- [ ] All tests use fixtures for cleanup
-- [ ] Tests are isolated and can run in parallel
+- [x] PaymentIntent creation returns correct amount
+- [x] PaymentIntent update preserves ID and clientSecret
+- [x] Idempotency key prevents duplicate creation
+- [x] Status transitions work correctly
+- [x] Amount validation rejects invalid values
+- [x] All tests use fixtures for cleanup
+- [x] Tests are isolated and can run in parallel
 
 ---
 

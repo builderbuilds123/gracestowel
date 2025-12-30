@@ -1,7 +1,7 @@
 # Story 4-2: Create Modification Token Test Suite
 
 **Epic:** Epic 4 - Order Creation Flow Testing  
-**Status:** drafted  
+**Status:** done
 **Created:** 2025-12-14  
 **Requirements:** FR13.2, FR8.4
 
@@ -108,11 +108,11 @@ test.describe('Modification Token', () => {
 
 ## Definition of Done
 
-- [ ] Token included in order response
-- [ ] Valid token grants access
-- [ ] Expired token shows appropriate message
-- [ ] Invalid signature is rejected
-- [ ] Token claims are correct
+- [x] Token included in order response
+- [x] Valid token grants access
+- [x] Expired token shows appropriate message
+- [x] Invalid signature is rejected
+- [x] Token claims are correct
 
 ---
 

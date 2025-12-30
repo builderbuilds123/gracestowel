@@ -1,7 +1,7 @@
 # Story 2-2: Create Cart Total Calculation Tests
 
 **Epic:** Epic 2 - Cart Flow Testing  
-**Status:** drafted  
+**Status:** done
 **Created:** 2025-12-14  
 **Requirements:** FR15.1, FR15.2, FR15.4
 
@@ -209,13 +209,13 @@ test.describe('Free Shipping Threshold', () => {
 
 ## Definition of Done
 
-- [ ] Single item subtotal calculation test passes
-- [ ] Multiple items total calculation test passes
-- [ ] Quantity update recalculates total correctly
-- [ ] Discounted prices display both original and sale price
-- [ ] Free shipping threshold displays correctly
-- [ ] Regular shipping displays when below threshold
-- [ ] All calculations match expected values
+- [x] Single item subtotal calculation test passes
+- [x] Multiple items total calculation test passes
+- [x] Quantity update recalculates total correctly
+- [x] Discounted prices display both original and sale price
+- [x] Free shipping threshold displays correctly
+- [x] Regular shipping displays when below threshold
+- [x] All calculations match expected values
 
 ---
 

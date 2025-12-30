@@ -1,7 +1,7 @@
 # Story 9-2: Update README with Testing Documentation
 
 **Epic:** Epic 9 - Cleanup & Documentation  
-**Status:** drafted  
+**Status:** done
 **Created:** 2025-12-14  
 **Requirements:** FR6.4
 
@@ -220,12 +220,12 @@ After CI run, download artifacts:
 
 ## Definition of Done
 
-- [ ] README explains API-first strategy
-- [ ] Running tests instructions complete
-- [ ] Project structure documented
-- [ ] Writing tests guide included
-- [ ] CI/CD section added
-- [ ] Troubleshooting section added
+- [x] README explains API-first strategy
+- [x] Running tests instructions complete
+- [x] Project structure documented
+- [x] Writing tests guide included
+- [x] CI/CD section added
+- [x] Troubleshooting section added
 
 ---
 

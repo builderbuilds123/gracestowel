@@ -1,7 +1,7 @@
 # Story 2-3: Write Property Test for Cart State Consistency
 
 **Epic:** Epic 2 - Cart Flow Testing  
-**Status:** drafted  
+**Status:** done
 **Created:** 2025-12-14  
 **Requirements:** FR12.1, FR15.1  
 **Property:** Property 1: Cart State Consistency
@@ -340,13 +340,13 @@ pnpm add -D fast-check --filter e2e
 
 ## Definition of Done
 
-- [ ] Cart arbitraries generate valid cart operations
-- [ ] Cart model correctly applies operations
-- [ ] Property test runs 100+ iterations
-- [ ] All property assertions pass
-- [ ] Integration test verifies API consistency
-- [ ] Test is annotated with property reference
-- [ ] Seed value ensures reproducibility
+- [x] Cart arbitraries generate valid cart operations
+- [x] Cart model correctly applies operations
+- [x] Property test runs 100+ iterations
+- [x] All property assertions pass
+- [x] Integration test verifies API consistency
+- [x] Test is annotated with property reference
+- [x] Seed value ensures reproducibility
 
 ---
 

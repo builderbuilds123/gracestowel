@@ -1,7 +1,7 @@
 # Story 6-2: Create Fallback Capture Test Suite
 
 **Epic:** Epic 6 - Payment Capture Flow Testing  
-**Status:** drafted  
+**Status:** done
 **Created:** 2025-12-14  
 **Requirements:** FR14.4, FR14.5
 
@@ -95,10 +95,10 @@ test.describe('Fallback Capture', () => {
 
 ## Definition of Done
 
-- [ ] Orders with needs_recovery flag are captured
-- [ ] Stale PaymentIntents (>65 min) are captured
-- [ ] Redis failures flag orders for recovery
-- [ ] Fallback cron processes all eligible orders
+- [x] Orders with needs_recovery flag are captured
+- [x] Stale PaymentIntents (>65 min) are captured
+- [x] Redis failures flag orders for recovery
+- [x] Fallback cron processes all eligible orders
 
 ---
 
