@@ -58,7 +58,7 @@
   "devDependencies": {
     "@medusajs/test-utils": "2.12.3",
     "@react-email/render": "^2.0.1",
-    "@swc/core": "1.15.7",
+    "@swc/core": "1.15.8",
     "@swc/jest": "^0.2.39",
     "@types/jest": "^29.5.14",
     "@types/jsonwebtoken": "^9.0.10",
