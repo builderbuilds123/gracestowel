@@ -89,9 +89,9 @@ Storefront → Stripe API → Stripe Webhook → create-order-from-stripe.ts
 - [x] 2.4 Keep `metadata.payment_status` for backward compatibility (not deprecated)
 
 ### Phase 3: Downstream Alignment
-- [ ] 3.1 Update `cancel-order-with-refund.ts` to read from Payment Module
-- [ ] 3.2 Update any other code reading `metadata.payment_status`
-- [ ] 3.3 Update Admin API responses to include canonical payment fields
+- [x] 3.1 Update `cancel-order-with-refund.ts` to read from Payment Module
+- [x] 3.2 Update any other code reading `metadata.payment_status`
+- [x] 3.3 Admin API: No custom endpoint needed - Medusa v2 default `/admin/orders/:id?fields=payment_collections.*` returns canonical payment fields
 
 ### Phase 4: Testing & Migration
 - [x] 4.1 Unit tests for Payment Module integration (existing tests pass: 17 total)
@@ -154,9 +154,28 @@ Storefront → Stripe API → Stripe Webhook → create-order-from-stripe.ts
 
 **Tests**: All 17 existing tests pass (8 payment-capture-worker, 9 order-placed)
 
+**Phase 3 Complete** (2025-12-30)
+
+**Files Modified**:
+- `apps/backend/src/workflows/cancel-order-with-refund.ts`
+  - Updated `lockOrderHandler` to read payment status from PaymentCollection (canonical)
+  - Falls back to metadata for pre-PAY-01 orders (backward compatibility)
+  - Checks PaymentCollection status "completed" = captured, "partially_captured" = partial
+- `apps/backend/integration-tests/unit/cancel-order-workflow.unit.spec.ts`
+  - Added tests for PaymentCollection status checks
+  - Added tests for metadata fallback (pre-PAY-01 orders)
+  - All 30 tests passing
+
+**Task 3.2 Analysis**: No other code reads `metadata.payment_status` for business logic decisions. Other occurrences are:
+- Writing to metadata (for backward compatibility - OK per story)
+- Returning workflow results (not reading from order)
+- Diagnostic scripts (not production code)
+
+**Task 3.3 Analysis**: Verified Medusa v2 default admin API at `/admin/orders/:id` supports `payment_collections` via `fields` query parameter. No custom endpoint needed.
+
 **Remaining Work**:
-- Phase 3: Update downstream code to read from PaymentCollections
 - OrderTransaction creation deferred (requires more research on Medusa v2 APIs)
+- Integration tests for full order → capture → admin view flow (optional)
 
 ---
 
@@ -164,16 +183,21 @@ Storefront → Stripe API → Stripe Webhook → create-order-from-stripe.ts
 
 - `apps/backend/src/workflows/create-order-from-stripe.ts` (modified)
 - `apps/backend/src/workers/payment-capture-worker.ts` (modified)
+- `apps/backend/src/workflows/cancel-order-with-refund.ts` (modified)
+- `apps/backend/integration-tests/unit/cancel-order-workflow.unit.spec.ts` (modified)
 
 ---
 
 ## Change Log
 
 - **2025-12-29**: Phase 1 & 2 implementation - PaymentCollection creation and capture update
+- **2025-12-30**: Phase 3.1 & 3.2 implementation - Updated cancel-order-with-refund.ts to read from PaymentCollection with metadata fallback
+- **2025-12-30**: Phase 3.3 verified - Medusa v2 default admin API already supports payment_collections
 
 ---
 
 ## Status
-- **Drafted**: 2025-12-29 - Initial creation from audit analysis
-- **In Progress**: 2025-12-29 - Phase 1 & 2 implementation complete, Phase 3 pending
 
+- **Drafted**: 2025-12-29 - Initial creation from audit analysis
+- **In Progress**: 2025-12-29 - Phase 1 & 2 implementation complete
+- **Review**: 2025-12-30 - Phase 1, 2, 3 complete. All 297 tests pass. Ready for review.

@@ -146,10 +146,17 @@ export const lockOrderHandler = async (input: { orderId: string; paymentIntentId
     const query = container.resolve("query");
     const stripe = getStripeClient();
     
-    // Step 3a: Fetch order with current status
+    // PAY-01: Fetch order with PaymentCollection status (canonical) and metadata (backward compatibility)
     const { data: orders } = await query.graph({
         entity: "order",
-        fields: ["id", "status", "payment_status", "metadata"],
+        fields: [
+            "id",
+            "status",
+            "payment_status",
+            "metadata",
+            "payment_collections.id",
+            "payment_collections.status",
+        ],
         filters: { id: input.orderId },
     });
     
@@ -165,15 +172,37 @@ export const lockOrderHandler = async (input: { orderId: string; paymentIntentId
         throw new OrderAlreadyCanceledError(input.orderId);
     }
     
+    // PAY-01: Check payment status from PaymentCollection (canonical) first
+    // Fall back to metadata for pre-PAY-01 orders (backward compatibility)
+    const paymentCollection = order.payment_collections?.[0];
+    let paymentStatus: string | undefined;
+    
+    if (paymentCollection) {
+        // Use canonical PaymentCollection status
+        paymentStatus = paymentCollection.status as string;
+        console.log(`[PAY-01][CancelOrder] Order ${input.orderId} has PaymentCollection status: ${paymentStatus}`);
+    } else {
+        // Fallback to metadata for pre-PAY-01 orders
+        paymentStatus = (order.metadata as Record<string, unknown>)?.payment_status as string | undefined;
+        if (paymentStatus) {
+            console.log(`[PAY-01][CancelOrder] Order ${input.orderId} using metadata payment_status (pre-PAY-01): ${paymentStatus}`);
+        }
+    }
+    
     // Check if payment has been captured (too late to cancel)
-    // Note: Medusa v2 Order type doesn't have payment_status, so we check metadata
-    const paymentStatus = (order.metadata as Record<string, unknown>)?.payment_status as string | undefined;
-    if (paymentStatus === "captured" || order.metadata?.payment_captured_at) {
+    // PaymentCollection status "completed" = captured
+    // Metadata fallback: "captured" or payment_captured_at set
+    const isCaptured = paymentStatus === "completed" || 
+                       paymentStatus === "captured" || 
+                       order.metadata?.payment_captured_at;
+    
+    if (isCaptured) {
         console.log(`[CancelOrder] Order ${input.orderId} payment already captured - too late to cancel`);
         throw new LateCancelError();
     }
 
     // Check for partial capture (requires manual intervention)
+    // PaymentCollection status "partially_captured" or metadata "partially_captured"
     if (paymentStatus === "partially_captured") {
         console.error(`[CancelOrder][REJECTED] Order ${input.orderId} is partially captured. Manual refund required.`);
         throw new PartialCaptureError();
