@@ -1,171 +1,127 @@
-# Grace Stowel - System Architecture
+---
+stepsCompleted: [1, 2, 3]
+inputDocuments:
+  - "docs/prd.md"
+  - "docs/project_context.md"
+  - "docs/epics.md"
+  - "docs/index.md"
+  - "docs/architecture/overview.md"
+  - "docs/architecture/backend.md"
+  - "docs/architecture/data-models.md"
+  - "docs/architecture/integration.md"
+  - "docs/architecture/storefront.md"
+workflowType: 'architecture'
+lastStep: 3
+project_name: 'gracestowel'
+user_name: 'Big Dick'
+date: '2025-12-14'
+hasProjectContext: true
+---
 
-## Overview
+# Architecture Decision Document
 
-Grace Stowel is an e-commerce platform for premium Turkish cotton towels, built on a modern headless architecture with:
+_This document builds collaboratively through step-by-step discovery. Sections are appended as we work through each architectural decision together._
 
-- **Backend**: Medusa v2 (Node.js headless commerce engine)
-- **Storefront**: React Router v7 + Cloudflare Workers
-- **Infrastructure**: Railway (databases, backend hosting) + Cloudflare (frontend CDN)
-- **Payments**: Stripe (checkout, payment intents, shipping rates)
+## Project Context Analysis
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           PRODUCTION ARCHITECTURE                            │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│    ┌──────────────────────┐           ┌──────────────────────┐             │
-│    │   Cloudflare Workers │           │       Railway        │             │
-│    │   (Edge Network)     │           │   (Container Host)   │             │
-│    ├──────────────────────┤           ├──────────────────────┤             │
-│    │                      │   REST    │                      │             │
-│    │   React Storefront   │ ───────▶  │   Medusa Backend     │             │
-│    │   (SSR + Hydration)  │           │   (API Server)       │             │
-│    │                      │           │                      │             │
-│    └──────────────────────┘           └─────────┬────────────┘             │
-│             │                                    │                          │
-│             │                                    │                          │
-│    ┌────────▼──────────────┐         ┌──────────▼───────────┐              │
-│    │       Stripe          │         │     PostgreSQL       │              │
-│    │   (Payments API)      │         │   + Redis (Cache)    │              │
-│    └───────────────────────┘         └──────────────────────┘              │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
+### Requirements Overview
 
-## Repository Structure
+**Functional Requirements (26 FRs):**
+The PRD defines a transactional email system with clear separation of concerns:
 
-```
-gracestowel/
-├── apps/
-│   ├── backend/                # Medusa v2 Backend
-│   │   ├── src/
-│   │   │   ├── api/            # Custom API routes
-│   │   │   ├── modules/        # Custom Medusa modules
-│   │   │   ├── workflows/      # Business logic workflows
-│   │   │   ├── subscribers/    # Event subscribers
-│   │   │   ├── jobs/           # Scheduled jobs
-│   │   │   ├── links/          # Entity relationships
-│   │   │   └── scripts/        # CLI scripts (seeding)
-│   │   ├── medusa-config.ts    # Medusa configuration
-│   │   ├── Dockerfile          # Production build
-│   │   └── package.json
-│   │
-│   └── storefront/             # React Router v7 Storefront
-│       ├── app/
-│       │   ├── components/     # React components
-│       │   ├── context/        # React contexts (Cart, Locale)
-│       │   ├── hooks/          # Custom hooks
-│       │   ├── routes/         # Page routes + API endpoints
-│       │   ├── data/           # Static product data
-│       │   ├── lib/            # Utilities (Stripe, DB)
-│       │   └── config/         # Site configuration
-│       ├── wrangler.toml       # Cloudflare Workers config
-│       └── package.json
-│
-├── railway.toml                # Railway deployment config
-├── ENVIRONMENT_SETUP.md        # Environment variables guide
-├── RAILWAY_INFRASTRUCTURE.md   # Infrastructure documentation
-└── package.json                # Root workspace config
-```
+1. **Email Delivery Core (FR1-5):** Resend API integration with async queue, retry mechanism (3x exponential backoff), and Dead Letter Queue for failed emails
+2. **Order Confirmation (FR6-10):** Primary MVP feature — trigger on `order.placed` event, include order summary and magic link with 1-hour TTL
+3. **Magic Link Integration (FR11-13):** Reuse existing GuestAccessService from Epic 4 — no new auth infrastructure needed
+4. **Observability (FR14-18):** Structured logging of all email attempts, failure alerting, DLQ inspection via direct Redis access (MVP)
+5. **Error Handling (FR19-23):** Graceful degradation — email failures never block order flows
+6. **Configuration (FR24-26):** Environment variables for Resend credentials, feature flag for staged rollout
 
-## Technology Stack
+**Non-Functional Requirements (22 NFRs):**
 
-### Backend (apps/backend)
+| Category | Key Requirements |
+|----------|------------------|
+| Performance | Queue < 1s, API call < 30s, Total latency < 5 min |
+| Security | API keys in env vars, no PII in logs, secure magic link tokens |
+| Reliability | Non-blocking, 3x retry with backoff, DLQ persistence |
+| Scalability | Handle 10x burst traffic, rate limiting, extensible design |
+| Integration | Medusa subscribers, existing Redis, existing GuestAccessService |
 
-| Technology | Purpose | Version |
-|------------|---------|---------|
-| Medusa v2 | Headless commerce engine | 2.11.3 |
-| PostgreSQL | Primary database | 15+ |
-| Redis | Caching, sessions, job queues | 7+ |
-| Node.js | Runtime | 20+ |
-| TypeScript | Type safety | 5.6+ |
+**Scale & Complexity:**
 
-### Storefront (apps/storefront)
+- Primary domain: Backend API (Medusa v2 module extension)
+- Complexity level: Low-Medium
+- Estimated architectural components: 4-5 (Subscriber, EmailService, Queue Worker, Templates, DLQ)
 
-| Technology | Purpose | Version |
-|------------|---------|---------|
-| React | UI framework | 19.x |
-| React Router v7 | SSR routing | 7.x |
-| Cloudflare Workers | Edge deployment | - |
-| TailwindCSS | Styling | 4.x |
-| Stripe.js | Payment UI | 8.x |
+### Technical Constraints & Dependencies
 
-### Infrastructure
+**From Project Context (30 rules):**
+- ✅ Must use Medusa workflows with rollback logic
+- ✅ Must use subscribers for domain events
+- ✅ Must use BullMQ jobs for heavy processing (non-blocking)
+- ✅ Redis already available for queue infrastructure
+- ✅ MCP servers prioritized for external service interactions
 
-| Service | Purpose | Provider |
-|---------|---------|----------|
-| PostgreSQL | Database | Railway |
-| Redis | Cache | Railway |
-| Backend hosting | API server | Railway |
-| CDN + Edge | Storefront | Cloudflare |
-| Payments | Transactions | Stripe |
+**From PRD:**
+- Resend as email provider (no alternatives considered for MVP)
+- Reuse GuestAccessService for magic links (no new auth)
+- Simple text templates for MVP (no rich HTML)
+- Manual DLQ inspection only (no admin API for MVP)
 
-## Data Flow
+### Cross-Cutting Concerns Identified
 
-### 1. Product Display Flow
-```
-User → Cloudflare Edge → React Storefront → Medusa API → PostgreSQL
-                                   ↓
-                            Products rendered
-```
+1. **Logging:** All email attempts must be logged with structured data (integrates with existing logging from Epic 8)
+2. **Alerting:** Failure rate threshold triggers alerts (integrates with existing alerting infrastructure)
+3. **Feature Flags:** Email system gated behind feature flag for staged rollout
+4. **Error Handling:** Consistent retry/DLQ pattern for all transient failures
+5. **Security:** PII handling in logs, secure token generation for magic links
 
-### 2. Checkout Flow
-```
-User adds to cart → Cart Context (localStorage)
-                              ↓
-User proceeds to checkout → /api/payment-intent (server action)
-                              ↓
-                        Stripe PaymentIntent created
-                              ↓
-                        Stripe Elements UI rendered
-                              ↓
-User submits payment → Stripe confirms payment
-                              ↓
-                        Redirect to /checkout/success
-```
 
-### 3. Shipping Rate Flow
-```
-User enters address → AddressElement onChange
-                              ↓
-                    /api/shipping-rates (server action)
-                              ↓
-                    Fetch Stripe Shipping Rates
-                              ↓
-                    Apply free shipping logic ($99+ threshold)
-                              ↓
-                    Display shipping options
-```
+## Starter Template Evaluation
 
-## Key Configuration Files
+### Primary Technology Domain
 
-| File | Purpose |
-|------|---------|
-| `apps/backend/medusa-config.ts` | Medusa core configuration |
-| `apps/storefront/wrangler.toml` | Cloudflare Workers config |
-| `railway.toml` | Railway deployment settings |
-| `apps/backend/.env` | Local development secrets |
-| `apps/storefront/.dev.vars` | Cloudflare local secrets |
+**Backend API Extension** — Adding transactional email capabilities to existing Medusa v2 e-commerce backend.
 
-## Related Documentation
+### Existing Technical Foundation (Brownfield)
 
-### Setup & Infrastructure
-- [Environment Setup](./ENVIRONMENT_SETUP.md) - How to configure environment variables
-- [Railway Infrastructure](./RAILWAY_INFRASTRUCTURE.md) - Database and hosting setup
-- [Development Workflow](./DEV_WORKFLOW.md) - Local development guide
+This is not a greenfield project. The technical stack is already established and documented in `docs/project_context.md`:
 
-### API & Backend
-- [Backend API Reference](./docs/BACKEND_API.md) - Medusa API endpoints documentation
-- [Storefront API Reference](./docs/STOREFRONT_API.md) - Cloudflare Workers API routes
+| Layer | Technology | Version |
+|-------|------------|---------|
+| Runtime | Node.js | >=24 |
+| Backend Framework | Medusa | v2.12.0 |
+| Database | PostgreSQL | Railway-hosted |
+| Queue/Cache | Redis | BullMQ |
+| Language | TypeScript | v5.6+ |
+| Package Manager | pnpm | Monorepo workspaces |
 
-### Frontend
-- [Storefront Components](./docs/STOREFRONT_COMPONENTS.md) - React component library
-- [Data Layer](./docs/DATA_LAYER.md) - Product data, cart state, and configuration
+### Starter Options Considered
 
-### Integrations
-- [Integrations Guide](./docs/INTEGRATIONS.md) - Stripe, Medusa, and Cloudflare integrations
+**N/A — Brownfield Extension**
 
-### Troubleshooting
-- [Medusa Auth Module Issue](./MEDUSA_AUTH_MODULE_ISSUE.md) - Known v2.11 bug and workarounds
+No starter template needed. We're extending an existing, well-architected system with:
+- Established module patterns
+- Existing subscriber infrastructure
+- BullMQ already configured for async jobs
+- Redis already available for queue/DLQ
 
+### Selected Approach: Medusa Module Extension
+
+**Rationale:**
+- Project context mandates using Medusa workflows, subscribers, and BullMQ
+- Email feature fits naturally as a Medusa module with subscriber triggers
+- Existing infrastructure (Redis, logging, alerting) can be reused
+- No new architectural patterns needed — follow established conventions
+
+**Architectural Decisions Already Made by Existing Stack:**
+
+| Decision | Established Pattern |
+|----------|---------------------|
+| Language & Runtime | TypeScript v5.6+, Node.js >=24 |
+| Event Handling | Medusa subscribers for domain events |
+| Async Processing | BullMQ jobs (non-blocking) |
+| Queue Infrastructure | Redis (existing) |
+| Logging | Structured logging (Epic 8) |
+| Configuration | Environment variables |
+
+**Note:** No project initialization needed — this is a feature addition to existing codebase.
