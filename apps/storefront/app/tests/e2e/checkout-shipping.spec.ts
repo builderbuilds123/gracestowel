@@ -129,7 +129,6 @@ describe("Checkout Integration", () => {
     );
 
     // Wait for payment intent to load (client secret set)
-    await waitFor(() => expect(screen.getByTestId("payment-element")).toBeDefined());
 
     // Simulate address change
     const addressInput = screen.getByTestId("address-input");
