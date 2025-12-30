@@ -307,7 +307,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
                 clientShipping: shipping
             });
         } else {
-             logger.error("Medusa cart missing total", { cartId, cart });
+             logger.error("Medusa cart missing total", new Error("Cart missing total"), { cartId, cart });
              return data({ message: "Invalid cart data", traceId }, { status: 500 });
         }
     } else {

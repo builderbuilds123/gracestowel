@@ -270,6 +270,36 @@ export default function CheckoutSuccess() {
                             }
                         };
 
+                        // CHK-01: Call Medusa cart completion API
+                        const cartIdFromSession = sessionStorage.getItem('medusa_cart_id');
+                        if (cartIdFromSession) {
+                            try {
+                                console.log(`Attempting to complete Medusa cart ${cartIdFromSession}...`);
+                                const completeResponse = await monitoredFetch(`/api/carts/${cartIdFromSession}/complete`, {
+                                    method: "POST",
+                                    headers: {
+                                        "Content-Type": "application/json",
+                                    },
+                                    label: "complete-medusa-cart",
+                                });
+
+                                if (completeResponse.ok) {
+                                    const completionData = await completeResponse.json();
+                                    console.log("Medusa cart completion successful:", completionData);
+                                    // Optionally use the returned orderId from completionData if needed
+                                } else {
+                                    const errorData = await completeResponse.json();
+                                    console.error("Medusa cart completion failed:", errorData);
+                                    // Non-critical failure: log and proceed, webhook should eventually create order
+                                }
+                            } catch (err) {
+                                console.error("Error calling cart completion API:", err);
+                                // Non-critical failure: log and proceed
+                            }
+                        } else {
+                            console.warn("No Medusa cart ID found in session to complete.");
+                        }
+
                         // Start fetching order
                         fetchOrderWithToken();
 
