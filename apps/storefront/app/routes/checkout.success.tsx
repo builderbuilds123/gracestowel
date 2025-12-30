@@ -141,6 +141,37 @@ export default function CheckoutSuccess() {
                     // or 'succeeded' (already captured after 1-hour window)
                     const validStatuses = ['succeeded', 'requires_capture'];
                     if (paymentIntent && validStatuses.includes(paymentIntent.status)) {
+                        // CHK-01: Complete cart after successful payment
+                        const cartId = sessionStorage.getItem('medusa_cart_id');
+                        if (cartId) {
+                            try {
+                                console.log("[CHK-01] Completing cart:", cartId);
+                                const completeResponse = await monitoredFetch(`/api/carts/${cartId}/complete`, {
+                                    method: "POST",
+                                    label: "complete-cart-chk01",
+                                });
+
+                                if (completeResponse.ok) {
+                                    const completeData = await completeResponse.json() as { order: any };
+                                    console.log("[CHK-01] Cart completed, order created:", completeData.order?.id);
+                                    // Store order ID for later use
+                                    if (completeData.order?.id) {
+                                        setOrderId(completeData.order.id);
+                                        localStorage.setItem('orderId', completeData.order.id);
+                                    }
+                                } else {
+                                    const errorData = await completeResponse.json() as { error?: string };
+                                    console.warn("[CHK-01] Cart completion failed (non-blocking):", errorData.error);
+                                    // Non-blocking: webhook will still create order, but cart may remain incomplete
+                                }
+                            } catch (error) {
+                                console.error("[CHK-01] Cart completion error (non-blocking):", error);
+                                // Non-blocking: continue with success flow
+                            }
+                        } else {
+                            console.warn("[CHK-01] No cartId found in sessionStorage, skipping cart completion");
+                        }
+
                         // Handle Order Details Logic (Persistence)
                         // Always try to recover from localStorage first since we save it before redirect
                         const savedOrder = localStorage.getItem('lastOrder');

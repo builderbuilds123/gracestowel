@@ -306,7 +306,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
         return data({ message: "Cart ID is required", traceId }, { status: 400 });
     }
 
-    const totalAmount = fromCents(calculatedAmount); // Convert back to dollars for local variables if needed
+    // MNY-01: calculatedAmount is already in cents, no conversion needed
     const isUpdate = !!paymentIntentId;
 
     // Validate amount is positive
@@ -356,6 +356,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
     };
 
     // Idempotency key only for CREATE
+    // MNY-01: calculatedAmount is already in cents, convert to dollars for idempotency key generation
     if (!isUpdate) {
       headers["Idempotency-Key"] = generateIdempotencyKey(
         fromCents(calculatedAmount),
@@ -428,12 +429,13 @@ export async function action({ request, context }: ActionFunctionArgs) {
       : "https://api.stripe.com/v1/payment_intents";
 
     // Log request details for debugging
+    // MNY-01: calculatedAmount is already in cents
     logger.info("Calling Stripe API", {
       operation: isUpdate ? "update" : "create",
       paymentIntentId,
-      amount: totalAmount,
+      amountInCents: calculatedAmount,
+      amountInDollars: fromCents(calculatedAmount),
       currency: validatedCurrency,
-      amountInCents: toCents(totalAmount),
       hasCartItems: !!cartItems?.length,
       cartItemCount: cartItems?.length,
       idempotencyKey: headers["Idempotency-Key"],
@@ -469,9 +471,9 @@ export async function action({ request, context }: ActionFunctionArgs) {
         stripeErrorCode: stripeError?.error?.code,
         stripeErrorMessage: stripeError?.error?.message,
         stripeErrorParam: stripeError?.error?.param,
-        requestAmount: totalAmount,
+        requestAmountInCents: calculatedAmount,
+        requestAmountInDollars: fromCents(calculatedAmount),
         requestCurrency: validatedCurrency,
-        requestAmountInCents: toCents(totalAmount),
       });
       
       // Sanitize error message to avoid exposing sensitive information
