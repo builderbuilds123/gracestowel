@@ -1,5 +1,5 @@
 import { type ActionFunctionArgs, data } from "react-router";
-import { toCents } from "../lib/price";
+import { toCents, fromCents } from "../lib/price";
 import { createLogger, getTraceIdFromRequest } from "../lib/logger";
 import { monitoredFetch, type CloudflareEnv } from "../utils/monitored-fetch";
 
@@ -41,6 +41,7 @@ interface PaymentIntentRequest {
   amount: number;
   currency: string;
   shipping?: number;
+  cartId: string; // Required for SEC-01: server-side pricing enforcement
   cartItems?: CartItem[];
   customerId?: string;
   customerEmail?: string;
@@ -187,10 +188,11 @@ export async function action({ request, context }: ActionFunctionArgs) {
   }
 
   const {
-    amount,
+    amount, // Ignored in favor of Medusa Cart (SEC-01)
     currency,
-    shipping,
+    shipping, // Ignored in favor of Medusa Cart (SEC-01)
     cartItems,
+    cartId,
     customerId,
     customerEmail,
     shippingAddress,
@@ -259,15 +261,70 @@ export async function action({ request, context }: ActionFunctionArgs) {
       }
     }
 
-    const totalAmount = amount + (shipping || 0);
+    // SEC-01: Fetch authoritative cart data from Medusa
+    // MNY-01: Ensure correct unit conversion (Medusa major -> Stripe cents)
+    let calculatedAmount = 0;
+
+    if (cartId) {
+        // Fetch cart from Medusa
+        const cartResponse = await monitoredFetch(`${medusaBackendUrl}/store/carts/${cartId}`, {
+            headers: {
+                "x-publishable-api-key": publishableKey,
+            },
+            label: "fetch-medusa-cart",
+            cloudflareEnv: env,
+        });
+
+        if (!cartResponse.ok) {
+            logger.error("Failed to fetch Medusa cart", new Error("Cart not found or error"), { cartId });
+            return data({ message: "Invalid cart", traceId }, { status: 400 });
+        }
+
+        // Type safe cart interface
+        interface MedusaCart {
+            id?: string;
+            total?: number;
+            summary?: {
+                current_order_total?: number;
+            };
+        }
+
+        const { cart } = await cartResponse.json() as { cart: MedusaCart };
+
+        if (cart && (cart.total !== undefined || cart.summary?.current_order_total !== undefined)) {
+            // Prefer summary.current_order_total if available (Medusa v2 pattern)
+            const cartTotal = cart.summary?.current_order_total ?? cart.total;
+
+            // AI-NOTE: Medusa returns cents (e.g. 5000). Stripe expects cents (5000).
+            // Do NOT multiply by 100. Reference: MNY-01 correction.
+            calculatedAmount = Number(cartTotal);
+
+            logger.info("Used Medusa cart for pricing", {
+                cartId,
+                medusaTotal: cartTotal,
+                calculatedCents: calculatedAmount,
+                clientAmount: amount,
+                clientShipping: shipping
+            });
+        } else {
+             logger.error("Medusa cart missing total", new Error("Cart missing total"), { cartId, cart });
+             return data({ message: "Invalid cart data", traceId }, { status: 500 });
+        }
+    } else {
+        // SEC-01: Fail if no cartId provided
+        logger.error("No cartId provided for payment intent");
+        return data({ message: "Cart ID is required", traceId }, { status: 400 });
+    }
+
+    const totalAmount = fromCents(calculatedAmount); // Convert back to dollars for local variables if needed
     const isUpdate = !!paymentIntentId;
 
     // Validate amount is positive
-    if (totalAmount <= 0) {
+    if (calculatedAmount <= 0) {
       logger.error("Invalid amount", new Error("Amount must be positive"), {
         amount,
         shipping,
-        totalAmount,
+        calculatedAmount,
       });
       return data(
         { message: "Invalid amount: must be greater than 0", traceId },
@@ -298,9 +355,8 @@ export async function action({ request, context }: ActionFunctionArgs) {
     }
 
     logger.info("Payment validation passed", {
-      totalAmount,
+      calculatedAmountInCents: calculatedAmount,
       currency: validatedCurrency,
-      amountInCents: toCents(totalAmount),
     });
 
     // Build request headers
@@ -312,7 +368,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
     // Idempotency key only for CREATE
     if (!isUpdate) {
       headers["Idempotency-Key"] = generateIdempotencyKey(
-        totalAmount,
+        fromCents(calculatedAmount),
         validatedCurrency,
         cartItems,
         customerId
@@ -320,7 +376,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
     }
 
     const body = new URLSearchParams();
-    body.append("amount", toCents(totalAmount).toString());
+    body.append("amount", calculatedAmount.toString());
 
     // These params only on CREATE
     if (!isUpdate) {
@@ -346,6 +402,8 @@ export async function action({ request, context }: ActionFunctionArgs) {
     }
 
     // Metadata - can be set on create or update
+    if (cartId) body.append("metadata[cart_id]", cartId);
+
     if (cartItems && cartItems.length > 0) {
       body.append(
         "metadata[cart_data]",

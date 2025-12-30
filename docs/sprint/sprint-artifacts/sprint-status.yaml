@@ -361,10 +361,10 @@ development_status:
   email-epic-4-retrospective: optional
 
   # --- Checkout Audit Fixes (from docs/analysis/checkout-flow-issues-audit.md) ---
-  audit-epic-1: drafted
+  audit-epic-1: in-progress
   fix-SEC-01-client-trust-pricing:
     path: docs/sprint/sprint-artifacts/fix-SEC-01-client-trust-pricing.md
-    status: drafted
+    status: done
   fix-SEC-02-unsafe-order-endpoint:
     path: docs/sprint/sprint-artifacts/fix-SEC-02-unsafe-order-endpoint.md
     status: drafted
@@ -391,7 +391,7 @@ development_status:
     status: drafted
   fix-CHK-01-canonical-checkout:
     path: docs/sprint/sprint-artifacts/fix-CHK-01-canonical-checkout.md
-    status: drafted
+    status: done
   fix-SHP-01-shipping-option-persistence:
     path: docs/sprint/sprint-artifacts/fix-SHP-01-shipping-option-persistence.md
     status: drafted
@@ -403,7 +403,7 @@ development_status:
     status: drafted
   fix-MNY-01-money-units:
     path: docs/sprint/sprint-artifacts/fix-MNY-01-money-units.md
-    status: drafted
+    status: done
   fix-INV-01-inventory-decrement:
     path: docs/sprint/sprint-artifacts/fix-INV-01-inventory-decrement.md
     status: drafted

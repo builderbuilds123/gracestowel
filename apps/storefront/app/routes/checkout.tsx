@@ -134,6 +134,12 @@ export default function Checkout() {
       try {
         setPaymentError(null);
 
+        // CRITICAL: Validate cartId exists before proceeding
+        if (!cartId) {
+          setPaymentError("Cart ID is missing. Please refresh and try again.");
+          return;
+        }
+
         const requestData = {
           amount: cartTotal,
           currency: currency.toLowerCase(),
@@ -150,6 +156,7 @@ export default function Checkout() {
             color: item.color,
           })),
           paymentIntentId: paymentIntentId, // Reuse if exists
+          cartId: cartId, // ADDED: Pass cartId to the API (SEC-01)
         };
 
         // Log request details for debugging (only in development)
@@ -265,6 +272,7 @@ export default function Checkout() {
     cartTotal,
     currency,
     items,
+    cartId,
     selectedShipping,
     isAuthenticated,
     customer?.id,

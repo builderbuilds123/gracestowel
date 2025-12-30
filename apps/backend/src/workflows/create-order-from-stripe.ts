@@ -14,29 +14,11 @@ import { modificationTokenService } from "../services/modification-token";
  */
 export interface CreateOrderFromStripeInput {
     paymentIntentId: string;
-    cartData: {
-        items: Array<{
-            variantId?: string;
-            sku?: string;
-            title: string;
-            price: string;
-            quantity: number;
-            color?: string;
-        }>;
-    };
+    cartId: string; // Required for SEC-01
+    // cartData removed - deprecated metadata flow not supported
     customerEmail?: string;
-    shippingAddress?: {
-        firstName: string;
-        lastName: string;
-        address1: string;
-        address2?: string;
-        city: string;
-        state?: string;
-        postalCode: string;
-        countryCode: string;
-        phone?: string;
-    };
-    shippingAmount?: number; // Shipping cost in cents
+    // shippingAddress removed - should come from cart
+    // shippingAmount removed - should come from cart
     amount: number;
     currency: string;
 }
@@ -47,154 +29,87 @@ export interface CreateOrderFromStripeInput {
 const prepareOrderDataStep = createStep(
     "prepare-order-data-from-stripe",
     async (input: CreateOrderFromStripeInput, { container }) => {
-        const { cartData, customerEmail, shippingAddress, shippingAmount, amount, currency, paymentIntentId } = input;
+        const { cartId, customerEmail, amount, currency, paymentIntentId } = input;
 
-        const regionService = container.resolve("region");
-        const regions = await regionService.listRegions({
-            currency_code: currency.toLowerCase(),
-        });
-
-        console.log("[create-order-from-stripe] Regions for currency", currency, regions.map((r: any) => ({ id: r.id, name: r.name, currency_code: r.currency_code, countries: r.countries })));
-
-        if (!regions.length) {
-            console.error(`[create-order-from-stripe] No region found for currency: ${currency}`);
-            throw new Error(`No region found for currency: ${currency}`);
+        // SEC-01: Strictly enforce authoritative Medusa Cart
+        if (!cartId) {
+            console.error(`[create-order-from-stripe] Missing cartId. Metadata flow is deprecated.`);
+            throw new Error("Valid Medusa Cart ID is required for order creation.");
         }
 
-        const region = regions[0];
-        console.log("[create-order-from-stripe] Using region", { id: region.id, name: region.name, currency_code: region.currency_code });
-
-        // Transform cart items to order line items
-        // If variantId is missing, try to look it up from the product
-        const query = container.resolve("query");
-        const items = await Promise.all(cartData.items.map(async (item) => {
-            let variantId = item.variantId;
-
-            // If no variantId, try to find it by SKU or product title
-            if (!variantId && item.sku) {
-                try {
-                    const { data: variants } = await query.graph({
-                        entity: "product_variant",
-                        fields: ["id", "sku"],
-                        filters: { sku: item.sku },
-                    });
-                    if (variants.length > 0) {
-                        variantId = variants[0].id;
-                        console.log(`[create-order-from-stripe] Resolved variantId from SKU: ${item.sku} -> ${variantId}`);
-                    }
-                } catch (e) {
-                    console.warn(`[create-order-from-stripe] Failed to lookup variant by SKU: ${item.sku}`, e);
-                }
-            }
-
-            // If still no variantId, log warning but continue (order will have custom line item)
-            if (!variantId) {
-                console.warn(`[create-order-from-stripe] No variantId for item: ${item.title}. Order will have custom line item.`);
-            }
-
-            // Parse price - extract dollar amount from formatted string like "$35.00"
-            // Medusa's createOrdersWorkflow expects unit_price in DOLLARS (it converts to cents internally)
-            let unitPrice: number;
-            if (typeof item.price === 'number') {
-                // If number, assume it's already in dollars
-                unitPrice = item.price;
-            } else if (typeof item.price === 'string') {
-                // Remove currency symbols and parse the number
-                // "$35.00" -> 35.00 (dollars)
-                const cleanPrice = item.price.replace(/[$€£,\s]/g, '').trim();
-                unitPrice = parseFloat(cleanPrice);
-            } else {
-                unitPrice = 0;
-                console.warn(`[create-order-from-stripe] Invalid price format for ${item.title}: ${item.price}`);
-            }
-
-            // Validate unitPrice is a valid number
-            if (isNaN(unitPrice) || !isFinite(unitPrice)) {
-                console.error(`[create-order-from-stripe] Invalid unit_price for ${item.title}: ${unitPrice}`);
-                unitPrice = 0;
-            }
-            
-            console.log(`[create-order-from-stripe] Price parsing: "${item.price}" -> ${unitPrice} dollars`);
-
-            return {
-                variant_id: variantId || undefined,
-                title: item.title,
-                quantity: item.quantity,
-                unit_price: unitPrice, // Dollar amount - Medusa converts to cents internally
-                metadata: {
-                    color: item.color,
-                    sku: item.sku,
-                },
-            };
-        }));
-
-        console.log("[create-order-from-stripe] Prepared items", items);
-
-        // Prepare shipping address
-        const shipping_address = shippingAddress
-            ? {
-                  first_name: shippingAddress.firstName,
-                  last_name: shippingAddress.lastName,
-                  address_1: shippingAddress.address1,
-                  address_2: shippingAddress.address2 || "",
-                  city: shippingAddress.city,
-                  province: shippingAddress.state || "",
-                  postal_code: shippingAddress.postalCode,
-                  country_code: shippingAddress.countryCode.toLowerCase(),
-                  phone: shippingAddress.phone || "",
-              }
-            : undefined;
-
-        // Build shipping methods array if shipping amount exists
-        const shipping_methods = shippingAmount && shippingAmount > 0
-            ? [{
-                name: "Standard Shipping",
-                amount: shippingAmount,
-              }]
-            : undefined;
-
-        // Resolve default Sales Channel
-        const salesChannelService = container.resolve("sales_channel");
-        let salesChannelId: string | undefined;
         try {
-            const salesChannels = await salesChannelService.listSalesChannels({}, { take: 1 });
-            if (salesChannels.length > 0) {
-                salesChannelId = salesChannels[0].id;
-                console.log("[create-order-from-stripe] Using default Sales Channel:", salesChannelId);
-            } else {
-                console.warn("[create-order-from-stripe] No sales channels found");
+            // Use query service to retrieve cart (Medusa v2 pattern)
+            const query = container.resolve("query");
+            const { data: carts } = await query.graph({
+                entity: "cart",
+                fields: [
+                    "id",
+                    "email",
+                    "region_id",
+                    "sales_channel_id",
+                    "items.*",
+                    "items.variant.*",
+                    "region.*",
+                    "shipping_methods.*",
+                    "shipping_address.*",
+                ],
+                filters: { id: cartId },
+            });
+
+            if (!carts || carts.length === 0) {
+                throw new Error(`Cart ${cartId} not found`);
             }
+
+            const cart = carts[0];
+
+            console.log(`[create-order-from-stripe] Using authoritative Medusa Cart ${cartId}`);
+            
+            // Transform Medusa cart items to Order items
+            // Filter out items without variant_id (required for inventory) and null items
+            const items = (cart.items || [])
+                .filter((item): item is NonNullable<typeof item> => item != null && item.variant_id != null)
+                .map(item => ({
+                    variant_id: item.variant_id as string, // Already filtered for null
+                    title: item.title,
+                    quantity: item.quantity,
+                    unit_price: item.unit_price, // Already in correct units (cents) from Medusa
+                    metadata: item.metadata || {},
+                }));
+
+            const orderData = {
+                region_id: cart.region_id ?? undefined, // Convert null to undefined
+                email: cart.email || customerEmail,
+                items,
+                shipping_address: cart.shipping_address ? {
+                    first_name: cart.shipping_address.first_name,
+                    last_name: cart.shipping_address.last_name,
+                    address_1: cart.shipping_address.address_1,
+                    address_2: cart.shipping_address.address_2,
+                    city: cart.shipping_address.city,
+                    province: cart.shipping_address.province,
+                    postal_code: cart.shipping_address.postal_code,
+                    country_code: cart.shipping_address.country_code,
+                    phone: cart.shipping_address.phone,
+                } : undefined,
+                shipping_methods: cart.shipping_methods?.filter((sm): sm is NonNullable<typeof sm> => sm != null).map(sm => ({
+                    name: sm.name,
+                    amount: sm.amount,
+                    data: sm.data ?? undefined, // Convert null to undefined
+                })),
+                status: "pending" as const,
+                sales_channel_id: cart.sales_channel_id ?? undefined, // Convert null to undefined
+                currency_code: cart.region?.currency_code || currency,
+                metadata: {
+                    stripe_payment_intent_id: paymentIntentId,
+                    source_cart_id: cartId,
+                }
+            };
+
+            return new StepResponse(orderData);
         } catch (e) {
-            console.warn("[create-order-from-stripe] Failed to list sales channels:", e);
+            console.error(`[create-order-from-stripe] Failed to retrieve cart ${cartId}`, e);
+            throw new Error(`Failed to retrieve cart ${cartId}: ${(e as Error).message}`);
         }
-
-        const orderData = {
-            region_id: region.id,
-            email: customerEmail,
-            items,
-            shipping_address,
-            shipping_methods,
-            status: "pending" as const,
-            sales_channel_id: salesChannelId, // Optional but recommended
-            currency_code: currency.toLowerCase(), // Explicitly set currency code
-            metadata: {
-                stripe_payment_intent_id: paymentIntentId,
-                shipping_amount: shippingAmount || 0,
-            },
-        };
-
-
-        console.log("[create-order-from-stripe] Prepared order data", {
-            region_id: orderData.region_id,
-            email: orderData.email,
-            items_count: orderData.items.length,
-            has_shipping: !!orderData.shipping_address,
-            shipping_amount: shippingAmount,
-            currency,
-            amount,
-        });
-
-        return new StepResponse(orderData);
     }
 );
 
@@ -237,23 +152,31 @@ const emitEventStep = createStep(
 );
 
 /**
+ * Interface for inventory adjustment input
+ */
+interface CartItemForInventory {
+    variant_id: string;
+    quantity: number;
+}
+
+/**
  * Step to prepare inventory adjustments from cart items
  */
 const prepareInventoryAdjustmentsStep = createStep(
     "prepare-inventory-adjustments",
-    async (input: { cartItems: CreateOrderFromStripeInput["cartData"]["items"] }, { container }) => {
+    async (input: { cartItems: CartItemForInventory[] }, { container }) => {
         const query = container.resolve("query");
         const adjustments: UpdateInventoryLevelInput[] = [];
 
         for (const item of input.cartItems) {
-            if (!item.variantId) continue;
+            if (!item.variant_id) continue;
 
             try {
                 // Get the inventory item linked to this variant
                 const { data: variants } = await query.graph({
                     entity: "product_variant",
                     fields: ["id", "inventory_items.inventory_item_id"],
-                    filters: { id: item.variantId },
+                    filters: { id: item.variant_id },
                 });
 
                 if (!variants.length) continue;
@@ -284,7 +207,7 @@ const prepareInventoryAdjustmentsStep = createStep(
                     stocked_quantity: currentStockedQuantity - item.quantity, // Reduce stock
                 });
             } catch (error) {
-                console.error(`Error preparing inventory adjustment for variant ${item.variantId}:`, error);
+                console.error(`Error preparing inventory adjustment for variant ${item.variant_id}:`, error);
             }
         }
 
@@ -347,8 +270,12 @@ export const createOrderFromStripeWorkflow = createWorkflow(
         });
 
         // Step 3: Prepare inventory adjustments from cart items
-        const cartItemsInput = transform({ input }, (data) => ({
-            cartItems: data.input.cartData.items,
+        // Use items from the prepared order data (which came from authoritative cart)
+        const cartItemsInput = transform({ orderData }, (data) => ({
+            cartItems: data.orderData.items.map(item => ({
+                variant_id: item.variant_id,
+                quantity: item.quantity,
+            }))
         }));
         const inventoryAdjustments = prepareInventoryAdjustmentsStep(cartItemsInput);
 
@@ -406,4 +333,3 @@ export const createOrderFromStripeWorkflow = createWorkflow(
 );
 
 export default createOrderFromStripeWorkflow;
-
