@@ -46,6 +46,15 @@ interface PaymentIntentRequest {
   customerEmail?: string;
   shippingAddress?: ShippingAddress;
   paymentIntentId?: string; // For reuse/update
+  cartId: string; // Required for SEC-01: server-side pricing enforcement
+}
+
+interface MedusaCart {
+  id?: string;
+  total?: number;
+  summary?: {
+    current_order_total?: number;
+  };
 }
 
 interface StockValidationResult {
@@ -196,7 +205,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
     customerEmail,
     shippingAddress,
     paymentIntentId,
-  } = (await request.json()) as PaymentIntentRequest & { cartId?: string };
+  } = (await request.json()) as PaymentIntentRequest;
 
   // Access full Cloudflare env to include PostHog config for monitoredFetch
   const env = context.cloudflare.env as {
@@ -279,7 +288,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
             return data({ message: "Invalid cart", traceId }, { status: 400 });
         }
 
-        const { cart } = await cartResponse.json() as { cart: any };
+        const { cart } = await cartResponse.json() as { cart: MedusaCart };
 
         if (cart && (cart.total !== undefined || cart.summary?.current_order_total !== undefined)) {
             // Prefer summary.current_order_total if available (Medusa v2 pattern)

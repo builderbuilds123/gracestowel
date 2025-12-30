@@ -134,11 +134,19 @@ const emitEventStep = createStep(
 );
 
 /**
+ * Cart item structure for inventory adjustments
+ */
+interface CartItemForInventory {
+    variant_id: string;
+    quantity: number;
+}
+
+/**
  * Step to prepare inventory adjustments from cart items
  */
 const prepareInventoryAdjustmentsStep = createStep(
     "prepare-inventory-adjustments",
-    async (input: { cartItems: any[] }, { container }) => {
+    async (input: { cartItems: CartItemForInventory[] }, { container }) => {
         const query = container.resolve("query");
         const adjustments: UpdateInventoryLevelInput[] = [];
 
