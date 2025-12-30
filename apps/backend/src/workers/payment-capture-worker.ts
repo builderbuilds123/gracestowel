@@ -406,6 +406,9 @@ async function updatePaymentCollectionOnCapture(orderId: string, amountCaptured:
         return { paymentCollectionId: null, paymentId: null };
     }
 
+    // Declare paymentCollection outside try block for catch block access
+    let paymentCollection: any = null;
+
     try {
         const query = containerRef.resolve("query");
         
@@ -431,14 +434,17 @@ async function updatePaymentCollectionOnCapture(orderId: string, amountCaptured:
         // Capturable statuses are those that can transition to "completed": "authorized", "awaiting", etc.
         // Terminal statuses are: "completed", "partially_captured", "canceled"
         const capturableStatuses = ["authorized", "awaiting", "not_paid"];
-        const paymentCollection = order.payment_collections?.find(pc =>
-            capturableStatuses.includes(pc.status as string)
+        paymentCollection = order.payment_collections?.find(pc =>
+            pc ? capturableStatuses.includes(pc.status as string) : false
         );
 
         if (!paymentCollection) {
             const hasPaymentCollections = order.payment_collections && order.payment_collections.length > 0;
-            if (hasPaymentCollections) {
-                const statuses = order.payment_collections.map(pc => pc.status).join(', ');
+            if (hasPaymentCollections && order.payment_collections) {
+                const statuses = order.payment_collections
+                    .filter((pc): pc is NonNullable<typeof pc> => pc !== null)
+                    .map(pc => pc.status)
+                    .join(', ');
                 console.log(
                     `[PAY-01] Order ${orderId}: No capturable PaymentCollection found. ` +
                     `Current statuses: ${statuses}. May already be captured or in terminal state.`
@@ -446,6 +452,9 @@ async function updatePaymentCollectionOnCapture(orderId: string, amountCaptured:
 
                 // Return the first one anyway for transaction recording, even if already captured
                 const existingPC = order.payment_collections[0];
+                if (!existingPC) {
+                    return { paymentCollectionId: null, paymentId: null };
+                }
                 const paymentId = existingPC.payments?.[0]?.id as string | undefined;
                 return {
                     paymentCollectionId: existingPC.id as string,
@@ -514,7 +523,7 @@ async function updatePaymentCollectionOnCapture(orderId: string, amountCaptured:
         console.error(
             `[CRITICAL][ZOMBIE] Zombie PaymentCollection detected! ` +
             `order=${orderId} payment_collection=${paymentCollection?.id || 'unknown'} ` +
-            `amount=${amountCaptured} currency=${currencyCode} ` +
+            `amount=${amountCaptured} ` +
             `error=${(error as Error).name} message="${(error as Error).message}"`
         );
 
