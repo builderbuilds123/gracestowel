@@ -9,7 +9,7 @@ import { ProductInfo } from "../components/ProductInfo";
 import { ProductActions } from "../components/ProductActions";
 import { ProductDetails } from "../components/ProductDetails";
 import { RelatedProducts } from "../components/RelatedProducts";
-import { getMedusaClient, castToMedusaProduct, type MedusaProduct, getBackendUrl, getStockStatus, validateMedusaProduct } from "../lib/medusa";
+import { getMedusaClient, castToMedusaProduct, type MedusaProduct, getBackendUrl, getStockStatus, validateMedusaProduct, getDefaultRegion } from "../lib/medusa";
 import { transformToDetail, transformToListItem, type ProductDetail, type ProductListItem } from "../lib/product-transformer";
 import { monitoredFetch } from "../utils/monitored-fetch";
 
@@ -43,7 +43,7 @@ export function meta({ data }: Route.MetaArgs) {
         { name: "twitter:image", content: product.images?.[0] || "" },
         // Product specific
         { property: "product:price:amount", content: String(product.price / 100) },
-        { property: "product:price:currency", content: "USD" },
+        { property: "product:price:currency", content: "CAD" },
     ];
 }
 
@@ -76,9 +76,19 @@ export async function loader({ params, context }: Route.LoaderArgs) {
     let medusaProduct: MedusaProduct | null = null;
     let dataSource: "hyperdrive" | "medusa" = "medusa";
 
+    // Get default region for price calculation (CAD/Canada preferred)
+    const regionInfo = await getDefaultRegion(medusa);
+    const regionId = regionInfo?.region_id;
+    const currencyCode = regionInfo?.currency_code || "cad";
+
     try {
-        // Fetch product (Blocking)
-        const { products } = await medusa.store.product.list({ handle, limit: 1, fields: "+variants,+variants.prices,+variants.inventory_quantity,+options,+options.values,+images,+categories,+metadata" });
+        // Fetch product with region_id to get calculated prices
+        const { products } = await medusa.store.product.list({ 
+            handle, 
+            limit: 1, 
+            region_id: regionId,
+            fields: "+variants,+variants.calculated_price,+variants.prices,*variants.inventory_quantity,+options,+options.values,+images,+categories,+metadata" 
+        });
         medusaProduct = validateMedusaProduct(products[0]);
     } catch (error: any) {
         console.error("Failed to fetch product from Medusa:", error);
@@ -94,11 +104,15 @@ export async function loader({ params, context }: Route.LoaderArgs) {
     // We start the promise but don't await it
     const relatedProductsPromise = (async () => {
         try {
-            const res = await medusa.store.product.list({ limit: 4, fields: "+variants.prices,+images" });
+            const res = await medusa.store.product.list({ 
+                limit: 4, 
+                region_id: regionId,
+                fields: "+variants.calculated_price,+variants.prices,*variants.inventory_quantity,+images" 
+            });
             return (res.products as unknown[]).map(castToMedusaProduct)
                 .filter(p => p.id !== medusaProduct!.id)
                 .slice(0, 3)
-                .map(p => transformToDetail(p)); // Use transformToDetail to satisfy RelatedProducts props
+                .map(p => transformToDetail(p, currencyCode));
         } catch (e) {
             console.error("Failed to fetch related products", e);
             return [] as ProductDetail[];

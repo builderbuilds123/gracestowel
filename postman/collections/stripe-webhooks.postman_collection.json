@@ -1,0 +1,401 @@
+{
+  "info": {
+    "_postman_id": "487bd3e5-7f06-415b-bacb-31bf3d57129c",
+    "name": "Stripe Webhooks",
+    "description": "Stripe webhook event simulators for testing payment event handling locally. This collection allows you to send simulated webhook events to your Medusa backend without making real Stripe transactions.\n\n## How Webhook Testing Works\n\n1. **Set your webhook secret**: Configure the `stripe_webhook_secret` environment variable with your Stripe webhook signing secret (starts with `whsec_`)\n\n2. **Pre-request script generates signature**: Each request automatically generates a valid `Stripe-Signature` header using HMAC-SHA256\n\n3. **Send the webhook**: The request is sent to your backend's webhook endpoint with the proper signature\n\n4. **Backend validates and processes**: Your Medusa backend validates the signature and processes the event\n\n## Getting Your Webhook Secret\n\n- **Local development**: Use Stripe CLI with `stripe listen --forward-to localhost:9000/hooks/stripe` and copy the webhook signing secret\n- **Staging/Production**: Get the signing secret from your Stripe Dashboard under Developers > Webhooks\n\n## Supported Events\n\n- `payment_intent.succeeded` - Payment completed successfully\n- `payment_intent.failed` - Payment failed\n- `checkout.session.completed` - Checkout session completed\n- Custom events via template request",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Payment Intent Events",
+      "item": [
+        {
+          "name": "payment_intent.succeeded",
+          "id": "d8402d50-908e-49f4-9269-e27536693a8a",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"evt_test_webhook_{{$timestamp}}\",\n  \"object\": \"event\",\n  \"api_version\": \"2023-10-16\",\n  \"created\": {{$timestamp}},\n  \"type\": \"payment_intent.succeeded\",\n  \"data\": {\n    \"object\": {\n      \"id\": \"pi_test_{{$randomUUID}}\",\n      \"object\": \"payment_intent\",\n      \"amount\": 2999,\n      \"amount_received\": 2999,\n      \"currency\": \"usd\",\n      \"status\": \"succeeded\",\n      \"client_secret\": \"pi_test_secret_{{$randomUUID}}\",\n      \"metadata\": {\n        \"cart_id\": \"{{cart_id}}\",\n        \"resource_id\": \"{{cart_id}}\"\n      },\n      \"payment_method\": \"pm_test_{{$randomUUID}}\",\n      \"payment_method_types\": [\"card\"],\n      \"receipt_email\": \"customer@example.com\",\n      \"created\": {{$timestamp}},\n      \"livemode\": false\n    }\n  },\n  \"livemode\": false,\n  \"pending_webhooks\": 1,\n  \"request\": {\n    \"id\": \"req_test_{{$randomUUID}}\",\n    \"idempotency_key\": null\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/hooks/stripe",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "hooks",
+                "stripe"
+              ]
+            }
+          },
+          "response": [
+            {
+              "id": "8403d02e-b406-4a4c-86e9-9740f234a86a",
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"id\": \"evt_test_webhook_1234567890\",\n  \"object\": \"event\",\n  \"type\": \"payment_intent.succeeded\",\n  \"data\": {\n    \"object\": {\n      \"id\": \"pi_test_abc123\",\n      \"status\": \"succeeded\"\n    }\n  }\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/hooks/stripe",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "hooks",
+                    "stripe"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": null,
+              "cookie": [],
+              "responseTime": null,
+              "body": "{\n  \"received\": true\n}"
+            },
+            {
+              "id": "fa3fd06a-2158-4f7a-bef2-035264f7f224",
+              "name": "Invalid Signature Response",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Stripe-Signature",
+                    "value": "t=1234567890,v1=invalid_signature"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/hooks/stripe",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "hooks",
+                    "stripe"
+                  ]
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": null,
+              "cookie": [],
+              "responseTime": null,
+              "body": "{\n  \"error\": \"Webhook signature verification failed\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "payment_intent.failed",
+          "id": "ad01b0a8-6729-4560-8c05-1035ca177839",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"evt_test_webhook_{{$timestamp}}\",\n  \"object\": \"event\",\n  \"api_version\": \"2023-10-16\",\n  \"created\": {{$timestamp}},\n  \"type\": \"payment_intent.payment_failed\",\n  \"data\": {\n    \"object\": {\n      \"id\": \"pi_test_{{$randomUUID}}\",\n      \"object\": \"payment_intent\",\n      \"amount\": 2999,\n      \"amount_received\": 0,\n      \"currency\": \"usd\",\n      \"status\": \"requires_payment_method\",\n      \"client_secret\": \"pi_test_secret_{{$randomUUID}}\",\n      \"last_payment_error\": {\n        \"code\": \"card_declined\",\n        \"decline_code\": \"generic_decline\",\n        \"message\": \"Your card was declined.\",\n        \"type\": \"card_error\",\n        \"param\": null\n      },\n      \"metadata\": {\n        \"cart_id\": \"{{cart_id}}\",\n        \"resource_id\": \"{{cart_id}}\"\n      },\n      \"payment_method\": \"pm_test_{{$randomUUID}}\",\n      \"payment_method_types\": [\"card\"],\n      \"created\": {{$timestamp}},\n      \"livemode\": false\n    }\n  },\n  \"livemode\": false,\n  \"pending_webhooks\": 1,\n  \"request\": {\n    \"id\": \"req_test_{{$randomUUID}}\",\n    \"idempotency_key\": null\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/hooks/stripe",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "hooks",
+                "stripe"
+              ]
+            }
+          },
+          "response": [
+            {
+              "id": "b3a3ea7b-26ce-44e7-9d91-9ae053b56e38",
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"id\": \"evt_test_webhook_1234567890\",\n  \"object\": \"event\",\n  \"type\": \"payment_intent.payment_failed\",\n  \"data\": {\n    \"object\": {\n      \"id\": \"pi_test_abc123\",\n      \"status\": \"requires_payment_method\",\n      \"last_payment_error\": {\n        \"code\": \"card_declined\"\n      }\n    }\n  }\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/hooks/stripe",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "hooks",
+                    "stripe"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": null,
+              "cookie": [],
+              "responseTime": null,
+              "body": "{\n  \"received\": true\n}"
+            }
+          ]
+        }
+      ],
+      "id": "bae75643-eee5-4c23-a932-ab1681584755",
+      "description": "Webhook events related to payment intent lifecycle"
+    },
+    {
+      "name": "Checkout Session Events",
+      "item": [
+        {
+          "name": "checkout.session.completed",
+          "id": "a334e07e-95a7-4812-bd33-697bdc0fac8d",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"evt_test_webhook_{{$timestamp}}\",\n  \"object\": \"event\",\n  \"api_version\": \"2023-10-16\",\n  \"created\": {{$timestamp}},\n  \"type\": \"checkout.session.completed\",\n  \"data\": {\n    \"object\": {\n      \"id\": \"cs_test_{{$randomUUID}}\",\n      \"object\": \"checkout.session\",\n      \"amount_total\": 2999,\n      \"currency\": \"usd\",\n      \"customer\": \"cus_test_{{$randomUUID}}\",\n      \"customer_email\": \"customer@example.com\",\n      \"mode\": \"payment\",\n      \"payment_intent\": \"pi_test_{{$randomUUID}}\",\n      \"payment_status\": \"paid\",\n      \"status\": \"complete\",\n      \"success_url\": \"{{storefront_url}}/checkout/success\",\n      \"cancel_url\": \"{{storefront_url}}/checkout/cancel\",\n      \"metadata\": {\n        \"cart_id\": \"{{cart_id}}\",\n        \"resource_id\": \"{{cart_id}}\"\n      },\n      \"shipping_details\": {\n        \"address\": {\n          \"city\": \"New York\",\n          \"country\": \"US\",\n          \"line1\": \"123 Main St\",\n          \"line2\": null,\n          \"postal_code\": \"10001\",\n          \"state\": \"NY\"\n        },\n        \"name\": \"John Doe\"\n      },\n      \"created\": {{$timestamp}},\n      \"livemode\": false\n    }\n  },\n  \"livemode\": false,\n  \"pending_webhooks\": 1,\n  \"request\": {\n    \"id\": \"req_test_{{$randomUUID}}\",\n    \"idempotency_key\": null\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/hooks/stripe",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "hooks",
+                "stripe"
+              ]
+            }
+          },
+          "response": [
+            {
+              "id": "3f9b237e-e1ff-43f0-8816-d0d5a6d84ab3",
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"id\": \"evt_test_webhook_1234567890\",\n  \"object\": \"event\",\n  \"type\": \"checkout.session.completed\",\n  \"data\": {\n    \"object\": {\n      \"id\": \"cs_test_abc123\",\n      \"status\": \"complete\",\n      \"payment_status\": \"paid\"\n    }\n  }\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/hooks/stripe",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "hooks",
+                    "stripe"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": null,
+              "cookie": [],
+              "responseTime": null,
+              "body": "{\n  \"received\": true\n}"
+            }
+          ]
+        }
+      ],
+      "id": "f09848c1-e77f-4227-b2ea-d8432fa32b41",
+      "description": "Webhook events related to Stripe Checkout sessions"
+    },
+    {
+      "name": "Custom Webhook Template",
+      "item": [
+        {
+          "name": "Custom Webhook Event (Template)",
+          "id": "561c19d8-0fe2-4ad5-ab1b-9cce72395192",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"evt_test_webhook_{{$timestamp}}\",\n  \"object\": \"event\",\n  \"api_version\": \"2023-10-16\",\n  \"created\": {{$timestamp}},\n  \"type\": \"YOUR_EVENT_TYPE_HERE\",\n  \"data\": {\n    \"object\": {\n      \"id\": \"obj_test_{{$randomUUID}}\",\n      \"object\": \"YOUR_OBJECT_TYPE_HERE\",\n      \"metadata\": {\n        \"cart_id\": \"{{cart_id}}\"\n      },\n      \"livemode\": false\n    }\n  },\n  \"livemode\": false,\n  \"pending_webhooks\": 1,\n  \"request\": {\n    \"id\": \"req_test_{{$randomUUID}}\",\n    \"idempotency_key\": null\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/hooks/stripe",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "hooks",
+                "stripe"
+              ]
+            }
+          },
+          "response": [
+            {
+              "id": "f3a2af7f-6f34-4c8b-a33d-db96d96a69d2",
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"id\": \"evt_test_webhook_1234567890\",\n  \"object\": \"event\",\n  \"type\": \"custom.event\",\n  \"data\": {\n    \"object\": {}\n  }\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/hooks/stripe",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "hooks",
+                    "stripe"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": null,
+              "cookie": [],
+              "responseTime": null,
+              "body": "{\n  \"received\": true\n}"
+            }
+          ]
+        }
+      ],
+      "id": "8183957c-461b-4198-800d-fed7b31cb33e",
+      "description": "Template for testing custom Stripe webhook events"
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Stripe Webhook Signature Generator",
+          "// Generates a valid Stripe-Signature header for webhook testing",
+          "",
+          "const webhookSecret = pm.environment.get('stripe_webhook_secret') || pm.collectionVariables.get('stripe_webhook_secret');",
+          "",
+          "if (!webhookSecret) {",
+          "    console.error('ERROR: stripe_webhook_secret is not set. Please configure it in your environment.');",
+          "    throw new Error('stripe_webhook_secret environment variable is required');",
+          "}",
+          "",
+          "// Get the request body",
+          "const payload = pm.request.body.raw;",
+          "",
+          "if (!payload) {",
+          "    console.error('ERROR: Request body is empty');",
+          "    throw new Error('Request body is required for webhook signature generation');",
+          "}",
+          "",
+          "// Generate timestamp (seconds since epoch)",
+          "const timestamp = Math.floor(Date.now() / 1000);",
+          "",
+          "// Create the signed payload string: timestamp.payload",
+          "const signedPayload = `${timestamp}.${payload}`;",
+          "",
+          "// Generate HMAC-SHA256 signature using CryptoJS",
+          "const signature = CryptoJS.HmacSHA256(signedPayload, webhookSecret).toString(CryptoJS.enc.Hex);",
+          "",
+          "// Create the Stripe-Signature header value",
+          "// Format: t=timestamp,v1=signature",
+          "const stripeSignature = `t=${timestamp},v1=${signature}`;",
+          "",
+          "// Set the header for this request",
+          "pm.request.headers.upsert({",
+          "    key: 'Stripe-Signature',",
+          "    value: stripeSignature",
+          "});",
+          "",
+          "console.log('Stripe signature generated successfully');",
+          "console.log('Timestamp:', timestamp);",
+          "console.log('Signature header:', stripeSignature);"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "id": "73603414-30d1-4d72-9148-f4a470233e5e",
+      "key": "base_url",
+      "value": "http://localhost:9000",
+      "type": "string"
+    },
+    {
+      "id": "0e243787-3ae4-4f31-921c-7db2a0113c0d",
+      "key": "storefront_url",
+      "value": "http://localhost:5173",
+      "type": "string"
+    },
+    {
+      "id": "36f9fe78-7ec3-442f-83cd-aedae8127869",
+      "key": "stripe_webhook_secret",
+      "value": "",
+      "type": "secret"
+    },
+    {
+      "id": "82bedeac-7c92-435b-9952-73c0a3cf0241",
+      "key": "cart_id",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}

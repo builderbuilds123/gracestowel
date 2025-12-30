@@ -9,6 +9,7 @@
     "dev": "react-router dev",
     "postinstall": "node -e \"(process.env.CI || process.env.CF_PAGES === '1') ? null : require('child_process').execSync('pnpm run cf-typegen', {stdio: 'inherit'})\"",
     "preview": "vite preview",
+    "local": "pnpm run build && npx wrangler dev --config dist/server/wrangler.json --port 5174",
     "lint": "echo 'Lint not configured for storefront'",
     "typecheck": "node -e \"process.env.CI ? null : require('child_process').execSync('npm run cf-typegen && react-router typegen', {stdio: 'inherit'})\" && tsc -b",
     "typecheck:ci": "tsc -b",
@@ -35,7 +36,7 @@
     "web-vitals": "^5.1.0"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "^1.15.2",
+    "@cloudflare/vite-plugin": "^1.18.0",
     "@faker-js/faker": "^10.1.0",
     "@react-router/dev": "^7.10.1",
     "@tailwindcss/vite": "^4.1.13",
@@ -59,6 +60,6 @@
     "vite-tsconfig-paths": "^5.1.4",
     "vitest": "^4.0.14",
     "vitest-axe": "^1.0.0-pre.3",
-    "wrangler": "^4.40.2"
+    "wrangler": "^4.55.0"
   }
 }

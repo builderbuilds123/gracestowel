@@ -1,7 +1,20 @@
 import { type ActionFunctionArgs, data } from "react-router";
-import { toCents } from "../lib/price";
+import { toCents, fromCents } from "../lib/price";
 import { createLogger, getTraceIdFromRequest } from "../lib/logger";
 import { monitoredFetch, type CloudflareEnv } from "../utils/monitored-fetch";
+import { fnv1aHash } from "../lib/hash";
+
+// Common supported currencies (module-level constant)
+const COMMON_CURRENCIES = new Set([
+  'usd', 'eur', 'gbp', 'cad', 'aud', 'jpy', 'cny', 'inr', 'brl', 'mxn',
+  'nzd', 'sgd', 'hkd', 'nok', 'sek', 'dkk', 'pln', 'chf', 'krw', 'thb'
+]);
+
+// Safe Stripe error codes to expose to clients (user-actionable errors)
+const SAFE_ERROR_CODES = new Set([
+  'amount_too_small', 'amount_too_large', 'invalid_currency',
+  'parameter_missing', 'parameter_invalid_empty', 'rate_limit'
+]);
 
 interface CartItem {
   id: string | number;
@@ -29,6 +42,7 @@ interface PaymentIntentRequest {
   amount: number;
   currency: string;
   shipping?: number;
+  cartId: string; // Required for SEC-01: server-side pricing enforcement
   cartItems?: CartItem[];
   customerId?: string;
   customerEmail?: string;
@@ -47,43 +61,44 @@ interface StockValidationResult {
 
 /**
  * Generate deterministic idempotency key from cart contents
- * Uses FNV-1a hash for better distribution and includes timestamp bucket
- * to allow retries within a time window while preventing rapid duplicates
+ * AI-NOTE: REL-01 - Fully deterministic key generation for effective retries
+ *
+ * Uses FNV-1a hash of: cartId + amount + currency + cart contents
+ * Same inputs ALWAYS produce same key (retry-safe)
+ * Different inputs produce different keys (prevents accidental duplicates)
+ *
+ * Stripe caches idempotency keys for 24 hours which is fine since:
+ * - Cart changes → different key (due to cartId/amount/items hash)
+ * - Same cart retried → same key (desired behavior for network retries)
  */
 function generateIdempotencyKey(
+  cartId: string,
   amount: number,
   currency: string,
-  cartItems: CartItem[] | undefined,
-  customerId: string | undefined
+  cartItems: CartItem[] | undefined
 ): string {
+  // AI-NOTE: REL-01 - Deterministic cart content hash (sorted for stability)
   const cartHash = cartItems
     ? cartItems
         .map((i) => `${i.variantId}:${i.quantity}:${i.price}`)
         .sort()
         .join("|")
     : "empty";
-  
-  // Include a 5-minute time bucket to allow new attempts after cache expires
-  // Stripe idempotency keys are valid for 24 hours, but we want to allow
-  // reasonable retries if parameters truly change
-  const timeBucket = Math.floor(Date.now() / (5 * 60 * 1000));
-  
-  const raw = `pi_${customerId || "guest"}_${amount}_${currency}_${cartHash}_${timeBucket}`;
 
-  // FNV-1a hash - better distribution than simple hash
-  let hash = 2166136261; // FNV offset basis
-  for (let i = 0; i < raw.length; i++) {
-    hash ^= raw.charCodeAt(i);
-    hash = Math.imul(hash, 16777619); // FNV prime
-  }
-  
-  // Convert to base36 and ensure sufficient length
-  const hashStr = (hash >>> 0).toString(36).padStart(8, '0');
-  return `pi_${hashStr}_${amount}`;
+  // AI-NOTE: REL-01 - Use pipe delimiter to prevent collision edge cases
+  // Example: "cart_123_abc" + "100" vs "cart_123" + "abc_100" would collide with underscore
+  // Pipe delimiter ensures unambiguous component separation
+  const raw = `pi|${cartId}|${amount}|${currency}|${cartHash}`;
+
+  // Use extracted FNV-1a hash utility
+  const hashStr = fnv1aHash(raw);
+
+  return `pi_${cartId.slice(-8)}_${hashStr}_${amount}`;
 }
 
 /**
  * Validate stock availability for cart items
+ * In Medusa v2, we query products by variant ID and use *variants.inventory_quantity field
  */
 async function validateStock(
   cartItems: CartItem[],
@@ -104,9 +119,10 @@ async function validateStock(
         headers["x-publishable-api-key"] = publishableKey;
       }
 
+      // Medusa v2: Use products endpoint with variant filter to get inventory
       const response = await monitoredFetch(
-        `${medusaBackendUrl}/store/variants/${item.variantId}`,
-        { headers, method: "GET", label: "stock-variant", cloudflareEnv }
+        `${medusaBackendUrl}/store/products?variants.id=${encodeURIComponent(item.variantId)}&fields=*variants.inventory_quantity`,
+        { headers, method: "GET", label: "stock-check", cloudflareEnv }
       );
 
       if (!response.ok) {
@@ -121,9 +137,14 @@ async function validateStock(
       }
 
       const data = (await response.json()) as {
-        variant: { id: string; inventory_quantity?: number };
+        products: Array<{
+          variants: Array<{ id: string; inventory_quantity?: number }>;
+        }>;
       };
-      const variant = data.variant;
+      
+      // Find the variant in the product's variants array
+      const product = data.products?.[0];
+      const variant = product?.variants?.find(v => v.id === item.variantId);
 
       if (variant) {
         const available = variant.inventory_quantity ?? Infinity;
@@ -134,6 +155,13 @@ async function validateStock(
             available: Math.max(0, available),
           });
         }
+      } else if (!product) {
+        // Product not found - treat as out of stock
+        outOfStockItems.push({
+          title: item.title,
+          requested: item.quantity,
+          available: 0,
+        });
       }
     } catch (error) {
       // Log error but continue without blocking checkout
@@ -157,10 +185,11 @@ export async function action({ request, context }: ActionFunctionArgs) {
   }
 
   const {
-    amount,
+    amount, // Ignored in favor of Medusa Cart (SEC-01)
     currency,
-    shipping,
+    shipping, // Ignored in favor of Medusa Cart (SEC-01)
     cartItems,
+    cartId,
     customerId,
     customerEmail,
     shippingAddress,
@@ -229,8 +258,103 @@ export async function action({ request, context }: ActionFunctionArgs) {
       }
     }
 
-    const totalAmount = amount + (shipping || 0);
+    // SEC-01: Fetch authoritative cart data from Medusa
+    // MNY-01: Ensure correct unit conversion (Medusa major -> Stripe cents)
+    let calculatedAmount = 0;
+
+    if (cartId) {
+        // Fetch cart from Medusa
+        const cartResponse = await monitoredFetch(`${medusaBackendUrl}/store/carts/${cartId}`, {
+            headers: {
+                "x-publishable-api-key": publishableKey,
+            },
+            label: "fetch-medusa-cart",
+            cloudflareEnv: env,
+        });
+
+        if (!cartResponse.ok) {
+            logger.error("Failed to fetch Medusa cart", new Error("Cart not found or error"), { cartId });
+            return data({ message: "Invalid cart", traceId }, { status: 400 });
+        }
+
+        // Type safe cart interface
+        interface MedusaCart {
+            id?: string;
+            total?: number;
+            summary?: {
+                current_order_total?: number;
+            };
+        }
+
+        const { cart } = await cartResponse.json() as { cart: MedusaCart };
+
+        if (cart && (cart.total !== undefined || cart.summary?.current_order_total !== undefined)) {
+            // Prefer summary.current_order_total if available (Medusa v2 pattern)
+            const cartTotal = cart.summary?.current_order_total ?? cart.total;
+
+            // AI-NOTE: Medusa returns cents (e.g. 5000). Stripe expects cents (5000).
+            // Do NOT multiply by 100. Reference: MNY-01 correction.
+            calculatedAmount = Number(cartTotal);
+
+            logger.info("Used Medusa cart for pricing", {
+                cartId,
+                medusaTotal: cartTotal,
+                calculatedCents: calculatedAmount,
+                clientAmount: amount,
+                clientShipping: shipping
+            });
+        } else {
+             logger.error("Medusa cart missing total", new Error("Cart missing total"), { cartId, cart });
+             return data({ message: "Invalid cart data", traceId }, { status: 500 });
+        }
+    } else {
+        // SEC-01: Fail if no cartId provided
+        logger.error("No cartId provided for payment intent");
+        return data({ message: "Cart ID is required", traceId }, { status: 400 });
+    }
+
+    const totalAmount = fromCents(calculatedAmount); // Convert back to dollars for local variables if needed
     const isUpdate = !!paymentIntentId;
+
+    // Validate amount is positive
+    if (calculatedAmount <= 0) {
+      logger.error("Invalid amount", new Error("Amount must be positive"), {
+        amount,
+        shipping,
+        calculatedAmount,
+      });
+      return data(
+        { message: "Invalid amount: must be greater than 0", traceId },
+        { status: 400 }
+      );
+    }
+
+    // Validate currency (normalize to lowercase)
+    const validatedCurrency = (currency || "usd").toLowerCase();
+    
+    // Basic format validation
+    if (!validatedCurrency.match(/^[a-z]{3}$/)) {
+      logger.error("Invalid currency format", new Error("Currency must be 3 letter code"), {
+        currency: validatedCurrency,
+      });
+      return data(
+        { message: "Invalid currency code format (must be 3 lowercase letters)", traceId },
+        { status: 400 }
+      );
+    }
+    
+    // Warn if using uncommon currency (but allow it - Stripe will validate)
+    if (!COMMON_CURRENCIES.has(validatedCurrency)) {
+      logger.warn("Uncommon currency code", {
+        currency: validatedCurrency,
+        message: "Currency not in common list but will be validated by Stripe"
+      });
+    }
+
+    logger.info("Payment validation passed", {
+      calculatedAmountInCents: calculatedAmount,
+      currency: validatedCurrency,
+    });
 
     // Build request headers
     const headers: Record<string, string> = {
@@ -241,19 +365,19 @@ export async function action({ request, context }: ActionFunctionArgs) {
     // Idempotency key only for CREATE
     if (!isUpdate) {
       headers["Idempotency-Key"] = generateIdempotencyKey(
-        totalAmount,
-        currency || "usd",
-        cartItems,
-        customerId
+        cartId,
+        calculatedAmount, // Use cents directly to avoid floating-point issues
+        validatedCurrency,
+        cartItems
       );
     }
 
     const body = new URLSearchParams();
-    body.append("amount", toCents(totalAmount).toString());
+    body.append("amount", calculatedAmount.toString());
 
     // These params only on CREATE
     if (!isUpdate) {
-      body.append("currency", currency || "usd");
+      body.append("currency", validatedCurrency);
       body.append("automatic_payment_methods[enabled]", "true");
       body.append("capture_method", "manual");
       body.append(
@@ -275,6 +399,8 @@ export async function action({ request, context }: ActionFunctionArgs) {
     }
 
     // Metadata - can be set on create or update
+    if (cartId) body.append("metadata[cart_id]", cartId);
+
     if (cartItems && cartItems.length > 0) {
       body.append(
         "metadata[cart_data]",
@@ -291,9 +417,14 @@ export async function action({ request, context }: ActionFunctionArgs) {
       );
     }
     if (customerId) body.append("metadata[customer_id]", customerId);
-    if (customerEmail) body.append("metadata[customer_email]", customerEmail);
+    if (customerEmail) {
+      body.append("metadata[customer_email]", customerEmail);
+      // Also set receipt_email so Stripe receipts and backend fallback work
+      body.append("receipt_email", customerEmail);
+    }
     if (shippingAddress)
       body.append("metadata[shipping_address]", JSON.stringify(shippingAddress));
+    if (shipping) body.append("metadata[shipping_amount]", shipping.toString());
     
     // Add trace ID to metadata for backend correlation
     body.append("metadata[trace_id]", traceId);
@@ -303,10 +434,16 @@ export async function action({ request, context }: ActionFunctionArgs) {
       ? `https://api.stripe.com/v1/payment_intents/${paymentIntentId}`
       : "https://api.stripe.com/v1/payment_intents";
 
+    // Log request details for debugging
     logger.info("Calling Stripe API", {
       operation: isUpdate ? "update" : "create",
       paymentIntentId,
       amount: totalAmount,
+      currency: validatedCurrency,
+      amountInCents: toCents(totalAmount),
+      hasCartItems: !!cartItems?.length,
+      cartItemCount: cartItems?.length,
+      idempotencyKey: headers["Idempotency-Key"],
     });
 
     const response = await monitoredFetch(url, {
@@ -319,14 +456,69 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
     if (!response.ok) {
       const errorText = await response.text();
+      
+      // Parse Stripe error response for better diagnostics
+      let stripeError: any = null;
+      try {
+        stripeError = JSON.parse(errorText);
+      } catch {
+        // Error is not JSON, use raw text
+        stripeError = { raw: errorText };
+      }
+      
+      // Enhanced logging with full error details
       logger.error("Stripe API error", new Error(errorText), {
         status: response.status,
+        statusText: response.statusText,
         paymentIntentId,
         operation: isUpdate ? "update" : "create",
+        stripeErrorType: stripeError?.error?.type,
+        stripeErrorCode: stripeError?.error?.code,
+        stripeErrorMessage: stripeError?.error?.message,
+        stripeErrorParam: stripeError?.error?.param,
+        requestAmount: totalAmount,
+        requestCurrency: validatedCurrency,
+        requestAmountInCents: toCents(totalAmount),
       });
+      
+      // Sanitize error message to avoid exposing sensitive information
+      // Only include user-friendly Stripe error messages for safe, user-actionable errors
+      const errorCode = stripeError?.error?.code;
+      const errorMessage = stripeError?.error?.message;
+      
+      // Generic fallback for any unsafe/unknown errors
+      const GENERIC_ERROR_MESSAGE = "Payment service error - please try again or contact support";
+      
+      // Only include detailed message if:
+      // 1. errorCode exists and is valid
+      // 2. errorCode is in the safe list
+      // 3. errorMessage exists and is a non-empty string
+      const debugInfo = (errorCode && SAFE_ERROR_CODES.has(errorCode) && errorMessage)
+        ? `Stripe error: ${errorMessage}`
+        : GENERIC_ERROR_MESSAGE;
+      
+      // Determine appropriate status code
+      // 400 (Bad Request) -> 400
+      // 402 (Request Failed) -> 402
+      // 401/403 (Auth/Permission) -> 500 (Server configuration error)
+      // 429 (Rate Limit) -> 429
+      // 5xx (Stripe Down) -> 502 (Bad Gateway)
+      let statusCode = 500;
+      
+      if (response.status === 400 || response.status === 402 || response.status === 429) {
+        statusCode = response.status;
+      } else if (response.status >= 500) {
+        statusCode = 502;
+      }
+
       return data(
-        { message: "Payment initialization failed", traceId },
-        { status: 500 }
+        { 
+          message: statusCode === 500 ? "Payment system error" : "Payment failed",
+          debugInfo,
+          stripeErrorCode: errorCode || undefined,
+          traceId 
+        },
+        { status: statusCode }
       );
     }
 

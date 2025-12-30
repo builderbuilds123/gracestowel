@@ -90,9 +90,10 @@ export function isLegacyId(id: ProductId): id is number {
 
 /**
  * Type guard to check if an ID is a Medusa string ID
+ * Accepts product IDs (prod_xxx) and variant IDs (variant_xxx)
  */
 export function isMedusaId(id: ProductId): id is string {
-    return typeof id === 'string' && id.startsWith('prod_');
+    return typeof id === 'string' && (id.startsWith('prod_') || id.startsWith('variant_'));
 }
 
 /**

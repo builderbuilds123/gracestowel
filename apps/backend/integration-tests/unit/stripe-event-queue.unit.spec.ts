@@ -50,7 +50,6 @@ import {
     releaseProcessingLock,
     queueStripeEvent,
     getStripeEventQueue,
-    processStripeEvent,
     resetStripeEventQueue,
     STRIPE_EVENT_QUEUE,
 } from "../../src/lib/stripe-event-queue";
@@ -351,7 +350,7 @@ describe("Stripe Event Queue - Story 6.1", () => {
         
         it("should log CRITICAL error and release lock when job exhausts all retries", async () => {
             // Re-import to get fresh module with our mock
-            const { startStripeEventWorker, releaseProcessingLock: releaseLock } = require("../../src/lib/stripe-event-queue");
+            const { startStripeEventWorker } = require("../../src/workers/stripe-event-worker");
             
             // Setup mocks for lock release
             mockRedisGet.mockResolvedValue("processing");
@@ -398,7 +397,7 @@ describe("Stripe Event Queue - Story 6.1", () => {
         });
         
         it("should only warn and not release lock for intermediate failures", async () => {
-            const { startStripeEventWorker } = require("../../src/lib/stripe-event-queue");
+            const { startStripeEventWorker } = require("../../src/workers/stripe-event-worker");
             
             const mockContainer = { resolve: jest.fn() };
             const mockHandler = jest.fn();

@@ -1,5 +1,6 @@
 import { MedusaContainer } from "@medusajs/framework/types";
-import { startPaymentCaptureWorker } from "../lib/payment-capture-queue";
+import { startPaymentCaptureWorker } from "../workers/payment-capture-worker";
+import { RedisNotConfiguredError } from "../lib/payment-capture-queue";
 
 /**
  * Loader to start the BullMQ payment capture worker when the Medusa server starts.
@@ -11,14 +12,14 @@ import { startPaymentCaptureWorker } from "../lib/payment-capture-queue";
  */
 export default async function paymentCaptureWorkerLoader(container: MedusaContainer) {
     try {
-        // Only start the worker if Redis is configured
-        if (process.env.REDIS_URL) {
-            // Pass container to worker for accessing Medusa services (Story 2.3)
-            startPaymentCaptureWorker(container);
-        } else {
-            console.warn("REDIS_URL not configured - payment capture worker not started");
-        }
+        // Pass container to worker for accessing Medusa services (Story 2.3)
+        startPaymentCaptureWorker(container);
     } catch (error) {
+        if (error instanceof RedisNotConfiguredError) {
+            console.warn("REDIS_URL not configured - payment capture worker not started");
+            return;
+        }
+
         // H2: Fail loudness
         console.error("CRITICAL: Failed to start payment capture worker:", error);
         throw error;

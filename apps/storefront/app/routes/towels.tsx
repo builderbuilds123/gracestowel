@@ -2,7 +2,7 @@ import type { Route } from "./+types/towels";
 import { useState, useMemo } from "react";
 import { ProductCard } from "../components/ProductCard";
 import { ProductFilters } from "../components/ProductFilters";
-import { getMedusaClient, castToMedusaProduct, type MedusaProduct } from "../lib/medusa";
+import { getMedusaClient, castToMedusaProduct, type MedusaProduct, getDefaultRegion } from "../lib/medusa";
 import { productList } from "../data/products";
 import { SlidersHorizontal, X } from "lucide-react";
 import { transformToListItems, type ProductListItem } from "../lib/product-transformer";
@@ -28,12 +28,22 @@ export function meta() {
 export async function loader({ context }: Route.LoaderArgs) {
     try {
         const medusa = getMedusaClient(context);
-        const { products } = await medusa.store.product.list({ limit: 50, fields: "+variants,+variants.prices,+variants.inventory_quantity,+options,+options.values,+images,+categories,+metadata" });
+        
+        // Get default region for price calculation (CAD/Canada preferred)
+        const regionInfo = await getDefaultRegion(medusa);
+        const regionId = regionInfo?.region_id;
+        const currencyCode = regionInfo?.currency_code || "cad";
+        
+        const { products } = await medusa.store.product.list({ 
+            limit: 50, 
+            region_id: regionId,
+            fields: "+variants,+variants.calculated_price,+variants.prices,*variants.inventory_quantity,+options,+options.values,+images,+categories,+metadata" 
+        });
 
         // Transform Medusa products using centralized transformer
         // Use safe casting to ensure type safety matching our MedusaProduct interface
         const safeProducts = products.map(castToMedusaProduct);
-        const transformedProducts = transformToListItems(safeProducts);
+        const transformedProducts = transformToListItems(safeProducts, currencyCode);
 
         // Extract all unique colors
         const allColors = [...new Set(transformedProducts.flatMap(p => p.colors))].sort();

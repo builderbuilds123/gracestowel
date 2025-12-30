@@ -28,10 +28,7 @@
     "test:e2e:ci:down": "docker compose -f docker-compose.test.yml down -v"
   },
   "dependencies": {
-    "@react-native-async-storage/async-storage": "^2.2.0",
-    "posthog-react-native": "^4.14.3",
-    "react-native-device-info": "^15.0.1",
-    "react-native-localize": "^3.6.0"
+
   },
   "engines": {
     "node": ">=24"

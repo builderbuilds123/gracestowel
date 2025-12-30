@@ -141,37 +141,6 @@ export default function CheckoutSuccess() {
                     // or 'succeeded' (already captured after 1-hour window)
                     const validStatuses = ['succeeded', 'requires_capture'];
                     if (paymentIntent && validStatuses.includes(paymentIntent.status)) {
-                        // Extract shipping details
-                        if (paymentIntent.shipping) {
-                            console.log("Shipping details found:", paymentIntent.shipping);
-                            setShippingAddress(paymentIntent.shipping);
-
-                            // Geocode address
-                            const address = paymentIntent.shipping.address;
-                            const addressString = `${address?.line1}, ${address?.city}, ${address?.state} ${address?.postal_code}, ${address?.country} `;
-                            console.log("Geocoding address:", addressString);
-
-                            try {
-                                const response = await monitoredFetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addressString)}`, {
-                                    method: "GET",
-                                    label: "geocode-shipping-address",
-                                });
-                                const data = await response.json() as any[];
-                                console.log("Geocoding response:", data);
-                                if (Array.isArray(data) && data.length > 0) {
-                                    const coords: [number, number] = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
-                                    console.log("Setting map coordinates:", coords);
-                                    setMapCoordinates(coords);
-                                } else {
-                                    console.warn("No geocoding results found");
-                                }
-                            } catch (error) {
-                                console.error("Geocoding error:", error);
-                            }
-                        } else {
-                            console.warn("No shipping details in payment intent");
-                        }
-
                         // Handle Order Details Logic (Persistence)
                         // Always try to recover from localStorage first since we save it before redirect
                         const savedOrder = localStorage.getItem('lastOrder');
@@ -216,7 +185,32 @@ export default function CheckoutSuccess() {
                         }
 
                         setOrderDetails(orderData);
+                        // Extract shipping details immediately for UI
+                        if (paymentIntent.shipping) {
+                            setShippingAddress(paymentIntent.shipping);
+                        }
+                        
+                        // RENDER SUCCESS IMMEDIATELY
                         setPaymentStatus('success');
+
+                        // NON-BLOCKING: Geocode address in background
+                        if (paymentIntent.shipping) {
+                            const address = paymentIntent.shipping.address;
+                            const addressString = `${address?.line1}, ${address?.city}, ${address?.state} ${address?.postal_code}, ${address?.country} `;
+                            console.log("Geocoding address (background):", addressString);
+
+                            // Do not await this
+                            monitoredFetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addressString)}`, {
+                                method: "GET",
+                                label: "geocode-shipping-address",
+                            }).then(async (response) => {
+                                const data = await response.json() as any[];
+                                if (Array.isArray(data) && data.length > 0) {
+                                    const coords: [number, number] = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+                                    setMapCoordinates(coords);
+                                }
+                            }).catch(err => console.error("Geocoding error:", err));
+                        }
 
                         // Fetch order from API to get modification token
                         // Poll until order is created (webhook may still be processing)
@@ -275,6 +269,36 @@ export default function CheckoutSuccess() {
                                 }
                             }
                         };
+
+                        // CHK-01: Call Medusa cart completion API
+                        const cartIdFromSession = sessionStorage.getItem('medusa_cart_id');
+                        if (cartIdFromSession) {
+                            try {
+                                console.log(`Attempting to complete Medusa cart ${cartIdFromSession}...`);
+                                const completeResponse = await monitoredFetch(`/api/carts/${cartIdFromSession}/complete`, {
+                                    method: "POST",
+                                    headers: {
+                                        "Content-Type": "application/json",
+                                    },
+                                    label: "complete-medusa-cart",
+                                });
+
+                                if (completeResponse.ok) {
+                                    const completionData = await completeResponse.json();
+                                    console.log("Medusa cart completion successful:", completionData);
+                                    // Optionally use the returned orderId from completionData if needed
+                                } else {
+                                    const errorData = await completeResponse.json();
+                                    console.error("Medusa cart completion failed:", errorData);
+                                    // Non-critical failure: log and proceed, webhook should eventually create order
+                                }
+                            } catch (err) {
+                                console.error("Error calling cart completion API:", err);
+                                // Non-critical failure: log and proceed
+                            }
+                        } else {
+                            console.warn("No Medusa cart ID found in session to complete.");
+                        }
 
                         // Start fetching order
                         fetchOrderWithToken();
@@ -457,7 +481,17 @@ export default function CheckoutSuccess() {
 
                         {/* Order Total */}
                         <div className="border-t border-gray-200 pt-4">
-                            <div className="flex justify-between items-center">
+                            <div className="flex justify-between items-center mb-2">
+                                <span className="text-text-earthy/80">Subtotal</span>
+                                <span className="text-text-earthy font-medium">${orderDetails?.subtotal?.toFixed(2) || orderDetails?.items.reduce((acc: number, item: any) => acc + parseFloat(item.price.replace('$', '')) * item.quantity, 0).toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between items-center mb-4">
+                                <span className="text-text-earthy/80">Shipping</span>
+                                <span className="text-text-earthy font-medium">
+                                    {orderDetails?.shipping === 0 ? 'Free' : `$${orderDetails?.shipping?.toFixed(2) || '0.00'}`}
+                                </span>
+                            </div>
+                            <div className="flex justify-between items-center pt-2 border-t border-gray-100">
                                 <span className="font-serif text-lg text-text-earthy">Total</span>
                                 <span className="font-bold text-2xl text-accent-earthy">${orderDetails?.total.toFixed(2)}</span>
                             </div>

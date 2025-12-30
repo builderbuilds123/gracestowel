@@ -1,0 +1,1141 @@
+{
+  "info": {
+    "_postman_id": "e1747f5e-96e9-439c-a2ef-2803ff7c8eec",
+    "name": "Store API",
+    "description": "Medusa Store API endpoints for storefront operations including products, carts, checkout, regions, and collections. These are public-facing endpoints used by the Grace Stowel storefront.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Products",
+      "item": [
+        {
+          "name": "List Products",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// JSON Schema for Product List Response - Contract Test",
+                  "// Validates: Requirements 4.1, 4.2, 4.3, 4.4",
+                  "const productListSchema = {",
+                  "    type: 'object',",
+                  "    required: ['products', 'count', 'offset', 'limit'],",
+                  "    properties: {",
+                  "        products: {",
+                  "            type: 'array',",
+                  "            items: {",
+                  "                type: 'object',",
+                  "                required: ['id', 'title', 'handle'],",
+                  "                properties: {",
+                  "                    id: { type: 'string' },",
+                  "                    title: { type: 'string' },",
+                  "                    handle: { type: 'string' },",
+                  "                    description: { type: ['string', 'null'] },",
+                  "                    thumbnail: { type: ['string', 'null'] },",
+                  "                    variants: {",
+                  "                        type: 'array',",
+                  "                        items: {",
+                  "                            type: 'object',",
+                  "                            required: ['id'],",
+                  "                            properties: {",
+                  "                                id: { type: 'string' },",
+                  "                                title: { type: ['string', 'null'] },",
+                  "                                prices: {",
+                  "                                    type: 'array',",
+                  "                                    items: {",
+                  "                                        type: 'object',",
+                  "                                        properties: {",
+                  "                                            amount: { type: 'number' },",
+                  "                                            currency_code: { type: 'string' }",
+                  "                                        }",
+                  "                                    }",
+                  "                                }",
+                  "                            }",
+                  "                        }",
+                  "                    }",
+                  "                }",
+                  "            }",
+                  "        },",
+                  "        count: { type: 'number' },",
+                  "        offset: { type: 'number' },",
+                  "        limit: { type: 'number' }",
+                  "    }",
+                  "};",
+                  "",
+                  "pm.test('Response status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Product list response matches schema', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(tv4.validate(response, productListSchema)).to.be.true;",
+                  "    if (!tv4.validate(response, productListSchema)) {",
+                  "        console.log('Schema validation error:', tv4.error);",
+                  "    }",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Products array contains valid items', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.products).to.be.an('array');",
+                  "    if (response.products.length > 0) {",
+                  "        const product = response.products[0];",
+                  "        pm.expect(product).to.have.property('id');",
+                  "        pm.expect(product).to.have.property('title');",
+                  "        pm.expect(product).to.have.property('handle');",
+                  "    }",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Pagination fields are present and valid', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.count).to.be.a('number');",
+                  "    pm.expect(response.offset).to.be.a('number');",
+                  "    pm.expect(response.limit).to.be.a('number');",
+                  "    pm.expect(response.count).to.be.at.least(0);",
+                  "    pm.expect(response.offset).to.be.at.least(0);",
+                  "    pm.expect(response.limit).to.be.at.least(1);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "id": "3f117411-d68b-48bb-9e6f-be67e20c34a2",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/store/products",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "store",
+                "products"
+              ]
+            }
+          },
+          "response": [
+            {
+              "id": "c65aac7e-0871-4c5a-837f-96c88a141253",
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/store/products",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "store",
+                    "products"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": null,
+              "cookie": [],
+              "responseTime": null,
+              "body": "{\n  \"products\": [\n    {\n      \"id\": \"prod_01EXAMPLE\",\n      \"title\": \"Grace Stowel Premium Towel\",\n      \"handle\": \"grace-stowel-premium-towel\",\n      \"description\": \"A luxurious premium towel\",\n      \"thumbnail\": \"https://example.com/thumbnail.jpg\",\n      \"variants\": [\n        {\n          \"id\": \"variant_01EXAMPLE\",\n          \"title\": \"White / Large\",\n          \"prices\": [\n            {\n              \"amount\": 2999,\n              \"currency_code\": \"usd\"\n            }\n          ]\n        }\n      ]\n    }\n  ],\n  \"count\": 1,\n  \"offset\": 0,\n  \"limit\": 20\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Product by Handle",
+          "id": "da7a3471-5987-449f-ab92-ef68de86e06c",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/store/products?handle={{product_handle}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "store",
+                "products"
+              ],
+              "query": [
+                {
+                  "key": "handle",
+                  "value": "{{product_handle}}",
+                  "description": "The URL-friendly handle of the product"
+                }
+              ]
+            }
+          },
+          "response": [
+            {
+              "id": "be2b4adf-4ab6-47dd-89a1-dcec825a7f7b",
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/store/products?handle=grace-stowel-premium-towel",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "store",
+                    "products"
+                  ],
+                  "query": [
+                    {
+                      "key": "handle",
+                      "value": "grace-stowel-premium-towel"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": null,
+              "cookie": [],
+              "responseTime": null,
+              "body": "{\n  \"products\": [\n    {\n      \"id\": \"prod_01EXAMPLE\",\n      \"title\": \"Grace Stowel Premium Towel\",\n      \"handle\": \"grace-stowel-premium-towel\",\n      \"description\": \"A luxurious premium towel with superior absorbency\",\n      \"thumbnail\": \"https://example.com/thumbnail.jpg\",\n      \"images\": [\n        {\n          \"id\": \"img_01EXAMPLE\",\n          \"url\": \"https://example.com/image1.jpg\"\n        }\n      ],\n      \"variants\": [\n        {\n          \"id\": \"variant_01EXAMPLE\",\n          \"title\": \"White / Large\",\n          \"sku\": \"TOWEL-WHT-LG\",\n          \"prices\": [\n            {\n              \"amount\": 2999,\n              \"currency_code\": \"usd\"\n            }\n          ],\n          \"inventory_quantity\": 100\n        }\n      ],\n      \"options\": [\n        {\n          \"id\": \"opt_01EXAMPLE\",\n          \"title\": \"Color\",\n          \"values\": [\"White\", \"Gray\", \"Navy\"]\n        },\n        {\n          \"id\": \"opt_02EXAMPLE\",\n          \"title\": \"Size\",\n          \"values\": [\"Small\", \"Medium\", \"Large\"]\n        }\n      ]\n    }\n  ],\n  \"count\": 1,\n  \"offset\": 0,\n  \"limit\": 1\n}"
+            }
+          ]
+        }
+      ],
+      "id": "a5612fed-7dd6-473f-9d9e-b67d3f3bb9ef",
+      "description": "Product catalog endpoints for browsing and searching products"
+    },
+    {
+      "name": "Carts",
+      "item": [
+        {
+          "name": "Create Cart",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Cart created successfully', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Store cart_id in collection variables', function () {",
+                  "    const response = pm.response.json();",
+                  "    if (response.cart && response.cart.id) {",
+                  "        pm.collectionVariables.set('cart_id', response.cart.id);",
+                  "        console.log('Cart ID stored:', response.cart.id);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "id": "dd1cd5c1-4762-4ec0-8582-5ebe00bb3bb6",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"region_id\": \"{{region_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/store/carts",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "store",
+                "carts"
+              ]
+            }
+          },
+          "response": [
+            {
+              "id": "83b23f5d-6ca8-413e-b5eb-fb508cf2f603",
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"region_id\": \"reg_01EXAMPLE\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/store/carts",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "store",
+                    "carts"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": null,
+              "cookie": [],
+              "responseTime": null,
+              "body": "{\n  \"cart\": {\n    \"id\": \"cart_01EXAMPLE\",\n    \"region_id\": \"reg_01EXAMPLE\",\n    \"items\": [],\n    \"subtotal\": 0,\n    \"tax_total\": 0,\n    \"total\": 0,\n    \"created_at\": \"2024-01-01T00:00:00.000Z\",\n    \"updated_at\": \"2024-01-01T00:00:00.000Z\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Cart",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// JSON Schema for Cart Response - Contract Test",
+                  "// Validates: Requirements 4.1, 4.2, 4.3, 4.4",
+                  "const cartSchema = {",
+                  "    type: 'object',",
+                  "    required: ['cart'],",
+                  "    properties: {",
+                  "        cart: {",
+                  "            type: 'object',",
+                  "            required: ['id'],",
+                  "            properties: {",
+                  "                id: { type: 'string' },",
+                  "                region_id: { type: ['string', 'null'] },",
+                  "                items: {",
+                  "                    type: 'array',",
+                  "                    items: {",
+                  "                        type: 'object',",
+                  "                        required: ['id', 'quantity'],",
+                  "                        properties: {",
+                  "                            id: { type: 'string' },",
+                  "                            cart_id: { type: 'string' },",
+                  "                            variant_id: { type: ['string', 'null'] },",
+                  "                            quantity: { type: 'number' },",
+                  "                            unit_price: { type: 'number' },",
+                  "                            subtotal: { type: 'number' }",
+                  "                        }",
+                  "                    }",
+                  "                },",
+                  "                subtotal: { type: 'number' },",
+                  "                tax_total: { type: ['number', 'null'] },",
+                  "                shipping_total: { type: ['number', 'null'] },",
+                  "                total: { type: 'number' },",
+                  "                shipping_address: {",
+                  "                    type: ['object', 'null'],",
+                  "                    properties: {",
+                  "                        first_name: { type: 'string' },",
+                  "                        last_name: { type: 'string' },",
+                  "                        address_1: { type: 'string' },",
+                  "                        city: { type: 'string' },",
+                  "                        province: { type: ['string', 'null'] },",
+                  "                        postal_code: { type: 'string' },",
+                  "                        country_code: { type: 'string' }",
+                  "                    }",
+                  "                },",
+                  "                billing_address: { type: ['object', 'null'] }",
+                  "            }",
+                  "        }",
+                  "    }",
+                  "};",
+                  "",
+                  "pm.test('Response status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Cart response matches schema', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(tv4.validate(response, cartSchema)).to.be.true;",
+                  "    if (!tv4.validate(response, cartSchema)) {",
+                  "        console.log('Schema validation error:', tv4.error);",
+                  "    }",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Cart has required fields', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.cart).to.have.property('id');",
+                  "    pm.expect(response.cart).to.have.property('items');",
+                  "    pm.expect(response.cart.items).to.be.an('array');",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Cart totals are valid numbers', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.cart.subtotal).to.be.a('number');",
+                  "    pm.expect(response.cart.total).to.be.a('number');",
+                  "    pm.expect(response.cart.subtotal).to.be.at.least(0);",
+                  "    pm.expect(response.cart.total).to.be.at.least(0);",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Cart items have valid structure', function () {",
+                  "    const response = pm.response.json();",
+                  "    if (response.cart.items.length > 0) {",
+                  "        const item = response.cart.items[0];",
+                  "        pm.expect(item).to.have.property('id');",
+                  "        pm.expect(item).to.have.property('quantity');",
+                  "        pm.expect(item.quantity).to.be.a('number');",
+                  "        pm.expect(item.quantity).to.be.at.least(1);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "id": "a08fb1a7-bb21-4c4a-a8e8-317a7cd9877c",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/store/carts/{{cart_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "store",
+                "carts",
+                "{{cart_id}}"
+              ]
+            }
+          },
+          "response": [
+            {
+              "id": "33d16fd5-9ed5-4e01-8dcd-3277d9be2cef",
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/store/carts/cart_01EXAMPLE",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "store",
+                    "carts",
+                    "cart_01EXAMPLE"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": null,
+              "cookie": [],
+              "responseTime": null,
+              "body": "{\n  \"cart\": {\n    \"id\": \"cart_01EXAMPLE\",\n    \"region_id\": \"reg_01EXAMPLE\",\n    \"items\": [\n      {\n        \"id\": \"item_01EXAMPLE\",\n        \"cart_id\": \"cart_01EXAMPLE\",\n        \"variant_id\": \"variant_01EXAMPLE\",\n        \"quantity\": 2,\n        \"unit_price\": 2999,\n        \"subtotal\": 5998\n      }\n    ],\n    \"subtotal\": 5998,\n    \"tax_total\": 540,\n    \"shipping_total\": 500,\n    \"total\": 7038,\n    \"shipping_address\": null,\n    \"billing_address\": null\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Add Line Item",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Line item added successfully', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Cart contains the added item', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.cart.items.length).to.be.greaterThan(0);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "id": "ed4a01fb-de58-462e-bc21-d87212421c7f",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"variant_id\": \"{{variant_id}}\",\n  \"quantity\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/store/carts/{{cart_id}}/line-items",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "store",
+                "carts",
+                "{{cart_id}}",
+                "line-items"
+              ]
+            }
+          },
+          "response": [
+            {
+              "id": "4502087d-2815-4116-a74d-260f07b05aba",
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"variant_id\": \"variant_01EXAMPLE\",\n  \"quantity\": 1\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/store/carts/cart_01EXAMPLE/line-items",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "store",
+                    "carts",
+                    "cart_01EXAMPLE",
+                    "line-items"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": null,
+              "cookie": [],
+              "responseTime": null,
+              "body": "{\n  \"cart\": {\n    \"id\": \"cart_01EXAMPLE\",\n    \"region_id\": \"reg_01EXAMPLE\",\n    \"items\": [\n      {\n        \"id\": \"item_01EXAMPLE\",\n        \"cart_id\": \"cart_01EXAMPLE\",\n        \"variant_id\": \"variant_01EXAMPLE\",\n        \"title\": \"Grace Stowel Premium Towel\",\n        \"quantity\": 1,\n        \"unit_price\": 2999,\n        \"subtotal\": 2999\n      }\n    ],\n    \"subtotal\": 2999,\n    \"tax_total\": 270,\n    \"total\": 3269\n  }\n}"
+            }
+          ]
+        }
+      ],
+      "id": "c42b8344-838e-4854-8bab-7e9ac9d75dd1",
+      "description": "Shopping cart management endpoints for creating carts, adding items, and managing cart state"
+    },
+    {
+      "name": "Checkout",
+      "item": [
+        {
+          "name": "Complete Checkout Flow",
+          "item": [
+            {
+              "name": "1. Create Cart",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Cart created successfully', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "pm.test('Store cart_id for checkout flow', function () {",
+                      "    const response = pm.response.json();",
+                      "    if (response.cart && response.cart.id) {",
+                      "        pm.collectionVariables.set('cart_id', response.cart.id);",
+                      "        console.log('Checkout Flow - Cart ID stored:', response.cart.id);",
+                      "    }",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "id": "efa8d334-faf8-414f-8ea0-c55dc6c8794a",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"region_id\": \"{{region_id}}\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/store/carts",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "store",
+                    "carts"
+                  ]
+                }
+              },
+              "response": [
+                {
+                  "id": "00b490cc-d125-4a12-ad3a-aa05c64a7894",
+                  "name": "Success Response",
+                  "originalRequest": {
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"region_id\": \"{{region_id}}\"\n}"
+                    },
+                    "url": {
+                      "raw": "{{base_url}}/store/carts",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "store",
+                        "carts"
+                      ]
+                    }
+                  },
+                  "status": "OK",
+                  "code": 200,
+                  "_postman_previewlanguage": "json",
+                  "header": null,
+                  "cookie": [],
+                  "responseTime": null,
+                  "body": "{\n  \"cart\": {\n    \"id\": \"cart_01CHECKOUT\",\n    \"region_id\": \"reg_01EXAMPLE\",\n    \"items\": [],\n    \"subtotal\": 0,\n    \"total\": 0\n  }\n}"
+                }
+              ]
+            },
+            {
+              "name": "2. Add Line Item",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Line item added successfully', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "pm.test('Cart has items', function () {",
+                      "    const response = pm.response.json();",
+                      "    pm.expect(response.cart.items.length).to.be.greaterThan(0);",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "id": "08cd70d6-e6ed-4d30-83fa-055ec01c408f",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"variant_id\": \"{{variant_id}}\",\n  \"quantity\": 1\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/store/carts/{{cart_id}}/line-items",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "store",
+                    "carts",
+                    "{{cart_id}}",
+                    "line-items"
+                  ]
+                }
+              },
+              "response": [
+                {
+                  "id": "4872a77b-e12b-4c52-a1d1-cfee1b90cec7",
+                  "name": "Success Response",
+                  "originalRequest": {
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"variant_id\": \"{{variant_id}}\",\n  \"quantity\": 1\n}"
+                    },
+                    "url": {
+                      "raw": "{{base_url}}/store/carts/{{cart_id}}/line-items",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "store",
+                        "carts",
+                        "{{cart_id}}",
+                        "line-items"
+                      ]
+                    }
+                  },
+                  "status": "OK",
+                  "code": 200,
+                  "_postman_previewlanguage": "json",
+                  "header": null,
+                  "cookie": [],
+                  "responseTime": null,
+                  "body": "{\n  \"cart\": {\n    \"id\": \"cart_01CHECKOUT\",\n    \"items\": [\n      {\n        \"id\": \"item_01EXAMPLE\",\n        \"variant_id\": \"variant_01EXAMPLE\",\n        \"quantity\": 1,\n        \"unit_price\": 2999\n      }\n    ],\n    \"subtotal\": 2999,\n    \"total\": 3269\n  }\n}"
+                }
+              ]
+            },
+            {
+              "name": "3. Set Shipping Address",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Shipping address set successfully', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "pm.test('Cart has shipping address', function () {",
+                      "    const response = pm.response.json();",
+                      "    pm.expect(response.cart.shipping_address).to.not.be.null;",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "id": "e978ae07-2fca-4201-ab65-454926249dd5",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"shipping_address\": {\n    \"first_name\": \"John\",\n    \"last_name\": \"Doe\",\n    \"address_1\": \"123 Main St\",\n    \"city\": \"New York\",\n    \"province\": \"NY\",\n    \"postal_code\": \"10001\",\n    \"country_code\": \"us\",\n    \"phone\": \"555-1234\"\n  },\n  \"email\": \"john.doe@example.com\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/store/carts/{{cart_id}}",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "store",
+                    "carts",
+                    "{{cart_id}}"
+                  ]
+                }
+              },
+              "response": [
+                {
+                  "id": "73333cb8-54d8-4a92-b050-fe906184aad1",
+                  "name": "Success Response",
+                  "originalRequest": {
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"shipping_address\": {\n    \"first_name\": \"John\",\n    \"last_name\": \"Doe\",\n    \"address_1\": \"123 Main St\",\n    \"city\": \"New York\",\n    \"province\": \"NY\",\n    \"postal_code\": \"10001\",\n    \"country_code\": \"us\",\n    \"phone\": \"555-1234\"\n  },\n  \"email\": \"john.doe@example.com\"\n}"
+                    },
+                    "url": {
+                      "raw": "{{base_url}}/store/carts/{{cart_id}}",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "store",
+                        "carts",
+                        "{{cart_id}}"
+                      ]
+                    }
+                  },
+                  "status": "OK",
+                  "code": 200,
+                  "_postman_previewlanguage": "json",
+                  "header": null,
+                  "cookie": [],
+                  "responseTime": null,
+                  "body": "{\n  \"cart\": {\n    \"id\": \"cart_01CHECKOUT\",\n    \"email\": \"john.doe@example.com\",\n    \"shipping_address\": {\n      \"first_name\": \"John\",\n      \"last_name\": \"Doe\",\n      \"address_1\": \"123 Main St\",\n      \"city\": \"New York\",\n      \"province\": \"NY\",\n      \"postal_code\": \"10001\",\n      \"country_code\": \"us\"\n    },\n    \"subtotal\": 2999,\n    \"shipping_total\": 500,\n    \"total\": 3769\n  }\n}"
+                }
+              ]
+            },
+            {
+              "name": "4. Create Payment Sessions",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Payment sessions created successfully', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "pm.test('Store client_secret for payment', function () {",
+                      "    const response = pm.response.json();",
+                      "    if (response.cart && response.cart.payment_session) {",
+                      "        const data = response.cart.payment_session.data;",
+                      "        if (data && data.client_secret) {",
+                      "            pm.collectionVariables.set('client_secret', data.client_secret);",
+                      "            console.log('Checkout Flow - Client secret stored');",
+                      "        }",
+                      "    }",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "id": "ea91a39c-f482-4b04-b845-2663cf1f0458",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/store/carts/{{cart_id}}/payment-sessions",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "store",
+                    "carts",
+                    "{{cart_id}}",
+                    "payment-sessions"
+                  ]
+                }
+              },
+              "response": [
+                {
+                  "id": "a9e0ad5d-3cfb-4791-97e2-778051b2c3b1",
+                  "name": "Success Response",
+                  "originalRequest": {
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{base_url}}/store/carts/{{cart_id}}/payment-sessions",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "store",
+                        "carts",
+                        "{{cart_id}}",
+                        "payment-sessions"
+                      ]
+                    }
+                  },
+                  "status": "OK",
+                  "code": 200,
+                  "_postman_previewlanguage": "json",
+                  "header": null,
+                  "cookie": [],
+                  "responseTime": null,
+                  "body": "{\n  \"cart\": {\n    \"id\": \"cart_01CHECKOUT\",\n    \"payment_sessions\": [\n      {\n        \"id\": \"ps_01EXAMPLE\",\n        \"provider_id\": \"stripe\",\n        \"data\": {\n          \"client_secret\": \"pi_xxx_secret_xxx\"\n        }\n      }\n    ],\n    \"payment_session\": {\n      \"id\": \"ps_01EXAMPLE\",\n      \"provider_id\": \"stripe\",\n      \"data\": {\n        \"client_secret\": \"pi_xxx_secret_xxx\"\n      }\n    }\n  }\n}"
+                }
+              ]
+            },
+            {
+              "name": "5. Complete Cart",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Checkout completed successfully', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "pm.test('Order was created', function () {",
+                      "    const response = pm.response.json();",
+                      "    pm.expect(response.type).to.equal('order');",
+                      "    if (response.order && response.order.id) {",
+                      "        console.log('Checkout Flow Complete - Order ID:', response.order.id);",
+                      "    }",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "id": "74cd3cd0-8df1-4e07-a5b3-c1f561905eed",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/store/carts/{{cart_id}}/complete",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "store",
+                    "carts",
+                    "{{cart_id}}",
+                    "complete"
+                  ]
+                }
+              },
+              "response": [
+                {
+                  "id": "79c18fd4-b8d5-466c-bcfb-f9ef41d3ac03",
+                  "name": "Success Response",
+                  "originalRequest": {
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{base_url}}/store/carts/{{cart_id}}/complete",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "store",
+                        "carts",
+                        "{{cart_id}}",
+                        "complete"
+                      ]
+                    }
+                  },
+                  "status": "OK",
+                  "code": 200,
+                  "_postman_previewlanguage": "json",
+                  "header": null,
+                  "cookie": [],
+                  "responseTime": null,
+                  "body": "{\n  \"type\": \"order\",\n  \"order\": {\n    \"id\": \"order_01EXAMPLE\",\n    \"status\": \"pending\",\n    \"fulfillment_status\": \"not_fulfilled\",\n    \"payment_status\": \"awaiting\",\n    \"display_id\": 1001,\n    \"email\": \"john.doe@example.com\",\n    \"items\": [\n      {\n        \"id\": \"item_01EXAMPLE\",\n        \"title\": \"Grace Stowel Premium Towel\",\n        \"quantity\": 1,\n        \"unit_price\": 2999\n      }\n    ],\n    \"subtotal\": 2999,\n    \"shipping_total\": 500,\n    \"tax_total\": 270,\n    \"total\": 3769,\n    \"created_at\": \"2024-01-01T00:00:00.000Z\"\n  }\n}"
+                }
+              ]
+            }
+          ],
+          "id": "d1d58afc-dc9f-42c5-a96e-60bff912b696",
+          "description": "Sequential requests to complete a full checkout: create cart → add line item → set shipping → create payment intent → complete checkout. Run this folder to execute the entire flow."
+        }
+      ],
+      "id": "2cdfdc2f-d5bb-44d2-aec7-3fc79360abf9",
+      "description": "Checkout flow endpoints for completing purchases"
+    },
+    {
+      "name": "Regions",
+      "item": [
+        {
+          "name": "List Regions",
+          "id": "d66d99d3-143a-4a0f-808e-30c7bbaa0d7d",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/store/regions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "store",
+                "regions"
+              ]
+            }
+          },
+          "response": [
+            {
+              "id": "9fe5f02e-a829-4cad-b0b7-b1a4aff0d6c9",
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/store/regions",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "store",
+                    "regions"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": null,
+              "cookie": [],
+              "responseTime": null,
+              "body": "{\n  \"regions\": [\n    {\n      \"id\": \"reg_01EXAMPLE\",\n      \"name\": \"United States\",\n      \"currency_code\": \"usd\",\n      \"tax_rate\": 0,\n      \"tax_code\": null,\n      \"countries\": [\n        {\n          \"id\": 840,\n          \"iso_2\": \"us\",\n          \"iso_3\": \"usa\",\n          \"name\": \"UNITED STATES\",\n          \"display_name\": \"United States\"\n        }\n      ],\n      \"payment_providers\": [\n        {\n          \"id\": \"stripe\",\n          \"is_installed\": true\n        }\n      ],\n      \"fulfillment_providers\": [\n        {\n          \"id\": \"manual\",\n          \"is_installed\": true\n        }\n      ]\n    },\n    {\n      \"id\": \"reg_02EXAMPLE\",\n      \"name\": \"Europe\",\n      \"currency_code\": \"eur\",\n      \"tax_rate\": 20,\n      \"countries\": [\n        {\n          \"id\": 276,\n          \"iso_2\": \"de\",\n          \"name\": \"GERMANY\",\n          \"display_name\": \"Germany\"\n        },\n        {\n          \"id\": 250,\n          \"iso_2\": \"fr\",\n          \"name\": \"FRANCE\",\n          \"display_name\": \"France\"\n        }\n      ]\n    }\n  ],\n  \"count\": 2,\n  \"offset\": 0,\n  \"limit\": 20\n}"
+            }
+          ]
+        }
+      ],
+      "id": "cb4aaf0e-b73e-4a26-aa7e-ae2a92a77a63",
+      "description": "Region endpoints for retrieving available shipping regions and their configurations"
+    },
+    {
+      "name": "Collections",
+      "item": [
+        {
+          "name": "List Collections",
+          "id": "ca7d18ff-4101-44d8-b979-297119cf129f",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/store/collections",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "store",
+                "collections"
+              ]
+            }
+          },
+          "response": [
+            {
+              "id": "671cdd0e-f496-4499-8ff3-abd17a042c88",
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/store/collections",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "store",
+                    "collections"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": null,
+              "cookie": [],
+              "responseTime": null,
+              "body": "{\n  \"collections\": [\n    {\n      \"id\": \"pcol_01EXAMPLE\",\n      \"title\": \"Premium Towels\",\n      \"handle\": \"premium-towels\",\n      \"created_at\": \"2024-01-01T00:00:00.000Z\",\n      \"updated_at\": \"2024-01-01T00:00:00.000Z\"\n    },\n    {\n      \"id\": \"pcol_02EXAMPLE\",\n      \"title\": \"Bath Essentials\",\n      \"handle\": \"bath-essentials\",\n      \"created_at\": \"2024-01-01T00:00:00.000Z\",\n      \"updated_at\": \"2024-01-01T00:00:00.000Z\"\n    },\n    {\n      \"id\": \"pcol_03EXAMPLE\",\n      \"title\": \"New Arrivals\",\n      \"handle\": \"new-arrivals\",\n      \"created_at\": \"2024-01-01T00:00:00.000Z\",\n      \"updated_at\": \"2024-01-01T00:00:00.000Z\"\n    }\n  ],\n  \"count\": 3,\n  \"offset\": 0,\n  \"limit\": 20\n}"
+            }
+          ]
+        }
+      ],
+      "id": "b256074c-0903-456b-81e0-f839d4e90b3e",
+      "description": "Product collection endpoints for browsing curated product groups"
+    }
+  ],
+  "variable": [
+    {
+      "id": "518b4c50-0ba0-4f02-905d-b680766eead3",
+      "key": "base_url",
+      "value": "http://localhost:9000",
+      "type": "string"
+    },
+    {
+      "id": "7ccc1e55-62b3-49b0-aae6-280870e2412b",
+      "key": "product_handle",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "id": "8e7fcaa7-7644-4d72-8064-b0f96a342b19",
+      "key": "cart_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "id": "ab7922bf-2f14-465e-8234-ab6174f23880",
+      "key": "client_secret",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "id": "86aeb4bb-538d-471f-b7bc-8991c6f2f2ad",
+      "key": "region_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "id": "3c2288d1-6a35-47dd-96a9-a819416e38be",
+      "key": "variant_id",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}

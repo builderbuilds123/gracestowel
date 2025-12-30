@@ -14,7 +14,10 @@ import { parsePrice } from "../lib/price";
 import { generateTraceId } from "../lib/logger";
 import { monitoredFetch } from "../utils/monitored-fetch";
 import { generateCartHash } from "../utils/cart-hash";
-import { debounce } from "../utils/debounce";
+
+
+// Check if in development mode (consistent with codebase pattern)
+const isDevelopment = import.meta.env.MODE === 'development';
 
 interface LoaderData {
   stripePublishableKey: string;
@@ -48,6 +51,7 @@ export default function Checkout() {
   const [paymentIntentId, setPaymentIntentId] = useState<string | null>(null);
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [lastTraceId, setLastTraceId] = useState<string | null>(null);
+  const [guestEmail, setGuestEmail] = useState<string | undefined>(undefined);
 
   // Shipping & Cart state
   // Initialize cartId from sessionStorage if available (client-side only)
@@ -89,8 +93,8 @@ export default function Checkout() {
     return total + originalPrice * item.quantity;
   }, 0);
 
-  const shippingCostCents = selectedShipping?.amount ?? 0;
-  const shippingCost = shippingCostCents / 100;
+  // Shipping amount from Medusa is in dollars
+  const shippingCost = selectedShipping?.amount ?? 0;
   const finalTotal = cartTotal + shippingCost;
 
   const hasFiredCheckoutStarted = useRef(false);
@@ -130,6 +134,45 @@ export default function Checkout() {
       try {
         setPaymentError(null);
 
+        // CRITICAL: Validate cartId exists before proceeding
+        if (!cartId) {
+          setPaymentError("Cart ID is missing. Please refresh and try again.");
+          return;
+        }
+
+        const requestData = {
+          amount: cartTotal,
+          currency: currency.toLowerCase(),
+          shipping: selectedShipping?.amount ?? 0,
+          customerId: isAuthenticated ? customer?.id : undefined,
+          customerEmail: isAuthenticated ? customer?.email : (guestEmail || undefined),
+          cartItems: items.map((item) => ({
+            id: item.id,
+            variantId: item.variantId,
+            sku: item.sku,
+            title: item.title,
+            price: item.price,
+            quantity: item.quantity,
+            color: item.color,
+          })),
+          paymentIntentId: paymentIntentId, // Reuse if exists
+          cartId: cartId, // ADDED: Pass cartId to the API (SEC-01)
+        };
+
+        // Log request details for debugging (only in development)
+        if (isDevelopment) {
+          console.log("[Checkout] Payment intent request:", {
+            operation: paymentIntentId ? "update" : "create",
+            amount: requestData.amount,
+            currency: requestData.currency,
+            shipping: requestData.shipping,
+            total: requestData.amount + requestData.shipping,
+            itemCount: requestData.cartItems.length,
+            paymentIntentId,
+            traceId: sessionTraceId.current,
+          });
+        }
+
         const response = await monitoredFetch("/api/payment-intent", {
           method: "POST",
           headers: {
@@ -137,35 +180,34 @@ export default function Checkout() {
             "x-trace-id": sessionTraceId.current,
           },
           signal: controller.signal,
-          body: JSON.stringify({
-            amount: cartTotal,
-            currency: currency.toLowerCase(),
-            shipping: selectedShipping?.amount
-              ? selectedShipping.amount / 100
-              : 0,
-            customerId: isAuthenticated ? customer?.id : undefined,
-            customerEmail: isAuthenticated ? customer?.email : undefined,
-            cartItems: items.map((item) => ({
-              id: item.id,
-              variantId: item.variantId,
-              sku: item.sku,
-              title: item.title,
-              price: item.price,
-              quantity: item.quantity,
-              color: item.color,
-            })),
-            paymentIntentId: paymentIntentId, // Reuse if exists
-          }),
+          body: JSON.stringify(requestData),
           label: paymentIntentId ? 'update-payment-intent' : 'create-payment-intent',
         });
 
         if (!response.ok) {
           const error = (await response.json()) as {
             message?: string;
+            debugInfo?: string;
+            stripeErrorCode?: string;
             traceId?: string;
           };
-          setPaymentError(error.message || "Payment initialization failed");
+          
+          // Build error message - prefer debugInfo when available as it's more specific
+          // If both exist, use debugInfo since it contains actionable details from Stripe
+          const errorMessage = error.debugInfo || error.message || "Payment initialization failed";
+          
+          setPaymentError(errorMessage);
           setLastTraceId(error.traceId || null);
+          
+          // Log detailed error for debugging (only in development)
+          if (isDevelopment) {
+            console.error("[Checkout] Payment initialization error:", {
+              message: error.message,
+              debugInfo: error.debugInfo,
+              stripeErrorCode: error.stripeErrorCode,
+              traceId: error.traceId,
+            });
+          }
           return;
         }
 
@@ -175,11 +217,25 @@ export default function Checkout() {
           traceId?: string;
         };
 
+        // Log successful response (only in development)
+        if (isDevelopment) {
+          console.log("[Checkout] Payment intent response:", {
+            operation: paymentIntentId ? "updated" : "created",
+            paymentIntentId: data.paymentIntentId,
+            hasClientSecret: !!data.clientSecret,
+            traceId: data.traceId,
+            isFirstInitialization: !isInitialized.current,
+          });
+        }
+
         // CRITICAL: Only set clientSecret on FIRST call
         // Changing it breaks Stripe Elements
         if (!isInitialized.current) {
           setClientSecret(data.clientSecret);
           isInitialized.current = true;
+          if (isDevelopment) {
+            console.log("[Checkout] Client secret set for first time");
+          }
         }
 
         // Always update the paymentIntentId
@@ -187,7 +243,18 @@ export default function Checkout() {
         if (data.traceId) setLastTraceId(data.traceId);
       } catch (error) {
         if ((error as Error).name !== "AbortError") {
-          console.error("[Checkout] PaymentIntent error:", error);
+          if (isDevelopment) {
+            console.error("[Checkout] PaymentIntent error:", {
+              error,
+              errorMessage: (error as Error).message,
+              errorName: (error as Error).name,
+              cartTotal,
+              currency,
+              itemCount: items.length,
+              paymentIntentId,
+              traceId: sessionTraceId.current,
+            });
+          }
           setPaymentError("Failed to initialize payment");
         }
       }
@@ -205,18 +272,24 @@ export default function Checkout() {
     cartTotal,
     currency,
     items,
+    cartId,
     selectedShipping,
     isAuthenticated,
     customer?.id,
     customer?.email,
+    guestEmail,
     paymentIntentId,
   ]);
 
-  // Function to fetch shipping rates
-  const fetchShippingRates = useCallback(async (currentItems: typeof items, address: any) => {
+  // Fetch shipping rates using new RESTful cart endpoints
+  const fetchShippingRates = useCallback(async (currentItems: typeof items, address: any, currentTotal: number) => {
     setIsCalculatingShipping(true);
 
-    const cacheKey = generateCartHash(currentItems, address, currency);
+    const cacheKey = generateCartHash(currentItems, address ? {
+        country_code: address.address?.country,
+        province: address.address?.state,
+        postal_code: address.address?.postal_code
+    } : undefined, currency, currentTotal);
     if (shippingCache.current.has(cacheKey)) {
         const cached = shippingCache.current.get(cacheKey)!;
         setShippingOptions(cached.options);
@@ -226,77 +299,144 @@ export default function Checkout() {
     }
 
     try {
-      const response = await monitoredFetch("/api/shipping-rates", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          cartItems: currentItems,
-          shippingAddress: address ? {
-            first_name: address.firstName,
-            last_name: address.lastName,
-            address_1: address.address.line1,
-            address_2: address.address.line2,
-            city: address.address.city,
-            country_code: address.address.country,
-            postal_code: address.address.postal_code,
-            province: address.address.state,
-            phone: address.phone
-          } : undefined,
-          currency, // Ensure currency is used here
-          cartId // Pass the current cartId (state)
-        }),
-        label: 'fetch-shipping-rates',
-      });
+      // Step 1: Create or get cart
+      let currentCartId = cartId;
+      if (!currentCartId) {
+        if (isDevelopment) {
+          console.log('[Checkout] Step 1: Creating cart...');
+        }
+        const createResponse = await monitoredFetch("/api/carts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            currency,
+            country_code: address?.address?.country,
+          }),
+          label: 'create-cart',
+        });
 
-      if (response.ok) {
-          const data = (await response.json()) as { shippingOptions: ShippingOption[], cartId?: string };
-          setShippingOptions(data.shippingOptions);
+        if (!createResponse.ok) {
+          const error = await createResponse.json() as { error: string; details?: string };
+          console.error('[Checkout] Step 1 FAILED - Cart creation:', error);
+          throw new Error(`Cart creation failed: ${error.error}`);
+        }
 
-          if (data.cartId) {
-              setCartId(data.cartId);
-          }
-
-          if (data.shippingOptions.length > 0) {
-            // Preserve selected shipping if still available
-            setSelectedShipping(prev => {
-                const found = data.shippingOptions.find(o => o.id === prev?.id);
-                return found || data.shippingOptions[0];
-            });
-          }
-
-          // Cache results
-          shippingCache.current.set(cacheKey, { options: data.shippingOptions, cartId: data.cartId });
+        const { cart_id } = await createResponse.json() as { cart_id: string };
+        currentCartId = cart_id;
+        setCartId(cart_id);
+        if (isDevelopment) {
+          console.log('[Checkout] Step 1 SUCCESS - Cart created:', cart_id);
+        }
       }
 
+      // Step 2: Update cart with items and address
+      if (currentItems.length > 0 || address) {
+        if (isDevelopment) {
+          console.log('[Checkout] Step 2: Updating cart items/address...');
+        }
+        const updateResponse = await monitoredFetch(`/api/carts/${currentCartId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            items: currentItems,
+            shipping_address: address ? {
+              first_name: address.firstName || '',
+              last_name: address.lastName || '',
+              address_1: address.address?.line1 || '',
+              address_2: address.address?.line2,
+              city: address.address?.city || '',
+              country_code: address.address?.country || '',
+              postal_code: address.address?.postal_code || '',
+              province: address.address?.state,
+              phone: address.phone,
+            } : undefined,
+          }),
+          label: 'update-cart',
+        });
+
+        if (!updateResponse.ok) {
+          const error = await updateResponse.json() as { error: string; details?: string; code?: string };
+          console.error('[Checkout] Step 2 FAILED - Cart update:', error);
+          
+          // Handle region mismatch - need to create new cart
+          if (error.code === 'REGION_MISMATCH') {
+            console.log('[Checkout] Region mismatch detected, creating new cart...');
+            setCartId(undefined);
+            // Retry with new cart on next call
+            throw new Error(`Region mismatch: ${error.details}`);
+          }
+          throw new Error(`Cart update failed: ${error.error}`);
+        }
+        if (isDevelopment) {
+          console.log('[Checkout] Step 2 SUCCESS - Cart updated');
+        }
+      }
+
+      // Step 3: Get shipping options (cacheable GET request)
+      if (isDevelopment) {
+        console.log('[Checkout] Step 3: Fetching shipping options...');
+      }
+      const optionsResponse = await monitoredFetch(`/api/carts/${currentCartId}/shipping-options`, {
+        method: "GET",
+        label: 'get-shipping-options',
+      });
+
+      if (!optionsResponse.ok) {
+        const error = await optionsResponse.json() as { error: string; details?: string };
+        console.error('[Checkout] Step 3 FAILED - Fetching shipping options:', error);
+        throw new Error(`Shipping options fetch failed: ${error.error}`);
+      }
+
+      const { shipping_options } = await optionsResponse.json() as { 
+        shipping_options: ShippingOption[];
+        cart_id: string;
+      };
+      
+      if (isDevelopment) {
+        console.log('[Checkout] Step 3 SUCCESS - Got', shipping_options.length, 'shipping options');
+      }
+
+      setShippingOptions(shipping_options);
+
+      if (shipping_options.length > 0) {
+        setSelectedShipping(prev => {
+          const found = shipping_options.find(o => o.id === prev?.id);
+          return found || shipping_options[0];
+        });
+      }
+
+      // Cache results
+      shippingCache.current.set(cacheKey, { options: shipping_options, cartId: currentCartId });
+
     } catch (error) {
-      console.error("Error fetching shipping rates:", error);
+      console.error("[Checkout] Shipping rates error:", error);
     } finally {
       setIsCalculatingShipping(false);
     }
-  }, [currency, cartId]); // currency is in dependency array
-
-  // Debounced fetch function
-  const debouncedFetchShipping = useCallback(
-      debounce((items, address) => fetchShippingRates(items, address), 300),
-      [fetchShippingRates]
-  );
+  }, [currency, cartId]);
 
   // Effect to trigger shipping fetch when items or address change
+  // Uses direct setTimeout architecture for robust debouncing
   useEffect(() => {
-    if (items.length > 0) {
-        debouncedFetchShipping(items, shippingAddress);
-    }
-  }, [items, shippingAddress, debouncedFetchShipping]);
+    if (items.length === 0) return;
+
+    // specific debounce for address changes
+    const timer = setTimeout(() => {
+      fetchShippingRates(items, shippingAddress, cartTotal);
+    }, 600);
+
+    return () => clearTimeout(timer);
+  }, [items, shippingAddress, cartTotal, fetchShippingRates]);
 
   // Handler for address changes from Stripe Address Element
   const handleAddressChange = async (event: StripeAddressElementChangeEvent) => {
-    const addressValue = event.value;
-    if (!addressValue || !addressValue.address || !addressValue.address.country) {
+    // Only update and fetch rates if the address is fully complete
+    // This effectively defers the API call until the form is filled, similar to 'onBlur'
+    if (!event.complete) {
       return;
     }
 
-    // Only update if address substantially changed (country, state, zip) to avoid rapid re-fetches
-    // Or just pass the whole object and let debounce handle it
+    const addressValue = event.value;
     setShippingAddress(addressValue);
   };
 
@@ -403,6 +543,7 @@ export default function Checkout() {
                     items={items}
                     cartTotal={cartTotal}
                     onAddressChange={handleAddressChange}
+                    onEmailChange={setGuestEmail}
                     shippingOptions={shippingOptions}
                     selectedShipping={selectedShipping}
                     setSelectedShipping={setSelectedShipping}

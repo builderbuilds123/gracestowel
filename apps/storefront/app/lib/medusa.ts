@@ -101,15 +101,59 @@ export function formatPrice(amount: number, currencyCode: string = "usd"): strin
 }
 
 /**
+ * Get the default region ID for Canada (CAD)
+ * @param medusa - Medusa client instance
+ * @returns Object with region_id and currency_code for use in product queries
+ */
+export async function getDefaultRegion(
+    medusa: ReturnType<typeof createMedusaClient>
+): Promise<{ region_id: string; currency_code: string } | null> {
+    try {
+        // Fetch Canada region by default (or fallback to first region)
+        const { regions } = await medusa.store.region.list({ limit: 10 });
+        
+        // Prefer Canada region for CAD
+        const canadaRegion = regions.find(r => r.currency_code === "cad");
+        if (canadaRegion) {
+            return { region_id: canadaRegion.id, currency_code: "cad" };
+        }
+        
+        // Fallback to first region
+        if (regions.length > 0) {
+            return { region_id: regions[0].id, currency_code: regions[0].currency_code };
+        }
+        
+        return null;
+    } catch (error) {
+        console.error("Failed to fetch default region:", error);
+        return null;
+    }
+}
+
+/**
  * Get the price for a specific currency from a product's first variant
+ * Supports both Medusa v2 calculated_price (when region_id passed) and legacy prices array
  */
 export function getProductPrice(
     product: MedusaProduct,
-    currencyCode: string = "usd"
+    currencyCode: string = "cad"
 ): { amount: number; formatted: string } | null {
-    const variant = product.variants?.[0];
+    const variant = product.variants?.[0] as any;
+    
+    // Method 1: Check for calculated_price (Medusa v2 with region_id)
+    if (variant?.calculated_price) {
+        const calculatedAmount = variant.calculated_price.calculated_amount;
+        if (typeof calculatedAmount === 'number') {
+            return {
+                amount: calculatedAmount,
+                formatted: formatPrice(calculatedAmount, variant.calculated_price.currency_code || currencyCode),
+            };
+        }
+    }
+    
+    // Method 2: Fallback to prices array
     const price = variant?.prices?.find(
-        (p) => p.currency_code.toLowerCase() === currencyCode.toLowerCase()
+        (p: any) => p.currency_code?.toLowerCase() === currencyCode.toLowerCase()
     );
 
     if (!price) return null;

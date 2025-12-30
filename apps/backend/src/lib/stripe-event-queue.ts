@@ -1,35 +1,36 @@
-
-import { Queue, Worker, Job } from "bullmq";
-import { MedusaContainer } from "@medusajs/framework/types";
-import Stripe from "stripe";
-import Redis from "ioredis";
-
 /**
  * Stripe Event Queue - Story 6.1
  * 
- * Provides robust, idempotent processing of Stripe webhook events with:
- * - Exponential backoff retry (5 attempts)
+ * Queue operations for Stripe webhook event processing.
+ * Worker logic is in workers/stripe-event-worker.ts
+ * 
+ * Provides robust, idempotent processing with:
  * - Distributed Idempotency using Redis (SETNX)
- * - DLQ for failed events
+ * - Lock management for concurrent processing
  */
 
-export interface StripeEventJobData {
-    eventId: string;
-    eventType: string;
-    eventData: Stripe.Event;
-    receivedAt: number;
-}
+import { Queue, Job } from "bullmq";
+import Stripe from "stripe";
+import Redis from "ioredis";
+import { StripeEventJobData } from "../types/queue-types";
 
-const IS_JEST = process.env.JEST_WORKER_ID !== undefined;
+// Re-export type for backwards compatibility
+export { StripeEventJobData } from "../types/queue-types";
+
+export const STRIPE_EVENT_QUEUE = "stripe-events";
 
 const PROCESSED_EVENT_TTL_SECONDS = 24 * 60 * 60; // 24 hours
-const PROCESSING_LOCK_TTL_SECONDS = 10 * 60; // 10 minutes for processing lock (shorter than retry window)
+const PROCESSING_LOCK_TTL_SECONDS = 10 * 60; // 10 minutes for processing lock
 const IDEMPOTENCY_PREFIX = "stripe:processed:";
+
+let queue: Queue<StripeEventJobData> | null = null;
+let redisClient: Redis | null = null;
 
 /**
  * Get Redis connection options from environment
+ * Exported for use by worker
  */
-const getRedisConnection = () => {
+export function getRedisConnection() {
     const redisUrl = process.env.REDIS_URL;
     if (!redisUrl) {
         throw new Error("REDIS_URL is not configured");
@@ -43,15 +44,11 @@ const getRedisConnection = () => {
         username: url.username || undefined,
         tls: url.protocol === "rediss:" ? {} : undefined,
     };
-};
-
-// Singleton Redis client for idempotency checks
-let redisClient: Redis | null = null;
+}
 
 function getRedisClient(): Redis {
     if (!redisClient) {
         const config = getRedisConnection();
-        // ioredis constructor expects options
         redisClient = new Redis({
             host: config.host,
             port: config.port,
@@ -62,16 +59,6 @@ function getRedisClient(): Redis {
     }
     return redisClient;
 }
-
-export const STRIPE_EVENT_QUEUE = "stripe-events";
-
-let queue: Queue<StripeEventJobData> | null = null;
-let worker: Worker<StripeEventJobData> | null = null;
-let containerRef: MedusaContainer | null = null;
-let eventHandler: ((event: Stripe.Event, container: MedusaContainer) => Promise<void>) | null = null;
-
-// Track shutdown handlers to prevent listener leaks
-let shutdownHandler: (() => Promise<void>) | null = null;
 
 /**
  * Check if an event has already been processed (idempotency)
@@ -235,138 +222,20 @@ export async function queueStripeEvent(
     }
 }
 
-
 /**
- * Process a Stripe event job
- */
-export async function processStripeEvent(job: Job<StripeEventJobData>): Promise<void> {
-    const { eventId, eventType, eventData } = job.data;
-    
-    console.log(`[StripeEventQueue] Processing event ${eventId} (${eventType})`);
-    
-    if (!containerRef || !eventHandler) {
-        throw new Error("Stripe event worker not properly initialized");
-    }
-
-    try {
-        await eventHandler(eventData, containerRef);
-        
-        // Mark as finalized "processed"
-        await markEventProcessed(eventId);
-        console.log(`[StripeEventQueue] Successfully processed event ${eventId}`);
-    } catch (error) {
-        console.error(`[StripeEventQueue] Error processing event ${eventId}:`, error);
-        throw error; // Trigger retry
-    }
-}
-
-/**
- * Set the event handler function
- */
-export function setEventHandler(
-    handler: (event: Stripe.Event, container: MedusaContainer) => Promise<void>
-): void {
-    eventHandler = handler;
-}
-
-/**
- * Start the Stripe event worker
- */
-export function startStripeEventWorker(
-    container: MedusaContainer,
-    handler: (event: Stripe.Event, container: MedusaContainer) => Promise<void>
-): Worker<StripeEventJobData> {
-    if (worker) {
-        return worker;
-    }
-
-    containerRef = container;
-    eventHandler = handler;
-
-    const connection = getRedisConnection();
-    
-    worker = new Worker<StripeEventJobData>(
-        STRIPE_EVENT_QUEUE,
-        processStripeEvent,
-        {
-            connection,
-            concurrency: 5,
-        }
-    );
-
-    worker.on("completed", (job) => {
-        console.log(`[StripeEventQueue] Job ${job.id} completed`);
-    });
-
-    worker.on("failed", async (job, err) => {
-        const attemptsMade = job?.attemptsMade || 0;
-        const maxAttempts = job?.opts?.attempts || 5;
-        
-        if (attemptsMade >= maxAttempts) {
-            // CRITICAL: Job exhausted all retries
-            console.error(
-                `[CRITICAL][DLQ] Stripe event processing PERMANENTLY FAILED for event ${job?.data?.eventId}. ` +
-                `Type: ${job?.data?.eventType}.`,
-                err
-            );
-            console.log(`[METRIC] webhook_processing_failure_rate event=${job?.data?.eventId}`);
-            
-            // Release the processing lock so Stripe can re-deliver the event
-            // This ensures AC5/6 compliance - failed events can be retried
-            if (job?.data?.eventId) {
-                await releaseProcessingLock(job.data.eventId);
-            }
-        } else {
-            console.warn(
-                `[StripeEventQueue] Job ${job?.id} failed (attempt ${attemptsMade}/${maxAttempts}), will retry`,
-                err
-            );
-        }
-    });
-
-    console.log("[StripeEventQueue] Worker started");
-
-    // Only register shutdown handlers once (prevent listener leak)
-    // Skip in Jest to avoid process listener accumulation across test suites.
-    if (!shutdownHandler && !IS_JEST) {
-        shutdownHandler = async () => {
-            console.log("[StripeEventQueue] Shutting down worker...");
-            await worker?.close();
-            await redisClient?.quit();
-        };
-        process.on("SIGTERM", shutdownHandler);
-        process.on("SIGINT", shutdownHandler);
-    }
-
-    return worker;
-}
-
-/**
- * Reset module state (for testing)
+ * Reset queue state (for testing)
  */
 export function resetStripeEventQueue(): void {
-    // Remove shutdown handlers to prevent listener leak in tests
-    if (shutdownHandler) {
-        process.removeListener("SIGTERM", shutdownHandler);
-        process.removeListener("SIGINT", shutdownHandler);
-        shutdownHandler = null;
-    }
     queue = null;
-    worker = null;
-    containerRef = null;
-    eventHandler = null;
 }
+
 /**
- * Close Redis client (for graceful shutdown)
+ * Close Redis client and queue (for graceful shutdown)
  */
 export async function closeStripeEventQueue(): Promise<void> {
     if (redisClient) {
         await redisClient.quit();
         redisClient = null;
-    }
-    if (worker) {
-        await worker.close();
-        worker = null;
     }
     if (queue) {
         await queue.close();

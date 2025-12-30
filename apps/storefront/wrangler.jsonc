@@ -6,12 +6,10 @@
   "main": "./workers/app.ts",
 
   // Shared configuration (inherited by all environments)
-  "vars": {
-    "MEDUSA_BACKEND_URL": "", // Placeholder for type generation
-    "MEDUSA_PUBLISHABLE_KEY": "", // Placeholder for type generation
-    "STRIPE_PUBLISHABLE_KEY": "", // Placeholder for type generation
-    "STRIPE_SECRET_KEY": "" // Placeholder for type generation
-  },
+  // NOTE: Do NOT define MEDUSA_BACKEND_URL, MEDUSA_PUBLISHABLE_KEY, STRIPE_* here!
+  // These are set as secrets via `wrangler secret put` or Cloudflare Dashboard.
+  // Defining them here as empty strings overrides the dashboard secrets.
+  // For type generation, see worker-configuration.d.ts
 
   "hyperdrive": [
     {

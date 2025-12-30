@@ -45,6 +45,26 @@ Full documentation is available in the [docs](./docs/index.md) directory.
 - **Database**: PostgreSQL + Redis (Railway)
 - **Payments**: Stripe
 
+## 🧪 API Testing with Postman
+
+The project includes comprehensive Postman collections for API testing and documentation.
+
+### Collections
+
+- **Store API** - Public storefront endpoints (products, carts, checkout)
+- **Admin API** - Authenticated admin endpoints
+- **Custom Endpoints** - Grace Stowel custom routes
+- **Stripe Webhooks** - Webhook event simulators
+
+### Quick Start
+
+1. Import collections from `postman/collections/`
+2. Import environments from `postman/environments/`
+3. Select the **Local** environment
+4. Start testing!
+
+See the [Postman README](./postman/README.md) for detailed setup instructions.
+
 ## 📄 License
 
 Private repository. All rights reserved.

@@ -8,6 +8,8 @@ import { schedulePaymentCapture } from "../lib/payment-capture-queue"
 import { getPostHog } from "../utils/posthog"
 import { enqueueEmail } from "../lib/email-queue"
 import type { ModificationTokenService } from "../services/modification-token"
+import { ensureStripeWorkerStarted } from "../loaders/stripe-event-worker"
+import { startPaymentCaptureWorker } from "../workers/payment-capture-worker"
 
 interface OrderPlacedEventData {
   id: string;
@@ -18,8 +20,22 @@ export default async function orderPlacedHandler({
   event: { data },
   container,
 }: SubscriberArgs<OrderPlacedEventData>) {
+  // Ensure Stripe worker is running (lazy init if loaders aren't auto-discovered)
+  ensureStripeWorkerStarted(container)
+
+  if (process.env.REDIS_URL) {
+    startPaymentCaptureWorker(container)
+  }
+
   const logger = container.resolve(ContainerRegistrationKeys.LOGGER)
-  logger.info(`Order placed event received: ${data.id}`)
+
+  if (!data?.id || typeof data.id !== "string") {
+    logger.error(`[ORDER_PLACED][CRITICAL] Missing order id in event payload - skipping`)
+    console.error("[ORDER_PLACED][CRITICAL] Missing order id in event payload - skipping", data)
+    return
+  }
+
+  logger.info(`[ORDER_PLACED] 🎯 Order placed event received: ${data.id}`)
 
   // Log masked token for audit trail (Story 4.1 requirement) - logged BEFORE email attempt
   if (data.modification_token) {
@@ -37,6 +53,7 @@ export default async function orderPlacedHandler({
           "id",
           "display_id",
           "email",
+          "metadata",
           "currency_code",
           "total",
           "customer_id",
@@ -64,7 +81,18 @@ export default async function orderPlacedHandler({
                 const payment = paymentCollection?.payments?.[0];
                 const paymentData = payment?.data as any;
 
-                const paymentIntentId = paymentData?.id;
+                const paymentIntentIdFromPaymentCollection =
+                  typeof paymentData?.id === "string" && paymentData.id.startsWith("pi_")
+                    ? paymentData.id
+                    : undefined
+
+                const paymentIntentIdFromMetadata =
+                  typeof order.metadata?.stripe_payment_intent_id === "string" &&
+                  order.metadata.stripe_payment_intent_id.startsWith("pi_")
+                    ? order.metadata.stripe_payment_intent_id
+                    : undefined
+
+                const paymentIntentId = paymentIntentIdFromPaymentCollection || paymentIntentIdFromMetadata
 
                 if (paymentIntentId) {
                      // Resolve service from container instead of importing singleton
@@ -156,8 +184,9 @@ export default async function orderPlacedHandler({
 
       if (paymentIntentId) {
         try {
+          logger.info(`[CAPTURE_SCHEDULE] Attempting to schedule payment capture for order ${data.id}, PI: ${paymentIntentId}`)
           await schedulePaymentCapture(data.id, paymentIntentId)
-          logger.info(`Payment capture scheduled for order ${data.id} (1 hour delay)`)
+          logger.info(`[CAPTURE_SCHEDULE] ✅ Payment capture scheduled for order ${data.id} (1 hour delay), PI: ${paymentIntentId}`)
         } catch (scheduleError: any) {
           // Story 6.2: Handle Redis connection failures gracefully
           const isRedisError = ['ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND'].includes(scheduleError?.code)

@@ -104,10 +104,13 @@ describe("Story 6.3: Race Condition Handling", () => {
             }),
         };
 
-        const mod = require("../../src/lib/payment-capture-queue");
-        processPaymentCapture = mod.processPaymentCapture;
-        startPaymentCaptureWorker = mod.startPaymentCaptureWorker;
-        OrderLockedError = mod.OrderLockedError;
+        const queueMod = require("../../src/lib/payment-capture-queue");
+        OrderLockedError = queueMod.OrderLockedError;
+        
+        // Worker functions are now in a separate module
+        const workerMod = require("../../src/workers/payment-capture-worker");
+        processPaymentCapture = workerMod.processPaymentCapture;
+        startPaymentCaptureWorker = workerMod.startPaymentCaptureWorker;
     });
 
     afterEach(() => {
@@ -117,7 +120,7 @@ describe("Story 6.3: Race Condition Handling", () => {
 
     describe("Task 1: Optimistic Locking / State Management (AC 1, 3, 8)", () => {
         const mockJobData = {
-            orderId: "ord_lock_test",
+            orderId: "order_lock_test",
             paymentIntentId: "pi_lock_test",
             scheduledAt: Date.now(),
         };
@@ -134,10 +137,11 @@ describe("Story 6.3: Race Condition Handling", () => {
                 amount: 5000,
                 currency: "usd",
             });
+            // Order total is in dollars (50.00), which converts to 5000 cents
             mockQueryGraph.mockResolvedValue({
                 data: [{
-                    id: "ord_lock_test",
-                    total: 5000,
+                    id: "order_lock_test",
+                    total: 50.00,
                     currency_code: "usd",
                     status: "pending",
                     metadata: { edit_status: "editable" },
@@ -165,10 +169,11 @@ describe("Story 6.3: Race Condition Handling", () => {
                 amount: 5000,
                 currency: "usd",
             });
+            // Order total is in dollars (50.00), which converts to 5000 cents
             mockQueryGraph.mockResolvedValue({
                 data: [{
-                    id: "ord_lock_test",
-                    total: 5000,
+                    id: "order_lock_test",
+                    total: 50.00,
                     currency_code: "usd",
                     status: "pending",
                     metadata: {},
@@ -193,10 +198,11 @@ describe("Story 6.3: Race Condition Handling", () => {
                 amount: 5000,
                 currency: "usd",
             });
+            // Order total is in dollars (60.00), which converts to 6000 cents - exceeds authorized 5000
             mockQueryGraph.mockResolvedValue({
                 data: [{
-                    id: "ord_lock_test",
-                    total: 6000, // Exceeds authorized - will fail
+                    id: "order_lock_test",
+                    total: 60.00, // Exceeds authorized - will fail (60.00 * 100 = 6000 > 5000)
                     currency_code: "usd",
                     status: "pending",
                     metadata: {},
@@ -222,7 +228,7 @@ describe("Story 6.3: Race Condition Handling", () => {
                     validateToken: jest.fn().mockReturnValue({
                         valid: true,
                         expired: false,
-                        payload: { order_id: "ord_locked" },
+                        payload: { order_id: "order_locked" },
                     }),
                 },
             }));
@@ -244,11 +250,12 @@ describe("Story 6.3: Race Condition Handling", () => {
             const { validatePreconditionsHandler, OrderLockedError } = require("../../src/workflows/add-item-to-order");
 
             // Mock order with locked status
+            // Order total is in dollars (50.00), which converts to 5000 cents
             mockQueryGraph.mockResolvedValue({
                 data: [{
-                    id: "ord_locked",
+                    id: "order_locked",
                     status: "pending",
-                    total: 5000,
+                    total: 50.00,
                     currency_code: "usd",
                     metadata: {
                         stripe_payment_intent_id: "pi_123",
@@ -259,7 +266,7 @@ describe("Story 6.3: Race Condition Handling", () => {
             });
 
             const input = {
-                orderId: "ord_locked",
+                orderId: "order_locked",
                 modificationToken: "valid_token",
                 variantId: "var_123",
                 quantity: 1,
