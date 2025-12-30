@@ -48,7 +48,7 @@
     "ioredis": "^5.8.2",
     "jsonwebtoken": "^9.0.3",
     "posthog-node": "^5.18.0",
-    "qs": "^6.14.0",
+    "qs": "^6.14.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "resend": "^6.6.0",
