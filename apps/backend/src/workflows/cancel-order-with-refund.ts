@@ -10,6 +10,12 @@ import type { UpdateInventoryLevelInput, MedusaContainer } from "@medusajs/types
 import Stripe from "stripe";
 import { getStripeClient } from "../utils/stripe";
 import { cancelPaymentCaptureJob, JobActiveError } from "../lib/payment-capture-queue";
+import {
+    PaymentCollectionStatus,
+    validatePaymentCollectionStatus,
+    isCapturedStatus,
+    type PaymentCollectionStatusType,
+} from "../types/payment-collection-status";
 
 /**
  * Story 3.4: Custom error classes for cancel workflow
@@ -82,11 +88,20 @@ interface PaymentCancellationResult {
 /**
  * Story 3.4: Step to remove the capture job from BullMQ queue
  * Step 2 in the CAS transaction - prevents capture from running during cancel
- * 
+ *
  * REVIEW FIX: Now fails hard on Redis errors to prevent zombie payments.
  * If we can't confirm the capture job is stopped, we must abort cancellation.
- * 
+ *
  * Handler exported for unit testing.
+ *
+ * @param input - Object containing the order ID
+ * @param input.orderId - The Medusa order ID to remove capture job for
+ * @returns Promise resolving to object with removal status
+ * @returns {boolean} removed - True if job was found and removed, false if job not found
+ * @returns {string} orderId - The order ID that was processed
+ * @returns {boolean} [notFound] - Optional flag indicating job wasn't found (not an error)
+ * @throws {JobActiveError} If the capture job is currently being processed (too late to cancel)
+ * @throws {Error} If Redis connection fails or other queue errors occur
  */
 export async function removeCaptureJobHandler(
     input: { orderId: string }
@@ -131,8 +146,30 @@ const removeCaptureJobStep = createStep(
 /**
  * Story 3.4: Lock order step - validates order state before proceeding
  * Implements optimistic concurrency control (OCC) pattern
- * Throws LateCancelError if order is already captured/canceled
- * Throws PartialCaptureError if payment is partially captured (requires manual refund)
+ *
+ * This handler performs the critical validation step before cancellation:
+ * 1. Fetches order with PaymentCollection status (canonical source per PAY-01)
+ * 2. Validates PaymentCollection exists (fails loudly if missing - NO backward compatibility)
+ * 3. Checks PaymentCollection status to determine if cancellation is allowed
+ * 4. Validates Stripe PaymentIntent status for consistency
+ *
+ * Handler exported for unit testing.
+ *
+ * @param input - Object containing order and payment details
+ * @param input.orderId - The Medusa order ID to validate for cancellation
+ * @param input.paymentIntentId - The Stripe PaymentIntent ID to check status
+ * @param container - Medusa dependency injection container for resolving services
+ * @returns Promise resolving to lock result with cancellation eligibility
+ * @returns {string} orderId - The order ID that was validated
+ * @returns {boolean} canCancel - Whether the order can be safely canceled
+ * @returns {string} previousStatus - The order's status before locking
+ * @throws {OrderNotFoundError} If order doesn't exist in database
+ * @throws {OrderAlreadyCanceledError} If order status is already "canceled"
+ * @throws {Error} If PaymentCollection is missing (PAY-01 requirement - no fallback)
+ * @throws {Error} If multiple PaymentCollections found (anomaly per Medusa docs)
+ * @throws {Error} If PaymentCollection has invalid status value
+ * @throws {LateCancelError} If payment already captured (PC status "completed" or Stripe status "succeeded")
+ * @throws {PartialCaptureError} If payment partially captured (requires manual refund)
  */
 interface LockOrderResult {
     orderId: string;
@@ -146,21 +183,27 @@ export const lockOrderHandler = async (input: { orderId: string; paymentIntentId
     const query = container.resolve("query");
     const stripe = getStripeClient();
     
-    // PAY-01: Fetch order with PaymentCollection status (canonical) and metadata (backward compatibility)
-    const { data: orders } = await query.graph({
-        entity: "order",
-        fields: [
-            "id",
-            "status",
-            "payment_status",
-            "metadata",
-            "payment_collections.id",
-            "payment_collections.status",
-        ],
-        filters: { id: input.orderId },
-    });
+    // PAY-01: Fetch order with PaymentCollection status (canonical source)
+    let orders: any[];
+    try {
+        const result = await query.graph({
+            entity: "order",
+            fields: [
+                "id",
+                "status",
+                "payment_collections.id",
+                "payment_collections.status",
+            ],
+            filters: { id: input.orderId },
+        });
+        orders = result.data || [];
+    } catch (error) {
+        console.error(`[CancelOrder][ERROR] Failed to query order ${input.orderId}:`, error);
+        throw new Error(`Failed to retrieve order ${input.orderId}: ${(error as Error).message}`);
+    }
     
     if (!orders.length) {
+        console.error(`[CancelOrder][ERROR] Order ${input.orderId} not found in database`);
         throw new OrderNotFoundError(input.orderId);
     }
     
@@ -172,40 +215,96 @@ export const lockOrderHandler = async (input: { orderId: string; paymentIntentId
         throw new OrderAlreadyCanceledError(input.orderId);
     }
     
-    // PAY-01: Check payment status from PaymentCollection (canonical) first
-    // Fall back to metadata for pre-PAY-01 orders (backward compatibility)
-    const paymentCollection = order.payment_collections?.[0];
-    let paymentStatus: string | undefined;
+    // PAY-01: Check payment status from PaymentCollection (canonical source)
+    // Per Medusa v2 docs: Each order should have exactly one PaymentCollection
+    // Multiple PaymentCollections is an anomaly and should be treated as an error
+    const paymentCollections = order.payment_collections || [];
     
-    if (paymentCollection) {
-        // Use canonical PaymentCollection status
-        paymentStatus = paymentCollection.status as string;
-        console.log(`[PAY-01][CancelOrder] Order ${input.orderId} has PaymentCollection status: ${paymentStatus}`);
-    } else {
-        // Fallback to metadata for pre-PAY-01 orders
-        paymentStatus = (order.metadata as Record<string, unknown>)?.payment_status as string | undefined;
-        if (paymentStatus) {
-            console.log(`[PAY-01][CancelOrder] Order ${input.orderId} using metadata payment_status (pre-PAY-01): ${paymentStatus}`);
-        }
+    if (paymentCollections.length === 0) {
+        // PAY-01: PaymentCollection is required - fail loudly
+        console.error(
+            `[PAY-01][CancelOrder][ERROR] Order ${input.orderId} has no PaymentCollection. ` +
+            `Payment status cannot be determined. Order status: ${order.status}`
+        );
+        throw new Error(
+            `Order ${input.orderId} is missing PaymentCollection. ` +
+            `This order may have been created before PAY-01 implementation. ` +
+            `Payment status cannot be verified for cancellation.`
+        );
     }
     
-    // Check if payment has been captured (too late to cancel)
-    // PaymentCollection status "completed" = captured
-    // Metadata fallback: "captured" or payment_captured_at set
-    const isCaptured = paymentStatus === "completed" || 
-                       paymentStatus === "captured" || 
-                       order.metadata?.payment_captured_at;
+    if (paymentCollections.length > 1) {
+        // Multiple PaymentCollections is an anomaly per Medusa docs
+        console.error(
+            `[PAY-01][CancelOrder][ERROR] Order ${input.orderId} has ${paymentCollections.length} PaymentCollections. ` +
+            `Expected exactly one. This is an anomaly. Statuses: ${paymentCollections.map((pc: any) => pc.status).join(", ")}`
+        );
+        throw new Error(
+            `Order ${input.orderId} has multiple PaymentCollections (${paymentCollections.length}). ` +
+            `This is an anomaly and prevents safe cancellation.`
+        );
+    }
     
-    if (isCaptured) {
-        console.log(`[CancelOrder] Order ${input.orderId} payment already captured - too late to cancel`);
+    // Use the single PaymentCollection
+    const paymentCollection = paymentCollections[0];
+    
+    // PAY-01: Validate and type-check PaymentCollection status
+    // This ensures type safety and catches invalid statuses at runtime
+    let paymentStatus: PaymentCollectionStatusType;
+    try {
+        paymentStatus = validatePaymentCollectionStatus(
+            paymentCollection.status,
+            input.orderId
+        );
+        console.log(`[PAY-01][CancelOrder] Order ${input.orderId} PaymentCollection status validated: ${paymentStatus}`);
+    } catch (error) {
+        console.error(
+            `[PAY-01][CancelOrder][ERROR] Invalid PaymentCollection status for order ${input.orderId}. ` +
+            `Raw status value: ${JSON.stringify(paymentCollection.status)}. ` +
+            `Error: ${(error as Error).message}`
+        );
+        throw error;
+    }
+    
+    // Explicit handling for all PaymentCollection statuses
+    // This ensures no status is accidentally allowed when it shouldn't be
+    
+    // Terminal states - cannot cancel
+    if (paymentStatus === PaymentCollectionStatus.COMPLETED) {
+        console.log(`[CancelOrder] Order ${input.orderId} payment already captured (status: completed) - too late to cancel`);
         throw new LateCancelError();
     }
-
-    // Check for partial capture (requires manual intervention)
-    // PaymentCollection status "partially_captured" or metadata "partially_captured"
-    if (paymentStatus === "partially_captured") {
+    
+    if (paymentStatus === PaymentCollectionStatus.PARTIALLY_CAPTURED) {
         console.error(`[CancelOrder][REJECTED] Order ${input.orderId} is partially captured. Manual refund required.`);
         throw new PartialCaptureError();
+    }
+    
+    if (paymentStatus === PaymentCollectionStatus.CANCELED) {
+        console.log(`[CancelOrder] Order ${input.orderId} PaymentCollection is already canceled`);
+        // PaymentCollection is canceled but order might not be - this is an edge case
+        // We should still allow order cancellation to proceed, but log the anomaly
+        console.warn(
+            `[CancelOrder][WARN] Order ${input.orderId} has canceled PaymentCollection but order status is ${order.status}. ` +
+            `Proceeding with order cancellation.`
+        );
+    }
+    
+    // Cancellable states - allow cancellation to proceed
+    if (paymentStatus === PaymentCollectionStatus.NOT_PAID) {
+        console.log(`[CancelOrder] Order ${input.orderId} PaymentCollection status: not_paid - cancellation allowed`);
+    } else if (paymentStatus === PaymentCollectionStatus.AWAITING) {
+        console.log(`[CancelOrder] Order ${input.orderId} PaymentCollection status: awaiting - cancellation allowed`);
+    } else if (paymentStatus === PaymentCollectionStatus.AUTHORIZED) {
+        console.log(`[CancelOrder] Order ${input.orderId} PaymentCollection status: authorized - cancellation allowed`);
+    } else if (paymentStatus === PaymentCollectionStatus.REQUIRES_ACTION) {
+        console.log(`[CancelOrder] Order ${input.orderId} PaymentCollection status: requires_action - cancellation allowed`);
+    } else {
+        // This should never happen due to validation, but handle defensively
+        console.error(
+            `[CancelOrder][ERROR] Order ${input.orderId} has unexpected PaymentCollection status: ${paymentStatus}. ` +
+            `This should have been caught by validation. Proceeding with caution.`
+        );
     }
     
     // Step 3b: Verify Stripe PaymentIntent status

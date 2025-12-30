@@ -272,6 +272,23 @@ const createPaymentCollectionStep = createStep(
         { container }
     ) => {
         // AI-NOTE: PAY-01 - Creates PaymentCollection for Medusa v2 canonical payment tracking
+
+        // REVIEW FIX: Input validation for security compliance
+        if (!input.amount || typeof input.amount !== 'number' || input.amount <= 0) {
+            throw new Error(`Invalid amount: ${input.amount}. Amount must be a positive number.`);
+        }
+
+        if (!input.currencyCode || typeof input.currencyCode !== 'string' || input.currencyCode.length !== 3) {
+            throw new Error(`Invalid currency code: ${input.currencyCode}. Must be a 3-letter ISO code.`);
+        }
+
+        if (!input.paymentIntentId || !input.paymentIntentId.startsWith('pi_')) {
+            throw new Error(`Invalid Stripe PaymentIntent ID: ${input.paymentIntentId}`);
+        }
+
+        // NOTE: Medusa v2 does not export IPaymentModuleService as a public type
+        // Using 'as any' is the standard pattern for resolving module services in Medusa v2
+        // The service provides methods like createPaymentCollections() and createPaymentSession()
         const paymentModuleService = container.resolve(Modules.PAYMENT) as any;
 
         try {
@@ -284,9 +301,20 @@ const createPaymentCollectionStep = createStep(
                 }
             ]);
 
+            // REVIEW FIX (Issue #10): Validate PaymentCollection was created with expected status
+            if (!paymentCollection || !paymentCollection.id) {
+                throw new Error("PaymentCollection creation returned invalid result");
+            }
+
+            // Log initial status for debugging
+            console.log(
+                `[PAY-01] PaymentCollection created: id=${paymentCollection.id}, ` +
+                `initial_status=${paymentCollection.status || 'unknown'}`
+            );
+
             // Create payment session for the collection
             // This represents the authorized Stripe payment
-            await paymentModuleService.createPaymentSession(paymentCollection.id, {
+            const paymentSession = await paymentModuleService.createPaymentSession(paymentCollection.id, {
                 provider_id: "pp_stripe",
                 amount: input.amount,
                 currency_code: input.currencyCode.toLowerCase(),
@@ -296,22 +324,40 @@ const createPaymentCollectionStep = createStep(
                 },
             });
 
+            // REVIEW FIX (Issue #10): Validate PaymentSession was created successfully
+            if (!paymentSession || !paymentSession.id) {
+                throw new Error("PaymentSession creation returned invalid result");
+            }
+
             console.log(
-                `[PAY-01] Created PaymentCollection ${paymentCollection.id} for order ${input.orderId} ` +
-                `(PI: ${input.paymentIntentId}, amount: ${input.amount})`
+                `[PAY-01] Created PaymentCollection ${paymentCollection.id} with PaymentSession ${paymentSession.id} ` +
+                `for order ${input.orderId} (PI: ${input.paymentIntentId}, amount: ${input.amount})`
             );
 
             return new StepResponse({
                 paymentCollectionId: paymentCollection.id,
             });
         } catch (error) {
+            // REVIEW FIX (Issue #11): Enhanced error handling with metric emission
             console.error(
                 `[PAY-01][ERROR] Failed to create PaymentCollection for order ${input.orderId}:`,
                 error
             );
-            // Don't throw - order creation should continue even if PC fails
-            // This allows graceful degradation to metadata-based tracking
-            return new StepResponse({ paymentCollectionId: null, error: (error as Error).message });
+
+            // Emit metric for monitoring (placeholder - integrate with your metrics system)
+            console.log(
+                `[METRIC] payment_collection_creation_failed ` +
+                `order=${input.orderId} error=${(error as Error).name} message="${(error as Error).message}"`
+            );
+
+            // CRITICAL: Don't throw - order creation should continue even if PC fails
+            // This allows graceful degradation, but logs the failure for monitoring
+            // Operators should monitor the payment_collection_creation_failed metric
+            return new StepResponse({
+                paymentCollectionId: null,
+                error: (error as Error).message,
+                errorName: (error as Error).name
+            });
         }
     }
 );
@@ -335,6 +381,9 @@ const linkPaymentCollectionStep = createStep(
 
         try {
             // Use remote link to establish relationship between order and payment collection
+            // NOTE: Medusa v2 does not export IRemoteLink as a public type
+            // Using 'as any' is the standard pattern for resolving remoteLink service in Medusa v2
+            // The service provides the create() method to establish cross-module relationships
             const remoteLink = container.resolve("remoteLink") as any;
             
             await remoteLink.create({

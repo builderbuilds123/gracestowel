@@ -39,6 +39,7 @@ import {
 import { cancelPaymentCaptureJob, JobActiveError } from "../../src/lib/payment-capture-queue";
 import { MedusaContainer } from "@medusajs/framework/types";
 import { getStripeClient } from "../../src/utils/stripe";
+import { PaymentCollectionStatus } from "../../src/types/payment-collection-status";
 
 describe("Cancel Order Workflow Steps", () => {
     beforeEach(() => {
@@ -111,25 +112,12 @@ describe("Cancel Order Workflow Steps", () => {
             (getStripeClient as jest.Mock).mockReturnValue(stripeMock);
         });
 
-        it("should succeed when order is pending and PI is requires_capture", async () => {
-            queryMock.mockResolvedValue({
-                data: [{ id: "ord_1", status: "pending", payment_status: "awaiting" }]
-            });
-            stripeMock.paymentIntents.retrieve.mockResolvedValue({
-                status: "requires_capture",
-                amount_received: 0
-            });
-
-            const result = await lockOrderHandler({ orderId: "ord_1", paymentIntentId: "pi_1" }, container);
-            expect(result.canCancel).toBe(true);
-        });
-
         it("should succeed when PaymentCollection status is authorized (PAY-01)", async () => {
             queryMock.mockResolvedValue({
                 data: [{
                     id: "ord_1",
                     status: "pending",
-                    payment_collections: [{ id: "pc_1", status: "authorized" }],
+                    payment_collections: [{ id: "pc_1", status: PaymentCollectionStatus.AUTHORIZED }],
                     metadata: {}
                 }]
             });
@@ -147,18 +135,9 @@ describe("Cancel Order Workflow Steps", () => {
                 data: [{
                     id: "ord_partial",
                     status: "pending",
-                    payment_collections: [{ id: "pc_1", status: "partially_captured" }],
+                    payment_collections: [{ id: "pc_1", status: PaymentCollectionStatus.PARTIALLY_CAPTURED }],
                     metadata: {}
                 }]
-            });
-
-            await expect(lockOrderHandler({ orderId: "ord_partial", paymentIntentId: "pi_1" }, container))
-                .rejects.toThrow(PartialCaptureError);
-        });
-
-        it("should throw PartialCaptureError if order metadata.payment_status is partially_captured (pre-PAY-01 fallback)", async () => {
-            queryMock.mockResolvedValue({
-                data: [{ id: "ord_partial", status: "pending", metadata: { payment_status: "partially_captured" } }]
             });
 
             await expect(lockOrderHandler({ orderId: "ord_partial", paymentIntentId: "pi_1" }, container))
@@ -170,7 +149,7 @@ describe("Cancel Order Workflow Steps", () => {
                 data: [{
                     id: "ord_captured",
                     status: "pending",
-                    payment_collections: [{ id: "pc_1", status: "completed" }],
+                    payment_collections: [{ id: "pc_1", status: PaymentCollectionStatus.COMPLETED }],
                     metadata: {}
                 }]
             });
@@ -179,18 +158,132 @@ describe("Cancel Order Workflow Steps", () => {
                 .rejects.toThrow(LateCancelError);
         });
 
-        it("should throw LateCancelError if order metadata.payment_status is captured (pre-PAY-01 fallback)", async () => {
+        it("should throw error if PaymentCollection is missing (PAY-01 requirement)", async () => {
             queryMock.mockResolvedValue({
-                data: [{ id: "ord_captured", status: "pending", metadata: { payment_status: "captured" } }]
+                data: [{
+                    id: "ord_no_pc",
+                    status: "pending",
+                    payment_collections: [],
+                    metadata: {}
+                }]
             });
 
-            await expect(lockOrderHandler({ orderId: "ord_captured", paymentIntentId: "pi_1" }, container))
-                .rejects.toThrow(LateCancelError);
+            await expect(lockOrderHandler({ orderId: "ord_no_pc", paymentIntentId: "pi_1" }, container))
+                .rejects.toThrow("missing PaymentCollection");
+        });
+
+        it("should throw error if multiple PaymentCollections exist (anomaly)", async () => {
+            queryMock.mockResolvedValue({
+                data: [{
+                    id: "ord_multi_pc",
+                    status: "pending",
+                    payment_collections: [
+                        { id: "pc_1", status: PaymentCollectionStatus.AUTHORIZED },
+                        { id: "pc_2", status: PaymentCollectionStatus.AUTHORIZED }
+                    ],
+                    metadata: {}
+                }]
+            });
+
+            await expect(lockOrderHandler({ orderId: "ord_multi_pc", paymentIntentId: "pi_1" }, container))
+                .rejects.toThrow("multiple PaymentCollections");
+        });
+
+        it("should throw error if PaymentCollection has invalid status", async () => {
+            queryMock.mockResolvedValue({
+                data: [{
+                    id: "ord_invalid_status",
+                    status: "pending",
+                    payment_collections: [{ id: "pc_1", status: "invalid_status_value" }],
+                    metadata: {}
+                }]
+            });
+
+            await expect(lockOrderHandler({ orderId: "ord_invalid_status", paymentIntentId: "pi_1" }, container))
+                .rejects.toThrow("Invalid PaymentCollection status");
+        });
+
+        it("should allow cancellation when PaymentCollection status is canceled (edge case)", async () => {
+            queryMock.mockResolvedValue({
+                data: [{
+                    id: "ord_pc_canceled",
+                    status: "pending",
+                    payment_collections: [{ id: "pc_1", status: PaymentCollectionStatus.CANCELED }],
+                    metadata: {}
+                }]
+            });
+            stripeMock.paymentIntents.retrieve.mockResolvedValue({
+                status: "canceled",
+                amount_received: 0
+            });
+
+            // Should allow cancellation even if PaymentCollection is canceled (order might not be)
+            const result = await lockOrderHandler({ orderId: "ord_pc_canceled", paymentIntentId: "pi_1" }, container);
+            expect(result.canCancel).toBe(true);
+        });
+
+        it("should allow cancellation when PaymentCollection status is requires_action", async () => {
+            queryMock.mockResolvedValue({
+                data: [{
+                    id: "ord_requires_action",
+                    status: "pending",
+                    payment_collections: [{ id: "pc_1", status: PaymentCollectionStatus.REQUIRES_ACTION }],
+                    metadata: {}
+                }]
+            });
+            stripeMock.paymentIntents.retrieve.mockResolvedValue({
+                status: "requires_capture",
+                amount_received: 0
+            });
+
+            const result = await lockOrderHandler({ orderId: "ord_requires_action", paymentIntentId: "pi_1" }, container);
+            expect(result.canCancel).toBe(true);
+        });
+
+        it("should allow cancellation when PaymentCollection status is not_paid", async () => {
+            queryMock.mockResolvedValue({
+                data: [{
+                    id: "ord_not_paid",
+                    status: "pending",
+                    payment_collections: [{ id: "pc_1", status: PaymentCollectionStatus.NOT_PAID }],
+                    metadata: {}
+                }]
+            });
+            stripeMock.paymentIntents.retrieve.mockResolvedValue({
+                status: "requires_capture",
+                amount_received: 0
+            });
+
+            const result = await lockOrderHandler({ orderId: "ord_not_paid", paymentIntentId: "pi_1" }, container);
+            expect(result.canCancel).toBe(true);
+        });
+
+        it("should allow cancellation when PaymentCollection status is awaiting", async () => {
+            queryMock.mockResolvedValue({
+                data: [{
+                    id: "ord_awaiting",
+                    status: "pending",
+                    payment_collections: [{ id: "pc_1", status: PaymentCollectionStatus.AWAITING }],
+                    metadata: {}
+                }]
+            });
+            stripeMock.paymentIntents.retrieve.mockResolvedValue({
+                status: "requires_capture",
+                amount_received: 0
+            });
+
+            const result = await lockOrderHandler({ orderId: "ord_awaiting", paymentIntentId: "pi_1" }, container);
+            expect(result.canCancel).toBe(true);
         });
 
         it("should throw PartialCaptureError if Stripe has partial amount received", async () => {
             queryMock.mockResolvedValue({
-                data: [{ id: "ord_1", status: "pending", payment_status: "awaiting" }]
+                data: [{
+                    id: "ord_1",
+                    status: "pending",
+                    payment_collections: [{ id: "pc_1", status: PaymentCollectionStatus.AUTHORIZED }],
+                    metadata: {}
+                }]
             });
             stripeMock.paymentIntents.retrieve.mockResolvedValue({
                 status: "requires_capture",
@@ -203,7 +296,12 @@ describe("Cancel Order Workflow Steps", () => {
 
         it("should throw LateCancelError if Stripe status is succeeded", async () => {
             queryMock.mockResolvedValue({
-                data: [{ id: "ord_1", status: "pending", payment_status: "awaiting" }]
+                data: [{
+                    id: "ord_1",
+                    status: "pending",
+                    payment_collections: [{ id: "pc_1", status: PaymentCollectionStatus.AUTHORIZED }],
+                    metadata: {}
+                }]
             });
             stripeMock.paymentIntents.retrieve.mockResolvedValue({
                 status: "succeeded"
@@ -213,23 +311,30 @@ describe("Cancel Order Workflow Steps", () => {
                 .rejects.toThrow(LateCancelError);
         });
 
-        it("should throw LateCancelError if metadata.payment_captured_at is set", async () => {
+        it("should throw error if PaymentCollection missing even when metadata.payment_captured_at is set", async () => {
             queryMock.mockResolvedValue({
                 data: [{ 
                     id: "ord_meta_captured", 
                     status: "pending", 
                     payment_status: "awaiting",
+                    payment_collections: [],
                     metadata: { payment_captured_at: "2025-12-09T12:00:00Z" }
                 }]
             });
 
+            // PAY-01: Metadata is ignored, PaymentCollection is required
             await expect(lockOrderHandler({ orderId: "ord_meta_captured", paymentIntentId: "pi_1" }, container))
-                .rejects.toThrow(LateCancelError);
+                .rejects.toThrow("missing PaymentCollection");
         });
 
         it("should throw OrderAlreadyCanceledError if order status is canceled", async () => {
             queryMock.mockResolvedValue({
-                data: [{ id: "ord_already_canceled", status: "canceled", payment_status: "awaiting" }]
+                data: [{
+                    id: "ord_already_canceled",
+                    status: "canceled",
+                    payment_collections: [{ id: "pc_1", status: PaymentCollectionStatus.AUTHORIZED }],
+                    metadata: {}
+                }]
             });
 
             await expect(lockOrderHandler({ orderId: "ord_already_canceled", paymentIntentId: "pi_1" }, container))
