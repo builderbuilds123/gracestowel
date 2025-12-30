@@ -2,6 +2,7 @@ import { type ActionFunctionArgs, data } from "react-router";
 import { toCents, fromCents } from "../lib/price";
 import { createLogger, getTraceIdFromRequest } from "../lib/logger";
 import { monitoredFetch, type CloudflareEnv } from "../utils/monitored-fetch";
+import { fnv1aHash } from "../lib/hash";
 
 // Common supported currencies (module-level constant)
 const COMMON_CURRENCIES = new Set([
@@ -60,43 +61,39 @@ interface StockValidationResult {
 
 /**
  * Generate deterministic idempotency key from cart contents
- * Uses FNV-1a hash for better distribution and includes timestamp bucket
- * to allow retries within a time window while preventing rapid duplicates
- * 
- * Note: Stripe caches idempotency keys for 24 hours. To avoid collisions
- * we include a 1-minute time bucket and a random session nonce.
+ * AI-NOTE: REL-01 - Fully deterministic key generation for effective retries
+ *
+ * Uses FNV-1a hash of: cartId + amount + currency + cart contents
+ * Same inputs ALWAYS produce same key (retry-safe)
+ * Different inputs produce different keys (prevents accidental duplicates)
+ *
+ * Stripe caches idempotency keys for 24 hours which is fine since:
+ * - Cart changes → different key (due to cartId/amount/items hash)
+ * - Same cart retried → same key (desired behavior for network retries)
  */
 function generateIdempotencyKey(
+  cartId: string,
   amount: number,
   currency: string,
-  cartItems: CartItem[] | undefined,
-  customerId: string | undefined
+  cartItems: CartItem[] | undefined
 ): string {
+  // AI-NOTE: REL-01 - Deterministic cart content hash (sorted for stability)
   const cartHash = cartItems
     ? cartItems
         .map((i) => `${i.variantId}:${i.quantity}:${i.price}`)
         .sort()
         .join("|")
     : "empty";
-  
-  // Include a 1-minute time bucket to allow fresh attempts
-  const timeBucket = Math.floor(Date.now() / (60 * 1000));
-  
-  // Add random nonce to prevent collisions across different sessions
-  const nonce = Math.random().toString(36).substring(2, 8);
-  
-  const raw = `pi_${customerId || "guest"}_${amount}_${currency}_${cartHash}_${timeBucket}_${nonce}`;
 
-  // FNV-1a hash - better distribution than simple hash
-  let hash = 2166136261; // FNV offset basis
-  for (let i = 0; i < raw.length; i++) {
-    hash ^= raw.charCodeAt(i);
-    hash = Math.imul(hash, 16777619); // FNV prime
-  }
-  
-  // Convert to base36 and ensure sufficient length
-  const hashStr = (hash >>> 0).toString(36).padStart(8, '0');
-  return `pi_${hashStr}_${amount}`;
+  // AI-NOTE: REL-01 - Use pipe delimiter to prevent collision edge cases
+  // Example: "cart_123_abc" + "100" vs "cart_123" + "abc_100" would collide with underscore
+  // Pipe delimiter ensures unambiguous component separation
+  const raw = `pi|${cartId}|${amount}|${currency}|${cartHash}`;
+
+  // Use extracted FNV-1a hash utility
+  const hashStr = fnv1aHash(raw);
+
+  return `pi_${cartId.slice(-8)}_${hashStr}_${amount}`;
 }
 
 /**
@@ -368,10 +365,10 @@ export async function action({ request, context }: ActionFunctionArgs) {
     // Idempotency key only for CREATE
     if (!isUpdate) {
       headers["Idempotency-Key"] = generateIdempotencyKey(
-        fromCents(calculatedAmount),
+        cartId,
+        calculatedAmount, // Use cents directly to avoid floating-point issues
         validatedCurrency,
-        cartItems,
-        customerId
+        cartItems
       );
     }
 
