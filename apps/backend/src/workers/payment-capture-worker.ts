@@ -11,6 +11,7 @@
 
 import { Worker, Job, Queue } from "bullmq";
 import { MedusaContainer } from "@medusajs/framework/types";
+import { Modules } from "@medusajs/framework/utils";
 import { getStripeClient } from "../utils/stripe";
 import { PaymentCaptureJobData } from "../types/queue-types";
 import { 
@@ -262,6 +263,11 @@ export async function setOrderEditStatus(
 /**
  * Update order metadata to track payment capture status in Medusa
  * Uses metadata since payment_status is not in UpdateOrderDTO
+ * 
+ * PAY-01: Also updates PaymentCollection status to "captured"
+ * AC3: Payment capture uses Payment Module APIs
+ * AC4: Creates canonical payment status (keeps metadata for backward compatibility)
+ * 
  * @param orderId - The Medusa order ID
  * @param amountCaptured - Amount captured in cents
  */
@@ -282,6 +288,7 @@ export async function updateOrderAfterCapture(orderId: string, amountCaptured: n
 
         const orderService = containerRef.resolve("order");
 
+        // Keep metadata updates for backward compatibility
         const update: any = {
             id: orderId,
             metadata: {
@@ -298,9 +305,84 @@ export async function updateOrderAfterCapture(orderId: string, amountCaptured: n
 
         await orderService.updateOrders([update]);
         console.log(`[PaymentCapture] Order ${orderId}: Updated metadata with capture info`);
+
+        // PAY-01: Update PaymentCollection status
+        await updatePaymentCollectionOnCapture(orderId, amountCaptured);
+
     } catch (error) {
         console.error(`[PaymentCapture] Error updating order ${orderId} after capture:`, error);
         // Don't throw - payment was captured, metadata update is secondary
+    }
+}
+
+/**
+ * PAY-01: Update PaymentCollection status on capture
+ * 
+ * AC3: Updates PaymentCollection via Payment Module service
+ * Graceful degradation: logs warning if no PaymentCollection found
+ * (orders created before PAY-01 may not have PaymentCollections)
+ * 
+ * @param orderId - The Medusa order ID
+ * @param amountCaptured - Amount captured in cents
+ */
+async function updatePaymentCollectionOnCapture(orderId: string, amountCaptured: number): Promise<void> {
+    if (!containerRef) {
+        return;
+    }
+
+    try {
+        const query = containerRef.resolve("query");
+        
+        // Get order with payment collections
+        const { data: orders } = await query.graph({
+            entity: "order",
+            fields: [
+                "id",
+                "payment_collections.id",
+                "payment_collections.status",
+            ],
+            filters: { id: orderId },
+        });
+
+        const order = orders?.[0];
+        if (!order) {
+            console.warn(`[PAY-01] Order ${orderId} not found for PaymentCollection update`);
+            return;
+        }
+
+        const paymentCollection = order.payment_collections?.[0];
+        if (!paymentCollection) {
+            // Graceful degradation for pre-PAY-01 orders
+            console.log(`[PAY-01] Order ${orderId}: No PaymentCollection found (pre-PAY-01 order)`);
+            return;
+        }
+
+        // PaymentCollectionStatus.COMPLETED is the captured state in Medusa v2
+        const capturedStatuses = ["completed", "partially_captured"];
+        if (capturedStatuses.includes(paymentCollection.status as string)) {
+            console.log(`[PAY-01] Order ${orderId}: PaymentCollection already in final state: ${paymentCollection.status}`);
+            return;
+        }
+
+        // Update PaymentCollection status via Payment Module
+        // Using "completed" which maps to PaymentCollectionStatus.COMPLETED
+        const paymentModuleService = containerRef.resolve(Modules.PAYMENT) as any;
+        
+        await paymentModuleService.updatePaymentCollections([
+            {
+                id: paymentCollection.id,
+                status: "completed", // PaymentCollectionStatus.COMPLETED
+            },
+        ]);
+
+        console.log(
+            `[PAY-01] Order ${orderId}: PaymentCollection ${paymentCollection.id} status updated to "completed" ` +
+            `(amount: ${amountCaptured} cents)`
+        );
+
+    } catch (error) {
+        // Log but don't throw - payment was captured via Stripe, PC update is secondary
+        console.error(`[PAY-01][ERROR] Failed to update PaymentCollection for order ${orderId}:`, error);
     }
 }
 

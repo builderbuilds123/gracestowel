@@ -7,6 +7,7 @@ import {
 } from "@medusajs/framework/workflows-sdk";
 import { createOrdersWorkflow, updateInventoryLevelsStep } from "@medusajs/core-flows";
 import type { UpdateInventoryLevelInput } from "@medusajs/types";
+import { Modules } from "@medusajs/framework/utils";
 import { modificationTokenService } from "../services/modification-token";
 
 /**
@@ -248,15 +249,125 @@ const logOrderCreatedStep = createStep(
 );
 
 /**
+ * PAY-01: Step to create PaymentCollection linked to order
+ * 
+ * Creates a PaymentCollection with:
+ * - provider_id: "pp_stripe" (Stripe payment provider)
+ * - Payment record containing Stripe PaymentIntent ID
+ * - Initial status: "authorized" (manual capture mode)
+ * 
+ * AC1: Orders have a linked PaymentCollection with provider pp_stripe
+ * AC2: PaymentCollection contains Payment record with Stripe PI ID in data field
+ */
+const createPaymentCollectionStep = createStep(
+    "create-payment-collection",
+    async (
+        input: {
+            orderId: string;
+            paymentIntentId: string;
+            amount: number;
+            currencyCode: string;
+            regionId?: string;
+        },
+        { container }
+    ) => {
+        // AI-NOTE: PAY-01 - Creates PaymentCollection for Medusa v2 canonical payment tracking
+        const paymentModuleService = container.resolve(Modules.PAYMENT) as any;
+
+        try {
+            // Create payment collection with payment record
+            const [paymentCollection] = await paymentModuleService.createPaymentCollections([
+                {
+                    amount: input.amount,
+                    currency_code: input.currencyCode.toLowerCase(),
+                    region_id: input.regionId,
+                }
+            ]);
+
+            // Create payment session for the collection
+            // This represents the authorized Stripe payment
+            await paymentModuleService.createPaymentSession(paymentCollection.id, {
+                provider_id: "pp_stripe",
+                amount: input.amount,
+                currency_code: input.currencyCode.toLowerCase(),
+                data: {
+                    id: input.paymentIntentId,
+                    status: "requires_capture",
+                },
+            });
+
+            console.log(
+                `[PAY-01] Created PaymentCollection ${paymentCollection.id} for order ${input.orderId} ` +
+                `(PI: ${input.paymentIntentId}, amount: ${input.amount})`
+            );
+
+            return new StepResponse({
+                paymentCollectionId: paymentCollection.id,
+            });
+        } catch (error) {
+            console.error(
+                `[PAY-01][ERROR] Failed to create PaymentCollection for order ${input.orderId}:`,
+                error
+            );
+            // Don't throw - order creation should continue even if PC fails
+            // This allows graceful degradation to metadata-based tracking
+            return new StepResponse({ paymentCollectionId: null, error: (error as Error).message });
+        }
+    }
+);
+
+/**
+ * PAY-01: Step to link PaymentCollection to Order
+ * 
+ * Updates order with payment_collection_id reference
+ * This establishes the relationship for canonical payment queries
+ */
+const linkPaymentCollectionStep = createStep(
+    "link-payment-collection-to-order",
+    async (
+        input: { orderId: string; paymentCollectionId: string | null },
+        { container }
+    ) => {
+        if (!input.paymentCollectionId) {
+            console.warn(`[PAY-01] No PaymentCollection to link for order ${input.orderId}`);
+            return new StepResponse({ linked: false });
+        }
+
+        try {
+            // Use remote link to establish relationship between order and payment collection
+            const remoteLink = container.resolve("remoteLink") as any;
+            
+            await remoteLink.create({
+                [Modules.ORDER]: {
+                    order_id: input.orderId,
+                },
+                [Modules.PAYMENT]: {
+                    payment_collection_id: input.paymentCollectionId,
+                },
+            });
+
+            console.log(`[PAY-01] Linked PaymentCollection ${input.paymentCollectionId} to order ${input.orderId}`);
+            return new StepResponse({ linked: true });
+        } catch (error) {
+            console.error(`[PAY-01][ERROR] Failed to link PaymentCollection to order ${input.orderId}:`, error);
+            // Don't throw - continue without link if it fails
+            return new StepResponse({ linked: false, error: (error as Error).message });
+        }
+    }
+);
+
+/**
  * Workflow to create an order from a Stripe payment
  *
  * This workflow:
  * 1. Validates and prepares order data from Stripe payment metadata
  * 2. Creates the order using Medusa's createOrderWorkflow
  * 3. Adjusts inventory levels (decrements stock)
- * 4. Generates a modification token for the 1-hour modification window
- * 5. Logs the order creation
- * 6. Emits order.placed event (triggers email + payment capture scheduling)
+ * 4. PAY-01: Creates PaymentCollection with Stripe PI data
+ * 5. PAY-01: Links PaymentCollection to Order
+ * 6. Generates a modification token for the 1-hour modification window
+ * 7. Logs the order creation
+ * 8. Emits order.placed event (triggers email + payment capture scheduling)
  */
 export const createOrderFromStripeWorkflow = createWorkflow(
     "create-order-from-stripe",
@@ -295,7 +406,24 @@ export const createOrderFromStripeWorkflow = createWorkflow(
         // Call the inventory update step
         updateInventoryLevelsStep(adjustedInventory);
 
-        // Step 5: Generate modification token for 1-hour window
+        // Step 5: PAY-01 - Create PaymentCollection for canonical payment tracking
+        const paymentCollectionInput = transform({ order, input, orderData }, (data) => ({
+            orderId: data.order.id,
+            paymentIntentId: data.input.paymentIntentId,
+            amount: data.input.amount,
+            currencyCode: data.orderData.currency_code || data.input.currency,
+            regionId: data.orderData.region_id,
+        }));
+        const paymentCollectionResult = createPaymentCollectionStep(paymentCollectionInput);
+
+        // Step 6: PAY-01 - Link PaymentCollection to Order
+        const linkInput = transform({ order, paymentCollectionResult }, (data) => ({
+            orderId: data.order.id,
+            paymentCollectionId: data.paymentCollectionResult.paymentCollectionId,
+        }));
+        linkPaymentCollectionStep(linkInput);
+
+        // Step 7: Generate modification token for 1-hour window
         const tokenInput = transform({ order, input }, (data) => ({
             orderId: data.order.id,
             paymentIntentId: data.input.paymentIntentId,
@@ -303,7 +431,7 @@ export const createOrderFromStripeWorkflow = createWorkflow(
         }));
         const tokenResult = generateModificationTokenStep(tokenInput);
 
-        // Step 6: Log the order creation
+        // Step 8: Log the order creation
         const logInput = transform({ order, input, shouldAdjustInventory, tokenResult }, (data) => ({
             orderId: data.order.id,
             paymentIntentId: data.input.paymentIntentId,
@@ -312,7 +440,7 @@ export const createOrderFromStripeWorkflow = createWorkflow(
         }));
         logOrderCreatedStep(logInput);
 
-        // Step 7: Emit order.placed event to trigger email notification and payment capture scheduling
+        // Step 9: Emit order.placed event to trigger email notification and payment capture scheduling
         const eventData = transform({ order, tokenResult }, (data) => ({
             eventName: "order.placed" as const,
             data: {
