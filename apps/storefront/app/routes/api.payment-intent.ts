@@ -284,7 +284,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
         });
 
         if (!cartResponse.ok) {
-            logger.error("Failed to fetch Medusa cart", new Error("Cart not found or error"), { cartId });
+            logger.error("Failed to fetch Medusa cart", new Error("Cart not found or error"), { cartId: cartId });
             return data({ message: "Invalid cart", traceId }, { status: 400 });
         }
 
@@ -306,7 +306,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
                 clientShipping: shipping
             });
         } else {
-             logger.error("Medusa cart missing total", { cartId, cart });
+             logger.error("Medusa cart missing total", new Error("Cart missing total"), { cartId, cart });
              return data({ message: "Invalid cart data", traceId }, { status: 500 });
         }
     } else {
