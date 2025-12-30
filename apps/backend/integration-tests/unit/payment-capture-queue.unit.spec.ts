@@ -101,23 +101,25 @@ describe("payment-capture-queue", () => {
         const mockUpdatePaymentCollections = jest.fn().mockResolvedValue({});
         const mockCapturePayment = jest.fn().mockResolvedValue({});
         const mockAddOrderTransactions = jest.fn().mockResolvedValue({});
-        (global as any).mockUpdateOrders = mockUpdateOrders; // Expose for test assertions
+        // Expose mocks for test assertions
+        (global as any).mockUpdateOrders = mockUpdateOrders;
+        (global as any).mockCapturePayment = mockCapturePayment;
+        (global as any).mockUpdatePaymentCollections = mockUpdatePaymentCollections;
+        (global as any).mockAddOrderTransactions = mockAddOrderTransactions;
         mockContainer = {
             resolve: jest.fn((serviceName: string) => {
                 if (serviceName === "query") {
                     return { graph: mockQueryGraph };
                 }
                 if (serviceName === "order") {
-                    return { updateOrders: mockUpdateOrders };
+                    return { updateOrders: mockUpdateOrders, addOrderTransactions: mockAddOrderTransactions };
                 }
-                if (serviceName === "paymentModuleService") {
+                // Modules.PAYMENT resolves to "payment" not "paymentModuleService"
+                if (serviceName === "payment") {
                     return {
                         updatePaymentCollections: mockUpdatePaymentCollections,
                         capturePayment: mockCapturePayment
                     };
-                }
-                if (serviceName === "orderModuleService") {
-                    return { addOrderTransactions: mockAddOrderTransactions };
                 }
                 return {};
             })
@@ -231,16 +233,17 @@ describe("payment-capture-queue", () => {
                     }]
                 }]
             });
-            mockStripeCapture.mockResolvedValue({ status: "succeeded" });
 
             await processPaymentCapture(mockJob as Job);
 
-            // Verify capture called with 5000 cents and idempotency key
-            expect(mockStripeCapture).toHaveBeenCalledWith(
-                "pi_123", 
-                { amount_to_capture: 5000 }, 
-                expect.objectContaining({ idempotencyKey: "capture_order_123_100000" })
-            );
+            // PAY-01 AC3: Verify Payment Module capture called with correct amount in major units
+            expect((global as any).mockCapturePayment).toHaveBeenCalledWith({
+                payment_id: "pay_123",
+                amount: 50.00  // 5000 cents → 50.00 major units
+            });
+
+            // Stripe capture should NOT be called when Payment Module succeeds
+            expect(mockStripeCapture).not.toHaveBeenCalled();
         });
 
         it("should capture partial amount when order total < authorized (Partial)", async () => {
@@ -265,25 +268,26 @@ describe("payment-capture-queue", () => {
                     }]
                 }]
             });
-            mockStripeCapture.mockResolvedValue({ status: "succeeded" });
 
             await processPaymentCapture(mockJob as Job);
 
-            expect(mockStripeCapture).toHaveBeenCalledWith(
-                "pi_123", 
-                { amount_to_capture: 4000 }, 
-                expect.any(Object)
-            );
-            expect(console.log).toHaveBeenCalledWith(expect.stringContaining("released 1000 cents"));
+            // PAY-01 AC3: Verify Payment Module capture called with partial amount
+            expect((global as any).mockCapturePayment).toHaveBeenCalledWith({
+                payment_id: "pay_123",
+                amount: 40.00  // 4000 cents → 40.00 major units (partial capture)
+            });
+
+            // Stripe capture should NOT be called when Payment Module succeeds
+            expect(mockStripeCapture).not.toHaveBeenCalled();
         });
 
         it("should throw error when order total > authorized (Excess)", async () => {
             // Setup: PaymentIntent = 5000 cents, Order = 60.00 dollars (converts to 6000 cents, item added/price changed)
-            mockStripeRetrieve.mockResolvedValue({ 
-                id: "pi_123", 
-                status: "requires_capture", 
-                amount: 5000, 
-                currency: "usd" 
+            mockStripeRetrieve.mockResolvedValue({
+                id: "pi_123",
+                status: "requires_capture",
+                amount: 5000,
+                currency: "usd"
             });
             mockQueryGraph.mockResolvedValue({
                 data: [{
@@ -291,6 +295,7 @@ describe("payment-capture-queue", () => {
                     total: 60.00,
                     currency_code: "usd",
                     status: "pending",
+                    metadata: {},
                     payment_collections: [{
                         id: "paycol_123",
                         status: "authorized",
@@ -298,10 +303,14 @@ describe("payment-capture-queue", () => {
                     }]
                 }]
             });
+            // Mock Payment Module to fail so it falls back to Stripe validation path
+            (global as any).mockCapturePayment.mockRejectedValueOnce(
+                new Error("Payment Module validation failed")
+            );
 
             await expect(processPaymentCapture(mockJob as Job))
                 .rejects.toThrow("exceeds authorized amount");
-            
+
             expect(mockStripeCapture).not.toHaveBeenCalled();
             expect(console.error).toHaveBeenCalledWith(expect.stringContaining("Manual intervention required"));
         });
@@ -355,10 +364,10 @@ describe("payment-capture-queue", () => {
 
         it("should handle Stripe amount_too_large error (M3 Fix)", async () => {
              mockStripeRetrieve.mockResolvedValue({
-                id: "pi_123", 
-                status: "requires_capture", 
-                amount: 5000, 
-                currency: "usd" 
+                id: "pi_123",
+                status: "requires_capture",
+                amount: 5000,
+                currency: "usd"
             });
             // Note: total is in dollars (50.00), which converts to 5000 cents
             mockQueryGraph.mockResolvedValue({
@@ -367,6 +376,7 @@ describe("payment-capture-queue", () => {
                     total: 50.00,
                     currency_code: "usd",
                     status: "pending",
+                    metadata: {},
                     payment_collections: [{
                         id: "paycol_123",
                         status: "authorized",
@@ -375,11 +385,16 @@ describe("payment-capture-queue", () => {
                 }]
             });
 
+            // Mock Payment Module to fail so it falls back to Stripe
+            (global as any).mockCapturePayment.mockRejectedValueOnce(
+                new Error("Payment Module unavailable")
+            );
+
             // Create error with type/code properties (robust property-based check)
             const stripeError = new Error("Amount too large") as any;
             stripeError.type = "invalid_request_error";
             stripeError.code = "amount_too_large";
-            
+
             mockStripeCapture.mockRejectedValue(stripeError);
 
             await expect(processPaymentCapture(mockJob as Job))
@@ -401,20 +416,18 @@ describe("payment-capture-queue", () => {
 
         it("should skip if already succeeded", async () => {
             mockStripeRetrieve.mockResolvedValue({ status: "succeeded", amount: 5000 });
-            // Query for updatePaymentCollectionOnCapture
-            mockQueryGraph.mockResolvedValueOnce({
+            mockQueryGraph.mockResolvedValue({
                 data: [{
                     id: "order_123",
+                    currency_code: "usd",
+                    status: "pending",
+                    metadata: {},
                     payment_collections: [{
                         id: "paycol_123",
                         status: "authorized",
                         payments: [{ id: "pay_123" }]
                     }]
                 }]
-            });
-            // Query for currency_code
-            mockQueryGraph.mockResolvedValueOnce({
-                data: [{ id: "order_123", currency_code: "usd" }]
             });
             await processPaymentCapture(mockJob as Job);
             expect(console.log).toHaveBeenCalledWith(expect.stringContaining("already captured"));
@@ -463,19 +476,13 @@ describe("payment-capture-queue", () => {
         // Code Review Fix: Test for order metadata update after capture
         it("should update order metadata after successful capture", async () => {
             mockStripeRetrieve.mockResolvedValue({ status: "requires_capture", amount: 1000, currency: "usd" });
-            // First query: fetchOrderTotal
-            mockQueryGraph.mockResolvedValueOnce({
+            mockQueryGraph.mockResolvedValue({
                 data: [{
                     id: "order_123",
                     total: 10.00,
                     currency_code: "usd",
-                    status: "pending"
-                }]
-            });
-            // Second query: updatePaymentCollectionOnCapture
-            mockQueryGraph.mockResolvedValueOnce({
-                data: [{
-                    id: "order_123",
+                    status: "pending",
+                    metadata: {},
                     payment_collections: [{
                         id: "paycol_123",
                         status: "authorized",
@@ -483,22 +490,23 @@ describe("payment-capture-queue", () => {
                     }]
                 }]
             });
-            // Third query: updateOrderAfterCapture gets currency_code
-            mockQueryGraph.mockResolvedValueOnce({
-                data: [{ id: "order_123", currency_code: "usd" }]
-            });
-            mockStripeCapture.mockResolvedValue({ status: "succeeded" });
 
             await processPaymentCapture(mockJob as Job);
 
-            // Should have called updateOrders to set metadata (amount is in cents: 1000)
+            // PAY-01: Verify Payment Module services were called (no metadata updates)
+            expect((global as any).mockCapturePayment).toHaveBeenCalledWith({
+                payment_id: "pay_123",
+                amount: 10.00
+            });
+
+            // PAY-01 AC4: Verify OrderTransaction creation
+            expect((global as any).mockAddOrderTransactions).toHaveBeenCalled();
+
+            // PAY-01: Verify order status updated to completed
             expect((global as any).mockUpdateOrders).toHaveBeenCalledWith([
                 expect.objectContaining({
                     id: "order_123",
-                    metadata: expect.objectContaining({
-                        payment_captured_at: expect.any(String),
-                        payment_amount_captured: 1000,
-                    }),
+                    status: "completed"
                 })
             ]);
         });
@@ -533,19 +541,14 @@ describe("payment-capture-queue", () => {
 
             // Setup mocks for successful processing (total in dollars, converts to 1000 cents)
             mockStripeRetrieve.mockResolvedValue({ status: "requires_capture", amount: 1000, currency: "usd" });
-            // First query: fetchOrderTotal
-            mockQueryGraph.mockResolvedValueOnce({
+            // Mock returns complete order object with all fields needed by all queries
+            mockQueryGraph.mockResolvedValue({
                 data: [{
                     id: "order_wiring",
                     total: 10.00,
                     currency_code: "usd",
-                    status: "pending"
-                }]
-            });
-            // Second query: updatePaymentCollectionOnCapture
-            mockQueryGraph.mockResolvedValueOnce({
-                data: [{
-                    id: "order_wiring",
+                    status: "pending",
+                    metadata: {},
                     payment_collections: [{
                         id: "paycol_wiring",
                         status: "authorized",
@@ -553,11 +556,6 @@ describe("payment-capture-queue", () => {
                     }]
                 }]
             });
-            // Third query: updateOrderAfterCapture gets currency_code
-            mockQueryGraph.mockResolvedValueOnce({
-                data: [{ id: "order_wiring", currency_code: "usd" }]
-            });
-            mockStripeCapture.mockResolvedValue({ status: "succeeded" });
 
             // Initialize worker/container
             startPaymentCaptureWorker(mockContainer);
@@ -565,13 +563,17 @@ describe("payment-capture-queue", () => {
             // Run process
             await processPaymentCapture(mockJob);
 
-            // 3. Verify Metadata set (End of flow)
+            // 3. Verify Payment Module capture called (AC5 - end-to-end wiring)
+            expect((global as any).mockCapturePayment).toHaveBeenCalledWith({
+                payment_id: "pay_wiring",
+                amount: 10.00
+            });
+
+            // PAY-01: Verify order status updated to completed
             expect((global as any).mockUpdateOrders).toHaveBeenCalledWith([
                 expect.objectContaining({
                     id: "order_wiring",
-                    metadata: expect.objectContaining({
-                        payment_captured_at: expect.any(String)
-                    })
+                    status: "completed"
                 })
             ]);
         });
