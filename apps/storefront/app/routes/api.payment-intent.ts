@@ -2,6 +2,7 @@ import { type ActionFunctionArgs, data } from "react-router";
 import { toCents, fromCents } from "../lib/price";
 import { createLogger, getTraceIdFromRequest } from "../lib/logger";
 import { monitoredFetch, type CloudflareEnv } from "../utils/monitored-fetch";
+import { fnv1aHash } from "../lib/hash";
 
 // Common supported currencies (module-level constant)
 const COMMON_CURRENCIES = new Set([
@@ -61,11 +62,11 @@ interface StockValidationResult {
 /**
  * Generate deterministic idempotency key from cart contents
  * AI-NOTE: REL-01 - Fully deterministic key generation for effective retries
- * 
+ *
  * Uses FNV-1a hash of: cartId + amount + currency + cart contents
  * Same inputs ALWAYS produce same key (retry-safe)
  * Different inputs produce different keys (prevents accidental duplicates)
- * 
+ *
  * Stripe caches idempotency keys for 24 hours which is fine since:
  * - Cart changes → different key (due to cartId/amount/items hash)
  * - Same cart retried → same key (desired behavior for network retries)
@@ -83,20 +84,15 @@ function generateIdempotencyKey(
         .sort()
         .join("|")
     : "empty";
-  
-  // AI-NOTE: REL-01 - Key based on cartId + amount + currency + cartHash
-  // No random nonce, no time bucket - fully deterministic
-  const raw = `pi_${cartId}_${amount}_${currency}_${cartHash}`;
 
-  // FNV-1a hash - better distribution than simple hash
-  let hash = 2166136261; // FNV offset basis
-  for (let i = 0; i < raw.length; i++) {
-    hash ^= raw.charCodeAt(i);
-    hash = Math.imul(hash, 16777619); // FNV prime
-  }
-  
-  // Convert to base36 and ensure sufficient length
-  const hashStr = (hash >>> 0).toString(36).padStart(8, '0');
+  // AI-NOTE: REL-01 - Use pipe delimiter to prevent collision edge cases
+  // Example: "cart_123_abc" + "100" vs "cart_123" + "abc_100" would collide with underscore
+  // Pipe delimiter ensures unambiguous component separation
+  const raw = `pi|${cartId}|${amount}|${currency}|${cartHash}`;
+
+  // Use extracted FNV-1a hash utility
+  const hashStr = fnv1aHash(raw);
+
   return `pi_${cartId.slice(-8)}_${hashStr}_${amount}`;
 }
 
