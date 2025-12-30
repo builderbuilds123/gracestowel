@@ -366,7 +366,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
     if (!isUpdate) {
       headers["Idempotency-Key"] = generateIdempotencyKey(
         cartId,
-        fromCents(calculatedAmount),
+        calculatedAmount, // Use cents directly to avoid floating-point issues
         validatedCurrency,
         cartItems
       );
