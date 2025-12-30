@@ -38,46 +38,28 @@ const prepareOrderDataStep = createStep(
         }
 
         try {
-            // Use query service to retrieve cart (Medusa v2 pattern)
-            const query = container.resolve("query");
-            const { data: carts } = await query.graph({
-                entity: "cart",
-                fields: [
-                    "id",
-                    "email",
-                    "region_id",
-                    "sales_channel_id",
-                    "items.*",
-                    "items.variant.*",
-                    "region.*",
-                    "shipping_methods.*",
-                    "shipping_address.*",
-                ],
-                filters: { id: cartId },
+            const cartService = container.resolve("cart");
+            const cart = await cartService.retrieve(cartId, {
+                relations: ["items", "items.variant", "region", "shipping_methods", "shipping_address"]
             });
 
-            if (!carts || carts.length === 0) {
+            if (!cart) {
                 throw new Error(`Cart ${cartId} not found`);
             }
-
-            const cart = carts[0];
 
             console.log(`[create-order-from-stripe] Using authoritative Medusa Cart ${cartId}`);
             
             // Transform Medusa cart items to Order items
-            // Filter out items without variant_id (required for inventory) and null items
-            const items = (cart.items || [])
-                .filter((item): item is NonNullable<typeof item> => item != null && item.variant_id != null)
-                .map(item => ({
-                    variant_id: item.variant_id as string, // Already filtered for null
-                    title: item.title,
-                    quantity: item.quantity,
-                    unit_price: item.unit_price, // Already in correct units (cents) from Medusa
-                    metadata: item.metadata || {},
-                }));
+            const items = cart.items.map(item => ({
+                variant_id: item.variant_id,
+                title: item.title,
+                quantity: item.quantity,
+                unit_price: item.unit_price, // Already in correct units (cents) from Medusa
+                metadata: item.metadata || {},
+            }));
 
             const orderData = {
-                region_id: cart.region_id ?? undefined, // Convert null to undefined
+                region_id: cart.region_id,
                 email: cart.email || customerEmail,
                 items,
                 shipping_address: cart.shipping_address ? {
@@ -91,13 +73,13 @@ const prepareOrderDataStep = createStep(
                     country_code: cart.shipping_address.country_code,
                     phone: cart.shipping_address.phone,
                 } : undefined,
-                shipping_methods: cart.shipping_methods?.filter((sm): sm is NonNullable<typeof sm> => sm != null).map(sm => ({
+                shipping_methods: cart.shipping_methods?.map(sm => ({
                     name: sm.name,
                     amount: sm.amount,
-                    data: sm.data ?? undefined, // Convert null to undefined
+                    data: sm.data,
                 })),
                 status: "pending" as const,
-                sales_channel_id: cart.sales_channel_id ?? undefined, // Convert null to undefined
+                sales_channel_id: cart.sales_channel_id,
                 currency_code: cart.region?.currency_code || currency,
                 metadata: {
                     stripe_payment_intent_id: paymentIntentId,
@@ -152,7 +134,7 @@ const emitEventStep = createStep(
 );
 
 /**
- * Cart item structure for inventory adjustments
+ * Interface for inventory adjustment input
  */
 interface CartItemForInventory {
     variant_id: string;
@@ -272,10 +254,7 @@ export const createOrderFromStripeWorkflow = createWorkflow(
         // Step 3: Prepare inventory adjustments from cart items
         // Use items from the prepared order data (which came from authoritative cart)
         const cartItemsInput = transform({ orderData }, (data) => ({
-            cartItems: data.orderData.items.map(item => ({
-                variant_id: item.variant_id,
-                quantity: item.quantity,
-            }))
+            cartItems: data.orderData.items
         }));
         const inventoryAdjustments = prepareInventoryAdjustmentsStep(cartItemsInput);
 

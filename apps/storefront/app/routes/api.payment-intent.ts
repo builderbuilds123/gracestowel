@@ -41,20 +41,12 @@ interface PaymentIntentRequest {
   amount: number;
   currency: string;
   shipping?: number;
+  cartId: string; // Required for SEC-01: server-side pricing enforcement
   cartItems?: CartItem[];
   customerId?: string;
   customerEmail?: string;
   shippingAddress?: ShippingAddress;
   paymentIntentId?: string; // For reuse/update
-  cartId: string; // Required for SEC-01: server-side pricing enforcement
-}
-
-interface MedusaCart {
-  id?: string;
-  total?: number;
-  summary?: {
-    current_order_total?: number;
-  };
 }
 
 interface StockValidationResult {
@@ -284,8 +276,17 @@ export async function action({ request, context }: ActionFunctionArgs) {
         });
 
         if (!cartResponse.ok) {
-            logger.error("Failed to fetch Medusa cart", new Error("Cart not found or error"), { cartId: cartId });
+            logger.error("Failed to fetch Medusa cart", new Error("Cart not found or error"), { cartId });
             return data({ message: "Invalid cart", traceId }, { status: 400 });
+        }
+
+        // Type safe cart interface
+        interface MedusaCart {
+            id?: string;
+            total?: number;
+            summary?: {
+                current_order_total?: number;
+            };
         }
 
         const { cart } = await cartResponse.json() as { cart: MedusaCart };
@@ -306,7 +307,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
                 clientShipping: shipping
             });
         } else {
-             logger.error("Medusa cart missing total", new Error("Cart missing total"), { cartId, cart });
+             logger.error("Medusa cart missing total", { cartId, cart });
              return data({ message: "Invalid cart data", traceId }, { status: 500 });
         }
     } else {
@@ -315,7 +316,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
         return data({ message: "Cart ID is required", traceId }, { status: 400 });
     }
 
-    // MNY-01: calculatedAmount is already in cents, no conversion needed
+    const totalAmount = fromCents(calculatedAmount); // Convert back to dollars for local variables if needed
     const isUpdate = !!paymentIntentId;
 
     // Validate amount is positive
@@ -365,7 +366,6 @@ export async function action({ request, context }: ActionFunctionArgs) {
     };
 
     // Idempotency key only for CREATE
-    // MNY-01: calculatedAmount is already in cents, convert to dollars for idempotency key generation
     if (!isUpdate) {
       headers["Idempotency-Key"] = generateIdempotencyKey(
         fromCents(calculatedAmount),
@@ -438,13 +438,12 @@ export async function action({ request, context }: ActionFunctionArgs) {
       : "https://api.stripe.com/v1/payment_intents";
 
     // Log request details for debugging
-    // MNY-01: calculatedAmount is already in cents
     logger.info("Calling Stripe API", {
       operation: isUpdate ? "update" : "create",
       paymentIntentId,
-      amountInCents: calculatedAmount,
-      amountInDollars: fromCents(calculatedAmount),
+      amount: totalAmount,
       currency: validatedCurrency,
+      amountInCents: toCents(totalAmount),
       hasCartItems: !!cartItems?.length,
       cartItemCount: cartItems?.length,
       idempotencyKey: headers["Idempotency-Key"],
@@ -480,9 +479,9 @@ export async function action({ request, context }: ActionFunctionArgs) {
         stripeErrorCode: stripeError?.error?.code,
         stripeErrorMessage: stripeError?.error?.message,
         stripeErrorParam: stripeError?.error?.param,
-        requestAmountInCents: calculatedAmount,
-        requestAmountInDollars: fromCents(calculatedAmount),
+        requestAmount: totalAmount,
         requestCurrency: validatedCurrency,
+        requestAmountInCents: toCents(totalAmount),
       });
       
       // Sanitize error message to avoid exposing sensitive information

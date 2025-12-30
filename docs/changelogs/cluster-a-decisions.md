@@ -24,9 +24,8 @@ Refactored checkout flow to enforce server-side pricing (SEC-01), fix money unit
 *   **Decision:** Explicitly call `medusa.carts.complete(cartId)` after successful payment.
 *   **Rationale:** The previous flow relied solely on webhooks for order creation, which could lead to race conditions or incomplete cart states in Medusa if webhooks failed.
 *   **Implementation:**
-    *   Created `/api/carts/:id/complete` endpoint that calls Medusa's `POST /store/carts/:id/complete`.
-    *   `checkout.success.tsx` calls this endpoint after verifying successful Stripe payment (status: 'succeeded' or 'requires_capture').
-    *   Cart completion is non-blocking - if it fails, webhook still ensures order creation, but cart may remain incomplete.
+    *   Added `onComplete` callback to `CheckoutForm`.
+    *   `checkout.tsx` calls a new endpoint `/api/carts/:id/complete` upon successful Stripe payment.
     *   This ensures the Medusa cart is marked as completed synchronously from the client's perspective (best effort), while the webhook ensures backend consistency.
 
 ## Verification

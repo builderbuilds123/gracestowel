@@ -280,11 +280,77 @@ async function createOrderFromPaymentIntent(
 ): Promise<void> {
     const metadata = paymentIntent.metadata || {};
     
-    // SEC-01: Extract cartId from metadata (required for authoritative cart)
-    const cartId = metadata.cart_id;
+    // Validate cart_data using Zod
+    let cartData: z.infer<typeof CartDataSchema> | null = null;
+    if (metadata.cart_data) {
+        try {
+             // Parse JSON first, then validate
+            const rawCart = JSON.parse(metadata.cart_data);
+            const parsed = CartDataSchema.safeParse(rawCart);
+            if (parsed.success) {
+                cartData = parsed.data;
+            } else {
+                // Schema validation failed - log and return early (don't throw)
+                logger.error("stripe-worker", "Invalid cart_data schema validation failed", {
+                    paymentIntentId: paymentIntent.id,
+                    zodError: parsed.error.message,
+                    issues: parsed.error.issues,
+                });
+                throw new Error(`Invalid cart_data schema: ${parsed.error.message}`);
+            }
+        } catch (e) {
+            // This catch block handles JSON parsing errors (malformed JSON)
+            logger.error("stripe-worker", "Failed to parse cart_data JSON", {
+                paymentIntentId: paymentIntent.id,
+                error: (e as Error).message,
+            });
+            return;
+        }
+    }
+
+    const customerEmail = metadata.customer_email || paymentIntent.receipt_email;
     
-    if (!cartId) {
-        logger.warn("stripe-worker", "No cart_id in PaymentIntent metadata - skipping order creation", {
+    // Extract shipping amount from metadata (stored in cents)
+    const shippingAmount = metadata.shipping_amount ? parseInt(metadata.shipping_amount, 10) : 0;
+
+    let shippingAddress: z.infer<typeof ShippingAddressSchema> | undefined = undefined;
+
+    if (metadata.shipping_address) {
+        try {
+            const rawAddress = JSON.parse(metadata.shipping_address);
+            const parsed = ShippingAddressSchema.safeParse(rawAddress);
+            if (parsed.success) {
+                shippingAddress = parsed.data;
+            } else {
+                logger.warn("stripe-worker", "Invalid shipping_address schema, using Stripe data", {
+                    paymentIntentId: paymentIntent.id,
+                });
+                // Fallback to undefined will trigger Stripe data usage below
+            }
+        } catch (e) {
+            logger.warn("stripe-worker", "Failed to parse shipping_address JSON, using Stripe data", {
+                paymentIntentId: paymentIntent.id,
+            });
+        }
+    }
+
+    if (!shippingAddress && paymentIntent.shipping) {
+        const stripeShipping = paymentIntent.shipping;
+        shippingAddress = {
+            firstName: stripeShipping.name?.split(' ')[0] || '',
+            lastName: stripeShipping.name?.split(' ').slice(1).join(' ') || '',
+            address1: stripeShipping.address?.line1 || '',
+            address2: stripeShipping.address?.line2 || undefined,
+            city: stripeShipping.address?.city || '',
+            state: stripeShipping.address?.state || undefined,
+            postalCode: stripeShipping.address?.postal_code || '',
+            countryCode: stripeShipping.address?.country || 'US',
+            phone: stripeShipping.phone || undefined,
+        };
+    }
+
+    if (!cartData) {
+        logger.warn("stripe-worker", "No cart data in PaymentIntent - skipping order creation", {
             paymentIntentId: paymentIntent.id,
             hasMetadata: !!metadata,
             metadataKeys: Object.keys(metadata),
@@ -292,12 +358,11 @@ async function createOrderFromPaymentIntent(
         return;
     }
 
-    const customerEmail = metadata.customer_email || paymentIntent.receipt_email;
-
     logger.info("stripe-worker", "Invoking createOrderFromStripeWorkflow", {
         paymentIntentId: paymentIntent.id,
-        cartId,
-        hasCustomerEmail: !!customerEmail,
+        itemCount: cartData.items.length,
+        hasShipping: !!shippingAddress,
+        shippingAmount,
         amount: paymentIntent.amount,
         currency: paymentIntent.currency,
     });
@@ -305,8 +370,10 @@ async function createOrderFromPaymentIntent(
     const { result: order } = await createOrderFromStripeWorkflow(container).run({
         input: {
             paymentIntentId: paymentIntent.id,
-            cartId,
+            cartData,
             customerEmail: customerEmail || undefined,
+            shippingAddress,
+            shippingAmount,
             amount: paymentIntent.amount,
             currency: paymentIntent.currency,
         }

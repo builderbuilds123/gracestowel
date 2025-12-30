@@ -134,14 +134,7 @@ export default function Checkout() {
       try {
         setPaymentError(null);
 
-        // SEC-01: Validate cartId exists before proceeding
-        if (!cartId) {
-          setPaymentError("Cart not initialized. Please refresh the page.");
-          return;
-        }
-
         const requestData = {
-          cartId: cartId, // SEC-01: Required for server-side pricing
           amount: cartTotal,
           currency: currency.toLowerCase(),
           shipping: selectedShipping?.amount ?? 0,
