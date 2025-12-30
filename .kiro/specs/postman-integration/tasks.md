@@ -1,0 +1,158 @@
+# Implementation Plan
+
+- [x] 1. Set up Postman directory structure and validation infrastructure
+  - [x] 1.1 Create postman directory structure with collections and environments folders
+    - Create `postman/collections/` and `postman/environments/` directories
+    - Add `.gitkeep` files to preserve empty directories
+    - _Requirements: 1.1, 2.1_
+  - [x] 1.2 Set up Vitest configuration for Postman validation tests
+    - Create `postman/vitest.config.ts` with TypeScript support
+    - Add `postman/package.json` with vitest and fast-check dependencies
+    - Create `postman/tsconfig.json` for TypeScript compilation
+    - _Requirements: 4.1_
+  - [x] 1.3 Write property test for collection structure validity
+    - **Property 1: Collection Structure Validity**
+    - **Validates: Requirements 1.1, 1.2, 1.3, 1.4**
+
+- [x] 2. Create Store API collection
+  - [x] 2.1 Create Store API collection with Products folder
+    - Create `postman/collections/store-api.postman_collection.json`
+    - Add Products folder with GET /store/products and GET /store/products?handle={handle} requests
+    - Include descriptions and example responses for each request
+    - _Requirements: 1.2, 1.5_
+  - [x] 2.2 Add Carts folder to Store API collection
+    - Add POST /store/carts (create cart) request
+    - Add GET /store/carts/{id} request
+    - Add POST /store/carts/{id}/line-items request
+    - Include test scripts to store cart_id in collection variables
+    - _Requirements: 1.2, 3.2_
+  - [x] 2.3 Add Checkout folder with Complete Checkout Flow
+    - Create "Complete Checkout Flow" folder with sequential requests
+    - Add requests: create cart → add line item → set shipping → create payment intent → complete checkout
+    - Include test scripts for variable chaining between requests
+    - _Requirements: 3.1, 3.2, 3.3_
+  - [x] 2.4 Add Regions and Collections folders
+    - Add GET /store/regions request with description and example
+    - Add GET /store/collections request with description and example
+    - _Requirements: 1.2, 1.5_
+  - [x] 2.5 Write property test for request documentation completeness
+    - **Property 2: Request Documentation Completeness**
+    - **Validates: Requirements 1.5, 7.3**
+
+- [x] 3. Create Admin API collection
+  - [x] 3.1 Create Admin API collection with authentication setup
+    - Create `postman/collections/admin-api.postman_collection.json`
+    - Add collection-level Authorization header using {{jwt_token}} variable
+    - Add collection description explaining authentication requirements
+    - _Requirements: 1.3, 2.5_
+  - [x] 3.2 Add Products, Orders, Customers, and Users folders
+    - Add Products folder with GET/POST /admin/products requests
+    - Add Orders folder with GET /admin/orders request
+    - Add Customers folder with GET /admin/customers request
+    - Add Users folder with GET/POST /admin/users requests
+    - Include descriptions and example responses for all requests
+    - _Requirements: 1.3, 1.5_
+  - [x] 3.3 Write property test for authentication variable usage
+    - **Property 3: Authentication Variable Usage**
+    - **Validates: Requirements 2.5**
+
+- [x] 4. Create Custom Endpoints collection
+  - [x] 4.1 Create Custom Endpoints collection with all Grace Stowel routes
+    - Create `postman/collections/custom-endpoints.postman_collection.json`
+    - Add GET /health request with description and example response
+    - Add GET /store/custom request with description
+    - Add GET /admin/custom request with description and auth header
+    - _Requirements: 1.4, 1.5_
+  - [x] 4.2 Write property test for variable chaining in checkout flow
+    - **Property 4: Variable Chaining in Checkout Flow**
+    - **Validates: Requirements 3.2, 3.3**
+
+- [x] 5. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 6. Create environment files
+  - [x] 6.1 Create Local environment file
+    - Create `postman/environments/local.postman_environment.json`
+    - Set base_url to http://localhost:9000
+    - Set storefront_url to http://localhost:5173
+    - Add placeholder variables for jwt_token, stripe_webhook_secret, cart_id, client_secret
+    - _Requirements: 2.1, 2.2_
+  - [x] 6.2 Create Staging environment file
+    - Create `postman/environments/staging.postman_environment.json`
+    - Set base_url to Railway staging URL placeholder
+    - Set storefront_url to Cloudflare staging URL placeholder
+    - Mark sensitive variables as type "secret"
+    - _Requirements: 2.1, 2.3_
+  - [x] 6.3 Create Production environment file
+    - Create `postman/environments/production.postman_environment.json`
+    - Set base_url to Railway production URL placeholder
+    - Set storefront_url to Cloudflare production URL placeholder
+    - Mark sensitive variables as type "secret"
+    - _Requirements: 2.1, 2.4_
+
+- [x] 7. Create Stripe Webhooks collection
+  - [x] 7.1 Create Stripe Webhooks collection with signature generation
+    - Create `postman/collections/stripe-webhooks.postman_collection.json`
+    - Add collection-level pre-request script for Stripe signature generation using CryptoJS
+    - Include documentation explaining webhook testing process
+    - _Requirements: 6.1, 6.2_
+  - [x] 7.2 Add webhook event requests
+    - Add payment_intent.succeeded webhook request with sample payload
+    - Add payment_intent.failed webhook request with sample payload
+    - Add checkout.session.completed webhook request with sample payload
+    - Add template request for custom webhook events
+    - _Requirements: 6.1, 6.5_
+  - [x] 7.3 Write property test for webhook signature generation
+    - **Property 6: Webhook Signature Generation**
+    - **Validates: Requirements 6.1, 6.2**
+
+- [x] 8. Add contract tests to collections
+  - [x] 8.1 Add JSON schema contract tests to Store API collection
+    - Add test scripts with JSON schema validation for product list response
+    - Add test scripts with JSON schema validation for cart response
+    - Use pm.expect().to.have.jsonSchema() for validation
+    - _Requirements: 4.1, 4.2, 4.3, 4.4_
+  - [x] 8.2 Add JSON schema contract tests to Admin API collection
+    - Add test scripts with JSON schema validation for admin product response
+    - Add test scripts with JSON schema validation for orders response
+    - _Requirements: 4.1, 4.2_
+  - [x] 8.3 Write property test for contract test schema presence
+    - **Property 5: Contract Test Schema Presence**
+    - **Validates: Requirements 4.1**
+
+- [x] 9. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 10. Create Newman CI/CD workflow
+  - [x] 10.1 Create GitHub Actions workflow for Newman
+    - Create `.github/workflows/api-contract-tests.yml`
+    - Configure trigger on pull_request events
+    - Add Newman installation step using npm
+    - Add Newman run step with staging environment
+    - _Requirements: 5.1, 5.2_
+  - [x] 10.2 Configure environment variables and secrets
+    - Reference GitHub Secrets for jwt_token and stripe_webhook_secret
+    - Set base_url from environment or secret
+    - Add timeout configuration for Newman
+    - _Requirements: 5.2_
+  - [x] 10.3 Add HTML report generation and artifact upload
+    - Install newman-reporter-htmlextra
+    - Configure Newman to generate HTML report
+    - Add upload-artifact step to store report
+    - _Requirements: 5.5_
+
+- [x] 11. Create documentation and README
+  - [x] 11.1 Create Postman README with setup instructions
+    - Create `postman/README.md` with import instructions
+    - Document environment setup process
+    - Explain how to run collections manually
+    - Document how to add new requests
+    - _Requirements: 7.1, 7.2_
+  - [x] 11.2 Update project documentation
+    - Add Postman section to main README.md
+    - Link to Postman README from docs/TESTING_STRATEGY.md
+    - _Requirements: 7.1_
+
+- [x] 12. Final Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+

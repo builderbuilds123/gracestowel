@@ -18,7 +18,7 @@ import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import { getPaymentCaptureQueue, getJobState } from "../lib/payment-capture-queue";
 import { getStripeClient } from "../utils/stripe";
 import { getPostHog } from "../utils/posthog";
-import { getPendingRecoveryOrders, QueryExecutor } from "../repositories/order-recovery";
+import { getPendingRecoveryOrders, PgConnection } from "../repositories/order-recovery";
 
 // 65 minutes = normal 60 min window + 5 min buffer
 const STALE_ORDER_THRESHOLD_MS = 65 * 60 * 1000;
@@ -49,7 +49,8 @@ export default async function fallbackCaptureJob(container: MedusaContainer) {
     }
     
     const query = container.resolve("query");
-    const manager = container.resolve("manager");
+    // Use PG_CONNECTION for raw SQL queries in Medusa v2
+    const pgConnection = container.resolve(ContainerRegistrationKeys.PG_CONNECTION) as unknown as PgConnection;
     const orderService = container.resolve("order");
     const stripe = getStripeClient();
     const posthog = getPostHog();
@@ -73,7 +74,7 @@ export default async function fallbackCaptureJob(container: MedusaContainer) {
         );
 
         // Query recovery orders via SQL to avoid full-table scans on JSONB
-        const recoveryOrders = await getPendingRecoveryOrders(manager as QueryExecutor);
+        const recoveryOrders = await getPendingRecoveryOrders(pgConnection);
 
         const orderMap = new Map<string, any>();
 

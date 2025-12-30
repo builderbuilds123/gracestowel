@@ -5,6 +5,15 @@ import { MedusaCartService } from "../services/medusa-cart";
 import type { CartItem, ProductId } from "../types/product";
 import { isMedusaId } from "../types/product";
 
+/**
+ * @deprecated Use the new RESTful cart endpoints instead:
+ * - POST /api/carts - Create cart
+ * - PATCH /api/carts/:id - Update cart items/address
+ * - GET /api/carts/:id/shipping-options - Get shipping options
+ * 
+ * This endpoint is maintained for backward compatibility.
+ */
+
 interface ShippingRatesRequest {
   cartItems: CartItem[];
   shippingAddress?: {
@@ -100,17 +109,66 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
   const { cartItems, shippingAddress, currency = "CAD", cartId: initialCartId } = body;
 
+  // Validate cartItems is an array
+  if (!cartItems || !Array.isArray(cartItems)) {
+    return data({ message: "cartItems array is required" }, { status: 400 });
+  }
+
   const service = new MedusaCartService(context);
 
   try {
     let cartId = initialCartId;
+    let needNewCart = false;
 
-    // 1. If we have a cartId, try to use it
+    // Helper function to fetch regions
+    const fetchRegions = async () => {
+        const regionsResponse = await monitoredFetch(`${medusaBackendUrl}/store/regions`, {
+            method: "GET",
+            headers: { "x-publishable-api-key": medusaPublishableKey },
+            label: "medusa-regions",
+            cloudflareEnv: env,
+        });
+        if (!regionsResponse.ok) {
+            throw new Error("Failed to fetch regions");
+        }
+        return (await regionsResponse.json() as { regions: any[] }).regions;
+    };
+
+    // Helper function to find region for a country
+    const findRegionForCountry = (regions: any[], countryCode: string) => {
+        const code = countryCode.toLowerCase();
+        return regions.find((r: any) => 
+            r.countries?.some((c: any) => 
+                c.iso_2?.toLowerCase() === code || 
+                c.iso_3?.toLowerCase() === code
+            )
+        );
+    };
+
+    // 1. If we have a cartId, validate it and check region compatibility
     if (cartId) {
       try {
         const cart = await service.getCart(cartId);
         if (!cart) {
           cartId = undefined; // Cart expired or invalid
+        } else if (shippingAddress?.country_code) {
+          // Check if cart's region is compatible with shipping address country
+          const regions = await fetchRegions();
+          const cartRegion = regions.find((r: any) => r.id === cart.region_id);
+          
+          if (cartRegion) {
+            const countryCode = shippingAddress.country_code.toLowerCase();
+            const countryInRegion = cartRegion.countries?.some((c: any) => 
+              c.iso_2?.toLowerCase() === countryCode || 
+              c.iso_3?.toLowerCase() === countryCode
+            );
+            
+            if (!countryInRegion) {
+              console.log(`Cart region "${cartRegion.name}" does not contain country ${shippingAddress.country_code}, creating new cart`);
+              needNewCart = true;
+              cartId = undefined;
+            }
+          }
         }
       } catch (e) {
         console.warn("Error checking cart:", e);
@@ -118,27 +176,37 @@ export async function action({ request, context }: ActionFunctionArgs) {
       }
     }
 
-    // 2. If no valid cartId, create one
-    if (!cartId) {
-        // Fetch regions to find region_id for currency
-        const regionsResponse = await monitoredFetch(`${medusaBackendUrl}/store/regions`, {
-            method: "GET",
-            headers: { "x-publishable-api-key": medusaPublishableKey },
-            label: "medusa-regions",
-            cloudflareEnv: env,
-        });
+    // 2. If no valid cartId or need a new cart, create one with the correct region
+    if (!cartId || needNewCart) {
+        const regions = await fetchRegions();
+        
+        // Priority 1: Find region that contains the shipping address country
+        let region = null;
+        if (shippingAddress?.country_code) {
+            region = findRegionForCountry(regions, shippingAddress.country_code);
+            if (region) {
+                console.log(`Found region "${region.name}" for country ${shippingAddress.country_code}`);
+            }
+        }
+        
+        // Priority 2: Fall back to currency match
+        if (!region) {
+            region = regions.find((r: any) => r.currency_code.toUpperCase() === currency.toUpperCase());
+            if (region) {
+                console.log(`Using region "${region.name}" based on currency ${currency}`);
+            }
+        }
+        
+        // Priority 3: Use first available region
+        if (!region && regions.length > 0) {
+            region = regions[0];
+            console.log(`Using fallback region "${region.name}"`);
+        }
 
-        if (regionsResponse.ok) {
-             const { regions } = await regionsResponse.json() as { regions: any[] };
-             const region = regions.find((r: any) => r.currency_code.toUpperCase() === currency.toUpperCase()) || regions[0];
-
-             if (region) {
-                 cartId = await service.getOrCreateCart(region.id, currency);
-             } else {
-                 throw new Error("No valid region found");
-             }
+        if (region) {
+            cartId = await service.getOrCreateCart(region.id, currency);
         } else {
-             throw new Error("Failed to fetch regions");
+            throw new Error("No valid region found");
         }
     }
 
@@ -179,7 +247,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
     let regionId = "";
     const cart = await service.getCart(cartId);
     if (cart) {
-        regionId = cart.region_id;
+        regionId = cart.region_id ?? "";
     }
 
     let regionOptions: any[] = [];
@@ -201,24 +269,10 @@ export async function action({ request, context }: ActionFunctionArgs) {
     }
 
     const formattedOptions = shippingOptions.map(opt => {
-        let originalAmount = opt.originalAmount;
-
-        // If not present (it won't be from service usually), try to find it in regionOptions
-        if (originalAmount === undefined && regionOptions.length > 0) {
-            const regionOption = regionOptions.find((ro: any) => ro.id === opt.id);
-            if (regionOption) {
-                originalAmount = extractOriginalAmount(regionOption, regionId, currency);
-            }
-        }
-
-        // If explicitly free (amount 0) and we found an original amount, that's our strikethrough.
-        // If amount > 0 but different from original, that's a discount.
-
         return {
             id: opt.id,
             displayName: opt.name,
             amount: opt.amount,
-            originalAmount: originalAmount !== opt.amount ? originalAmount : undefined,
             isFree: opt.amount === 0,
             deliveryEstimate: null
         };
@@ -227,49 +281,14 @@ export async function action({ request, context }: ActionFunctionArgs) {
     return { shippingOptions: formattedOptions, cartId };
 
   } catch (error: any) {
+    // Log the actual error for debugging
     console.error("Cart-based shipping failed:", error);
-
-    // Fallback to simple region-based fetch
-    try {
-        const regionsResponse = await monitoredFetch(`${medusaBackendUrl}/store/regions`, {
-            method: "GET",
-            headers: { "x-publishable-api-key": medusaPublishableKey },
-            label: "medusa-regions",
-            cloudflareEnv: env,
-        });
-
-        if (!regionsResponse.ok) throw new Error("Regions fetch failed");
-
-        const { regions } = await regionsResponse.json() as { regions: any[] };
-        const region = regions.find((r: any) => r.currency_code.toUpperCase() === currency.toUpperCase()) || regions[0];
-        
-        if (!region) throw new Error("No region found");
-
-        const optionsResponse = await monitoredFetch(`${medusaBackendUrl}/store/shipping-options?region_id=${region.id}`, {
-            method: "GET",
-            headers: { "x-publishable-api-key": medusaPublishableKey },
-            label: "medusa-shipping-options",
-            cloudflareEnv: env,
-        });
-
-        if (!optionsResponse.ok) throw new Error("Options fetch failed");
-
-        const { shipping_options } = await optionsResponse.json() as { shipping_options: any[] };
-
-        const formattedOptions = shipping_options.map((option: any) => ({
-            id: option.id,
-            displayName: option.name,
-            amount: option.amount,
-            originalAmount: undefined,
-            isFree: option.amount === 0,
-            deliveryEstimate: null
-        }));
-
-        return { shippingOptions: formattedOptions, cartId: undefined };
-
-    } catch (fallbackError) {
-        console.error("Fallback shipping failed:", fallbackError);
-        return data({ message: "An error occurred while calculating shipping rates." }, { status: 500 });
-    }
+    
+    // Return clear error - Medusa v2 requires cart_id for shipping options,
+    // so there's no valid fallback without a cart. Surface the real error.
+    return data({ 
+        message: "Unable to calculate shipping rates. Please try again.",
+        error: error.message 
+    }, { status: 500 });
   }
 }

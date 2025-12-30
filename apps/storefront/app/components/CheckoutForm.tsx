@@ -12,6 +12,7 @@ import type {
     StripeExpressCheckoutElementShippingAddressChangeEvent,
     StripeExpressCheckoutElementShippingRateChangeEvent,
     StripeAddressElementChangeEvent,
+    StripeLinkAuthenticationElementChangeEvent,
 } from '@stripe/stripe-js';
 import type { CartItem } from '../context/CartContext';
 
@@ -43,6 +44,7 @@ export interface CheckoutFormProps {
     items: CartItem[];
     cartTotal: number;
     onAddressChange?: (event: StripeAddressElementChangeEvent) => void;
+    onEmailChange?: (email: string) => void;
     shippingOptions: ShippingOption[];
     selectedShipping: ShippingOption | null;
     setSelectedShipping: (option: ShippingOption) => void;
@@ -54,6 +56,7 @@ export function CheckoutForm({
     items,
     cartTotal,
     onAddressChange,
+    onEmailChange,
     shippingOptions,
     selectedShipping,
     setSelectedShipping,
@@ -65,12 +68,24 @@ export function CheckoutForm({
     const [message, setMessage] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
 
+    const handleEmailChange = useCallback(
+        (event: StripeLinkAuthenticationElementChangeEvent) => {
+            const email = event.value?.email;
+            if (event.complete && email && onEmailChange) {
+                onEmailChange(email);
+            }
+        },
+        [onEmailChange]
+    );
+
     const saveOrderToLocalStorage = () => {
         localStorage.setItem(
             'lastOrder',
             JSON.stringify({
                 items,
-                total: cartTotal,
+                subtotal: cartTotal,
+                shipping: selectedShipping?.amount || 0,
+                total: cartTotal + (selectedShipping?.amount || 0),
                 date: new Date().toLocaleDateString('en-US', {
                     year: 'numeric',
                     month: 'long',
@@ -125,15 +140,10 @@ export function CheckoutForm({
                     })),
                 });
             } else {
-                // Provide a default shipping rate if none available yet
+                // If no shipping rates are available, resolve with empty array
+                // The wallet UI will usually show pending state or no options
                 event.resolve({
-                    shippingRates: [
-                        {
-                            id: 'standard',
-                            displayName: 'Standard Shipping',
-                            amount: 999, // $9.99 in cents
-                        },
-                    ],
+                    shippingRates: [],
                 });
             }
         },
@@ -231,6 +241,7 @@ export function CheckoutForm({
                 <LinkAuthenticationElement
                     id="link-authentication-element"
                     options={customerData?.email ? { defaultValues: { email: customerData.email } } : undefined}
+                    onChange={handleEmailChange}
                 />
             </div>
 
@@ -242,18 +253,17 @@ export function CheckoutForm({
                     options={{
                         mode: 'shipping',
                         fields: { phone: 'always' },
-                        display: { name: 'split' },
+                        // Remove split name to use default full name field (Stripe Standard)
                         defaultValues: customerData ? {
-                            firstName: customerData.firstName || '',
-                            lastName: customerData.lastName || '',
-                            phone: customerData.phone || '',
+                            name: `${customerData.firstName || ''} ${customerData.lastName || ''}`.trim(),
+                            phone: customerData.phone ?? '',
                             address: customerData.address ? {
-                                line1: customerData.address.line1 || '',
-                                line2: customerData.address.line2 || '',
-                                city: customerData.address.city || '',
-                                state: customerData.address.state || '',
-                                postal_code: customerData.address.postal_code || '',
-                                country: customerData.address.country || 'US',
+                                line1: customerData.address.line1 ?? '',
+                                line2: customerData.address.line2 ?? '',
+                                city: customerData.address.city ?? '',
+                                state: customerData.address.state ?? '',
+                                postal_code: customerData.address.postal_code ?? '',
+                                country: customerData.address.country ?? 'US',
                             } : undefined,
                         } : undefined,
                     }}
@@ -348,7 +358,7 @@ function ShippingMethodSelector({ options, selected, onSelect }: ShippingMethodS
                                 <span className="font-bold text-text-earthy">FREE</span>
                             ) : (
                                 <span className="font-semibold text-text-earthy">
-                                    ${(option.amount / 100).toFixed(2)}
+                                    ${option.amount.toFixed(2)}
                                 </span>
                             )}
                         </div>

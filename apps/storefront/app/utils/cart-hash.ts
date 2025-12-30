@@ -10,7 +10,8 @@ export function generateCartHash(
     province?: string;
     postal_code: string;
   },
-  currency: string = "CAD"
+  currency: string = "CAD",
+  cartTotal: number = 0
 ): string {
   const itemsString = cartItems
     .map(
@@ -24,5 +25,5 @@ export function generateCartHash(
     ? `${address.country_code}-${address.province || ""}-${address.postal_code}`
     : "no-address";
 
-  return `${itemsString}__${addressString}__${currency}`;
+  return `${itemsString}__${addressString}__${currency}__${cartTotal}`;
 }

@@ -1,5 +1,8 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { logger } from "../../../utils/logger";
+import { getStripeEventQueue } from "../../../lib/stripe-event-queue";
+import { getPaymentCaptureQueue } from "../../../lib/payment-capture-queue";
+import { startPaymentCaptureWorker } from "../../../workers/payment-capture-worker";
 
 /**
  * GET /health/workers
@@ -16,6 +19,10 @@ export async function GET(
   req: MedusaRequest,
   res: MedusaResponse
 ): Promise<void> {
+  // Health check endpoints should be read-only and idempotent
+  // Workers should be started via loaders, not health endpoints
+  // Removed side effect: startPaymentCaptureWorker(req.scope as any)
+
   const status: {
     redis: { connected: boolean; error?: string };
     stripeEventQueue: {
@@ -32,6 +39,14 @@ export async function GET(
       completed: number;
       failed: number;
     } | null;
+    paymentCaptureDelayedJobs?: Array<{
+      id: string | number | null;
+      orderId?: string;
+      paymentIntentId?: string;
+      attemptsMade: number;
+      scheduledFor?: string;
+      delayMs?: number;
+    }>;
     errors: string[];
   } = {
     redis: { connected: false },
@@ -41,68 +56,75 @@ export async function GET(
   };
 
   // Check Redis connectivity and queue status
+
+  // Test Stripe Event Queue
   try {
-    const { getStripeEventQueue } = await import(
-      "../../../lib/stripe-event-queue.js"
-    );
-    const { getPaymentCaptureQueue } = await import(
-      "../../../lib/payment-capture-queue.js"
-    );
+    const stripeQueue = getStripeEventQueue();
+    const [waiting, active, delayed, completed, failed] = await Promise.all([
+      stripeQueue.getWaitingCount(),
+      stripeQueue.getActiveCount(),
+      stripeQueue.getDelayedCount(),
+      stripeQueue.getCompletedCount(),
+      stripeQueue.getFailedCount(),
+    ]);
 
-    // Test Stripe Event Queue
-    try {
-      const stripeQueue = getStripeEventQueue();
-      const [waiting, active, delayed, completed, failed] = await Promise.all([
-        stripeQueue.getWaitingCount(),
-        stripeQueue.getActiveCount(),
-        stripeQueue.getDelayedCount(),
-        stripeQueue.getCompletedCount(),
-        stripeQueue.getFailedCount(),
-      ]);
+    status.stripeEventQueue = { waiting, active, delayed, completed, failed };
+    status.redis.connected = true;
 
-      status.stripeEventQueue = { waiting, active, delayed, completed, failed };
-      status.redis.connected = true;
+    logger.info("health", "Stripe event queue status", {
+      waiting,
+      active,
+      delayed,
+      completed,
+      failed,
+    });
+  } catch (stripeQueueError: any) {
+    status.errors.push(`Stripe queue error: ${stripeQueueError.message}`);
+    logger.error("health", "Failed to get stripe queue status", {}, stripeQueueError);
+  }
 
-      logger.info("health", "Stripe event queue status", {
-        waiting,
-        active,
-        delayed,
-        completed,
-        failed,
-      });
-    } catch (stripeQueueError: any) {
-      status.errors.push(`Stripe queue error: ${stripeQueueError.message}`);
-      logger.error("health", "Failed to get stripe queue status", {}, stripeQueueError);
-    }
+  // Test Payment Capture Queue
+  try {
+    const captureQueue = getPaymentCaptureQueue();
+    const [waiting, active, delayed, completed, failed] = await Promise.all([
+      captureQueue.getWaitingCount(),
+      captureQueue.getActiveCount(),
+      captureQueue.getDelayedCount(),
+      captureQueue.getCompletedCount(),
+      captureQueue.getFailedCount(),
+    ]);
 
-    // Test Payment Capture Queue
-    try {
-      const captureQueue = getPaymentCaptureQueue();
-      const [waiting, active, delayed, completed, failed] = await Promise.all([
-        captureQueue.getWaitingCount(),
-        captureQueue.getActiveCount(),
-        captureQueue.getDelayedCount(),
-        captureQueue.getCompletedCount(),
-        captureQueue.getFailedCount(),
-      ]);
+    const delayedJobs = await captureQueue.getDelayed(0, 9);
 
-      status.paymentCaptureQueue = { waiting, active, delayed, completed, failed };
-      status.redis.connected = true;
+    status.paymentCaptureDelayedJobs = delayedJobs.map((job) => {
+      const delayMs = job.opts.delay || 0;
+      const scheduledFor = delayMs
+        ? new Date(job.timestamp + delayMs).toISOString()
+        : undefined;
 
-      logger.info("health", "Payment capture queue status", {
-        waiting,
-        active,
-        delayed,
-        completed,
-        failed,
-      });
-    } catch (captureQueueError: any) {
-      status.errors.push(`Capture queue error: ${captureQueueError.message}`);
-      logger.error("health", "Failed to get capture queue status", {}, captureQueueError);
-    }
-  } catch (importError: any) {
-    status.errors.push(`Import error: ${importError.message}`);
-    logger.error("health", "Failed to import queue modules", {}, importError);
+      return {
+        id: job.id ?? null,
+        orderId: job.data?.orderId,
+        paymentIntentId: job.data?.paymentIntentId,
+        attemptsMade: job.attemptsMade,
+        scheduledFor,
+        delayMs,
+      };
+    });
+
+    status.paymentCaptureQueue = { waiting, active, delayed, completed, failed };
+    status.redis.connected = true;
+
+    logger.info("health", "Payment capture queue status", {
+      waiting,
+      active,
+      delayed,
+      completed,
+      failed,
+    });
+  } catch (captureQueueError: any) {
+    status.errors.push(`Capture queue error: ${captureQueueError.message}`);
+    logger.error("health", "Failed to get capture queue status", {}, captureQueueError);
   }
 
   // Determine overall health

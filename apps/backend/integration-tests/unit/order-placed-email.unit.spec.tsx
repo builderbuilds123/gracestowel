@@ -37,7 +37,7 @@ describe("OrderPlacedEmail", () => {
   beforeEach(() => {
     jest.resetModules()
     process.env = { ...OLD_ENV }
-    process.env.STORE_URL = "http://localhost:8000"
+    process.env.STOREFRONT_URL = "http://localhost:8000"
   })
 
   afterAll(() => {

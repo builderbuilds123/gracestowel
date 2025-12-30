@@ -17,6 +17,12 @@ export default [
     route("api/payment-intent", "routes/api.payment-intent.ts"),
     route("api/shipping-rates", "routes/api.shipping-rates.ts"),
     route("api/checkout-session", "routes/api.checkout-session.ts"),
+    // Cart API routes
+    route("api/carts", "routes/api.carts.ts"),
+    route("api/carts/:id", "routes/api.carts.$id.ts"),
+    route("api/carts/:id/shipping-options", "routes/api.carts.$id.shipping-options.ts"),
+    // Utility routes
+    route("api/health", "routes/api.health.ts"),
     route("blog/:id", "routes/blog.$id.tsx"),
     // SEO routes
     route("sitemap.xml", "routes/sitemap[.]xml.tsx"),

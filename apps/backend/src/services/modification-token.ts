@@ -78,10 +78,16 @@ export class ModificationTokenService {
      * @param createdAt - Optional order creation time to anchor expiry (defaults to now)
      * @returns The signed JWT token
      */
-    generateToken(orderId: string, paymentIntentId: string, createdAt?: Date): string {
+    generateToken(orderId: string, paymentIntentId: string, createdAt?: Date | string): string {
         // Use provided createdAt or "now" to calculate specific expiry
         // This ensures token matches business window even if generated later (e.g. retries)
-        const timestamp = createdAt ? Math.floor(createdAt.getTime() / 1000) : Math.floor(Date.now() / 1000);
+        let timestamp: number;
+        if (createdAt) {
+            const dateObj = typeof createdAt === 'string' ? new Date(createdAt) : createdAt;
+            timestamp = Math.floor(dateObj.getTime() / 1000);
+        } else {
+            timestamp = Math.floor(Date.now() / 1000);
+        }
         
         const payload = {
             order_id: orderId,

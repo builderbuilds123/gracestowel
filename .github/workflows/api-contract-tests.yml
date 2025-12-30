@@ -1,0 +1,172 @@
+# Grace Stowel API Contract Tests
+# Runs Postman collections via Newman on pull requests
+# Requirements: 5.1, 5.2, 5.5
+
+name: API Contract Tests
+
+on:
+  pull_request:
+    branches: [main, staging]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to test against'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - local
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "24"
+
+jobs:
+  check-secrets:
+    name: Check Required Secrets
+    runs-on: ubuntu-latest
+    outputs:
+      has-secrets: ${{ steps.check.outputs.has-secrets }}
+    steps:
+      - name: Check if secrets are configured
+        id: check
+        run: |
+          if [ -n "${{ secrets.STAGING_BASE_URL }}" ]; then
+            echo "has-secrets=true" >> $GITHUB_OUTPUT
+          else
+            echo "has-secrets=false" >> $GITHUB_OUTPUT
+            echo "⚠️ STAGING_BASE_URL secret is not configured."
+            echo "API contract tests will be skipped."
+            echo ""
+            echo "To enable API contract tests, configure the following secrets:"
+            echo "  - STAGING_BASE_URL: The base URL of your staging API"
+            echo "  - STAGING_STOREFRONT_URL: The URL of your staging storefront"
+            echo "  - STAGING_JWT_TOKEN: JWT token for admin API authentication"
+          fi
+
+  api-contract-tests:
+    name: API Contract Tests
+    runs-on: ubuntu-latest
+    needs: check-secrets
+    if: needs.check-secrets.outputs.has-secrets == 'true'
+    timeout-minutes: 15
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+
+      - name: Install Newman and HTML Reporter
+        run: |
+          npm install -g newman newman-reporter-htmlextra
+
+      - name: Create reports directory
+        run: mkdir -p newman-reports
+
+      - name: Run Store API Contract Tests
+        env:
+          BASE_URL: ${{ secrets.STAGING_BASE_URL }}
+          STOREFRONT_URL: ${{ secrets.STAGING_STOREFRONT_URL }}
+        run: |
+          newman run postman/collections/store-api.postman_collection.json \
+            --environment postman/environments/staging.postman_environment.json \
+            --env-var "base_url=$BASE_URL" \
+            --env-var "storefront_url=$STOREFRONT_URL" \
+            --reporters cli,htmlextra \
+            --reporter-htmlextra-export newman-reports/store-api-report.html \
+            --timeout-request 30000 \
+            --delay-request 100 \
+            --bail
+        continue-on-error: true
+        id: store-api-tests
+
+      - name: Run Admin API Contract Tests
+        env:
+          BASE_URL: ${{ secrets.STAGING_BASE_URL }}
+          JWT_TOKEN: ${{ secrets.STAGING_JWT_TOKEN }}
+        run: |
+          newman run postman/collections/admin-api.postman_collection.json \
+            --environment postman/environments/staging.postman_environment.json \
+            --env-var "base_url=$BASE_URL" \
+            --env-var "jwt_token=$JWT_TOKEN" \
+            --reporters cli,htmlextra \
+            --reporter-htmlextra-export newman-reports/admin-api-report.html \
+            --timeout-request 30000 \
+            --delay-request 100 \
+            --bail
+        continue-on-error: true
+        id: admin-api-tests
+
+      - name: Run Custom Endpoints Contract Tests
+        env:
+          BASE_URL: ${{ secrets.STAGING_BASE_URL }}
+          JWT_TOKEN: ${{ secrets.STAGING_JWT_TOKEN }}
+        run: |
+          newman run postman/collections/custom-endpoints.postman_collection.json \
+            --environment postman/environments/staging.postman_environment.json \
+            --env-var "base_url=$BASE_URL" \
+            --env-var "jwt_token=$JWT_TOKEN" \
+            --reporters cli,htmlextra \
+            --reporter-htmlextra-export newman-reports/custom-endpoints-report.html \
+            --timeout-request 30000 \
+            --delay-request 100 \
+            --bail
+        continue-on-error: true
+        id: custom-endpoints-tests
+
+      - name: Upload Newman HTML Reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: newman-reports
+          path: newman-reports/
+          retention-days: 14
+
+      - name: Check Test Results
+        if: always()
+        run: |
+          echo "=== API Contract Test Results ==="
+          echo "Store API Tests: ${{ steps.store-api-tests.outcome }}"
+          echo "Admin API Tests: ${{ steps.admin-api-tests.outcome }}"
+          echo "Custom Endpoints Tests: ${{ steps.custom-endpoints-tests.outcome }}"
+          
+          if [ "${{ steps.store-api-tests.outcome }}" == "failure" ] || \
+             [ "${{ steps.admin-api-tests.outcome }}" == "failure" ] || \
+             [ "${{ steps.custom-endpoints-tests.outcome }}" == "failure" ]; then
+            echo ""
+            echo "❌ One or more API contract tests failed!"
+            echo "Check the Newman HTML reports artifact for detailed results."
+            exit 1
+          fi
+          
+          echo ""
+          echo "✅ All API contract tests passed!"
+
+  skip-notice:
+    name: API Contract Tests (Skipped)
+    runs-on: ubuntu-latest
+    needs: check-secrets
+    if: needs.check-secrets.outputs.has-secrets == 'false'
+    steps:
+      - name: Notice
+        run: |
+          echo "⚠️ API Contract Tests were skipped because required secrets are not configured."
+          echo ""
+          echo "To enable these tests, please configure the following repository secrets:"
+          echo "  - STAGING_BASE_URL: The base URL of your staging API (e.g., https://api-staging.example.com)"
+          echo "  - STAGING_STOREFRONT_URL: The URL of your staging storefront (e.g., https://staging.example.com)"
+          echo "  - STAGING_JWT_TOKEN: JWT token for admin API authentication"
+          echo ""
+          echo "You can configure secrets at: Settings > Secrets and variables > Actions"

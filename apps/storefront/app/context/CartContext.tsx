@@ -23,11 +23,33 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     const [items, setItems] = useState<CartItem[]>([]);
     const [isOpen, setIsOpen] = useState(false);
 
+    // Validate cart item integrity
+    const validateCartItem = (item: any): boolean => {
+        if (!item.id) return false;
+        if (!item.title || typeof item.title !== 'string') return false;
+        if (!item.price || typeof item.price !== 'string') return false;
+        return true;
+    };
+
     // Load cart from local storage on mount
     useEffect(() => {
         const savedCart = localStorage.getItem('cart');
         if (savedCart) {
-            setItems(JSON.parse(savedCart));
+            try {
+                const parsed = JSON.parse(savedCart);
+                if (Array.isArray(parsed)) {
+                    const validItems = parsed.filter(validateCartItem);
+                    if (validItems.length !== parsed.length) {
+                        console.warn("[CartContext] Purged invalid items from local storage:", 
+                            parsed.length - validItems.length, "items removed");
+                    }
+                    setItems(validItems);
+                }
+            } catch (e) {
+                console.error("[CartContext] Failed to parse cart from local storage", e);
+                // If corrupted, clear it to self-heal
+                localStorage.removeItem('cart');
+            }
         }
     }, []);
 
@@ -37,6 +59,13 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     }, [items]);
 
     const addToCart = (newItem: Omit<CartItem, 'quantity'> & { quantity?: number }) => {
+        // Fail loudly if inputs are invalid (User Requirement)
+        if (!validateCartItem(newItem)) {
+            const error = `Attempted to add invalid item to cart: ${JSON.stringify(newItem)}`;
+            console.error(error);
+            throw new Error(error);
+        }
+
         setItems(prevItems => {
             const quantityToAdd = newItem.quantity || 1;
             const existingItem = prevItems.find(item =>

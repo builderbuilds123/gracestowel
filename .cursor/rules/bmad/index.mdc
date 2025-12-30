@@ -29,7 +29,6 @@ BMAD rules have been installed to: `.cursor/rules/bmad/`
 
 **Agents:**
 - @bmad/core/agents/bmad-master - bmad-master
-- @bmad/core/agents/bmad-master - bmad-master
 
 **Tasks:**
 - @bmad/core/tasks/advanced-elicitation - advanced-elicitation
@@ -41,11 +40,14 @@ BMAD rules have been installed to: `.cursor/rules/bmad/`
 **Workflows:**
 - @bmad/core/workflows/brainstorming-session - brainstorming-session
 - @bmad/core/workflows/party-mode - party-mode
+- @bmad/core/workflows/brainstorming - brainstorming
 
 ### BMB
 
 **Agents:**
-- @bmad/bmb/agents/bmad-builder - bmad-builder
+- @bmad/bmb/agents/agent-builder - agent-builder
+- @bmad/bmb/agents/module-builder - module-builder
+- @bmad/bmb/agents/workflow-builder - workflow-builder
 
 **Workflows:**
 - @bmad/bmb/workflows/Meal Prep & Nutrition Plan - Meal Prep & Nutrition Plan
@@ -102,6 +104,7 @@ BMAD rules have been installed to: `.cursor/rules/bmad/`
 - @bmad/bmm/workflows/testarch-trace - testarch-trace
 - @bmad/bmm/workflows/workflow-init - workflow-init
 - @bmad/bmm/workflows/workflow-status - workflow-status
+- @bmad/bmm/workflows/create-epics-and-stories - create-epics-and-stories
 
 
 ## Quick Reference

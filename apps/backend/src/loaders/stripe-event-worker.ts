@@ -1,9 +1,10 @@
 import { MedusaContainer } from "@medusajs/framework/types";
 import Stripe from "stripe";
-import { startStripeEventWorker } from "../lib/stripe-event-queue";
+import { startStripeEventWorker } from "../workers/stripe-event-worker";
 import { createOrderFromStripeWorkflow } from "../workflows/create-order-from-stripe";
 import { z } from "zod";
 import { logger } from "../utils/logger";
+import { registerProjectSubscribers } from "../utils/register-subscribers";
 
 const CartItemSchema = z.object({
   variantId: z.string().optional(),
@@ -146,10 +147,17 @@ async function handlePaymentIntentSucceeded(
     const existingOrder = await findOrderByPaymentIntentId(paymentIntent.id, container);
 
     if (existingOrder) {
-        logger.info("stripe-worker", "Order already exists for succeeded PI", {
+        logger.info("stripe-worker", "Order already exists for succeeded PI - updating payment status", {
             paymentIntentId: paymentIntent.id,
             orderId: existingOrder.id,
         });
+        
+        // Update order payment status to reflect that payment has been captured
+        await updateOrderPaymentStatusAfterCapture(
+            existingOrder.id,
+            paymentIntent.amount_received || paymentIntent.amount,
+            container
+        );
         return;
     }
 
@@ -195,6 +203,75 @@ async function findOrderByPaymentIntentId(
 }
 
 /**
+ * Update existing order's payment status after capture
+ * Called when payment_intent.succeeded webhook arrives for an existing order
+ */
+async function updateOrderPaymentStatusAfterCapture(
+    orderId: string,
+    amountCaptured: number,
+    container: MedusaContainer
+): Promise<void> {
+    try {
+        const query = container.resolve("query");
+        const orderService = container.resolve("order");
+        
+        // Get current order metadata
+        const { data: orders } = await query.graph({
+            entity: "order",
+            fields: ["id", "status", "metadata"],
+            filters: { id: orderId },
+        });
+        
+        if (orders.length === 0) {
+            logger.warn("stripe-worker", "Order not found for payment status update", { orderId });
+            return;
+        }
+        
+        const order = orders[0] as any;
+        const currentMetadata = (order.metadata || {}) as Record<string, any>;
+        const currentStatus = order.status;
+        
+        // Don't update if order is canceled
+        if (currentStatus === "canceled") {
+            logger.warn("stripe-worker", "Order is canceled - skipping payment status update", {
+                orderId,
+            });
+            return;
+        }
+        
+        // Update order with payment capture information
+        const update: any = {
+            id: orderId,
+            metadata: {
+                ...currentMetadata,
+                payment_status: "captured",
+                payment_captured_at: new Date().toISOString(),
+                payment_amount_captured: amountCaptured,
+            },
+        };
+        
+        // Update order status to completed if not already
+        if (currentStatus !== "completed") {
+            update.status = "completed";
+        }
+        
+        await orderService.updateOrders([update]);
+        
+        logger.info("stripe-worker", "Order payment status updated after capture", {
+            orderId,
+            amountCaptured,
+            status: update.status,
+        });
+    } catch (error) {
+        logger.error("stripe-worker", "Error updating order payment status after capture", {
+            orderId,
+            error: (error as Error).message,
+        });
+        // Don't throw - webhook processing should continue even if metadata update fails
+    }
+}
+
+/**
  * Create order from PaymentIntent
  */
 async function createOrderFromPaymentIntent(
@@ -203,71 +280,11 @@ async function createOrderFromPaymentIntent(
 ): Promise<void> {
     const metadata = paymentIntent.metadata || {};
     
-    // Validate cart_data using Zod
-    let cartData: z.infer<typeof CartDataSchema> | null = null;
-    if (metadata.cart_data) {
-        try {
-             // Parse JSON first, then validate
-            const rawCart = JSON.parse(metadata.cart_data);
-            const parsed = CartDataSchema.safeParse(rawCart);
-            if (parsed.success) {
-                cartData = parsed.data;
-            } else {
-                logger.error("stripe-worker", "Invalid cart_data schema", {
-                    paymentIntentId: paymentIntent.id,
-                    zodError: parsed.error.message,
-                });
-                // Fail safe - do not process invalid cart data
-                return;
-            }
-        } catch (e) {
-            logger.error("stripe-worker", "Failed to parse cart_data JSON", {
-                paymentIntentId: paymentIntent.id,
-            }, e as Error);
-            return;
-        }
-    }
-
-    const customerEmail = metadata.customer_email || paymentIntent.receipt_email;
-
-    let shippingAddress: z.infer<typeof ShippingAddressSchema> | undefined = undefined;
-
-    if (metadata.shipping_address) {
-        try {
-            const rawAddress = JSON.parse(metadata.shipping_address);
-            const parsed = ShippingAddressSchema.safeParse(rawAddress);
-            if (parsed.success) {
-                shippingAddress = parsed.data;
-            } else {
-                logger.warn("stripe-worker", "Invalid shipping_address schema, using Stripe data", {
-                    paymentIntentId: paymentIntent.id,
-                });
-                // Fallback to undefined will trigger Stripe data usage below
-            }
-        } catch (e) {
-            logger.warn("stripe-worker", "Failed to parse shipping_address JSON, using Stripe data", {
-                paymentIntentId: paymentIntent.id,
-            });
-        }
-    }
-
-    if (!shippingAddress && paymentIntent.shipping) {
-        const stripeShipping = paymentIntent.shipping;
-        shippingAddress = {
-            firstName: stripeShipping.name?.split(' ')[0] || '',
-            lastName: stripeShipping.name?.split(' ').slice(1).join(' ') || '',
-            address1: stripeShipping.address?.line1 || '',
-            address2: stripeShipping.address?.line2 || undefined,
-            city: stripeShipping.address?.city || '',
-            state: stripeShipping.address?.state || undefined,
-            postalCode: stripeShipping.address?.postal_code || '',
-            countryCode: stripeShipping.address?.country || 'US',
-            phone: stripeShipping.phone || undefined,
-        };
-    }
-
-    if (!cartData) {
-        logger.warn("stripe-worker", "No cart data in PaymentIntent - skipping order creation", {
+    // SEC-01: Extract cartId from metadata (required for authoritative cart)
+    const cartId = metadata.cart_id;
+    
+    if (!cartId) {
+        logger.warn("stripe-worker", "No cart_id in PaymentIntent metadata - skipping order creation", {
             paymentIntentId: paymentIntent.id,
             hasMetadata: !!metadata,
             metadataKeys: Object.keys(metadata),
@@ -275,10 +292,12 @@ async function createOrderFromPaymentIntent(
         return;
     }
 
+    const customerEmail = metadata.customer_email || paymentIntent.receipt_email;
+
     logger.info("stripe-worker", "Invoking createOrderFromStripeWorkflow", {
         paymentIntentId: paymentIntent.id,
-        itemCount: cartData.items.length,
-        hasShipping: !!shippingAddress,
+        cartId,
+        hasCustomerEmail: !!customerEmail,
         amount: paymentIntent.amount,
         currency: paymentIntent.currency,
     });
@@ -286,9 +305,8 @@ async function createOrderFromPaymentIntent(
     const { result: order } = await createOrderFromStripeWorkflow(container).run({
         input: {
             paymentIntentId: paymentIntent.id,
-            cartData,
+            cartId,
             customerEmail: customerEmail || undefined,
-            shippingAddress,
             amount: paymentIntent.amount,
             currency: paymentIntent.currency,
         }
@@ -318,22 +336,43 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session):
     logger.info("stripe-worker", "Checkout session completed", { sessionId: session.id });
 }
 
+let workerStarted = false;
+
 /**
- * Loader function - called by Medusa on startup
+ * Ensure the Stripe event worker is started (idempotent)
+ * Can be called multiple times safely - only starts worker once
  */
-export default async function stripeEventWorkerLoader(container: MedusaContainer): Promise<void> {
-    // Only start worker if Redis is configured
+export function ensureStripeWorkerStarted(container: MedusaContainer): void {
+    // Only start worker once
+    if (workerStarted) {
+        return;
+    }
+
     if (!process.env.REDIS_URL) {
         logger.warn("stripe-worker", "REDIS_URL not configured - worker not started");
         return;
     }
 
     try {
-        logger.info("stripe-worker", "Starting Stripe event worker", { redisConfigured: true });
+        console.log("[stripe-worker] Starting Stripe event worker...");
         startStripeEventWorker(container, handleStripeEvent);
-        logger.info("stripe-worker", "Worker started successfully - ready to process events");
+        workerStarted = true;
+        console.log("[stripe-worker] Worker started successfully");
     } catch (error) {
         logger.critical("stripe-worker", "Failed to start worker", {}, error as Error);
-        // Don't throw - allow backend to start even if worker fails
     }
+}
+
+/**
+ * Loader function - called by Medusa on startup (if auto-discovery works)
+ * Currently not being auto-discovered by Medusa v2, so we trigger manually
+ */
+export default async function stripeEventWorkerLoader(container: MedusaContainer): Promise<void> {
+    logger.info("stripe-event-worker-loader", "Stripe event worker loader starting");
+
+    // Register subscribers first
+    await registerProjectSubscribers(container);
+
+    // Then start worker
+    ensureStripeWorkerStarted(container);
 }

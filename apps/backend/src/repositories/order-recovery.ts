@@ -1,9 +1,9 @@
 /**
- * Interface for database manager that supports raw queries.
- * Compatible with Medusa's internal query execution.
+ * Interface for database connection that supports raw queries.
+ * Compatible with Medusa's PG_CONNECTION (node-postgres Pool).
  */
-export interface QueryExecutor {
-  query<T = any>(sql: string, params?: any[]): Promise<T>;
+export interface PgConnection {
+  query<T = any>(sql: string, params?: any[]): Promise<{ rows: T[] }>;
 }
 
 export interface RecoveryOrderRow {
@@ -16,9 +16,11 @@ export interface RecoveryOrderRow {
 /**
  * Fetch pending orders flagged for recovery (needs_recovery=true) that also have a Stripe PI.
  * This pushes the JSONB predicate into the DB to avoid full-table scans in cron.
+ * 
+ * Uses PG_CONNECTION directly for raw SQL queries in Medusa v2.
  */
 export async function getPendingRecoveryOrders(
-  manager: QueryExecutor,
+  pgConnection: PgConnection,
   olderThan?: Date
 ): Promise<RecoveryOrderRow[]> {
   const params: any[] = [];
@@ -38,5 +40,6 @@ export async function getPendingRecoveryOrders(
      WHERE ${where}
   `;
 
-  return manager.query(sql, params);
+  const result = await pgConnection.query<RecoveryOrderRow>(sql, params);
+  return result.rows;
 }

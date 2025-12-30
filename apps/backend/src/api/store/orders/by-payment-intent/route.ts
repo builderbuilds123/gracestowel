@@ -64,7 +64,8 @@ export async function GET(
         // Generate a new modification token for this order
         const token = modificationTokenService.generateToken(
             order.id,
-            paymentIntentId
+            paymentIntentId,
+            order.created_at // Anchor expiry to order creation time
         );
 
         const remainingSeconds = modificationTokenService.getRemainingTime(token);
