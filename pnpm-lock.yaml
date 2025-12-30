@@ -51,8 +51,8 @@ importers:
         specifier: 2.12.0
         version: 2.12.0(@medusajs/framework@2.12.0(@medusajs/cli@2.12.0(@types/node@20.19.25))(@types/node@20.19.25)(ioredis@5.8.2)(vite@5.4.21(@types/node@20.19.25)(lightningcss@1.30.2)(terser@5.44.1)))
       '@medusajs/file-local':
-        specifier: ^1.0.4
-        version: 1.0.4(medusa-interfaces@1.3.10)
+        specifier: ^2.12.3
+        version: 2.12.3(@medusajs/framework@2.12.0(@medusajs/cli@2.12.0(@types/node@20.19.25))(@types/node@20.19.25)(ioredis@5.8.2)(vite@5.4.21(@types/node@20.19.25)(lightningcss@1.30.2)(terser@5.44.1)))
       '@medusajs/file-s3':
         specifier: 2.12.0
         version: 2.12.0(@medusajs/framework@2.12.0(@medusajs/cli@2.12.0(@types/node@20.19.25))(@types/node@20.19.25)(ioredis@5.8.2)(vite@5.4.21(@types/node@20.19.25)(lightningcss@1.30.2)(terser@5.44.1)))
@@ -1927,17 +1927,17 @@ packages:
     peerDependencies:
       '@medusajs/framework': 2.12.0
 
-  '@medusajs/file-local@1.0.4':
-    resolution: {integrity: sha512-RXCqmtxYnqJ1IJQEu6zHAVk6IYiOEPJsfZ536H/301+bWzil0ySodyGcr2qaQ+Nrg7EHvnYQy3MjfqDCYQr0Sw==}
-    engines: {node: '>=16'}
-    peerDependencies:
-      medusa-interfaces: ^1.3.7
-
   '@medusajs/file-local@2.12.0':
     resolution: {integrity: sha512-Wke92RedDSQHFKsZZ63LUiTyA+H9PZU8LHk6P/FgB/2JMsBM9LL3ELOPNh/wc4B6P07Q33Q3ks/FM7MHore8fg==}
     engines: {node: '>=20'}
     peerDependencies:
       '@medusajs/framework': 2.12.0
+
+  '@medusajs/file-local@2.12.3':
+    resolution: {integrity: sha512-MT0KhQpUAhCrVpAgE6ombKB0d6/zhK2BhTw8VI4av0Endkum6N9h8/UEclYT65Nd763GDqe1U9vhYmruj2ZtZw==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      '@medusajs/framework': 2.12.3
 
   '@medusajs/file-s3@2.12.0':
     resolution: {integrity: sha512-jq/V6MG5rhhOvowNzobbdLAIHFzjOCU4cIaXb0gc80DkgkoNwRgJ0pTiJZVQH82sDVnPKRlauyWnrl27TCTv1Q==}
@@ -7042,10 +7042,6 @@ packages:
     resolution: {integrity: sha512-dq+qelQ9akHpcOl/gUVRTxVIOkAJ1wR3QAvb4RsVjS8oVoFjDGTc679wJYmUmknUF5HwMLOgb5O+a3KxfWapPQ==}
     engines: {node: '>= 0.6'}
 
-  medusa-interfaces@1.3.10:
-    resolution: {integrity: sha512-S3J8+W/Wy5zoJML7P5mxGd9gRJTdMaRdpiPAhMeod8MmZGcTKpLRB1Ms8d2+pNDPhmoHJ69SAKaWRxp1w7eCUg==}
-    engines: {node: '>=16'}
-
   merge-descriptors@1.0.3:
     resolution: {integrity: sha512-gaNvAS7TZ897/rVaZ0nMtAyxNyi/pdbjbAwUpFQpN70GqnVfOiXpeUUMKRBmzXaSQ8DdTX4/0ms62r2K+hE6mQ==}
 
@@ -8827,6 +8823,7 @@ packages:
   whatwg-encoding@3.1.1:
     resolution: {integrity: sha512-6qN4hJdMwfYBtE3YBTTHhoeuUrDBPZmbQaxWAqSALV/MeEnR5z1xd8UKud2RAkFoPkmB+hli1TZSnyi84xz1vQ==}
     engines: {node: '>=18'}
+    deprecated: Use @exodus/bytes instead for a more spec-conformant and faster implementation
 
   whatwg-mimetype@3.0.0:
     resolution: {integrity: sha512-nt+N2dzIutVRxARx1nghPKGv1xHikU7HKdfafKkLNLindmPU/ch3U31NOCGGA/dmPcmb1VlofO0vnKAcsm0o/Q==}
@@ -8873,6 +8870,7 @@ packages:
   wrangler@4.55.0:
     resolution: {integrity: sha512-50icmLX8UbNaq0FmFHbcvvOh7I6rDA/FyaMYRcNSl1iX0JwuKswezmmtYvYPxPTkbYz7FUYR8GPZLaT23uzFqw==}
     engines: {node: '>=20.0.0'}
+    deprecated: This version can incorrectly automatically delegate 'wrangler deploy' to 'opennextjs-cloudflare'
     hasBin: true
     peerDependencies:
       '@cloudflare/workers-types': ^4.20251213.0
@@ -11053,11 +11051,11 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@medusajs/file-local@1.0.4(medusa-interfaces@1.3.10)':
-    dependencies:
-      medusa-interfaces: 1.3.10
-
   '@medusajs/file-local@2.12.0(@medusajs/framework@2.12.0(@medusajs/cli@2.12.0(@types/node@20.19.25))(@types/node@20.19.25)(ioredis@5.8.2)(vite@5.4.21(@types/node@20.19.25)(lightningcss@1.30.2)(terser@5.44.1)))':
+    dependencies:
+      '@medusajs/framework': 2.12.0(@medusajs/cli@2.12.0(@types/node@20.19.25))(@types/node@20.19.25)(ioredis@5.8.2)(vite@5.4.21(@types/node@20.19.25)(lightningcss@1.30.2)(terser@5.44.1))
+
+  '@medusajs/file-local@2.12.3(@medusajs/framework@2.12.0(@medusajs/cli@2.12.0(@types/node@20.19.25))(@types/node@20.19.25)(ioredis@5.8.2)(vite@5.4.21(@types/node@20.19.25)(lightningcss@1.30.2)(terser@5.44.1)))':
     dependencies:
       '@medusajs/framework': 2.12.0(@medusajs/cli@2.12.0(@types/node@20.19.25))(@types/node@20.19.25)(ioredis@5.8.2)(vite@5.4.21(@types/node@20.19.25)(lightningcss@1.30.2)(terser@5.44.1))
 
@@ -17434,8 +17432,6 @@ snapshots:
   meant@1.0.3: {}
 
   media-typer@0.3.0: {}
-
-  medusa-interfaces@1.3.10: {}
 
   merge-descriptors@1.0.3: {}
 
