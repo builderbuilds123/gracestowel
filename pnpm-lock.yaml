@@ -102,8 +102,8 @@ importers:
         specifier: ^6.5.2
         version: 6.5.2(@react-email/render@2.0.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1))
       stripe:
-        specifier: ^19.1.0
-        version: 19.3.1(@types/node@20.19.25)
+        specifier: ^20.1.0
+        version: 20.1.0(@types/node@20.19.25)
       zod:
         specifier: ^4.1.13
         version: 4.1.13
@@ -214,8 +214,8 @@ importers:
         specifier: ^7.10.1
         version: 7.10.1(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       stripe:
-        specifier: ^20.0.0
-        version: 20.0.0(@types/node@22.19.1)
+        specifier: ^20.1.0
+        version: 20.1.0(@types/node@22.19.1)
       web-vitals:
         specifier: ^5.1.0
         version: 5.1.0
@@ -8245,17 +8245,8 @@ packages:
       '@types/node':
         optional: true
 
-  stripe@19.3.1:
-    resolution: {integrity: sha512-5NXhLxTZ+4uO1wnsmNysILVuyeZ1Xia7niz/8ykBkGJkCcrY2WyQZwcfYuWZmZEJtWr2+0j49JXwNC6y9CHL7Q==}
-    engines: {node: '>=16'}
-    peerDependencies:
-      '@types/node': '>=16'
-    peerDependenciesMeta:
-      '@types/node':
-        optional: true
-
-  stripe@20.0.0:
-    resolution: {integrity: sha512-EaZeWpbJOCcDytdjKSwdrL5BxzbDGNueiCfHjHXlPdBQvLqoxl6AAivC35SPzTmVXJb5duXQlXFGS45H0+e6Gg==}
+  stripe@20.1.0:
+    resolution: {integrity: sha512-o1VNRuMkY76ZCq92U3EH3/XHm/WHp7AerpzDs4Zyo8uE5mFL4QUcv/2SudWsSnhBSp4moO2+ZoGCZ7mT8crPmQ==}
     engines: {node: '>=16'}
     peerDependencies:
       '@types/node': '>=16'
@@ -8827,6 +8818,7 @@ packages:
   whatwg-encoding@3.1.1:
     resolution: {integrity: sha512-6qN4hJdMwfYBtE3YBTTHhoeuUrDBPZmbQaxWAqSALV/MeEnR5z1xd8UKud2RAkFoPkmB+hli1TZSnyi84xz1vQ==}
     engines: {node: '>=18'}
+    deprecated: Use @exodus/bytes instead for a more spec-conformant and faster implementation
 
   whatwg-mimetype@3.0.0:
     resolution: {integrity: sha512-nt+N2dzIutVRxARx1nghPKGv1xHikU7HKdfafKkLNLindmPU/ch3U31NOCGGA/dmPcmb1VlofO0vnKAcsm0o/Q==}
@@ -8873,6 +8865,7 @@ packages:
   wrangler@4.55.0:
     resolution: {integrity: sha512-50icmLX8UbNaq0FmFHbcvvOh7I6rDA/FyaMYRcNSl1iX0JwuKswezmmtYvYPxPTkbYz7FUYR8GPZLaT23uzFqw==}
     engines: {node: '>=20.0.0'}
+    deprecated: This version can incorrectly automatically delegate 'wrangler deploy' to 'opennextjs-cloudflare'
     hasBin: true
     peerDependencies:
       '@cloudflare/workers-types': ^4.20251213.0
@@ -18737,13 +18730,13 @@ snapshots:
     optionalDependencies:
       '@types/node': 20.19.25
 
-  stripe@19.3.1(@types/node@20.19.25):
+  stripe@20.1.0(@types/node@20.19.25):
     dependencies:
       qs: 6.14.0
     optionalDependencies:
       '@types/node': 20.19.25
 
-  stripe@20.0.0(@types/node@22.19.1):
+  stripe@20.1.0(@types/node@22.19.1):
     dependencies:
       qs: 6.14.0
     optionalDependencies:
