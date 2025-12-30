@@ -60,18 +60,23 @@ interface StockValidationResult {
 
 /**
  * Generate deterministic idempotency key from cart contents
- * Uses FNV-1a hash for better distribution and includes timestamp bucket
- * to allow retries within a time window while preventing rapid duplicates
+ * AI-NOTE: REL-01 - Fully deterministic key generation for effective retries
  * 
- * Note: Stripe caches idempotency keys for 24 hours. To avoid collisions
- * we include a 1-minute time bucket and a random session nonce.
+ * Uses FNV-1a hash of: cartId + amount + currency + cart contents
+ * Same inputs ALWAYS produce same key (retry-safe)
+ * Different inputs produce different keys (prevents accidental duplicates)
+ * 
+ * Stripe caches idempotency keys for 24 hours which is fine since:
+ * - Cart changes → different key (due to cartId/amount/items hash)
+ * - Same cart retried → same key (desired behavior for network retries)
  */
 function generateIdempotencyKey(
+  cartId: string,
   amount: number,
   currency: string,
-  cartItems: CartItem[] | undefined,
-  customerId: string | undefined
+  cartItems: CartItem[] | undefined
 ): string {
+  // AI-NOTE: REL-01 - Deterministic cart content hash (sorted for stability)
   const cartHash = cartItems
     ? cartItems
         .map((i) => `${i.variantId}:${i.quantity}:${i.price}`)
@@ -79,13 +84,9 @@ function generateIdempotencyKey(
         .join("|")
     : "empty";
   
-  // Include a 1-minute time bucket to allow fresh attempts
-  const timeBucket = Math.floor(Date.now() / (60 * 1000));
-  
-  // Add random nonce to prevent collisions across different sessions
-  const nonce = Math.random().toString(36).substring(2, 8);
-  
-  const raw = `pi_${customerId || "guest"}_${amount}_${currency}_${cartHash}_${timeBucket}_${nonce}`;
+  // AI-NOTE: REL-01 - Key based on cartId + amount + currency + cartHash
+  // No random nonce, no time bucket - fully deterministic
+  const raw = `pi_${cartId}_${amount}_${currency}_${cartHash}`;
 
   // FNV-1a hash - better distribution than simple hash
   let hash = 2166136261; // FNV offset basis
@@ -96,7 +97,7 @@ function generateIdempotencyKey(
   
   // Convert to base36 and ensure sufficient length
   const hashStr = (hash >>> 0).toString(36).padStart(8, '0');
-  return `pi_${hashStr}_${amount}`;
+  return `pi_${cartId.slice(-8)}_${hashStr}_${amount}`;
 }
 
 /**
@@ -368,10 +369,10 @@ export async function action({ request, context }: ActionFunctionArgs) {
     // Idempotency key only for CREATE
     if (!isUpdate) {
       headers["Idempotency-Key"] = generateIdempotencyKey(
+        cartId,
         fromCents(calculatedAmount),
         validatedCurrency,
-        cartItems,
-        customerId
+        cartItems
       );
     }
 
