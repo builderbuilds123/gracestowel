@@ -6,6 +6,7 @@ import { useCart } from "../context/CartContext";
 import { posts } from "../data/blogPosts";
 import { getStripe, initStripe } from "../lib/stripe";
 import { monitoredFetch } from "../utils/monitored-fetch";
+import { logPaymentInfo, logError, maskPaymentIntentId, maskAddress } from "../utils/secure-logging";
 
 // Lazy load Map component to avoid SSR issues with Leaflet
 const Map = lazy(() => import("../components/Map.client"));
@@ -155,7 +156,8 @@ export default function CheckoutSuccess() {
         }
 
         const fetchPaymentDetails = async () => {
-            console.log("Checkout Success Params:", {
+            // SECURITY: Use secure logging to mask sensitive payment data
+            logPaymentInfo("Checkout Success - Processing payment", {
                 redirectStatus,
                 paymentIntentId,
             });
@@ -177,16 +179,28 @@ export default function CheckoutSuccess() {
                 processedRef.current = paymentIntentId; // Mark as processed
 
                 try {
-                    console.log("Retrieving payment intent...");
+                    // SECURITY: Don't log client secret or full payment intent object
                     const { paymentIntent, error } = await stripe.retrievePaymentIntent(paymentIntentClientSecret);
-                    console.log("Payment Intent retrieved:", paymentIntent);
-                    console.log("Error retrieved:", error);
 
                     if (error) {
-                        console.error("Stripe retrieval error:", error);
+                        // SECURITY: Log error without exposing sensitive data
+                        logError("Stripe retrieval error", error, {
+                            paymentIntentId: maskPaymentIntentId(paymentIntentId),
+                            redirectStatus,
+                        });
                         setMessage(`Stripe Error: ${error.message}`);
                         setPaymentStatus('error');
                         return;
+                    }
+                    
+                    // SECURITY: Only log non-sensitive payment intent fields
+                    if (paymentIntent) {
+                        logPaymentInfo("Payment Intent retrieved", {
+                            paymentIntentId: paymentIntent.id,
+                            status: paymentIntent.status,
+                            amount: paymentIntent.amount,
+                            currency: paymentIntent.currency,
+                        });
                     }
 
                     // With manual capture mode, status will be 'requires_capture' (authorized but not captured)
@@ -249,7 +263,8 @@ export default function CheckoutSuccess() {
                         if (paymentIntent.shipping) {
                             const address = paymentIntent.shipping.address;
                             const addressString = `${address?.line1}, ${address?.city}, ${address?.state} ${address?.postal_code}, ${address?.country} `;
-                            console.log("Geocoding address (background):", addressString);
+                            // SECURITY: Mask address in logs (PII protection)
+                            console.log("Geocoding address (background):", maskAddress(addressString));
 
                             // Do not await this
                             monitoredFetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addressString)}`, {
@@ -261,7 +276,7 @@ export default function CheckoutSuccess() {
                                     const coords: [number, number] = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
                                     setMapCoordinates(coords);
                                 }
-                            }).catch(err => console.error("Geocoding error:", err));
+                            }).catch(err => logError("Geocoding error", err));
                         }
 
                         // Fetch order from API to get modification token
@@ -291,8 +306,9 @@ export default function CheckoutSuccess() {
                                     // Store in localStorage for persistence
                                     localStorage.setItem('orderId', data.order.id);
 
+                                    // SECURITY: Log order info with masked ID
                                     console.log("Order fetched:", {
-                                        orderId: data.order.id,
+                                        orderId: maskPaymentIntentId(data.order.id), // Mask order ID
                                         status: data.order.status,
                                     });
                                 } else if (response.status === 404 && retries < maxRetries) {
@@ -301,10 +317,14 @@ export default function CheckoutSuccess() {
                                     console.log(`Order not found, retrying (${retries}/${maxRetries})...`);
                                     setTimeout(fetchOrderWithToken, retryDelay);
                                 } else {
-                                    console.error("Failed to fetch order:", await response.text());
+                                    logError("Failed to fetch order", new Error(`HTTP ${response.status}`), {
+                                        paymentIntentId: maskPaymentIntentId(paymentIntentId),
+                                    });
                                 }
                             } catch (err) {
-                                console.error("Error fetching order:", err);
+                                logError("Error fetching order", err, {
+                                    paymentIntentId: maskPaymentIntentId(paymentIntentId),
+                                });
                                 if (retries < maxRetries) {
                                     retries++;
                                     setTimeout(fetchOrderWithToken, retryDelay);
@@ -316,7 +336,8 @@ export default function CheckoutSuccess() {
                         const cartIdFromSession = sessionStorage.getItem('medusa_cart_id');
                         if (cartIdFromSession) {
                             try {
-                                console.log(`Attempting to complete Medusa cart ${cartIdFromSession}...`);
+                                // SECURITY: Don't log full cart ID
+                                console.log("Attempting to complete Medusa cart...");
                                 const completeResponse = await monitoredFetch(`/api/carts/${cartIdFromSession}/complete`, {
                                     method: "POST",
                                     headers: {
@@ -326,16 +347,19 @@ export default function CheckoutSuccess() {
                                 });
 
                                 if (completeResponse.ok) {
-                                    const completionData = await completeResponse.json();
-                                    console.log("Medusa cart completion successful:", completionData);
+                                    // SECURITY: Don't log full completion data (may contain PII)
+                                    console.log("Medusa cart completion successful");
                                     // Optionally use the returned orderId from completionData if needed
                                 } else {
                                     const errorData = await completeResponse.json();
-                                    console.error("Medusa cart completion failed:", errorData);
+                                    logError("Medusa cart completion failed", new Error("Cart completion failed"), {
+                                        status: completeResponse.status,
+                                        // Don't log full error data (may contain sensitive info)
+                                    });
                                     // Non-critical failure: log and proceed, webhook should eventually create order
                                 }
                             } catch (err) {
-                                console.error("Error calling cart completion API:", err);
+                                logError("Error calling cart completion API", err);
                                 // Non-critical failure: log and proceed
                             }
                         } else {
@@ -350,17 +374,27 @@ export default function CheckoutSuccess() {
                             clearCart();
                         }, 500);
                     } else {
-                        console.error("Payment status not valid:", paymentIntent?.status);
+                        // SECURITY: Log payment status without sensitive data
+                        logError("Payment status not valid", new Error(`Invalid status: ${paymentIntent?.status}`), {
+                            paymentIntentId: maskPaymentIntentId(paymentIntentId),
+                            status: paymentIntent?.status,
+                        });
                         setMessage(`Payment status: ${paymentIntent?.status}`);
                         setPaymentStatus('error');
                     }
                 } catch (error: any) {
-                    console.error("Error fetching payment details:", error);
-                    setMessage(`Error: ${error.message || JSON.stringify(error)}`);
+                    logError("Error fetching payment details", error, {
+                        paymentIntentId: maskPaymentIntentId(paymentIntentId),
+                        redirectStatus,
+                    });
+                    setMessage(`Error: ${error.message || "Payment processing failed"}`);
                     setPaymentStatus('error');
                 }
             } else {
-                console.error("Missing required params or redirect status not succeeded");
+                logError("Missing required params or redirect status not succeeded", new Error("Invalid payment params"), {
+                    redirectStatus,
+                    hasPaymentIntentId: !!paymentIntentId,
+                });
                 setPaymentStatus('error');
             }
         };
