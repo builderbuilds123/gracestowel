@@ -1,6 +1,5 @@
 import orderPlacedHandler from "../../src/subscribers/order-placed";
 import { enqueueEmail } from "../../src/lib/email-queue";
-import { modificationTokenService } from "../../src/services/modification-token";
 
 jest.mock("../../src/lib/email-queue", () => ({
   enqueueEmail: jest.fn(),
@@ -32,17 +31,21 @@ describe("Order Placed Subscriber", () => {
       warn: jest.fn(),
     };
 
+    // Create a mock service instance with generateToken spy
+    const mockModificationTokenService = {
+      generateToken: jest.fn().mockReturnValue("mock_token_123"),
+    };
+
+    generateTokenSpy = jest.spyOn(mockModificationTokenService, "generateToken");
+
     mockContainer = {
       resolve: jest.fn((key) => {
         if (key === "logger") return mockLogger;
         if (key === "query") return mockQuery;
+        if (key === "modificationTokenService") return mockModificationTokenService;
         return null;
       }),
     };
-
-    generateTokenSpy = jest
-      .spyOn(modificationTokenService, "generateToken")
-      .mockReturnValue("mock_token_123");
   });
 
   afterEach(() => {
