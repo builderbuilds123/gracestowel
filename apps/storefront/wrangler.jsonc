@@ -10,6 +10,11 @@
   // These are set as secrets via `wrangler secret put` or Cloudflare Dashboard.
   // Defining them here as empty strings overrides the dashboard secrets.
   // For type generation, see worker-configuration.d.ts
+  // UPDATE: We define them in environment-specific vars for type generation purposes,
+  // but be careful not to commit sensitive values or override secrets in production deployment
+  // if not intended. Cloudflare Docs state that vars override secrets if present.
+  // However, `wrangler types` requires them to be in `vars` to generate the interface.
+  // We will add them to `staging` and `production` vars as expected by the application code.
 
   "hyperdrive": [
     {
@@ -43,7 +48,9 @@
     "staging": {
       "name": "gracestowelstorefront-staging",
       "vars": {
-        "ENVIRONMENT": "staging"
+        "ENVIRONMENT": "staging",
+        "MEDUSA_BACKEND_URL": "https://staging-backend.gracestowel.com",
+        "MEDUSA_PUBLISHABLE_KEY": "pk_test_staging"
       }
       // Hyperdrive is injected by CI from HYPERDRIVE_ID secret
       // Secrets are set via: wrangler secret put <NAME> --env staging
@@ -53,7 +60,9 @@
     "production": {
       "name": "gracestowelstorefront",
       "vars": {
-        "ENVIRONMENT": "production"
+        "ENVIRONMENT": "production",
+        "MEDUSA_BACKEND_URL": "",
+        "MEDUSA_PUBLISHABLE_KEY": ""
       }
       // Hyperdrive is injected by CI from HYPERDRIVE_ID secret
       // Secrets are set via: wrangler secret put <NAME> --env production
