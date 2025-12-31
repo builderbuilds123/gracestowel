@@ -500,11 +500,29 @@ export async function calculateTotalsHandler(
     }
 
     // TAX-01: Calculate tax for the added items
+    // 
+    // Tax calculation handles both tax-inclusive and tax-exclusive regions:
+    // - Tax-inclusive: calculated_amount_with_tax includes tax in the price
+    //   - unitPrice = calculated_amount_with_tax (price already includes tax)
+    //   - taxPerUnit = tax_total (tax component for tracking/reporting)
+    //   - Note: In tax-inclusive regions, taxAmount is tracked separately for accounting
+    //     but the price already includes it, so newOrderTotal is correct
+    // - Tax-exclusive: calculated_amount is base price, tax is added separately
+    //   - unitPrice = calculated_amount_with_tax (base + tax)
+    //   - taxPerUnit = tax_total (tax added on top of base price)
+    //
     // tax_total is per unit, multiply by quantity for total tax of this addition
     const unitPrice = price.calculated_amount_with_tax || price.calculated_amount;
     const taxPerUnit = price.tax_total || 0;
-    const taxAmount = taxPerUnit * input.quantity;
+    const taxAmount = taxPerUnit * input.quantity; // Total tax for all units (quantity * per-unit tax)
+    
+    // itemTotal uses unitPrice which includes tax (calculated_amount_with_tax)
+    // This is correct for Stripe PaymentIntent amount which should include tax
     const itemTotal = unitPrice * input.quantity;
+    
+    // For subtotal calculation (if needed in future), use:
+    // const itemSubtotal = price.calculated_amount * input.quantity; // Base price without tax
+    
     const newOrderTotal = input.currentTotal + itemTotal;
     const difference = itemTotal;
     const variantTitle = `${variant.product?.title || ""} - ${variant.title || ""}`.trim();
@@ -657,8 +675,9 @@ const updateOrderValuesStep = createStep(
                 variant_id: input.variantId,
                 title: input.variantTitle,
                 quantity: input.quantity,
-                unit_price: input.unitPrice,
-                tax_amount: input.taxAmount, // TAX-01: Track tax per item
+                unit_price: input.unitPrice, // Per-unit price (includes tax if tax-inclusive)
+                tax_amount: input.taxAmount, // TAX-01: Total tax for this line item (quantity * per-unit tax)
+                // Note: tax_amount represents the total tax for all units of this item, not per-unit tax
             };
 
             // Defensively parse existing added items from metadata

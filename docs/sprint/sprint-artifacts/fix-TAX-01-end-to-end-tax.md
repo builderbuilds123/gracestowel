@@ -42,12 +42,22 @@ Use Medusa Cart/Order totals (which include tax provider logic) as source of tru
 1. **Fetch tax per unit** from `variant.calculated_price.tax_total`
 2. **Calculate total tax** for added items: `taxPerUnit * quantity`
 3. **Store in metadata**:
-   - Per-item tax in `added_items[].tax_amount`
+   - Total tax for item (all units) in `added_items[].tax_amount` (quantity * per-unit tax)
+     - Note: `tax_amount` represents the total tax for all units of that item, not per-unit tax
    - Order total in `metadata.updated_total` (current order total after addition)
    - ~~Accumulated tax in `metadata.updated_tax_total`~~ **REMOVED**
    - ~~Accumulated subtotal in `metadata.updated_subtotal`~~ **REMOVED**
 4. Tax accumulation is calculated **on-demand** by summing `added_items[].tax_amount` when needed
 5. This avoids the flawed pattern of tracking computed values that reset on each workflow invocation
+
+### Tax Calculation Details
+- **Tax-inclusive regions**: `calculated_amount_with_tax` includes tax in the price
+  - `unitPrice` = `calculated_amount_with_tax` (price already includes tax)
+  - `taxPerUnit` = `tax_total` (tax component for tracking/reporting)
+  - Note: In tax-inclusive regions, `taxAmount` is tracked separately for accounting but the price already includes it
+- **Tax-exclusive regions**: `calculated_amount` is base price, tax is added separately
+  - `unitPrice` = `calculated_amount_with_tax` (base + tax)
+  - `taxPerUnit` = `tax_total` (tax added on top of base price)
 
 ### Changes Made
 - **`calculateTotalsStep`**: Calculates per-unit and total tax for added items
@@ -102,9 +112,10 @@ Added 10 tax-related unit tests:
 - **Summary**: Implemented end-to-end tax calculation for order modifications during the grace period. Uses Medusa's `calculated_price.tax_total` as source of truth. Tax is tracked per-item in `added_items[].tax_amount` metadata.
 - **Implementation Notes**:
   - Medusa v2 `tax_total` and `subtotal` are computed fields (cannot be directly updated)
-  - Tax stored only in per-item metadata: `added_items[].tax_amount`
+  - Tax stored only in per-item metadata: `added_items[].tax_amount` (total tax for all units of that item)
   - Tax accumulation calculated on-demand from per-item values (not stored as aggregate)
   - When items are converted to actual line items (at capture), tax info is available for proper accounting
+  - Handles both tax-inclusive and tax-exclusive regions correctly
 
 ## Change Log
 
@@ -135,3 +146,12 @@ Added 10 tax-related unit tests:
 - **Resolution**:
   - ✅ All HIGH issues fixed automatically.
   - ✅ 29 unit tests passing.
+
+## Post-Merge Verification (2025-12-30)
+- **Verified By**: Dev Agent
+- **Context**: Post-merge to main
+- **Status**: Verified
+- **Verification**:
+  - ✅ Implementation logic reviewed: `calculateTotalsHandler` correctly isolates tax logic.
+  - ✅ On-demand calculation strategy confirmed (no persisted tax total overrides).
+  - ✅ 32/32 Unit Tests Passing (re-run locally).
