@@ -32,6 +32,8 @@ interface ValidationResult {
         id: string;
         status: string;
         total: number;
+        tax_total: number;
+        subtotal: number;
         currency_code: string;
         metadata: Record<string, any>;
         items: any[];
@@ -340,9 +342,10 @@ export async function validatePreconditionsHandler(
     }
 
     // 2. Fetch order and validate status
+    // TAX-01: Fetch tax_total and subtotal for order-level tax recalculation
     const { data: orders } = await query.graph({
         entity: "order",
-        fields: ["id", "status", "total", "currency_code", "metadata", "items.*"],
+        fields: ["id", "status", "total", "tax_total", "subtotal", "currency_code", "metadata", "items.*"],
         filters: { id: input.orderId },
     });
 
@@ -420,6 +423,8 @@ export async function validatePreconditionsHandler(
             id: order.id,
             status: order.status,
             total: order.total,
+            tax_total: order.tax_total || 0,
+            subtotal: order.subtotal || 0,
             currency_code: order.currency_code,
             metadata: order.metadata || {},
             items: order.items || [],
@@ -442,14 +447,13 @@ const validatePreconditionsStep = createStep(
 
 /**
  * Step 2: Calculate Order Totals (Tax, Shipping)
- * 
- * NOTE: Tax calculation is handled by Medusa's calculated_price which includes
- * tax when configured. For explicit tax provider integration, this step would
- * need to call the tax provider API. Currently uses calculated_price which
- * represents the final price including applicable taxes.
- * 
- * Per Medusa v2 pricing: calculated_price already includes tax when tax-inclusive
- * pricing is configured. For tax-exclusive regions, tax is added at checkout.
+ *
+ * TAX-01: Tax calculation using Medusa's calculated_price as source of truth.
+ * - For tax-inclusive regions: calculated_amount_with_tax includes tax
+ * - For tax-exclusive regions: tax is added separately via tax_total
+ * - Tax amount per item is calculated and accumulated for order-level tax_total update
+ *
+ * Per Medusa v2 pricing: calculated_price represents the final price with tax provider logic applied.
  */
 const calculateTotalsStep = createStep(
     "calculate-totals",
@@ -459,6 +463,8 @@ const calculateTotalsStep = createStep(
             variantId: string;
             quantity: number;
             currentTotal: number;
+            currentTaxTotal: number;
+            currentSubtotal: number;
             currencyCode: string;
         },
         { container }
@@ -491,16 +497,17 @@ const calculateTotalsStep = createStep(
             throw new PriceNotFoundError(input.variantId, input.currencyCode);
         }
 
-        // Use calculated_amount_with_tax if available, otherwise calculated_amount
-        // This ensures tax is included when the region is configured for it
+        // TAX-01: Calculate tax for the added items
+        // tax_total is per unit, multiply by quantity for total tax of this addition
         const unitPrice = price.calculated_amount_with_tax || price.calculated_amount;
-        const taxAmount = price.tax_total || 0;
+        const taxPerUnit = price.tax_total || 0;
+        const taxAmount = taxPerUnit * input.quantity;
         const itemTotal = unitPrice * input.quantity;
         const newOrderTotal = input.currentTotal + itemTotal;
         const difference = itemTotal;
         const variantTitle = `${variant.product?.title || ""} - ${variant.title || ""}`.trim();
 
-        console.log(`[add-item-to-order] Calculated totals: unitPrice=${unitPrice}, tax=${taxAmount}, itemTotal=${itemTotal}, newTotal=${newOrderTotal}`);
+        console.log(`[add-item-to-order] TAX-01: Calculated totals: unitPrice=${unitPrice}, taxPerUnit=${taxPerUnit}, totalTax=${taxAmount}, itemTotal=${itemTotal}, newTotal=${newOrderTotal}`);
 
         return new StepResponse({
             variantId: input.variantId,
@@ -609,6 +616,11 @@ const incrementStripeAuthStep = createStep(
 
 /**
  * Step 4: Update Order Values (DB Commit)
+ *
+ * TAX-01: Tracks tax in metadata for added items during grace period.
+ * Note: Order tax_total and subtotal are computed fields in Medusa v2, calculated
+ * from line items. We store tax info in metadata for tracking until these additions
+ * are converted to actual line items (e.g., during capture or final reconciliation).
  */
 const updateOrderValuesStep = createStep(
     "update-order-values",
@@ -621,7 +633,10 @@ const updateOrderValuesStep = createStep(
             quantity: number;
             unitPrice: number;
             itemTotal: number;
+            taxAmount: number;
             newTotal: number;
+            newTaxTotal: number;
+            newSubtotal: number;
             stripeIncrementSucceeded: boolean;
             currentOrderMetadata: Record<string, any>;
         },
@@ -630,11 +645,13 @@ const updateOrderValuesStep = createStep(
         const orderService = container.resolve("order");
 
         try {
+            // TAX-01: Store tax information with the line item
             const newLineItem = {
                 variant_id: input.variantId,
                 title: input.variantTitle,
                 quantity: input.quantity,
                 unit_price: input.unitPrice,
+                tax_amount: input.taxAmount, // TAX-01: Track tax per item
             };
 
             // Defensively parse existing added items from metadata
@@ -650,6 +667,8 @@ const updateOrderValuesStep = createStep(
 
             const allAddedItems = [...existingAddedItems, newLineItem];
 
+            // TAX-01: Store computed totals in metadata for tracking
+            // These will be used when converting metadata items to actual line items
             await orderService.updateOrders([
                 {
                     id: input.orderId,
@@ -657,12 +676,14 @@ const updateOrderValuesStep = createStep(
                         ...input.currentOrderMetadata,
                         added_items: JSON.stringify(allAddedItems),
                         updated_total: input.newTotal,
+                        updated_tax_total: input.newTaxTotal, // TAX-01: Track accumulated tax
+                        updated_subtotal: input.newSubtotal,   // TAX-01: Track accumulated subtotal
                         last_modified: new Date().toISOString(),
                     },
                 },
             ]);
 
-            console.log(`[add-item-to-order] Order ${input.orderId} updated with new item`);
+            console.log(`[add-item-to-order] TAX-01: Order ${input.orderId} updated - metadata.updated_tax_total: ${input.newTaxTotal}, metadata.updated_subtotal: ${input.newSubtotal}, metadata.updated_total: ${input.newTotal}`);
 
             return new StepResponse({
                 success: true,
@@ -706,11 +727,14 @@ export const addItemToOrderWorkflow = createWorkflow(
             quantity: input.quantity,
         });
 
+        // TAX-01: Pass current tax_total and subtotal for recalculation
         const totalsInput = transform({ validation, input }, (data) => ({
             orderId: data.input.orderId,
             variantId: data.input.variantId,
             quantity: data.input.quantity,
             currentTotal: data.validation.paymentIntent.amount,
+            currentTaxTotal: data.validation.order.tax_total,
+            currentSubtotal: data.validation.order.subtotal,
             currencyCode: data.validation.order.currency_code,
         }));
         const totals = calculateTotalsStep(totalsInput);
@@ -726,6 +750,7 @@ export const addItemToOrderWorkflow = createWorkflow(
         }));
         const stripeResult = incrementStripeAuthStep(stripeInput);
 
+        // TAX-01: Pass new tax_total and subtotal to update step
         const updateInput = transform({ validation, totals, stripeResult, input }, (data) => ({
             orderId: data.input.orderId,
             paymentIntentId: data.validation.paymentIntentId,
@@ -734,7 +759,10 @@ export const addItemToOrderWorkflow = createWorkflow(
             quantity: data.input.quantity,
             unitPrice: data.totals.unitPrice,
             itemTotal: data.totals.itemTotal,
+            taxAmount: data.totals.taxAmount,
             newTotal: data.totals.newOrderTotal,
+            newTaxTotal: data.validation.order.tax_total + data.totals.taxAmount,
+            newSubtotal: data.validation.order.subtotal + data.totals.itemTotal,
             stripeIncrementSucceeded: data.stripeResult.success && !data.stripeResult.skipped,
             currentOrderMetadata: data.validation.order.metadata,
         }));

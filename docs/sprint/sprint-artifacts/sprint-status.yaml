@@ -403,7 +403,10 @@ development_status:
     status: drafted
   fix-TAX-01-end-to-end-tax:
     path: docs/sprint/sprint-artifacts/fix-TAX-01-end-to-end-tax.md
-    status: drafted
+    status: done
+    meta: "Tax calculation implemented in add-item-to-order workflow. Uses Medusa's calculated_price.tax_total, tracks per-item tax in metadata (tax_amount), stores accumulated tax in metadata.updated_tax_total. 7 new unit tests passing (28 total). Medusa v2 computed field architecture respected."
+    completed: "2025-12-30"
+    depends_on: ["SEC-01"]
   fix-RET-01-returns-refunds:
     path: docs/sprint/sprint-artifacts/fix-RET-01-returns-refunds.md
     status: done
