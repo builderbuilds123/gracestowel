@@ -92,13 +92,23 @@ describe("Story 6.3: Race Condition Handling", () => {
 
         mockQueryGraph = jest.fn();
         mockUpdateOrders = jest.fn().mockResolvedValue({});
+        const mockUpdatePaymentCollections = jest.fn().mockResolvedValue({});
+        const mockCapturePayment = jest.fn().mockResolvedValue({});
+        const mockAddOrderTransactions = jest.fn().mockResolvedValue({});
         mockContainer = {
             resolve: jest.fn((serviceName: string) => {
                 if (serviceName === "query") {
                     return { graph: mockQueryGraph };
                 }
                 if (serviceName === "order") {
-                    return { updateOrders: mockUpdateOrders };
+                    return { updateOrders: mockUpdateOrders, addOrderTransactions: mockAddOrderTransactions };
+                }
+                // Modules.PAYMENT resolves to "payment" not "paymentModuleService"
+                if (serviceName === "payment") {
+                    return {
+                        updatePaymentCollections: mockUpdatePaymentCollections,
+                        capturePayment: mockCapturePayment
+                    };
                 }
                 return {};
             }),
@@ -145,9 +155,13 @@ describe("Story 6.3: Race Condition Handling", () => {
                     currency_code: "usd",
                     status: "pending",
                     metadata: { edit_status: "editable" },
+                    payment_collections: [{
+                        id: "paycol_lock_test",
+                        status: "authorized",
+                        payments: [{ id: "pay_lock_test" }]
+                    }]
                 }],
             });
-            mockStripeCapture.mockResolvedValue({ status: "succeeded" });
 
             await processPaymentCapture(mockJob as Job);
 
@@ -177,9 +191,13 @@ describe("Story 6.3: Race Condition Handling", () => {
                     currency_code: "usd",
                     status: "pending",
                     metadata: {},
+                    payment_collections: [{
+                        id: "paycol_lock_test",
+                        status: "authorized",
+                        payments: [{ id: "pay_lock_test" }]
+                    }]
                 }],
             });
-            mockStripeCapture.mockResolvedValue({ status: "succeeded" });
 
             await processPaymentCapture(mockJob as Job);
 

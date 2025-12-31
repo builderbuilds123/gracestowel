@@ -388,8 +388,9 @@ development_status:
     status: drafted
   fix-PAY-01-payment-status-model:
     path: docs/sprint/sprint-artifacts/fix-PAY-01-payment-status-model.md
-    status: deferred
-    meta: "Architecture refactor - requires PaymentCollection creation in order workflow. Deferred to dedicated architecture sprint."
+    status: done
+    meta: "Code review complete 2025-12-30. All ACs implemented. PaymentCollection creation, capture via Payment Module, OrderTransaction records, canonical payment status API. Currency units verified via official docs. NO backward compatibility - fails loudly if PaymentCollection missing."
+    completed: "2025-12-30"
     depends_on: []
     blocks: ["RET-01", "TAX-01"]
   fix-CHK-01-canonical-checkout:
