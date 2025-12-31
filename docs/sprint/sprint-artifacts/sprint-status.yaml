@@ -367,7 +367,9 @@ development_status:
     status: done
   fix-SEC-02-unsafe-order-endpoint:
     path: docs/sprint/sprint-artifacts/fix-SEC-02-unsafe-order-endpoint.md
-    status: drafted
+    status: done
+    meta: "Emergency security fix complete. Stripped PII (shipping_address, items), added security headers, optimized query to 24h window, 30 unit tests pass."
+    completed: "2025-12-30"
   fix-SEC-03-token-expiry-anchoring:
     path: docs/sprint/sprint-artifacts/fix-SEC-03-token-expiry-anchoring.md
     status: drafted

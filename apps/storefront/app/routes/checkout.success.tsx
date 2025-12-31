@@ -11,31 +11,16 @@ import { monitoredFetch } from "../utils/monitored-fetch";
 // Lazy load Map component to avoid SSR issues with Leaflet
 const Map = lazy(() => import("../components/Map.client"));
 
+/**
+ * SEC-02: Minimal order API response (no PII)
+ *
+ * This endpoint only returns order ID and status.
+ * Shipping details are fetched from Stripe PaymentIntent instead.
+ */
 interface OrderApiResponse {
     order: {
         id: string;
-        display_id: number;
         status: string;
-        created_at: string;
-        total: number;
-        currency_code: string;
-        items: Array<{
-            id: string;
-            title: string;
-            quantity: number;
-            unit_price: number;
-            thumbnail?: string;
-        }>;
-        shipping_address?: {
-            first_name: string;
-            last_name: string;
-            address_1: string;
-            address_2?: string;
-            city: string;
-            province?: string;
-            postal_code: string;
-            country_code: string;
-        };
     };
     modification_allowed: boolean;
     remaining_seconds: number;

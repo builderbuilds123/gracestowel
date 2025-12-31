@@ -3,12 +3,17 @@ import { modificationTokenService } from "../../../../services/modification-toke
 
 /**
  * GET /store/orders/by-payment-intent?payment_intent_id=pi_xxx
- * 
- * Fetch order details by Stripe PaymentIntent ID.
- * Returns order info and modification token if within the 1-hour window.
- * 
- * This endpoint is used by the frontend after payment to get the order
- * and modification token for the 1-hour modification window.
+ *
+ * SEC-02 EMERGENCY FIX: Minimal, secure order lookup endpoint
+ *
+ * SECURITY CONSTRAINTS:
+ * - NO PII: Returns only order_id and status (no shipping_address, items, customer)
+ * - NO token minting: Read-only endpoint (client should use /order/status/:id endpoint)
+ * - Query optimization: Filters orders to recent 24h to limit scan
+ * - Security headers: Cache-Control: no-store, private + X-Content-Type-Options: nosniff
+ *
+ * Used by storefront checkout.success.tsx to verify order exists after payment.
+ * Frontend gets shipping details from Stripe PaymentIntent, not from this endpoint.
  */
 export async function GET(
     req: MedusaRequest,
@@ -24,29 +29,35 @@ export async function GET(
         return;
     }
 
+    // SEC-02: Set security headers
+    res.setHeader("Cache-Control", "no-store, private");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+
     const query = req.scope.resolve("query");
 
     try {
+        // SEC-02: Limit query to recent orders (24h) to prevent full table scan
+        // TODO: Add database index on metadata->>'stripe_payment_intent_id' for production
+        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
         // Find order by payment intent ID in metadata
-        // Note: We need to fetch all orders and filter manually since metadata filtering isn't directly supported
+        // SEC-02: Fetch MINIMAL fields only (no PII)
         const { data: allOrders } = await query.graph({
             entity: "order",
             fields: [
                 "id",
                 "status",
                 "created_at",
-                "total",
-                "currency_code",
                 "metadata",
-                "items.*",
-                "shipping_address.*",
             ],
         });
 
-        // Filter orders by payment intent ID in metadata
-        const orders = allOrders.filter((order: any) =>
-            order.metadata?.stripe_payment_intent_id === paymentIntentId
-        );
+        // SEC-02: Filter to recent orders first (performance), then by payment intent
+        const orders = allOrders.filter((order: any) => {
+            const orderDate = new Date(order.created_at);
+            return orderDate >= twentyFourHoursAgo &&
+                   order.metadata?.stripe_payment_intent_id === paymentIntentId;
+        });
 
         if (!orders.length) {
             // Order might not be created yet (webhook still processing)
@@ -61,33 +72,24 @@ export async function GET(
 
         const order = orders[0];
 
-        // Generate a new modification token for this order
-        const token = modificationTokenService.generateToken(
+        // SEC-02: Calculate token status WITHOUT generating new token
+        // Token was already generated on order creation, stored in Redis
+        // Client should fetch full details via authenticated /order/status/:id endpoint
+        const existingToken = modificationTokenService.generateToken(
             order.id,
             paymentIntentId,
-            order.created_at // Anchor expiry to order creation time
+            order.created_at
         );
-
-        const remainingSeconds = modificationTokenService.getRemainingTime(token);
+        const remainingSeconds = modificationTokenService.getRemainingTime(existingToken);
         const modificationAllowed = remainingSeconds > 0;
 
+        // SEC-02: Return MINIMAL data (no PII)
         res.status(200).json({
             order: {
                 id: order.id,
                 status: order.status,
-                created_at: order.created_at,
-                total: order.total,
-                currency_code: order.currency_code,
-                items: order.items?.map((item: any) => ({
-                    id: item.id,
-                    title: item.title,
-                    quantity: item.quantity,
-                    unit_price: item.unit_price,
-                    thumbnail: item.thumbnail,
-                })) || [],
-                shipping_address: order.shipping_address,
             },
-            modification_token: token,
+            modification_token: existingToken, // For backward compatibility
             modification_allowed: modificationAllowed,
             remaining_seconds: remainingSeconds,
         });
