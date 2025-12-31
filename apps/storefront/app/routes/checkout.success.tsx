@@ -182,7 +182,8 @@ export default function CheckoutSuccess() {
                     if (error) {
                         // Use existing logger for errors (without sensitive data)
                         const logger = createLogger();
-                        logger.error("Stripe retrieval error", error, {
+                        const errorObj = error instanceof Error ? error : new Error(error.message || String(error));
+                        logger.error("Stripe retrieval error", errorObj, {
                             redirectStatus,
                             // Don't include paymentIntentId or clientSecret
                         });
@@ -263,11 +264,9 @@ export default function CheckoutSuccess() {
                                     const coords: [number, number] = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
                                     setMapCoordinates(coords);
                                 }
-                            }).catch(err => {
-                                // SECURITY: Don't log geocoding errors with address context
-                                if (import.meta.env.DEV) {
-                                    console.warn("Geocoding error (dev only):", err);
-                                }
+                            }).catch(() => {
+                                // SECURITY: Don't log geocoding errors (may contain address PII)
+                                // Silently fail - geocoding is non-critical
                             });
                         }
 
@@ -302,10 +301,7 @@ export default function CheckoutSuccess() {
                                 } else if (response.status === 404 && retries < maxRetries) {
                                     // Order not yet created, retry
                                     retries++;
-                                    // Only log retries in dev mode
-                                    if (import.meta.env.DEV) {
-                                        console.log(`Order not found, retrying (${retries}/${maxRetries})...`);
-                                    }
+                                    // SECURITY: Don't log retry attempts (may expose order/payment context)
                                     setTimeout(fetchOrderWithToken, retryDelay);
                                 } else {
                                     const logger = createLogger();
