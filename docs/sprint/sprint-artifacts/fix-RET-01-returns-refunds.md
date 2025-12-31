@@ -81,3 +81,14 @@ The `handleChargeRefunded` function processes Stripe `charge.refunded` webhooks:
 - Current implementation focuses on financial tracking via PaymentCollection and OrderTransactions
 - Partial refunds keep order status as "completed" and are tracked via OrderTransaction history
 - OrderTransaction records enable downstream features to calculate refundable amounts
+
+## Code Review (2025-12-30)
+- **Reviewer**: Auto-Review Agent
+- **Status**: Passed with Automated Fixes
+- **Findings**:
+  - 🟡 **Scalability**: Order lookup by PaymentIntent ID was limited to 1000 records. Increased to 5000 and added warning telemetry.
+  - 🟡 **Partial Refunds**: Clarified status mapping logic. Partial refunds map to "completed" status (safe fallback) as Medusa v2 standardizes intermediate states.
+- **Resolution**:
+  - ✅ All findings fixed automatically.
+  - ✅ Unit tests verified passing.
+

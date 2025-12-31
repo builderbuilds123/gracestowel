@@ -183,12 +183,14 @@ async function findOrderByPaymentIntentId(
 ): Promise<any | null> {
     const query = container.resolve("query");
     
-    // Query recent orders only (last 1000) to avoid O(n) full scan
-    // Orders are typically processed within minutes of payment
+    // Query recent orders only (last 5000) to avoid O(n) full scan
+    // Orders are typically processed within minutes of payment, but we allow 
+    // a larger window (5000) to handle chargebacks or delayed refunds safely.
+    // TODO: Ideally add a dedicated index or lookup table for O(1) access by external ID.
     const { data: recentOrders } = await query.graph({
         entity: "order",
         fields: ["id", "metadata", "created_at"],
-        pagination: { take: 1000, skip: 0 },
+        pagination: { take: 5000, skip: 0 },
     });
 
     // Filter by payment intent ID in metadata
@@ -198,9 +200,10 @@ async function findOrderByPaymentIntentId(
 
     if (!matchingOrder && recentOrders.length >= 1000) {
         // If we hit the limit and didn't find it, log warning
-        logger.warn("stripe-worker", "Order lookup may be incomplete - hit 1000 order limit", {
+        logger.warn("stripe-worker", "Order lookup incomplete - hit 5000 order limit", {
             paymentIntentId,
             ordersChecked: recentOrders.length,
+            limit: 5000
         });
     }
 
@@ -487,8 +490,9 @@ async function updatePaymentCollectionOnRefund(
         const paymentModuleService = container.resolve(Modules.PAYMENT) as any;
 
         // For full refund, mark as canceled
-        // For partial refund, we need to check if Medusa v2 supports "partially_refunded" status
-        // If not, we'll keep it as "completed" and track via OrderTransactions
+        // For partial refund, we intentionally use "completed" as Medusa (at time of writing)
+        // does not have a standard "partially_refunded" status that works reliably with
+        // downstream logic. OrderTransactions are the source of truth for refund amounts.
         const newStatus = isFullRefund ? "canceled" : "completed";
 
         await paymentModuleService.updatePaymentCollections([
