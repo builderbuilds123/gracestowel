@@ -1,11 +1,10 @@
-import { useEffect, useState, lazy, Suspense, useRef, useCallback } from "react";
+import { useEffect, useState, lazy, Suspense, useRef } from "react";
 import { Link, useSearchParams, useNavigate, useLoaderData } from "react-router";
 import type { LoaderFunctionArgs } from "react-router";
 import { CheckCircle2, Package, Truck, MapPin, XCircle } from "lucide-react";
 import { useCart } from "../context/CartContext";
 import { posts } from "../data/blogPosts";
 import { getStripe, initStripe } from "../lib/stripe";
-import { OrderTimer } from "../components/order/OrderTimer";
 import { monitoredFetch } from "../utils/monitored-fetch";
 
 // Lazy load Map component to avoid SSR issues with Leaflet
@@ -22,8 +21,6 @@ interface OrderApiResponse {
         id: string;
         status: string;
     };
-    modification_allowed: boolean;
-    remaining_seconds: number;
 }
 
 interface LoaderData {
@@ -64,12 +61,7 @@ export default function CheckoutSuccess() {
     const [mapCoordinates, setMapCoordinates] = useState<[number, number] | null>(null);
 
     // Modification window state
-    const [modificationToken, setModificationToken] = useState<string | null>(null);
     const [orderId, setOrderId] = useState<string | null>(null);
-    const [remainingSeconds, setRemainingSeconds] = useState<number>(0);
-    const [modificationAllowed, setModificationAllowed] = useState<boolean>(false);
-
-
     // Ref to track processed payment intent to prevent double-firing
     const processedRef = useRef<string | null>(null);
 
@@ -218,25 +210,15 @@ export default function CheckoutSuccess() {
                                 );
 
                                 if (response.ok) {
-                                    const data = await response.json() as {
-                                        order: { id: string };
-                                        modification_token: string;
-                                        remaining_seconds: number;
-                                        modification_allowed: boolean;
-                                    };
+                                    const data = await response.json() as OrderApiResponse;
                                     setOrderId(data.order.id);
-                                    setModificationToken(data.modification_token);
-                                    setRemainingSeconds(data.remaining_seconds);
-                                    setModificationAllowed(data.modification_allowed);
 
                                     // Store in localStorage for persistence
                                     localStorage.setItem('orderId', data.order.id);
-                                    localStorage.setItem('modificationToken', data.modification_token);
 
-                                    console.log("Order fetched with modification token:", {
+                                    console.log("Order fetched:", {
                                         orderId: data.order.id,
-                                        allowed: data.modification_allowed,
-                                        remainingSeconds: data.remaining_seconds
+                                        status: data.order.status,
                                     });
                                 } else if (response.status === 404 && retries < maxRetries) {
                                     // Order not yet created, retry
@@ -311,15 +293,6 @@ export default function CheckoutSuccess() {
         fetchPaymentDetails();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [searchParams]);
-
-    // Handle timer expiration
-    const handleTimerExpire = useCallback(() => {
-        setModificationAllowed(false);
-        setRemainingSeconds(0);
-    }, []);
-
-    // Handlers for OrderModificationDialogs are now inline or simplified
-
 
     if (paymentStatus === 'loading') {
         return (
@@ -397,26 +370,6 @@ export default function CheckoutSuccess() {
                     <h1 className="text-4xl font-serif text-text-earthy mb-2">Order Confirmed!</h1>
                     <p className="text-text-earthy/70 text-lg">Thank you for your purchase</p>
                 </div>
-
-                {/* Modification Window Banner */}
-                {modificationAllowed && remainingSeconds > 0 && orderId && modificationToken && (
-                    <div className="bg-white rounded-lg shadow-lg p-4 mb-6 flex flex-col sm:flex-row items-center justify-between gap-4 border border-accent-earthy/20">
-                        <div className="flex items-center gap-3">
-                            <OrderTimer
-                                expiresAt={new Date(Date.now() + remainingSeconds * 1000).toISOString()}
-                                serverTime={new Date().toISOString()} // Approx for immediate post-checkout
-                                onExpire={handleTimerExpire}
-                            />
-                        </div>
-                        {/* Link to order status page for modifications (uses cookie-based auth) */}
-                        <a
-                            href={`/order/status/${orderId}?token=${modificationToken}`}
-                            className="px-4 py-2 bg-accent-earthy text-white rounded-lg hover:bg-accent-earthy/90 transition-colors text-sm font-medium"
-                        >
-                            Manage Order
-                        </a>
-                    </div>
-                )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                     {/* Order Details Card */}
