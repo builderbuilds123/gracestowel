@@ -65,6 +65,9 @@ describe("charge.refunded webhook handler", () => {
         // Setup mock container with proper Medusa v2 service resolution
         container = {
             resolve: jest.fn((service: string) => {
+                // Debug: Log all resolve calls
+                console.log(`[TEST] container.resolve called with: "${service}"`);
+                
                 if (service === "query") {
                     return {
                         graph: mockQuery,
@@ -74,14 +77,17 @@ describe("charge.refunded webhook handler", () => {
                         updateOrders: mockOrderServiceUpdate,
                     };
                 } else if (service === Modules.PAYMENT) {
+                    console.log(`[TEST] Resolving Modules.PAYMENT (value: "${Modules.PAYMENT}")`);
                     return {
                         updatePaymentCollections: mockPaymentModuleUpdate,
                     };
                 } else if (service === Modules.ORDER) {
+                    console.log(`[TEST] Resolving Modules.ORDER (value: "${Modules.ORDER}")`);
                     return {
                         addOrderTransactions: mockOrderModuleAdd,
                     };
                 }
+                console.log(`[TEST] Unknown service: "${service}"`);
                 throw new Error(`Unknown service: ${service}`);
             }),
         } as any;
@@ -179,6 +185,45 @@ describe("charge.refunded webhook handler", () => {
             // Debug: Verify query mocks were called (should be 3 calls: findOrder, updatePC, createTx)
             // This helps identify if the function is exiting early
             expect(mockQuery).toHaveBeenCalledTimes(3);
+
+            // Debug: Check what services were resolved
+            const resolveCalls = (container.resolve as jest.Mock).mock.calls;
+            const resolvedServices = resolveCalls.map(call => call[0]);
+            
+            // Verify container.resolve was called for payment and order modules
+            expect(container.resolve).toHaveBeenCalledWith(Modules.PAYMENT);
+            expect(container.resolve).toHaveBeenCalledWith(Modules.ORDER);
+            
+            // Debug: Check if payment collection update was attempted
+            // If updatePaymentCollectionOnRefund returns false, it means order or payment collection wasn't found
+            expect(logger.warn).not.toHaveBeenCalledWith(
+                "stripe-worker",
+                "Order not found for refund update",
+                expect.any(Object)
+            );
+            expect(logger.warn).not.toHaveBeenCalledWith(
+                "stripe-worker",
+                "Order has no PaymentCollection for refund",
+                expect.any(Object)
+            );
+            
+            // Debug: Check if errors were logged (would indicate errors being caught)
+            const errorCalls = (logger.error as jest.Mock).mock.calls;
+            const paymentCollectionErrors = errorCalls.filter(call => 
+                call[0] === "stripe-worker" && 
+                call[1] === "Failed to update PaymentCollection on refund"
+            );
+            const orderTransactionErrors = errorCalls.filter(call =>
+                call[0] === "stripe-worker" &&
+                call[1] === "Failed to create OrderTransaction for refund"
+            );
+            
+            // If no errors, service methods should have been called
+            if (paymentCollectionErrors.length === 0 && orderTransactionErrors.length === 0) {
+                // Service methods should have been called if no errors
+                expect(mockPaymentModuleUpdate).toHaveBeenCalled();
+                expect(mockOrderModuleAdd).toHaveBeenCalled();
+            }
 
             // Verify PaymentCollection was updated to canceled
             expect(mockPaymentModuleUpdate).toHaveBeenCalledWith([
