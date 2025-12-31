@@ -432,7 +432,7 @@ export async function handleChargeRefunded(charge: Stripe.Charge, container: Med
         }
 
         // Step 3: Update PaymentCollection status
-        await updatePaymentCollectionOnRefund(
+        const updatePCSuccess = await updatePaymentCollectionOnRefund(
             order.id,
             refundAmountCents,
             isFullRefund,
@@ -440,7 +440,7 @@ export async function handleChargeRefunded(charge: Stripe.Charge, container: Med
         );
 
         // Step 4: Create OrderTransaction for refund (with idempotency check)
-        await createOrderTransactionOnRefund(
+        const createTxSuccess = await createOrderTransactionOnRefund(
             order.id,
             refundAmountCents,
             charge.currency,
@@ -449,15 +449,27 @@ export async function handleChargeRefunded(charge: Stripe.Charge, container: Med
         );
 
         // Step 5: Update order status if fully refunded (skip if already canceled)
+        let updateOrderStatusSuccess = true;
         if (isFullRefund && order.status !== "canceled") {
-            await updateOrderStatusOnFullRefund(order.id, container);
+            updateOrderStatusSuccess = await updateOrderStatusOnFullRefund(order.id, container);
         }
 
-        logger.info("stripe-worker", "Refund processed successfully", {
-            orderId: order.id,
-            refundAmountCents,
-            isFullRefund,
-        });
+        // Log success status based on actual results
+        if (updatePCSuccess && createTxSuccess && updateOrderStatusSuccess) {
+            logger.info("stripe-worker", "Refund processed successfully", {
+                orderId: order.id,
+                refundAmountCents,
+                isFullRefund,
+            });
+        } else {
+            logger.warn("stripe-worker", "Refund processed with partial success", {
+                orderId: order.id,
+                paymentIntentId,
+                updatePCSuccess,
+                createTxSuccess,
+                updateOrderStatusSuccess,
+            });
+        }
 
     } catch (error) {
         logger.critical("stripe-worker", "Failed to process charge.refunded webhook", {
@@ -473,21 +485,22 @@ export async function handleChargeRefunded(charge: Stripe.Charge, container: Med
 /**
  * RET-01: Update PaymentCollection status on refund
  *
- * Updates PaymentCollection to either:
+ * Updates PaymentCollection status based on the refund:
  * - "canceled" for full refunds
- * - "partially_refunded" for partial refunds (if Medusa supports this status)
+ * - "completed" for partial refunds (tracked via OrderTransactions)
  *
  * @param orderId - Medusa order ID
  * @param refundAmountCents - Amount refunded in cents
  * @param isFullRefund - Whether this is a full refund
  * @param container - Medusa container
+ * @returns true if update succeeded, false otherwise
  */
 async function updatePaymentCollectionOnRefund(
     orderId: string,
     refundAmountCents: number,
     isFullRefund: boolean,
     container: MedusaContainer
-): Promise<void> {
+): Promise<boolean> {
     try {
         const query = container.resolve("query");
 
@@ -505,16 +518,16 @@ async function updatePaymentCollectionOnRefund(
         const order = orders?.[0];
         if (!order) {
             logger.warn("stripe-worker", "Order not found for refund update", { orderId });
-            return;
+            return false;
         }
 
         const paymentCollection = order.payment_collections?.[0];
         if (!paymentCollection) {
-            logger.error("stripe-worker", "Order has no PaymentCollection for refund", {
+            logger.warn("stripe-worker", "Order has no PaymentCollection for refund", {
                 orderId,
                 message: "Cannot update payment status without PaymentCollection",
             });
-            return;
+            return false;
         }
 
         // Update PaymentCollection status via Payment Module
@@ -542,12 +555,15 @@ async function updatePaymentCollectionOnRefund(
             isFullRefund,
         });
 
+        return true;
+
     } catch (error) {
         logger.error("stripe-worker", "Failed to update PaymentCollection on refund", {
             orderId,
             error: (error as Error).message,
         });
         // Don't throw - refund was processed in Stripe, PC update is secondary
+        return false;
     }
 }
 
@@ -563,6 +579,7 @@ async function updatePaymentCollectionOnRefund(
  * @param currencyCode - Currency code (e.g., "usd")
  * @param paymentIntentId - Stripe PaymentIntent ID (used as reference)
  * @param container - Medusa container
+ * @returns true if transaction created successfully, false otherwise
  */
 async function createOrderTransactionOnRefund(
     orderId: string,
@@ -570,7 +587,7 @@ async function createOrderTransactionOnRefund(
     currencyCode: string,
     paymentIntentId: string,
     container: MedusaContainer
-): Promise<void> {
+): Promise<boolean> {
     try {
         const orderModuleService = container.resolve(Modules.ORDER) as any;
         const query = container.resolve("query");
@@ -593,7 +610,7 @@ async function createOrderTransactionOnRefund(
                 paymentIntentId,
                 existingTransactionId: existingTransactions[0].id,
             });
-            return; // Idempotent: already processed
+            return true; // Idempotent: already processed (considered success)
         }
 
         // Medusa v2 uses MAJOR UNITS for all amount fields
@@ -620,12 +637,15 @@ async function createOrderTransactionOnRefund(
             referenceId: paymentIntentId,
         });
 
+        return true;
+
     } catch (error) {
         logger.error("stripe-worker", "Failed to create OrderTransaction for refund", {
             orderId,
             error: (error as Error).message,
         });
         // Don't throw - OrderTransaction is for tracking, not critical
+        return false;
     }
 }
 
@@ -637,11 +657,12 @@ async function createOrderTransactionOnRefund(
  *
  * @param orderId - Medusa order ID
  * @param container - Medusa container
+ * @returns true if update succeeded, false otherwise
  */
 async function updateOrderStatusOnFullRefund(
     orderId: string,
     container: MedusaContainer
-): Promise<void> {
+): Promise<boolean> {
     try {
         const orderService = container.resolve("order");
 
@@ -655,12 +676,15 @@ async function updateOrderStatusOnFullRefund(
             newStatus: "canceled",
         });
 
+        return true;
+
     } catch (error) {
         logger.error("stripe-worker", "Failed to update order status on refund", {
             orderId,
             error: (error as Error).message,
         });
         // Don't throw - order status update is secondary to refund processing
+        return false;
     }
 }
 
