@@ -167,6 +167,19 @@ describe("charge.refunded webhook handler", () => {
                 })
             );
 
+            // Verify order was found
+            expect(logger.info).toHaveBeenCalledWith(
+                "stripe-worker",
+                "Found order for refund",
+                expect.objectContaining({
+                    orderId: "order_123",
+                })
+            );
+
+            // Debug: Verify query mocks were called (should be 3 calls: findOrder, updatePC, createTx)
+            // This helps identify if the function is exiting early
+            expect(mockQuery).toHaveBeenCalledTimes(3);
+
             // Verify PaymentCollection was updated to canceled
             expect(mockPaymentModuleUpdate).toHaveBeenCalledWith([
                 {
