@@ -7,7 +7,7 @@ import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
 import { schedulePaymentCapture } from "../lib/payment-capture-queue"
 import { getPostHog } from "../utils/posthog"
 import { enqueueEmail } from "../lib/email-queue"
-import type { ModificationTokenService } from "../services/modification-token"
+import { modificationTokenService } from "../services/modification-token"
 import { ensureStripeWorkerStarted } from "../loaders/stripe-event-worker"
 import { startPaymentCaptureWorker } from "../workers/payment-capture-worker"
 
@@ -95,9 +95,6 @@ export default async function orderPlacedHandler({
                 const paymentIntentId = paymentIntentIdFromPaymentCollection || paymentIntentIdFromMetadata
 
                 if (paymentIntentId) {
-                     // Resolve service from container instead of importing singleton
-                     const modificationTokenService = container.resolve("modificationTokenService") as ModificationTokenService;
-
                      const token = modificationTokenService.generateToken(
                         order.id,
                         paymentIntentId,

@@ -1,5 +1,6 @@
 import orderPlacedHandler from "../../src/subscribers/order-placed";
 import { enqueueEmail } from "../../src/lib/email-queue";
+import { modificationTokenService } from "../../src/services/modification-token";
 
 jest.mock("../../src/lib/email-queue", () => ({
   enqueueEmail: jest.fn(),
@@ -17,8 +18,8 @@ describe("Order Placed Subscriber", () => {
   let mockContainer: any;
   let mockLogger: any;
   let mockQuery: any;
-  let mockModificationTokenService: any;
   const originalEnv = process.env;
+  let generateTokenSpy: jest.SpyInstance;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -31,22 +32,22 @@ describe("Order Placed Subscriber", () => {
       warn: jest.fn(),
     };
 
-    mockModificationTokenService = {
-      generateToken: jest.fn().mockReturnValue("mock_token_123"),
-    };
-
     mockContainer = {
       resolve: jest.fn((key) => {
         if (key === "logger") return mockLogger;
         if (key === "query") return mockQuery;
-        if (key === "modificationTokenService") return mockModificationTokenService;
         return null;
       }),
     };
+
+    generateTokenSpy = jest
+      .spyOn(modificationTokenService, "generateToken")
+      .mockReturnValue("mock_token_123");
   });
 
   afterEach(() => {
     process.env = originalEnv;
+    generateTokenSpy.mockRestore();
   });
 
   const createQueryMock = (orderData: any) => {
@@ -78,7 +79,7 @@ describe("Order Placed Subscriber", () => {
     const event = { data: { id: "order_guest_1" } };
     await orderPlacedHandler({ event, container: mockContainer } as any);
 
-    expect(mockModificationTokenService.generateToken).toHaveBeenCalledWith(
+    expect(generateTokenSpy).toHaveBeenCalledWith(
       "order_guest_1",
       "pi_123",
       expect.any(Date)
@@ -118,7 +119,7 @@ describe("Order Placed Subscriber", () => {
     const event = { data: { id: "order_reg_1" } };
     await orderPlacedHandler({ event, container: mockContainer } as any);
 
-    expect(mockModificationTokenService.generateToken).not.toHaveBeenCalled();
+    expect(generateTokenSpy).not.toHaveBeenCalled();
 
     expect(enqueueEmail).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -152,7 +153,7 @@ describe("Order Placed Subscriber", () => {
     createQueryMock(guestOrder);
 
     // Mock error with PII
-    mockModificationTokenService.generateToken.mockImplementationOnce(() => {
+    generateTokenSpy.mockImplementationOnce(() => {
       throw new Error("Failed for user user@example.com because reason");
     });
 
@@ -196,7 +197,7 @@ describe("Order Placed Subscriber", () => {
     await orderPlacedHandler({ event, container: mockContainer } as any);
 
     // Ensure token generation was skipped
-    expect(mockModificationTokenService.generateToken).not.toHaveBeenCalled();
+    expect(generateTokenSpy).not.toHaveBeenCalled();
 
     // Ensure warning logged
     expect(mockLogger.warn).toHaveBeenCalledWith(
