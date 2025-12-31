@@ -1,6 +1,6 @@
-import { useEffect, useState, lazy, Suspense, useRef } from "react";
-import { Link, useSearchParams, useNavigate, useLoaderData } from "react-router";
-import type { LoaderFunctionArgs } from "react-router";
+import { useEffect, useLayoutEffect, useState, lazy, Suspense, useRef } from "react";
+import { Link, useNavigate, useLoaderData, redirect } from "react-router";
+import type { LoaderFunctionArgs, MetaFunction } from "react-router";
 import { CheckCircle2, Package, Truck, MapPin, XCircle } from "lucide-react";
 import { useCart } from "../context/CartContext";
 import { posts } from "../data/blogPosts";
@@ -23,28 +23,94 @@ interface OrderApiResponse {
     };
 }
 
+const CHECKOUT_PARAMS_COOKIE = "checkout_params";
+
+type PaymentParams = {
+    paymentIntentId: string | null;
+    paymentIntentClientSecret: string | null;
+    redirectStatus: string | null;
+};
+
 interface LoaderData {
     stripePublishableKey: string;
     medusaBackendUrl: string;
     medusaPublishableKey: string;
+    initialParams: PaymentParams | null;
 }
 
-export async function loader({ context }: LoaderFunctionArgs): Promise<LoaderData> {
+const serializeParamsCookie = (params: PaymentParams): string =>
+    `${CHECKOUT_PARAMS_COOKIE}=${encodeURIComponent(JSON.stringify(params))}; Max-Age=600; Path=/; SameSite=Strict; Secure`;
+
+const clearParamsCookie = (): string =>
+    `${CHECKOUT_PARAMS_COOKIE}=; Max-Age=0; Path=/; SameSite=Strict; Secure`;
+
+const parseParamsFromCookie = (cookieHeader: string | null): PaymentParams | null => {
+    if (!cookieHeader) return null;
+    const cookie = cookieHeader
+        .split(";")
+        .map((c) => c.trim())
+        .find((c) => c.startsWith(`${CHECKOUT_PARAMS_COOKIE}=`));
+    if (!cookie) return null;
+    try {
+        const value = decodeURIComponent(cookie.split("=", 2)[1] ?? "");
+        return JSON.parse(value) as PaymentParams;
+    } catch {
+        return null;
+    }
+};
+
+export async function loader({ request, context }: LoaderFunctionArgs) {
     const env = context.cloudflare.env as {
         STRIPE_PUBLISHABLE_KEY: string;
         MEDUSA_BACKEND_URL: string;
         MEDUSA_PUBLISHABLE_KEY: string;
     };
-    return {
-        stripePublishableKey: env.STRIPE_PUBLISHABLE_KEY,
-        medusaBackendUrl: env.MEDUSA_BACKEND_URL,
-        medusaPublishableKey: env.MEDUSA_PUBLISHABLE_KEY,
+
+    const url = new URL(request.url);
+    const paramsFromUrl: PaymentParams = {
+        paymentIntentId: url.searchParams.get("payment_intent"),
+        paymentIntentClientSecret: url.searchParams.get("payment_intent_client_secret"),
+        redirectStatus: url.searchParams.get("redirect_status"),
     };
+
+    // If sensitive params are present in the URL, strip them via redirect while persisting in a short-lived cookie.
+    if (paramsFromUrl.paymentIntentClientSecret) {
+        const headers = new Headers();
+        headers.set("Set-Cookie", serializeParamsCookie(paramsFromUrl));
+        return redirect(`${url.origin}${url.pathname}`, { headers });
+    }
+
+    const paramsFromCookie = parseParamsFromCookie(request.headers.get("cookie"));
+    const headers = new Headers();
+
+    // Clear cookie once consumed to avoid lingering secrets.
+    if (paramsFromCookie) {
+        headers.set("Set-Cookie", clearParamsCookie());
+    }
+
+    return Response.json(
+        {
+            stripePublishableKey: env.STRIPE_PUBLISHABLE_KEY,
+            medusaBackendUrl: env.MEDUSA_BACKEND_URL,
+            medusaPublishableKey: env.MEDUSA_PUBLISHABLE_KEY,
+            initialParams: paramsFromCookie,
+        },
+        { headers }
+    );
 }
 
+/**
+ * SEC-04: Referrer Policy Meta Tag
+ * 
+ * Prevents payment_intent_client_secret from leaking via Referer header
+ * when making requests to third-party services (e.g., Nominatim geocoding).
+ */
+export const meta: MetaFunction = () => [
+    { name: "referrer", content: "strict-origin-when-cross-origin" },
+];
+
 export default function CheckoutSuccess() {
-    const { stripePublishableKey, medusaBackendUrl, medusaPublishableKey } = useLoaderData<LoaderData>();
-    const [searchParams] = useSearchParams();
+    const { stripePublishableKey, medusaBackendUrl, medusaPublishableKey, initialParams } = useLoaderData<LoaderData>();
     const navigate = useNavigate();
     const { clearCart, items } = useCart();
     const [paymentStatus, setPaymentStatus] = useState<'loading' | 'success' | 'error' | 'canceled'>('loading');
@@ -65,10 +131,23 @@ export default function CheckoutSuccess() {
     // Ref to track processed payment intent to prevent double-firing
     const processedRef = useRef<string | null>(null);
 
+    const initialParamsRef = useRef<PaymentParams | null>(initialParams);
+    const [urlSanitized, setUrlSanitized] = useState<boolean>(() => !initialParamsRef.current);
+
+    useLayoutEffect(() => {
+        if (typeof window === "undefined") return;
+        // If params were provided via cookie, ensure URL is clean before rendering the page.
+        if (initialParamsRef.current && window.history?.replaceState) {
+            window.history.replaceState({}, "", window.location.pathname);
+        }
+        setUrlSanitized(true);
+    }, []);
+
     useEffect(() => {
-        const paymentIntentId = searchParams.get('payment_intent');
-        const paymentIntentClientSecret = searchParams.get('payment_intent_client_secret');
-        const redirectStatus = searchParams.get('redirect_status');
+        if (!urlSanitized) return;
+        const paymentIntentId = initialParamsRef.current?.paymentIntentId;
+        const paymentIntentClientSecret = initialParamsRef.current?.paymentIntentClientSecret;
+        const redirectStatus = initialParamsRef.current?.redirectStatus;
 
         // Prevent double processing
         if (processedRef.current === paymentIntentId) {
@@ -80,10 +159,6 @@ export default function CheckoutSuccess() {
                 redirectStatus,
                 paymentIntentId,
             });
-            const paymentIntentClientSecret = new URLSearchParams(window.location.search).get(
-                "payment_intent_client_secret"
-            );
-
             if (!paymentIntentClientSecret) {
                 setPaymentStatus("error");
                 setMessage("No payment intent found");
@@ -292,7 +367,7 @@ export default function CheckoutSuccess() {
 
         fetchPaymentDetails();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [searchParams]);
+    }, [urlSanitized]);
 
     if (paymentStatus === 'loading') {
         return (
@@ -304,6 +379,9 @@ export default function CheckoutSuccess() {
             </div>
         );
     }
+
+    const debugRedirectStatus = initialParamsRef.current?.redirectStatus ?? "";
+    const debugPaymentIntentId = initialParamsRef.current?.paymentIntentId ?? "";
 
     if (paymentStatus === 'error') {
         return (
@@ -321,8 +399,8 @@ export default function CheckoutSuccess() {
                     {/* Debug Info */}
                     <div className="bg-gray-100 p-4 rounded text-left text-xs font-mono text-gray-600 mb-6 overflow-auto max-h-40">
                         <p><strong>Debug Info:</strong></p>
-                        <p>Status: {searchParams.get('redirect_status')}</p>
-                        <p>Intent ID: {searchParams.get('payment_intent')}</p>
+                        <p>Status: {debugRedirectStatus}</p>
+                        <p>Intent ID: {debugPaymentIntentId}</p>
                         {message && <p className="text-red-600 mt-2">{message}</p>}
                     </div>
                     <Link
