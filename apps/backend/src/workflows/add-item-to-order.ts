@@ -45,7 +45,7 @@ interface ValidationResult {
     };
 }
 
-interface TotalsResult {
+export interface TotalsResult {
     variantId: string;
     variantTitle: string;
     quantity: number;
@@ -54,6 +54,16 @@ interface TotalsResult {
     itemTotal: number;
     newOrderTotal: number;
     difference: number;
+}
+
+export interface CalculateTotalsInput {
+    orderId: string;
+    variantId: string;
+    quantity: number;
+    currentTotal: number;
+    currentTaxTotal: number;
+    currentSubtotal: number;
+    currencyCode: string;
 }
 
 interface StripeIncrementResult {
@@ -451,74 +461,73 @@ const validatePreconditionsStep = createStep(
  * TAX-01: Tax calculation using Medusa's calculated_price as source of truth.
  * - For tax-inclusive regions: calculated_amount_with_tax includes tax
  * - For tax-exclusive regions: tax is added separately via tax_total
- * - Tax amount per item is calculated and accumulated for order-level tax_total update
+ * - Tax amount per item is calculated and stored in added_items metadata
  *
  * Per Medusa v2 pricing: calculated_price represents the final price with tax provider logic applied.
+ *
+ * Handler exported for unit testing.
  */
+export async function calculateTotalsHandler(
+    input: CalculateTotalsInput,
+    context: { container: any }
+): Promise<TotalsResult> {
+    const query = context.container.resolve("query");
+
+    // Fetch variant with calculated price (includes tax if configured)
+    const { data: variants } = await query.graph({
+        entity: "product_variant",
+        fields: [
+            "id",
+            "title",
+            "calculated_price.calculated_amount",
+            "calculated_price.currency_code",
+            "calculated_price.calculated_amount_with_tax",
+            "calculated_price.tax_total",
+            "product.title",
+        ],
+        filters: { id: input.variantId },
+    });
+
+    if (!variants.length) {
+        throw new VariantNotFoundError(input.variantId);
+    }
+
+    const variant = variants[0] as any;
+    const price = variant.calculated_price;
+
+    if (!price || !price.calculated_amount) {
+        throw new PriceNotFoundError(input.variantId, input.currencyCode);
+    }
+
+    // TAX-01: Calculate tax for the added items
+    // tax_total is per unit, multiply by quantity for total tax of this addition
+    const unitPrice = price.calculated_amount_with_tax || price.calculated_amount;
+    const taxPerUnit = price.tax_total || 0;
+    const taxAmount = taxPerUnit * input.quantity;
+    const itemTotal = unitPrice * input.quantity;
+    const newOrderTotal = input.currentTotal + itemTotal;
+    const difference = itemTotal;
+    const variantTitle = `${variant.product?.title || ""} - ${variant.title || ""}`.trim();
+
+    console.log(`[add-item-to-order] TAX-01: Calculated totals: unitPrice=${unitPrice}, taxPerUnit=${taxPerUnit}, totalTax=${taxAmount}, itemTotal=${itemTotal}, newTotal=${newOrderTotal}`);
+
+    return {
+        variantId: input.variantId,
+        variantTitle,
+        quantity: input.quantity,
+        unitPrice,
+        taxAmount,
+        itemTotal,
+        newOrderTotal,
+        difference,
+    };
+}
+
 const calculateTotalsStep = createStep(
     "calculate-totals",
-    async (
-        input: {
-            orderId: string;
-            variantId: string;
-            quantity: number;
-            currentTotal: number;
-            currentTaxTotal: number;
-            currentSubtotal: number;
-            currencyCode: string;
-        },
-        { container }
-    ): Promise<StepResponse<TotalsResult>> => {
-        const query = container.resolve("query");
-
-        // Fetch variant with calculated price (includes tax if configured)
-        const { data: variants } = await query.graph({
-            entity: "product_variant",
-            fields: [
-                "id",
-                "title",
-                "calculated_price.calculated_amount",
-                "calculated_price.currency_code",
-                "calculated_price.calculated_amount_with_tax",
-                "calculated_price.tax_total",
-                "product.title",
-            ],
-            filters: { id: input.variantId },
-        });
-
-        if (!variants.length) {
-            throw new VariantNotFoundError(input.variantId);
-        }
-
-        const variant = variants[0] as any;
-        const price = variant.calculated_price;
-
-        if (!price || !price.calculated_amount) {
-            throw new PriceNotFoundError(input.variantId, input.currencyCode);
-        }
-
-        // TAX-01: Calculate tax for the added items
-        // tax_total is per unit, multiply by quantity for total tax of this addition
-        const unitPrice = price.calculated_amount_with_tax || price.calculated_amount;
-        const taxPerUnit = price.tax_total || 0;
-        const taxAmount = taxPerUnit * input.quantity;
-        const itemTotal = unitPrice * input.quantity;
-        const newOrderTotal = input.currentTotal + itemTotal;
-        const difference = itemTotal;
-        const variantTitle = `${variant.product?.title || ""} - ${variant.title || ""}`.trim();
-
-        console.log(`[add-item-to-order] TAX-01: Calculated totals: unitPrice=${unitPrice}, taxPerUnit=${taxPerUnit}, totalTax=${taxAmount}, itemTotal=${itemTotal}, newTotal=${newOrderTotal}`);
-
-        return new StepResponse({
-            variantId: input.variantId,
-            variantTitle,
-            quantity: input.quantity,
-            unitPrice,
-            taxAmount,
-            itemTotal,
-            newOrderTotal,
-            difference,
-        });
+    async (input: CalculateTotalsInput, { container }): Promise<StepResponse<TotalsResult>> => {
+        const result = await calculateTotalsHandler(input, { container });
+        return new StepResponse(result);
     }
 );
 
@@ -635,8 +644,6 @@ const updateOrderValuesStep = createStep(
             itemTotal: number;
             taxAmount: number;
             newTotal: number;
-            newTaxTotal: number;
-            newSubtotal: number;
             stripeIncrementSucceeded: boolean;
             currentOrderMetadata: Record<string, any>;
         },
@@ -667,8 +674,10 @@ const updateOrderValuesStep = createStep(
 
             const allAddedItems = [...existingAddedItems, newLineItem];
 
-            // TAX-01: Store computed totals in metadata for tracking
-            // These will be used when converting metadata items to actual line items
+            // TAX-01: Store per-item tax in added_items metadata only
+            // Tax accumulation is calculated on-demand from added_items[].tax_amount
+            // This avoids the flawed pattern of tracking updated_tax_total/updated_subtotal
+            // which would reset on each add (Medusa v2 computed fields can't be directly updated)
             await orderService.updateOrders([
                 {
                     id: input.orderId,
@@ -676,14 +685,12 @@ const updateOrderValuesStep = createStep(
                         ...input.currentOrderMetadata,
                         added_items: JSON.stringify(allAddedItems),
                         updated_total: input.newTotal,
-                        updated_tax_total: input.newTaxTotal, // TAX-01: Track accumulated tax
-                        updated_subtotal: input.newSubtotal,   // TAX-01: Track accumulated subtotal
                         last_modified: new Date().toISOString(),
                     },
                 },
             ]);
 
-            console.log(`[add-item-to-order] TAX-01: Order ${input.orderId} updated - metadata.updated_tax_total: ${input.newTaxTotal}, metadata.updated_subtotal: ${input.newSubtotal}, metadata.updated_total: ${input.newTotal}`);
+            console.log(`[add-item-to-order] TAX-01: Order ${input.orderId} updated - per-item tax stored in added_items, updated_total: ${input.newTotal}`);
 
             return new StepResponse({
                 success: true,
@@ -750,7 +757,8 @@ export const addItemToOrderWorkflow = createWorkflow(
         }));
         const stripeResult = incrementStripeAuthStep(stripeInput);
 
-        // TAX-01: Pass new tax_total and subtotal to update step
+        // TAX-01: Pass per-item tax to update step (stored in added_items metadata)
+        // Note: We don't track accumulated tax_total/subtotal - only per-item tax_amount
         const updateInput = transform({ validation, totals, stripeResult, input }, (data) => ({
             orderId: data.input.orderId,
             paymentIntentId: data.validation.paymentIntentId,
@@ -761,8 +769,6 @@ export const addItemToOrderWorkflow = createWorkflow(
             itemTotal: data.totals.itemTotal,
             taxAmount: data.totals.taxAmount,
             newTotal: data.totals.newOrderTotal,
-            newTaxTotal: data.validation.order.tax_total + data.totals.taxAmount,
-            newSubtotal: data.validation.order.subtotal + data.totals.itemTotal,
             stripeIncrementSucceeded: data.stripeResult.success && !data.stripeResult.skipped,
             currentOrderMetadata: data.validation.order.metadata,
         }));

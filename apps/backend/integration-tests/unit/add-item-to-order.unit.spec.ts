@@ -501,6 +501,9 @@ describe("add-item-to-order TAX-01 - Tax Calculation", () => {
     let mockQuery: { graph: jest.Mock };
     let mockContainer: { resolve: jest.Mock };
 
+    // Import the actual handler for testing
+    const { calculateTotalsHandler, VariantNotFoundError, PriceNotFoundError } = require("../../src/workflows/add-item-to-order");
+
     beforeEach(() => {
         jest.clearAllMocks();
         jest.spyOn(console, "log").mockImplementation(() => {});
@@ -522,7 +525,7 @@ describe("add-item-to-order TAX-01 - Tax Calculation", () => {
         jest.restoreAllMocks();
     });
 
-    it("should calculate tax for tax-inclusive region (tax included in calculated_amount_with_tax)", async () => {
+    it("should calculate tax for tax-inclusive region (AC5)", async () => {
         // Mock variant with tax-inclusive pricing
         mockQuery.graph.mockResolvedValueOnce({
             data: [{
@@ -548,13 +551,16 @@ describe("add-item-to-order TAX-01 - Tax Calculation", () => {
             currencyCode: "usd",
         };
 
-        // Import the calculateTotalsStep handler (we'd need to export it for testing)
-        // For now, we verify the logic through the workflow integration
-        // This test validates our understanding of the tax calculation
-        expect(input.quantity * 100).toBe(200); // 2 units * $1.00 tax = $2.00 tax
+        const result = await calculateTotalsHandler(input, { container: mockContainer });
+
+        // Verify tax calculation: 2 units * $1.00 tax = $2.00 tax
+        expect(result.taxAmount).toBe(200);
+        expect(result.unitPrice).toBe(1100); // Uses calculated_amount_with_tax
+        expect(result.itemTotal).toBe(2200); // 2 * 1100
+        expect(result.newOrderTotal).toBe(7200); // 5000 + 2200
     });
 
-    it("should calculate tax for tax-exclusive region (tax separate from base price)", async () => {
+    it("should calculate tax for tax-exclusive region (AC6)", async () => {
         // Mock variant with tax-exclusive pricing
         mockQuery.graph.mockResolvedValueOnce({
             data: [{
@@ -580,11 +586,16 @@ describe("add-item-to-order TAX-01 - Tax Calculation", () => {
             currencyCode: "usd",
         };
 
+        const result = await calculateTotalsHandler(input, { container: mockContainer });
+
         // Verify tax calculation: 3 units * $2.00 tax = $6.00 total tax
-        expect(input.quantity * 200).toBe(600);
+        expect(result.taxAmount).toBe(600);
+        expect(result.unitPrice).toBe(2200);
+        expect(result.itemTotal).toBe(6600); // 3 * 2200
+        expect(result.newOrderTotal).toBe(16600); // 10000 + 6600
     });
 
-    it("should handle zero tax for tax-exempt products", async () => {
+    it("should handle zero tax for tax-exempt products (AC7)", async () => {
         // Mock variant with no tax
         mockQuery.graph.mockResolvedValueOnce({
             data: [{
@@ -610,46 +621,119 @@ describe("add-item-to-order TAX-01 - Tax Calculation", () => {
             currencyCode: "usd",
         };
 
-        // Verify no tax added: 5 units * $0.00 tax = $0.00 total tax
-        expect(input.quantity * 0).toBe(0);
+        const result = await calculateTotalsHandler(input, { container: mockContainer });
+
+        // Verify no tax added
+        expect(result.taxAmount).toBe(0);
+        expect(result.unitPrice).toBe(1500);
+        expect(result.itemTotal).toBe(7500); // 5 * 1500
+        expect(result.newOrderTotal).toBe(15500); // 8000 + 7500
     });
 
-    it("should accumulate tax correctly when adding multiple items", () => {
-        // Scenario: Order starts with $4.00 tax, adding item with $2.00 tax
-        const currentTaxTotal = 400; // $4.00
-        const newItemTaxAmount = 200; // $2.00
-        const expectedNewTaxTotal = 600; // $6.00
+    it("should track per-item tax in result for metadata storage (AC3)", async () => {
+        mockQuery.graph.mockResolvedValueOnce({
+            data: [{
+                id: "var_123",
+                title: "Test Variant",
+                calculated_price: {
+                    calculated_amount: 1000,
+                    calculated_amount_with_tax: 1100,
+                    tax_total: 100,
+                    currency_code: "usd",
+                },
+                product: { title: "Test Product" },
+            }],
+        });
 
-        expect(currentTaxTotal + newItemTaxAmount).toBe(expectedNewTaxTotal);
-    });
-
-    it("should track tax in metadata for added items", () => {
-        const addedItem = {
-            variant_id: "var_123",
-            title: "Test Product - Test Variant",
+        const input = {
+            orderId: "ord_123",
+            variantId: "var_123",
             quantity: 2,
-            unit_price: 1100,
-            tax_amount: 200, // TAX-01: Tax tracked per added item
+            currentTotal: 5000,
+            currentTaxTotal: 0,
+            currentSubtotal: 5000,
+            currencyCode: "usd",
         };
 
-        expect(addedItem.tax_amount).toBe(200);
-        expect(addedItem).toHaveProperty("tax_amount");
+        const result = await calculateTotalsHandler(input, { container: mockContainer });
+
+        // Verify taxAmount is returned for per-item tracking in metadata
+        expect(result).toHaveProperty("taxAmount");
+        expect(result.taxAmount).toBe(200); // 2 * 100
+        expect(result.variantId).toBe("var_123");
+        expect(result.quantity).toBe(2);
     });
 
-    it("should store updated_tax_total and updated_subtotal in order metadata", () => {
-        const metadata = {
-            stripe_payment_intent_id: "pi_123",
-            added_items: JSON.stringify([
-                { variant_id: "var_1", quantity: 1, unit_price: 1000, tax_amount: 100 },
-            ]),
-            updated_total: 5100,
-            updated_tax_total: 500, // TAX-01: Accumulated tax in metadata
-            updated_subtotal: 4600, // TAX-01: Accumulated subtotal in metadata
-            last_modified: new Date().toISOString(),
+    it("should throw VariantNotFoundError when variant does not exist", async () => {
+        mockQuery.graph.mockResolvedValueOnce({ data: [] });
+
+        const input = {
+            orderId: "ord_123",
+            variantId: "var_nonexistent",
+            quantity: 1,
+            currentTotal: 5000,
+            currentTaxTotal: 0,
+            currentSubtotal: 5000,
+            currencyCode: "usd",
         };
 
-        expect(metadata.updated_tax_total).toBe(500);
-        expect(metadata.updated_subtotal).toBe(4600);
-        expect(metadata.updated_total).toBe(5100);
+        await expect(calculateTotalsHandler(input, { container: mockContainer }))
+            .rejects.toThrow(VariantNotFoundError);
+    });
+
+    it("should throw PriceNotFoundError when variant has no price", async () => {
+        mockQuery.graph.mockResolvedValueOnce({
+            data: [{
+                id: "var_123",
+                title: "Test Variant",
+                calculated_price: null, // No price
+                product: { title: "Test Product" },
+            }],
+        });
+
+        const input = {
+            orderId: "ord_123",
+            variantId: "var_123",
+            quantity: 1,
+            currentTotal: 5000,
+            currentTaxTotal: 0,
+            currentSubtotal: 5000,
+            currencyCode: "usd",
+        };
+
+        await expect(calculateTotalsHandler(input, { container: mockContainer }))
+            .rejects.toThrow(PriceNotFoundError);
+    });
+
+    it("should use calculated_amount as fallback when calculated_amount_with_tax is missing", async () => {
+        mockQuery.graph.mockResolvedValueOnce({
+            data: [{
+                id: "var_123",
+                title: "Test Variant",
+                calculated_price: {
+                    calculated_amount: 1000,
+                    // calculated_amount_with_tax is missing
+                    tax_total: 0,
+                    currency_code: "usd",
+                },
+                product: { title: "Test Product" },
+            }],
+        });
+
+        const input = {
+            orderId: "ord_123",
+            variantId: "var_123",
+            quantity: 2,
+            currentTotal: 5000,
+            currentTaxTotal: 0,
+            currentSubtotal: 5000,
+            currencyCode: "usd",
+        };
+
+        const result = await calculateTotalsHandler(input, { container: mockContainer });
+
+        // Should fallback to calculated_amount
+        expect(result.unitPrice).toBe(1000);
+        expect(result.itemTotal).toBe(2000);
     });
 });
