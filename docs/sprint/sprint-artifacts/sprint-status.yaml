@@ -375,8 +375,8 @@ development_status:
     status: ready-for-dev
   fix-SEC-04-client-secret-leak:
     path: docs/sprint/sprint-artifacts/fix-SEC-04-client-secret-leak.md
-    status: review
-    meta: "SEC-04: Added URL cleanup (history.replaceState) + referrer policy meta tag to prevent payment secret leakage"
+    status: done
+    meta: "SEC-04: Server-side redirect (primary) + client-side cleanup + referrer policy + HttpOnly cookie. All code review issues fixed."
     completed: "2025-12-30"
   fix-SEC-05-localstorage-token:
     path: docs/sprint/sprint-artifacts/fix-SEC-05-localstorage-token.md
