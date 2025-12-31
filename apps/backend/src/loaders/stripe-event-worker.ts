@@ -5,6 +5,7 @@ import { createOrderFromStripeWorkflow } from "../workflows/create-order-from-st
 import { z } from "zod";
 import { logger } from "../utils/logger";
 import { registerProjectSubscribers } from "../utils/register-subscribers";
+import { Modules } from "@medusajs/framework/utils";
 
 const CartItemSchema = z.object({
   variantId: z.string().optional(),
@@ -62,6 +63,10 @@ async function handleStripeEvent(event: Stripe.Event, container: MedusaContainer
 
         case "checkout.session.completed":
             await handleCheckoutSessionCompleted(event.data.object as Stripe.Checkout.Session);
+            break;
+
+        case "charge.refunded":
+            await handleChargeRefunded(event.data.object as Stripe.Charge, container);
             break;
 
         default:
@@ -178,12 +183,14 @@ async function findOrderByPaymentIntentId(
 ): Promise<any | null> {
     const query = container.resolve("query");
     
-    // Query recent orders only (last 1000) to avoid O(n) full scan
-    // Orders are typically processed within minutes of payment
+    // Query recent orders only (last 5000) to avoid O(n) full scan
+    // Orders are typically processed within minutes of payment, but we allow 
+    // a larger window (5000) to handle chargebacks or delayed refunds safely.
+    // TODO: Ideally add a dedicated index or lookup table for O(1) access by external ID.
     const { data: recentOrders } = await query.graph({
         entity: "order",
         fields: ["id", "metadata", "created_at"],
-        pagination: { take: 1000, skip: 0 },
+        pagination: { take: 5000, skip: 0 },
     });
 
     // Filter by payment intent ID in metadata
@@ -191,11 +198,12 @@ async function findOrderByPaymentIntentId(
         order.metadata?.stripe_payment_intent_id === paymentIntentId
     );
 
-    if (!matchingOrder && recentOrders.length >= 1000) {
+    if (!matchingOrder && recentOrders.length >= 5000) {
         // If we hit the limit and didn't find it, log warning
-        logger.warn("stripe-worker", "Order lookup may be incomplete - hit 1000 order limit", {
+        logger.warn("stripe-worker", "Order lookup incomplete - hit 5000 order limit", {
             paymentIntentId,
             ordersChecked: recentOrders.length,
+            limit: 5000
         });
     }
 
@@ -334,6 +342,350 @@ async function handlePaymentIntentFailed(paymentIntent: Stripe.PaymentIntent): P
  */
 async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session): Promise<void> {
     logger.info("stripe-worker", "Checkout session completed", { sessionId: session.id });
+}
+
+/**
+ * RET-01: Handle charge refunded webhook
+ *
+ * This handler processes Stripe charge.refunded webhooks to:
+ * 1. Find the associated order via PaymentIntent ID
+ * 2. Update PaymentCollection status based on refund amount
+ * 3. Create OrderTransaction record for the refund (with idempotency check)
+ * 4. Update order status if fully refunded
+ *
+ * Supports both full and partial refunds.
+ * Includes idempotency checks to prevent duplicate processing.
+ *
+ * @param charge - Stripe Charge object from webhook
+ * @param container - Medusa dependency injection container
+ */
+export async function handleChargeRefunded(charge: Stripe.Charge, container: MedusaContainer): Promise<void> {
+    const paymentIntentId = typeof charge.payment_intent === 'string'
+        ? charge.payment_intent
+        : charge.payment_intent?.id;
+
+    if (!paymentIntentId) {
+        logger.warn("stripe-worker", "charge.refunded event missing payment_intent", {
+            chargeId: charge.id
+        });
+        return;
+    }
+
+    logger.info("stripe-worker", "Processing charge.refunded", {
+        chargeId: charge.id,
+        paymentIntentId,
+        amountRefunded: charge.amount_refunded,
+        totalAmount: charge.amount,
+        refunded: charge.refunded,
+    });
+
+    try {
+        // Step 1: Find order by PaymentIntent ID
+        const order = await findOrderByPaymentIntentId(paymentIntentId, container);
+
+        if (!order) {
+            logger.warn("stripe-worker", "No order found for refunded charge", {
+                paymentIntentId,
+                chargeId: charge.id,
+            });
+            return;
+        }
+
+        logger.info("stripe-worker", "Found order for refund", {
+            orderId: order.id,
+            paymentIntentId,
+            currentStatus: order.status,
+        });
+
+        // Step 2: Validate refund amount and determine refund type
+        const refundAmountCents = charge.amount_refunded;
+        
+        // Input validation: ensure refund amount is valid
+        if (typeof refundAmountCents !== 'number' || refundAmountCents < 0) {
+            logger.error("stripe-worker", "Invalid refund amount", {
+                chargeId: charge.id,
+                paymentIntentId,
+                refundAmountCents,
+            });
+            return;
+        }
+        
+        if (refundAmountCents > charge.amount) {
+            logger.error("stripe-worker", "Refund amount exceeds original charge amount", {
+                chargeId: charge.id,
+                paymentIntentId,
+                refundAmountCents,
+                originalAmount: charge.amount,
+            });
+            return;
+        }
+        
+        const isFullRefund = charge.refunded || charge.amount_refunded === charge.amount;
+        
+        // Check if order is already canceled (idempotency)
+        if (order.status === "canceled" && isFullRefund) {
+            logger.info("stripe-worker", "Order already canceled - skipping status update", {
+                orderId: order.id,
+                paymentIntentId,
+            });
+            // Still process PaymentCollection and OrderTransaction for audit trail
+        }
+
+        // Step 3: Update PaymentCollection status
+        const updatePCSuccess = await updatePaymentCollectionOnRefund(
+            order.id,
+            refundAmountCents,
+            isFullRefund,
+            container
+        );
+
+        // Step 4: Create OrderTransaction for refund (with idempotency check)
+        const createTxSuccess = await createOrderTransactionOnRefund(
+            order.id,
+            refundAmountCents,
+            charge.currency,
+            paymentIntentId,
+            container
+        );
+
+        // Step 5: Update order status if fully refunded (skip if already canceled)
+        let updateOrderStatusSuccess = true;
+        if (isFullRefund && order.status !== "canceled") {
+            updateOrderStatusSuccess = await updateOrderStatusOnFullRefund(order.id, container);
+        }
+
+        // Log success status based on actual results
+        if (updatePCSuccess && createTxSuccess && updateOrderStatusSuccess) {
+            logger.info("stripe-worker", "Refund processed successfully", {
+                orderId: order.id,
+                refundAmountCents,
+                isFullRefund,
+            });
+        } else {
+            logger.warn("stripe-worker", "Refund processed with partial success", {
+                orderId: order.id,
+                paymentIntentId,
+                updatePCSuccess,
+                createTxSuccess,
+                updateOrderStatusSuccess,
+            });
+        }
+
+    } catch (error) {
+        logger.critical("stripe-worker", "Failed to process charge.refunded webhook", {
+            chargeId: charge.id,
+            paymentIntentId,
+            error: (error as Error).message,
+            stack: (error as Error).stack?.split("\n").slice(0, 3).join(" | "),
+        });
+        throw error; // Re-throw to trigger Stripe webhook retry
+    }
+}
+
+/**
+ * RET-01: Update PaymentCollection status on refund
+ *
+ * Updates PaymentCollection status based on the refund:
+ * - "canceled" for full refunds
+ * - "completed" for partial refunds (tracked via OrderTransactions)
+ *
+ * @param orderId - Medusa order ID
+ * @param refundAmountCents - Amount refunded in cents
+ * @param isFullRefund - Whether this is a full refund
+ * @param container - Medusa container
+ * @returns true if update succeeded, false otherwise
+ */
+async function updatePaymentCollectionOnRefund(
+    orderId: string,
+    refundAmountCents: number,
+    isFullRefund: boolean,
+    container: MedusaContainer
+): Promise<boolean> {
+    try {
+        const query = container.resolve("query");
+
+        // Get order with payment collections
+        const { data: orders } = await query.graph({
+            entity: "order",
+            fields: [
+                "id",
+                "payment_collections.id",
+                "payment_collections.status",
+            ],
+            filters: { id: orderId },
+        });
+
+        const order = orders?.[0];
+        if (!order) {
+            logger.warn("stripe-worker", "Order not found for refund update", { orderId });
+            return false;
+        }
+
+        const paymentCollection = order.payment_collections?.[0];
+        if (!paymentCollection) {
+            logger.warn("stripe-worker", "Order has no PaymentCollection for refund", {
+                orderId,
+                message: "Cannot update payment status without PaymentCollection",
+            });
+            return false;
+        }
+
+        // Update PaymentCollection status via Payment Module
+        const paymentModuleService = container.resolve(Modules.PAYMENT) as any;
+
+        // For full refund, mark as canceled
+        // For partial refund, we intentionally use "completed" as Medusa (at time of writing)
+        // does not have a standard "partially_refunded" status that works reliably with
+        // downstream logic. OrderTransactions are the source of truth for refund amounts.
+        const newStatus = isFullRefund ? "canceled" : "completed";
+
+        await paymentModuleService.updatePaymentCollections([
+            {
+                id: paymentCollection.id,
+                status: newStatus,
+            },
+        ]);
+
+        logger.info("stripe-worker", "PaymentCollection updated on refund", {
+            orderId,
+            paymentCollectionId: paymentCollection.id,
+            previousStatus: paymentCollection.status,
+            newStatus,
+            refundAmountCents,
+            isFullRefund,
+        });
+
+        return true;
+
+    } catch (error) {
+        logger.error("stripe-worker", "Failed to update PaymentCollection on refund", {
+            orderId,
+            error: (error as Error).message,
+        });
+        // Don't throw - refund was processed in Stripe, PC update is secondary
+        return false;
+    }
+}
+
+/**
+ * RET-01: Create OrderTransaction record for refund
+ *
+ * Creates an OrderTransaction with reference type "refund" to track the refund
+ * in Medusa's transaction history. This enables downstream features to calculate
+ * refundable amounts by querying OrderTransactions.
+ *
+ * @param orderId - Medusa order ID
+ * @param refundAmountCents - Amount refunded in cents (Stripe minor units)
+ * @param currencyCode - Currency code (e.g., "usd")
+ * @param paymentIntentId - Stripe PaymentIntent ID (used as reference)
+ * @param container - Medusa container
+ * @returns true if transaction created successfully, false otherwise
+ */
+async function createOrderTransactionOnRefund(
+    orderId: string,
+    refundAmountCents: number,
+    currencyCode: string,
+    paymentIntentId: string,
+    container: MedusaContainer
+): Promise<boolean> {
+    try {
+        const orderModuleService = container.resolve(Modules.ORDER) as any;
+        const query = container.resolve("query");
+
+        // IDEMPOTENCY CHECK: Verify if refund transaction already exists
+        // Query existing OrderTransactions for this order with matching reference
+        const { data: existingTransactions } = await query.graph({
+            entity: "order_transaction",
+            fields: ["id", "reference", "reference_id", "amount"],
+            filters: {
+                order_id: orderId,
+                reference: "refund",
+                reference_id: paymentIntentId,
+            },
+        });
+
+        if (existingTransactions && existingTransactions.length > 0) {
+            logger.info("stripe-worker", "Refund transaction already exists - skipping duplicate", {
+                orderId,
+                paymentIntentId,
+                existingTransactionId: existingTransactions[0].id,
+            });
+            return true; // Idempotent: already processed (considered success)
+        }
+
+        // Medusa v2 uses MAJOR UNITS for all amount fields
+        // Convert Stripe minor units (cents) → Medusa major units (dollars)
+        const amountInMajorUnits = refundAmountCents / 100;
+
+        // Normalize currency code to uppercase (ISO 4217 standard)
+        const normalizedCurrencyCode = currencyCode.toUpperCase();
+
+        // Create OrderTransaction with reference to the refund
+        // Note: Amount is NEGATIVE for refunds to indicate money going back to customer
+        await orderModuleService.addOrderTransactions({
+            order_id: orderId,
+            amount: -amountInMajorUnits, // Negative for refund
+            currency_code: normalizedCurrencyCode,
+            reference: "refund",
+            reference_id: paymentIntentId,
+        });
+
+        logger.info("stripe-worker", "OrderTransaction created for refund", {
+            orderId,
+            amount: -amountInMajorUnits,
+            currencyCode: normalizedCurrencyCode,
+            referenceId: paymentIntentId,
+        });
+
+        return true;
+
+    } catch (error) {
+        logger.error("stripe-worker", "Failed to create OrderTransaction for refund", {
+            orderId,
+            error: (error as Error).message,
+        });
+        // Don't throw - OrderTransaction is for tracking, not critical
+        return false;
+    }
+}
+
+/**
+ * RET-01: Update order status on full refund
+ *
+ * Updates order status to "canceled" when fully refunded.
+ * For partial refunds, order status remains unchanged (likely "completed").
+ *
+ * @param orderId - Medusa order ID
+ * @param container - Medusa container
+ * @returns true if update succeeded, false otherwise
+ */
+async function updateOrderStatusOnFullRefund(
+    orderId: string,
+    container: MedusaContainer
+): Promise<boolean> {
+    try {
+        const orderService = container.resolve("order");
+
+        await orderService.updateOrders([{
+            id: orderId,
+            status: "canceled",
+        }]);
+
+        logger.info("stripe-worker", "Order status updated on full refund", {
+            orderId,
+            newStatus: "canceled",
+        });
+
+        return true;
+
+    } catch (error) {
+        logger.error("stripe-worker", "Failed to update order status on refund", {
+            orderId,
+            error: (error as Error).message,
+        });
+        // Don't throw - order status update is secondary to refund processing
+        return false;
+    }
 }
 
 let workerStarted = false;

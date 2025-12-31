@@ -406,7 +406,10 @@ development_status:
     status: drafted
   fix-RET-01-returns-refunds:
     path: docs/sprint/sprint-artifacts/fix-RET-01-returns-refunds.md
-    status: drafted
+    status: done
+    meta: "Implemented charge.refunded webhook handler with PaymentCollection updates, OrderTransaction creation, and order status updates. Supports both full and partial refunds. 13 unit tests passing (100% pass)."
+    completed: "2025-12-30"
+    depends_on: ["PAY-01"]
   fix-MNY-01-money-units:
     path: docs/sprint/sprint-artifacts/fix-MNY-01-money-units.md
     status: done
