@@ -148,6 +148,7 @@ describe("charge.refunded webhook handler", () => {
                 data: [],
             });
 
+            // Mock service methods (Medusa services typically return void or the updated entity)
             mockPaymentModuleUpdate.mockResolvedValueOnce(undefined);
             mockOrderModuleAdd.mockResolvedValueOnce(undefined);
             mockOrderServiceUpdate.mockResolvedValueOnce(undefined);
@@ -155,6 +156,16 @@ describe("charge.refunded webhook handler", () => {
             await expect(
                 handleChargeRefunded(chargeEvent.data.object as Stripe.Charge, container)
             ).resolves.not.toThrow();
+
+            // Verify function executed (logger should be called)
+            expect(logger.info).toHaveBeenCalledWith(
+                "stripe-worker",
+                "Processing charge.refunded",
+                expect.objectContaining({
+                    chargeId: "ch_123",
+                    paymentIntentId: "pi_123",
+                })
+            );
 
             // Verify PaymentCollection was updated to canceled
             expect(mockPaymentModuleUpdate).toHaveBeenCalledWith([
@@ -231,6 +242,7 @@ describe("charge.refunded webhook handler", () => {
                 data: [],
             });
 
+            // Mock service methods (Medusa services typically return void or the updated entity)
             mockPaymentModuleUpdate.mockResolvedValueOnce(undefined);
             mockOrderModuleAdd.mockResolvedValueOnce(undefined);
             mockOrderServiceUpdate.mockResolvedValueOnce(undefined);
@@ -579,8 +591,9 @@ describe("charge.refunded webhook handler", () => {
             // Mock PaymentCollection update failure (implementation catches and logs, doesn't throw)
             mockPaymentModuleUpdate.mockRejectedValueOnce(new Error("Database connection lost"));
 
-            mockOrderModuleAdd.mockResolvedValueOnce(undefined);
-            mockOrderServiceUpdate.mockResolvedValueOnce(undefined);
+            // Mock service methods to return success (for boolean return types)
+            mockOrderModuleAdd.mockResolvedValueOnce({ id: "txn_130" });
+            mockOrderServiceUpdate.mockResolvedValueOnce([{ id: "order_130", status: "canceled" }]);
 
             // Implementation logs error but continues processing
             await handleChargeRefunded(chargeEvent.data.object as Stripe.Charge, container);
@@ -651,6 +664,7 @@ describe("charge.refunded webhook handler", () => {
                 data: [],
             });
 
+            // Mock service methods (Medusa services typically return void or the updated entity)
             mockPaymentModuleUpdate.mockResolvedValueOnce(undefined);
             mockOrderModuleAdd.mockResolvedValueOnce(undefined);
             mockOrderServiceUpdate.mockResolvedValueOnce(undefined);
