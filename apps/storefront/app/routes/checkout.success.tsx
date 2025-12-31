@@ -42,7 +42,7 @@ const serializeParamsCookie = (params: PaymentParams): string =>
     `${CHECKOUT_PARAMS_COOKIE}=${encodeURIComponent(JSON.stringify(params))}; Max-Age=600; Path=/; SameSite=Strict; Secure; HttpOnly`;
 
 const clearParamsCookie = (): string =>
-    `${CHECKOUT_PARAMS_COOKIE}=; Max-Age=0; Path=/; SameSite=Strict; Secure`;
+    `${CHECKOUT_PARAMS_COOKIE}=; Max-Age=0; Path=/; SameSite=Strict; Secure; HttpOnly`;
 
 const parseParamsFromCookie = (cookieHeader: string | null): PaymentParams | null => {
     if (!cookieHeader) return null;
