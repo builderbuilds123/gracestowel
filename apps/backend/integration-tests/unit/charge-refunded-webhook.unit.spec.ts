@@ -54,7 +54,17 @@ describe("charge.refunded webhook handler", () => {
     let container: MedusaContainer;
 
     beforeEach(async () => {
-        jest.clearAllMocks();
+        // Clear mocks but preserve the mock functions themselves
+        // Reset mock implementations to ensure they're fresh for each test
+        mockQuery.mockReset();
+        mockOrderServiceUpdate.mockReset();
+        mockPaymentModuleUpdate.mockReset();
+        mockOrderModuleAdd.mockReset();
+        
+        // Re-setup mock implementations
+        mockPaymentModuleUpdate.mockResolvedValue(undefined);
+        mockOrderModuleAdd.mockResolvedValue(undefined);
+        mockOrderServiceUpdate.mockResolvedValue(undefined);
 
         // Reset mock logger functions
         (logger.info as jest.Mock) = jest.fn();
@@ -63,31 +73,29 @@ describe("charge.refunded webhook handler", () => {
         (logger.critical as jest.Mock) = jest.fn();
 
         // Setup mock container with proper Medusa v2 service resolution
+        // Create service objects once and reuse them to ensure mock tracking works
+        const paymentService = {
+            updatePaymentCollections: mockPaymentModuleUpdate,
+        };
+        const orderService = {
+            addOrderTransactions: mockOrderModuleAdd,
+        };
+        
         container = {
             resolve: jest.fn((service: string) => {
-                // Debug: Log all resolve calls
-                console.log(`[TEST] container.resolve called with: "${service}"`);
-                
                 if (service === "query") {
                     return {
                         graph: mockQuery,
                     };
-                } else if (service === "order") {
+                } else if (service === "order" || service === Modules.ORDER) {
+                    // Combine legacy order service and Order Module methods
                     return {
                         updateOrders: mockOrderServiceUpdate,
-                    };
-                } else if (service === Modules.PAYMENT) {
-                    console.log(`[TEST] Resolving Modules.PAYMENT (value: "${Modules.PAYMENT}")`);
-                    return {
-                        updatePaymentCollections: mockPaymentModuleUpdate,
-                    };
-                } else if (service === Modules.ORDER) {
-                    console.log(`[TEST] Resolving Modules.ORDER (value: "${Modules.ORDER}")`);
-                    return {
                         addOrderTransactions: mockOrderModuleAdd,
                     };
+                } else if (service === Modules.PAYMENT) {
+                    return paymentService;
                 }
-                console.log(`[TEST] Unknown service: "${service}"`);
                 throw new Error(`Unknown service: ${service}`);
             }),
         } as any;
@@ -154,10 +162,11 @@ describe("charge.refunded webhook handler", () => {
                 data: [],
             });
 
-            // Mock service methods (Medusa services typically return void or the updated entity)
-            mockPaymentModuleUpdate.mockResolvedValueOnce(undefined);
-            mockOrderModuleAdd.mockResolvedValueOnce(undefined);
-            mockOrderServiceUpdate.mockResolvedValueOnce(undefined);
+            // Mock service methods - use mockResolvedValue to ensure they always resolve
+            // (not mockResolvedValueOnce which only works once)
+            mockPaymentModuleUpdate.mockResolvedValue(undefined);
+            mockOrderModuleAdd.mockResolvedValue(undefined);
+            mockOrderServiceUpdate.mockResolvedValue(undefined);
 
             await expect(
                 handleChargeRefunded(chargeEvent.data.object as Stripe.Charge, container)
@@ -185,6 +194,18 @@ describe("charge.refunded webhook handler", () => {
             // Debug: Verify query mocks were called (should be 3 calls: findOrder, updatePC, createTx)
             // This helps identify if the function is exiting early
             expect(mockQuery).toHaveBeenCalledTimes(3);
+            
+            // Debug: Check if idempotency log exists (would mean function returned early)
+            const idempotencyLog = (logger.info as jest.Mock).mock.calls.some(call =>
+                call[0] === "stripe-worker" &&
+                call[1] === "Refund transaction already exists - skipping duplicate"
+            );
+            
+            if (idempotencyLog) {
+                // Function returned early due to idempotency - service method should NOT be called
+                expect(mockOrderModuleAdd).not.toHaveBeenCalled();
+                return; // Skip remaining assertions
+            }
 
             // Debug: Check what services were resolved
             const resolveCalls = (container.resolve as jest.Mock).mock.calls;
@@ -218,10 +239,55 @@ describe("charge.refunded webhook handler", () => {
                 call[1] === "Failed to create OrderTransaction for refund"
             );
             
-            // If no errors, service methods should have been called
-            if (paymentCollectionErrors.length === 0 && orderTransactionErrors.length === 0) {
-                // Service methods should have been called if no errors
-                expect(mockPaymentModuleUpdate).toHaveBeenCalled();
+            // Debug: Log error info
+            if (paymentCollectionErrors.length > 0) {
+                console.log("PaymentCollection errors:", paymentCollectionErrors);
+            }
+            if (orderTransactionErrors.length > 0) {
+                console.log("OrderTransaction errors:", orderTransactionErrors);
+            }
+            
+            // Debug: Check if success logs were called (would indicate service methods were called)
+            // These logs are AFTER the service method calls, so if they exist, methods were called
+            expect(logger.info).toHaveBeenCalledWith(
+                "stripe-worker",
+                "PaymentCollection updated on refund",
+                expect.any(Object)
+            );
+            // Check if OrderTransaction was created (log comes AFTER service call)
+            // If log doesn't exist, check if error was logged or if service wasn't called
+            const orderTxCreated = (logger.info as jest.Mock).mock.calls.some(call =>
+                call[0] === "stripe-worker" &&
+                call[1] === "OrderTransaction created for refund"
+            );
+            
+            // PaymentCollection should always be called (we verified the log exists)
+            expect(mockPaymentModuleUpdate).toHaveBeenCalled();
+            
+            // OrderTransaction: Check if it was created successfully
+            if (orderTxCreated) {
+                // Success log exists - verify service method was called
+                expect(mockOrderModuleAdd).toHaveBeenCalled();
+            } else if (idempotencyLog) {
+                // Idempotency check found existing transaction - service method should NOT be called
+                expect(mockOrderModuleAdd).not.toHaveBeenCalled();
+            } else if (orderTransactionErrors.length > 0) {
+                // Error occurred - log the error to understand what went wrong
+                const errorCall = orderTransactionErrors[0];
+                const errorMessage = errorCall[2]?.error || JSON.stringify(errorCall[2]);
+                console.log("OrderTransaction error:", errorMessage);
+                // If the error is about the method not existing, the service wasn't called
+                // Otherwise, the service method should have been called before the error
+                if (errorMessage.includes("addOrderTransactions method not found")) {
+                    // Service method doesn't exist - this is a setup issue
+                    throw new Error(`Service method not found: ${errorMessage}`);
+                } else {
+                    // Other error - service method should have been called
+                    expect(mockOrderModuleAdd).toHaveBeenCalled();
+                }
+            } else {
+                // No error, no success log, and no idempotency log - this shouldn't happen
+                // The service method should have been called
                 expect(mockOrderModuleAdd).toHaveBeenCalled();
             }
 

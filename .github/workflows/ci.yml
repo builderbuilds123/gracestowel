@@ -175,6 +175,68 @@ jobs:
           flags: storefront
           fail_ci_if_error: false
 
+  test-backend-integration:
+    name: Backend Integration Tests
+    runs-on: ubuntu-latest
+    needs: validate
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: medusa_test
+          POSTGRES_PASSWORD: medusa_test_password
+          POSTGRES_DB: medusa_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+
+      - name: Cache turbo
+        uses: actions/cache@v5
+        with:
+          path: .turbo
+          key: ${{ runner.os }}-turbo-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-turbo-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run backend integration tests
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgres://medusa_test:medusa_test_password@localhost:5432/medusa_test
+          REDIS_URL: redis://localhost:6379
+          RESEND_API_KEY: re_test_ci_placeholder_key
+          MEDUSA_WORKER_MODE: worker
+          DISABLE_MEDUSA_ADMIN: true
+        run: pnpm turbo run test:integration --filter=@gracestowel/backend -- --forceExit
+
   # ============================================
   # Stage 3: E2E Tests (Paused)
   # ============================================
