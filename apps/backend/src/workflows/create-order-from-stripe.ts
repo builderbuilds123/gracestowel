@@ -222,7 +222,7 @@ const prepareInventoryAdjustmentsStep = createStep(
  */
 const generateModificationTokenStep = createStep(
     "generate-modification-token",
-    async (input: { orderId: string; paymentIntentId: string; createdAt: Date }) => {
+    async (input: { orderId: string; paymentIntentId: string; createdAt: Date | string }) => {
         // SEC-03: Runtime guard - createdAt is required to anchor token expiry
         if (!input.createdAt) {
             throw new Error("createdAt is required to anchor token expiry to order creation time");

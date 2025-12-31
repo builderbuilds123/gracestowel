@@ -84,14 +84,15 @@ export class ModificationTokenService {
      */
     generateToken(orderId: string, paymentIntentId: string, orderCreatedAt: Date | string): string {
         // SEC-03 AC2: Fail safely if orderCreatedAt is not provided
-        if (orderCreatedAt === undefined || orderCreatedAt === null) {
-            throw new Error('orderCreatedAt is required to anchor token expiry to order creation time');
+        // Handles undefined, null, and empty string ""
+        if (!orderCreatedAt) {
+            throw new Error('orderCreatedAt is required and must be a non-empty string or Date object');
         }
 
         // Parse the date
         const dateObj = typeof orderCreatedAt === 'string' ? new Date(orderCreatedAt) : orderCreatedAt;
 
-        // Guard against invalid or empty date inputs
+        // Guard against invalid date inputs
         if (Number.isNaN(dateObj.getTime())) {
             throw new Error('orderCreatedAt must be a valid date');
         }
@@ -107,7 +108,7 @@ export class ModificationTokenService {
         const payload = {
             order_id: orderId,
             payment_intent_id: paymentIntentId,
-            iat: Math.floor(Date.now() / 1000), // Issued NOW
+            iat: timestamp, // Issued at order creation (anchored to order creation time)
             exp: timestamp + this.windowSeconds, // Expires relative to ORDER creation
         };
 

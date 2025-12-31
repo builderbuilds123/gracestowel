@@ -264,7 +264,7 @@ describe("ModificationTokenService", () => {
 
       expect(() => {
         service.generateToken(testOrderId, testPaymentIntentId, "");
-      }).toThrow("orderCreatedAt must be a valid date");
+      }).toThrow("orderCreatedAt is required and must be a non-empty string or Date object");
     });
 
     // SEC-03: Future-proofing validation
