@@ -6,7 +6,7 @@ import { useCart } from "../context/CartContext";
 import { posts } from "../data/blogPosts";
 import { getStripe, initStripe } from "../lib/stripe";
 import { monitoredFetch } from "../utils/monitored-fetch";
-import { logPaymentInfo, logError, maskPaymentIntentId, maskAddress } from "../utils/secure-logging";
+import { createLogger } from "../lib/logger";
 
 // Lazy load Map component to avoid SSR issues with Leaflet
 const Map = lazy(() => import("../components/Map.client"));
@@ -156,11 +156,8 @@ export default function CheckoutSuccess() {
         }
 
         const fetchPaymentDetails = async () => {
-            // SECURITY: Use secure logging to mask sensitive payment data
-            logPaymentInfo("Checkout Success - Processing payment", {
-                redirectStatus,
-                paymentIntentId,
-            });
+            // SECURITY: Don't log sensitive payment data (paymentIntentId, clientSecret)
+            // Debug logs removed to prevent sensitive data exposure
             if (!paymentIntentClientSecret) {
                 setPaymentStatus("error");
                 setMessage("No payment intent found");
@@ -179,28 +176,19 @@ export default function CheckoutSuccess() {
                 processedRef.current = paymentIntentId; // Mark as processed
 
                 try {
-                    // SECURITY: Don't log client secret or full payment intent object
+                    // SECURITY: Don't log client secret or payment intent object
                     const { paymentIntent, error } = await stripe.retrievePaymentIntent(paymentIntentClientSecret);
 
                     if (error) {
-                        // SECURITY: Log error without exposing sensitive data
-                        logError("Stripe retrieval error", error, {
-                            paymentIntentId: maskPaymentIntentId(paymentIntentId),
+                        // Use existing logger for errors (without sensitive data)
+                        const logger = createLogger();
+                        logger.error("Stripe retrieval error", error, {
                             redirectStatus,
+                            // Don't include paymentIntentId or clientSecret
                         });
                         setMessage(`Stripe Error: ${error.message}`);
                         setPaymentStatus('error');
                         return;
-                    }
-                    
-                    // SECURITY: Only log non-sensitive payment intent fields
-                    if (paymentIntent) {
-                        logPaymentInfo("Payment Intent retrieved", {
-                            paymentIntentId: paymentIntent.id,
-                            status: paymentIntent.status,
-                            amount: paymentIntent.amount,
-                            currency: paymentIntent.currency,
-                        });
                     }
 
                     // With manual capture mode, status will be 'requires_capture' (authorized but not captured)
@@ -263,8 +251,7 @@ export default function CheckoutSuccess() {
                         if (paymentIntent.shipping) {
                             const address = paymentIntent.shipping.address;
                             const addressString = `${address?.line1}, ${address?.city}, ${address?.state} ${address?.postal_code}, ${address?.country} `;
-                            // SECURITY: Mask address in logs (PII protection)
-                            console.log("Geocoding address (background):", maskAddress(addressString));
+                            // SECURITY: Don't log addresses (PII) - removed debug log
 
                             // Do not await this
                             monitoredFetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addressString)}`, {
@@ -276,7 +263,12 @@ export default function CheckoutSuccess() {
                                     const coords: [number, number] = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
                                     setMapCoordinates(coords);
                                 }
-                            }).catch(err => logError("Geocoding error", err));
+                            }).catch(err => {
+                                // SECURITY: Don't log geocoding errors with address context
+                                if (import.meta.env.DEV) {
+                                    console.warn("Geocoding error (dev only):", err);
+                                }
+                            });
                         }
 
                         // Fetch order from API to get modification token
@@ -306,25 +298,22 @@ export default function CheckoutSuccess() {
                                     // Store in localStorage for persistence
                                     localStorage.setItem('orderId', data.order.id);
 
-                                    // SECURITY: Log order info with masked ID
-                                    console.log("Order fetched:", {
-                                        orderId: maskPaymentIntentId(data.order.id), // Mask order ID
-                                        status: data.order.status,
-                                    });
+                                    // SECURITY: Don't log order IDs - removed debug log
                                 } else if (response.status === 404 && retries < maxRetries) {
                                     // Order not yet created, retry
                                     retries++;
-                                    console.log(`Order not found, retrying (${retries}/${maxRetries})...`);
+                                    // Only log retries in dev mode
+                                    if (import.meta.env.DEV) {
+                                        console.log(`Order not found, retrying (${retries}/${maxRetries})...`);
+                                    }
                                     setTimeout(fetchOrderWithToken, retryDelay);
                                 } else {
-                                    logError("Failed to fetch order", new Error(`HTTP ${response.status}`), {
-                                        paymentIntentId: maskPaymentIntentId(paymentIntentId),
-                                    });
+                                    const logger = createLogger();
+                                    logger.error("Failed to fetch order", new Error(`HTTP ${response.status}`));
                                 }
                             } catch (err) {
-                                logError("Error fetching order", err, {
-                                    paymentIntentId: maskPaymentIntentId(paymentIntentId),
-                                });
+                                const logger = createLogger();
+                                logger.error("Error fetching order", err instanceof Error ? err : new Error(String(err)));
                                 if (retries < maxRetries) {
                                     retries++;
                                     setTimeout(fetchOrderWithToken, retryDelay);
@@ -336,8 +325,7 @@ export default function CheckoutSuccess() {
                         const cartIdFromSession = sessionStorage.getItem('medusa_cart_id');
                         if (cartIdFromSession) {
                             try {
-                                // SECURITY: Don't log full cart ID
-                                console.log("Attempting to complete Medusa cart...");
+                                // SECURITY: Don't log cart IDs or completion data
                                 const completeResponse = await monitoredFetch(`/api/carts/${cartIdFromSession}/complete`, {
                                     method: "POST",
                                     headers: {
@@ -346,24 +334,18 @@ export default function CheckoutSuccess() {
                                     label: "complete-medusa-cart",
                                 });
 
-                                if (completeResponse.ok) {
-                                    // SECURITY: Don't log full completion data (may contain PII)
-                                    console.log("Medusa cart completion successful");
-                                    // Optionally use the returned orderId from completionData if needed
-                                } else {
-                                    const errorData = await completeResponse.json();
-                                    logError("Medusa cart completion failed", new Error("Cart completion failed"), {
+                                if (!completeResponse.ok) {
+                                    const logger = createLogger();
+                                    logger.error("Medusa cart completion failed", new Error("Cart completion failed"), {
                                         status: completeResponse.status,
-                                        // Don't log full error data (may contain sensitive info)
                                     });
                                     // Non-critical failure: log and proceed, webhook should eventually create order
                                 }
                             } catch (err) {
-                                logError("Error calling cart completion API", err);
+                                const logger = createLogger();
+                                logger.error("Error calling cart completion API", err instanceof Error ? err : new Error(String(err)));
                                 // Non-critical failure: log and proceed
                             }
-                        } else {
-                            console.warn("No Medusa cart ID found in session to complete.");
                         }
 
                         // Start fetching order
@@ -374,26 +356,28 @@ export default function CheckoutSuccess() {
                             clearCart();
                         }, 500);
                     } else {
-                        // SECURITY: Log payment status without sensitive data
-                        logError("Payment status not valid", new Error(`Invalid status: ${paymentIntent?.status}`), {
-                            paymentIntentId: maskPaymentIntentId(paymentIntentId),
+                        const logger = createLogger();
+                        logger.error("Payment status not valid", new Error(`Invalid status: ${paymentIntent?.status}`), {
                             status: paymentIntent?.status,
+                            // Don't include paymentIntentId
                         });
                         setMessage(`Payment status: ${paymentIntent?.status}`);
                         setPaymentStatus('error');
                     }
                 } catch (error: any) {
-                    logError("Error fetching payment details", error, {
-                        paymentIntentId: maskPaymentIntentId(paymentIntentId),
+                    const logger = createLogger();
+                    logger.error("Error fetching payment details", error instanceof Error ? error : new Error(String(error)), {
                         redirectStatus,
+                        // Don't include paymentIntentId or clientSecret
                     });
                     setMessage(`Error: ${error.message || "Payment processing failed"}`);
                     setPaymentStatus('error');
                 }
             } else {
-                logError("Missing required params or redirect status not succeeded", new Error("Invalid payment params"), {
+                const logger = createLogger();
+                logger.error("Missing required params or redirect status not succeeded", new Error("Invalid payment params"), {
                     redirectStatus,
-                    hasPaymentIntentId: !!paymentIntentId,
+                    // Don't include paymentIntentId
                 });
                 setPaymentStatus('error');
             }
