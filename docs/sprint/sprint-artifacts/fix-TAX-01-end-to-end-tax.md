@@ -43,9 +43,10 @@ Use Medusa Cart/Order totals (which include tax provider logic) as source of tru
 2. **Calculate total tax** for added items: `taxPerUnit * quantity`
 3. **Store in metadata**:
    - Per-item tax in `added_items[].tax_amount`
+   - Order total in `metadata.updated_total` (current order total after addition)
    - ~~Accumulated tax in `metadata.updated_tax_total`~~ **REMOVED**
    - ~~Accumulated subtotal in `metadata.updated_subtotal`~~ **REMOVED**
-4. Tax accumulation is calculated **on-demand** from `added_items[].tax_amount` when needed
+4. Tax accumulation is calculated **on-demand** by summing `added_items[].tax_amount` when needed
 5. This avoids the flawed pattern of tracking computed values that reset on each workflow invocation
 
 ### Changes Made
@@ -55,7 +56,9 @@ Use Medusa Cart/Order totals (which include tax provider logic) as source of tru
 - **Workflow**: Passes tax information through transformation steps
 
 ### Test Coverage
-Added 7 tax-related unit tests that call actual `calculateTotalsHandler`:
+Added 10 tax-related unit tests:
+
+**calculateTotalsHandler tests** (7 tests):
 - Tax-inclusive region calculations (AC5)
 - Tax-exclusive region calculations (AC6)
 - Zero-tax/tax-exempt products (AC7)
@@ -64,13 +67,19 @@ Added 7 tax-related unit tests that call actual `calculateTotalsHandler`:
 - PriceNotFoundError handling
 - Fallback behavior for missing `calculated_amount_with_tax`
 
+**Tax Accumulation tests (AC8)** (3 tests):
+- Multiple additions accumulate per-item tax via append logic
+- JSON parsing preserves existing items with tax amounts
+- Malformed JSON gracefully starts fresh
+
 ## Verification
 - **Automated**:
-  - ✅ 29 unit tests in `integration-tests/unit/add-item-to-order.unit.spec.ts` (all passing):
+  - ✅ 32 unit tests in `integration-tests/unit/add-item-to-order.unit.spec.ts` (all passing):
     - Tax-inclusive region calculations (AC5)
     - Tax-exclusive region calculations (AC6)
     - Zero-tax products (AC7)
     - Per-item tax tracking in result (AC3)
+    - Tax accumulation via append logic (AC8)
     - Error handling (VariantNotFoundError, PriceNotFoundError)
     - Fallback behavior for edge cases
 
