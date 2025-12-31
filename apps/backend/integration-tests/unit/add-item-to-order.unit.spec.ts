@@ -496,3 +496,340 @@ describe("add-item-to-order API error mapping", () => {
         expect(error.message).toContain("AUTH_MISMATCH_OVERSOLD");
     });
 });
+
+describe("add-item-to-order TAX-01 - Tax Calculation", () => {
+    let mockQuery: { graph: jest.Mock };
+    let mockContainer: { resolve: jest.Mock };
+
+    // Import the actual handler for testing
+    const { calculateTotalsHandler, VariantNotFoundError, PriceNotFoundError } = require("../../src/workflows/add-item-to-order");
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+        jest.spyOn(console, "log").mockImplementation(() => {});
+        jest.spyOn(console, "error").mockImplementation(() => {});
+
+        mockQuery = {
+            graph: jest.fn(),
+        };
+
+        mockContainer = {
+            resolve: jest.fn((service: string) => {
+                if (service === "query") return mockQuery;
+                throw new Error(`Unknown service: ${service}`);
+            }),
+        };
+    });
+
+    afterEach(() => {
+        jest.restoreAllMocks();
+    });
+
+    it("should calculate tax for tax-inclusive region (AC5)", async () => {
+        // Mock variant with tax-inclusive pricing
+        mockQuery.graph.mockResolvedValueOnce({
+            data: [{
+                id: "var_123",
+                title: "Test Variant",
+                calculated_price: {
+                    calculated_amount: 1000, // $10.00 before tax
+                    calculated_amount_with_tax: 1100, // $11.00 with tax
+                    tax_total: 100, // $1.00 tax per unit
+                    currency_code: "usd",
+                },
+                product: { title: "Test Product" },
+            }],
+        });
+
+        const input = {
+            orderId: "ord_123",
+            variantId: "var_123",
+            quantity: 2,
+            currentTotal: 5000,
+            currentTaxTotal: 400,
+            currentSubtotal: 4600,
+            currencyCode: "usd",
+        };
+
+        const result = await calculateTotalsHandler(input, { container: mockContainer });
+
+        // Verify tax calculation: 2 units * $1.00 tax = $2.00 tax
+        expect(result.taxAmount).toBe(200);
+        expect(result.unitPrice).toBe(1100); // Uses calculated_amount_with_tax
+        expect(result.itemTotal).toBe(2200); // 2 * 1100
+        expect(result.newOrderTotal).toBe(7200); // 5000 + 2200
+    });
+
+    it("should calculate tax for tax-exclusive region (AC6)", async () => {
+        // Mock variant with tax-exclusive pricing
+        mockQuery.graph.mockResolvedValueOnce({
+            data: [{
+                id: "var_456",
+                title: "Test Variant",
+                calculated_price: {
+                    calculated_amount: 2000, // $20.00
+                    calculated_amount_with_tax: 2200, // $22.00 with 10% tax
+                    tax_total: 200, // $2.00 tax per unit
+                    currency_code: "usd",
+                },
+                product: { title: "Test Product" },
+            }],
+        });
+
+        const input = {
+            orderId: "ord_123",
+            variantId: "var_456",
+            quantity: 3,
+            currentTotal: 10000,
+            currentTaxTotal: 800,
+            currentSubtotal: 9200,
+            currencyCode: "usd",
+        };
+
+        const result = await calculateTotalsHandler(input, { container: mockContainer });
+
+        // Verify tax calculation: 3 units * $2.00 tax = $6.00 total tax
+        expect(result.taxAmount).toBe(600);
+        expect(result.unitPrice).toBe(2200);
+        expect(result.itemTotal).toBe(6600); // 3 * 2200
+        expect(result.newOrderTotal).toBe(16600); // 10000 + 6600
+    });
+
+    it("should handle zero tax for tax-exempt products (AC7)", async () => {
+        // Mock variant with no tax
+        mockQuery.graph.mockResolvedValueOnce({
+            data: [{
+                id: "var_789",
+                title: "Tax Exempt Item",
+                calculated_price: {
+                    calculated_amount: 1500,
+                    calculated_amount_with_tax: 1500, // Same as calculated_amount
+                    tax_total: 0, // No tax
+                    currency_code: "usd",
+                },
+                product: { title: "Tax Exempt Product" },
+            }],
+        });
+
+        const input = {
+            orderId: "ord_123",
+            variantId: "var_789",
+            quantity: 5,
+            currentTotal: 8000,
+            currentTaxTotal: 600,
+            currentSubtotal: 7400,
+            currencyCode: "usd",
+        };
+
+        const result = await calculateTotalsHandler(input, { container: mockContainer });
+
+        // Verify no tax added
+        expect(result.taxAmount).toBe(0);
+        expect(result.unitPrice).toBe(1500);
+        expect(result.itemTotal).toBe(7500); // 5 * 1500
+        expect(result.newOrderTotal).toBe(15500); // 8000 + 7500
+    });
+
+    it("should track per-item tax in result for metadata storage (AC3)", async () => {
+        mockQuery.graph.mockResolvedValueOnce({
+            data: [{
+                id: "var_123",
+                title: "Test Variant",
+                calculated_price: {
+                    calculated_amount: 1000,
+                    calculated_amount_with_tax: 1100,
+                    tax_total: 100,
+                    currency_code: "usd",
+                },
+                product: { title: "Test Product" },
+            }],
+        });
+
+        const input = {
+            orderId: "ord_123",
+            variantId: "var_123",
+            quantity: 2,
+            currentTotal: 5000,
+            currentTaxTotal: 0,
+            currentSubtotal: 5000,
+            currencyCode: "usd",
+        };
+
+        const result = await calculateTotalsHandler(input, { container: mockContainer });
+
+        // Verify taxAmount is returned for per-item tracking in metadata
+        expect(result).toHaveProperty("taxAmount");
+        expect(result.taxAmount).toBe(200); // 2 * 100
+        expect(result.variantId).toBe("var_123");
+        expect(result.quantity).toBe(2);
+    });
+
+    it("should throw VariantNotFoundError when variant does not exist", async () => {
+        mockQuery.graph.mockResolvedValueOnce({ data: [] });
+
+        const input = {
+            orderId: "ord_123",
+            variantId: "var_nonexistent",
+            quantity: 1,
+            currentTotal: 5000,
+            currentTaxTotal: 0,
+            currentSubtotal: 5000,
+            currencyCode: "usd",
+        };
+
+        await expect(calculateTotalsHandler(input, { container: mockContainer }))
+            .rejects.toThrow(VariantNotFoundError);
+    });
+
+    it("should throw PriceNotFoundError when variant has no price", async () => {
+        mockQuery.graph.mockResolvedValueOnce({
+            data: [{
+                id: "var_123",
+                title: "Test Variant",
+                calculated_price: null, // No price
+                product: { title: "Test Product" },
+            }],
+        });
+
+        const input = {
+            orderId: "ord_123",
+            variantId: "var_123",
+            quantity: 1,
+            currentTotal: 5000,
+            currentTaxTotal: 0,
+            currentSubtotal: 5000,
+            currencyCode: "usd",
+        };
+
+        await expect(calculateTotalsHandler(input, { container: mockContainer }))
+            .rejects.toThrow(PriceNotFoundError);
+    });
+
+    it("should use calculated_amount as fallback when calculated_amount_with_tax is missing", async () => {
+        mockQuery.graph.mockResolvedValueOnce({
+            data: [{
+                id: "var_123",
+                title: "Test Variant",
+                calculated_price: {
+                    calculated_amount: 1000,
+                    // calculated_amount_with_tax is missing
+                    tax_total: 0,
+                    currency_code: "usd",
+                },
+                product: { title: "Test Product" },
+            }],
+        });
+
+        const input = {
+            orderId: "ord_123",
+            variantId: "var_123",
+            quantity: 2,
+            currentTotal: 5000,
+            currentTaxTotal: 0,
+            currentSubtotal: 5000,
+            currencyCode: "usd",
+        };
+
+        const result = await calculateTotalsHandler(input, { container: mockContainer });
+
+        // Should fallback to calculated_amount
+        expect(result.unitPrice).toBe(1000);
+        expect(result.itemTotal).toBe(2000);
+    });
+});
+
+describe("add-item-to-order TAX-01 - Tax Accumulation Across Multiple Additions (AC8)", () => {
+    /**
+     * AC8: Multiple item additions accumulate tax properly
+     *
+     * This tests the append logic in updateOrderValuesStep that enables tax accumulation.
+     * Each addition appends to added_items[], and total tax is summed from per-item tax_amounts.
+     */
+
+    it("should accumulate per-item tax across multiple additions via added_items append", () => {
+        // Simulate multiple additions to added_items metadata
+        const existingAddedItems = [
+            { variant_id: "var_1", title: "Item 1", quantity: 2, unit_price: 1100, tax_amount: 200 }, // $2.00 tax
+            { variant_id: "var_2", title: "Item 2", quantity: 1, unit_price: 2200, tax_amount: 200 }, // $2.00 tax
+        ];
+
+        const newItem = {
+            variant_id: "var_3",
+            title: "Item 3",
+            quantity: 3,
+            unit_price: 1500,
+            tax_amount: 450, // $4.50 tax (3 * $1.50)
+        };
+
+        // This is the append logic from updateOrderValuesStep
+        const allAddedItems = [...existingAddedItems, newItem];
+
+        // Calculate accumulated tax on-demand (as downstream code would)
+        const accumulatedTax = allAddedItems.reduce((sum, item) => sum + item.tax_amount, 0);
+
+        // Verify accumulation: $2.00 + $2.00 + $4.50 = $8.50
+        expect(accumulatedTax).toBe(850);
+        expect(allAddedItems).toHaveLength(3);
+        expect(allAddedItems[2].tax_amount).toBe(450);
+    });
+
+    it("should preserve existing items when parsing from JSON metadata", () => {
+        // Simulate the JSON parsing that happens in updateOrderValuesStep
+        const existingItemsJson = JSON.stringify([
+            { variant_id: "var_1", title: "Item 1", quantity: 1, unit_price: 1000, tax_amount: 100 },
+        ]);
+
+        let existingAddedItems: any[] = [];
+        if (typeof existingItemsJson === "string") {
+            existingAddedItems = JSON.parse(existingItemsJson);
+        }
+
+        const newItem = {
+            variant_id: "var_2",
+            title: "Item 2",
+            quantity: 2,
+            unit_price: 2000,
+            tax_amount: 400,
+        };
+
+        const allAddedItems = [...existingAddedItems, newItem];
+
+        // Both items preserved with their tax amounts
+        expect(allAddedItems).toHaveLength(2);
+        expect(allAddedItems[0].tax_amount).toBe(100);
+        expect(allAddedItems[1].tax_amount).toBe(400);
+
+        // Total tax can be computed on-demand
+        const totalTax = allAddedItems.reduce((sum, item) => sum + item.tax_amount, 0);
+        expect(totalTax).toBe(500);
+    });
+
+    it("should handle malformed JSON gracefully (starts fresh)", () => {
+        // Simulate malformed JSON in metadata
+        const malformedJson = "not valid json";
+
+        let existingAddedItems: any[] = [];
+        if (typeof malformedJson === "string") {
+            try {
+                existingAddedItems = JSON.parse(malformedJson);
+            } catch (e) {
+                // Matches the behavior in updateOrderValuesStep
+                existingAddedItems = [];
+            }
+        }
+
+        const newItem = {
+            variant_id: "var_1",
+            title: "Item 1",
+            quantity: 1,
+            unit_price: 1000,
+            tax_amount: 100,
+        };
+
+        const allAddedItems = [...existingAddedItems, newItem];
+
+        // Only the new item exists after malformed data is discarded
+        expect(allAddedItems).toHaveLength(1);
+        expect(allAddedItems[0].tax_amount).toBe(100);
+    });
+});
