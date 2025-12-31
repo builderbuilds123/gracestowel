@@ -55,6 +55,10 @@ describe("checkout.success loader", () => {
         const setCookie = response.headers.get("set-cookie") ?? "";
         expect(setCookie).toContain("checkout_params=");
         expect(setCookie).toContain("Max-Age=0");
+        // Verify all cookie flags are present when clearing (must match setting flags)
+        expect(setCookie).toContain("SameSite=Strict");
+        expect(setCookie).toContain("Secure");
+        expect(setCookie).toContain("HttpOnly");
     });
 
     it("returns null params when none provided", async () => {
