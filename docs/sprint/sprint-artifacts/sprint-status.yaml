@@ -372,7 +372,9 @@ development_status:
     completed: "2025-12-30"
   fix-SEC-03-token-expiry-anchoring:
     path: docs/sprint/sprint-artifacts/fix-SEC-03-token-expiry-anchoring.md
-    status: ready-for-dev
+    status: done
+    meta: "SEC-03 complete. orderCreatedAt now required param with future-date validation. Code review fixes applied: type safety in workflow step, 90-minute boundary test added. 19 unit tests pass."
+    completed: "2025-12-31"
   fix-SEC-04-client-secret-leak:
     path: docs/sprint/sprint-artifacts/fix-SEC-04-client-secret-leak.md
     status: done

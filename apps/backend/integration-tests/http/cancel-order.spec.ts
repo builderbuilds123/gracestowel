@@ -32,7 +32,7 @@ medusaIntegrationTestRunner({
 
       it("should accept valid token and attempt workflow (fail with 500/Internal Error due to missing order)", async () => {
         // Generate a valid token for a non-existent order
-        const validToken = modificationTokenService.generateToken("ord_integration_test", "pi_test");
+        const validToken = modificationTokenService.generateToken("ord_integration_test", "pi_test", new Date());
 
         try {
             await api.post("/store/orders/ord_integration_test/cancel", {}, {

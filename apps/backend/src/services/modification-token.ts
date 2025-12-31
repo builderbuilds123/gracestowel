@@ -73,26 +73,42 @@ export class ModificationTokenService {
     /**
      * Generate a modification token for an order
      * 
+     * SEC-03: orderCreatedAt is REQUIRED to anchor token expiry to order creation time.
+     * This prevents retroactive token generation with "fresh" expiration windows.
+     * 
      * @param orderId - The Medusa order ID
      * @param paymentIntentId - The Stripe PaymentIntent ID
-     * @param createdAt - Optional order creation time to anchor expiry (defaults to now)
+     * @param orderCreatedAt - REQUIRED: Order creation time to anchor expiry
      * @returns The signed JWT token
+     * @throws Error if orderCreatedAt is not provided or is in the future
      */
-    generateToken(orderId: string, paymentIntentId: string, createdAt?: Date | string): string {
-        // Use provided createdAt or "now" to calculate specific expiry
-        // This ensures token matches business window even if generated later (e.g. retries)
-        let timestamp: number;
-        if (createdAt) {
-            const dateObj = typeof createdAt === 'string' ? new Date(createdAt) : createdAt;
-            timestamp = Math.floor(dateObj.getTime() / 1000);
-        } else {
-            timestamp = Math.floor(Date.now() / 1000);
+    generateToken(orderId: string, paymentIntentId: string, orderCreatedAt: Date | string): string {
+        // SEC-03 AC2: Fail safely if orderCreatedAt is not provided
+        // Handles undefined, null, and empty string ""
+        if (!orderCreatedAt) {
+            throw new Error('orderCreatedAt is required and must be a non-empty string or Date object');
         }
+
+        // Parse the date
+        const dateObj = typeof orderCreatedAt === 'string' ? new Date(orderCreatedAt) : orderCreatedAt;
+
+        // Guard against invalid date inputs
+        if (Number.isNaN(dateObj.getTime())) {
+            throw new Error('orderCreatedAt must be a valid date');
+        }
+        
+        // SEC-03: Validate orderCreatedAt is not in the future (prevents clock skew exploitation)
+        const now = Date.now();
+        if (dateObj.getTime() > now) {
+            throw new Error('orderCreatedAt cannot be in the future');
+        }
+
+        const timestamp = Math.floor(dateObj.getTime() / 1000);
         
         const payload = {
             order_id: orderId,
             payment_intent_id: paymentIntentId,
-            iat: Math.floor(Date.now() / 1000), // Issued NOW
+            iat: timestamp, // Issued at order creation (anchored to order creation time)
             exp: timestamp + this.windowSeconds, // Expires relative to ORDER creation
         };
 
