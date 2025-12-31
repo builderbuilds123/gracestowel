@@ -1,5 +1,5 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
-import { modificationTokenService } from "../../../../services/modification-token";
+import { logger } from "../../../../utils/logger";
 
 /**
  * GET /store/orders/by-payment-intent?payment_intent_id=pi_xxx
@@ -19,8 +19,13 @@ export async function GET(
     req: MedusaRequest,
     res: MedusaResponse
 ): Promise<void> {
+    // SEC-02: Set security headers FIRST (before any response)
+    res.setHeader("Cache-Control", "no-store, private");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+
     const paymentIntentId = req.query.payment_intent_id as string;
 
+    // SEC-02: Input validation - Stripe PaymentIntent IDs start with "pi_" and are 27-28 chars
     if (!paymentIntentId) {
         res.status(400).json({
             error: "payment_intent_id query parameter is required",
@@ -29,37 +34,47 @@ export async function GET(
         return;
     }
 
-    // SEC-02: Set security headers
-    res.setHeader("Cache-Control", "no-store, private");
-    res.setHeader("X-Content-Type-Options", "nosniff");
+    // Validate format: Stripe PI IDs are "pi_[a-zA-Z0-9]{24}" (27 chars total)
+    if (typeof paymentIntentId !== "string" || !paymentIntentId.startsWith("pi_") || paymentIntentId.length < 27 || paymentIntentId.length > 28) {
+        logger.warn("by-payment-intent", "Invalid payment_intent_id format", {
+            paymentIntentId: paymentIntentId.substring(0, 10) + "...", // Log partial to avoid PII
+            length: paymentIntentId.length,
+        });
+        res.status(400).json({
+            error: "Invalid payment_intent_id format",
+            code: "INVALID_PAYMENT_INTENT_ID",
+        });
+        return;
+    }
 
     const query = req.scope.resolve("query");
 
     try {
-        // SEC-02: Limit query to recent orders (24h) to prevent full table scan
-        // TODO: Add database index on metadata->>'stripe_payment_intent_id' for production
+        // SEC-02: Limit query to recent orders (24h) and minimal fields to avoid full scans
+        // NOTE: Medusa query.graph does not support JSONB filter on metadata; we bound the result set.
         const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-
-        // Find order by payment intent ID in metadata
-        // SEC-02: Fetch MINIMAL fields only (no PII)
-        const { data: allOrders } = await query.graph({
+        const { data: recentOrders } = await query.graph({
             entity: "order",
-            fields: [
-                "id",
-                "status",
-                "created_at",
-                "metadata",
-            ],
+            fields: ["id", "status", "created_at", "metadata"],
+            // keep pagination tight to reduce scan load
+            pagination: { take: 200 },
         });
 
-        // SEC-02: Filter to recent orders first (performance), then by payment intent
-        const orders = allOrders.filter((order: any) => {
+        const orders = recentOrders.filter((order: any) => {
             const orderDate = new Date(order.created_at);
-            return orderDate >= twentyFourHoursAgo &&
-                   order.metadata?.stripe_payment_intent_id === paymentIntentId;
+            return (
+                orderDate >= twentyFourHoursAgo &&
+                order.metadata?.stripe_payment_intent_id === paymentIntentId
+            );
         });
 
         if (!orders.length) {
+            // SEC-02: Audit log for failed lookup (security monitoring)
+            logger.info("by-payment-intent", "Order lookup by payment intent - not found", {
+                paymentIntentId: paymentIntentId.substring(0, 10) + "...", // Log partial to avoid full PI ID in logs
+                found: false,
+            });
+
             // Order might not be created yet (webhook still processing)
             res.status(404).json({
                 error: "Order not found",
@@ -72,29 +87,27 @@ export async function GET(
 
         const order = orders[0];
 
-        // SEC-02: Calculate token status WITHOUT generating new token
-        // Token was already generated on order creation, stored in Redis
-        // Client should fetch full details via authenticated /order/status/:id endpoint
-        const existingToken = modificationTokenService.generateToken(
-            order.id,
-            paymentIntentId,
-            order.created_at
-        );
-        const remainingSeconds = modificationTokenService.getRemainingTime(existingToken);
-        const modificationAllowed = remainingSeconds > 0;
+        // SEC-02: Audit log for security-relevant lookup
+        logger.info("by-payment-intent", "Order lookup by payment intent", {
+            orderId: order.id,
+            orderStatus: order.status,
+            paymentIntentId: paymentIntentId.substring(0, 10) + "...", // Log partial to avoid full PI ID in logs
+            found: true,
+        });
 
-        // SEC-02: Return MINIMAL data (no PII)
+        // SEC-02: Return MINIMAL data (no PII, no token minting)
         res.status(200).json({
             order: {
                 id: order.id,
                 status: order.status,
             },
-            modification_token: existingToken, // For backward compatibility
-            modification_allowed: modificationAllowed,
-            remaining_seconds: remainingSeconds,
         });
-    } catch (error) {
-        console.error("Error fetching order by payment intent:", error);
+    } catch (error: any) {
+        logger.error("by-payment-intent", "Failed to fetch order by payment intent", {
+            paymentIntentId,
+            errorName: error?.name,
+            errorMessage: error?.message,
+        }, error);
         res.status(500).json({
             error: "Failed to fetch order",
             code: "FETCH_FAILED",
