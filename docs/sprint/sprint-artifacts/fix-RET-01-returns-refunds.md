@@ -52,11 +52,13 @@ The `handleChargeRefunded` function processes Stripe `charge.refunded` webhooks:
 
 ## Verification
 - **Automated**:
-  - ✅ 9 unit tests passing in `integration-tests/unit/charge-refunded-webhook.unit.spec.ts`:
+  - ✅ 13 unit tests passing in `integration-tests/unit/charge-refunded-webhook.unit.spec.ts` (Verified 2025-12-30):
     - Full refund scenarios (2 tests)
     - Partial refund scenarios (2 tests)
     - Edge cases (4 tests): missing payment_intent, order not found, no PaymentCollection, PaymentCollection update failure
     - Currency handling (1 test): EUR currency support
+    - Input Validation (2 tests): Negative/Excessive amounts
+    - Idempotency (2 tests): Duplicate transaction/Already canceled check
 
 ## Dependencies
 - ✅ PAY-01 (Payment models) - DONE
