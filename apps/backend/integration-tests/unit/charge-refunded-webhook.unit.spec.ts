@@ -3,6 +3,12 @@
  *
  * Story: RET-01 (Returns/Refunds Not Modeled)
  * Coverage: Full refunds, partial refunds, PaymentCollection updates, OrderTransaction creation, order status updates
+ * 
+ * Code Review Fixes (2025-12-30):
+ * - Tests now use actual handleChargeRefunded function instead of simulation
+ * - Added idempotency test cases
+ * - Added input validation test cases
+ * - Fixed error handling tests to match implementation
  */
 
 import { MedusaContainer } from "@medusajs/framework/types";
@@ -22,8 +28,17 @@ const mockLogger = {
 };
 
 jest.mock("../../src/utils/logger", () => ({
-    logger: mockLogger,
+    logger: {
+        info: jest.fn(),
+        warn: jest.fn(),
+        error: jest.fn(),
+        critical: jest.fn(),
+    },
 }));
+
+// Import after mocks are set up
+import { handleChargeRefunded } from "../../src/loaders/stripe-event-worker";
+import { logger } from "../../src/utils/logger";
 
 // Mock startStripeEventWorker to prevent actual worker startup
 jest.mock("../../src/workers/stripe-event-worker", () => ({
@@ -37,16 +52,23 @@ jest.mock("../../src/utils/register-subscribers", () => ({
 
 describe("charge.refunded webhook handler", () => {
     let container: MedusaContainer;
-    let processWebhookEvent: (event: Stripe.Event) => Promise<void>;
 
     beforeEach(async () => {
         jest.clearAllMocks();
+
+        // Reset mock logger functions
+        (logger.info as jest.Mock) = jest.fn();
+        (logger.warn as jest.Mock) = jest.fn();
+        (logger.error as jest.Mock) = jest.fn();
+        (logger.critical as jest.Mock) = jest.fn();
 
         // Setup mock container with proper Medusa v2 service resolution
         container = {
             resolve: jest.fn((service: string) => {
                 if (service === "query") {
-                    return mockQuery;
+                    return {
+                        graph: mockQuery,
+                    };
                 } else if (service === "order") {
                     return {
                         updateOrders: mockOrderServiceUpdate,
@@ -63,66 +85,6 @@ describe("charge.refunded webhook handler", () => {
                 throw new Error(`Unknown service: ${service}`);
             }),
         } as any;
-
-        // Since handleStripeEvent is not exported, we'll test it indirectly by
-        // manually calling the internal functions that would be called by the webhook handler.
-        // This is a simplified test that validates the logic without needing the full event loop.
-        processWebhookEvent = async (event: Stripe.Event) => {
-            // This simulates what the webhook handler does internally
-            const charge = event.data.object as Stripe.Charge;
-            const paymentIntentId = typeof charge.payment_intent === 'string'
-                ? charge.payment_intent
-                : charge.payment_intent?.id;
-
-            if (!paymentIntentId) {
-                mockLogger.warn("stripe-worker", "charge.refunded event missing payment_intent", {
-                    chargeId: charge.id
-                });
-                return;
-            }
-
-            // Find order by PaymentIntent ID (simulating findOrderByPaymentIntentId)
-            const { data: orders } = await mockQuery();
-            const order = orders.find((o: any) =>
-                o.metadata?.stripe_payment_intent_id === paymentIntentId
-            );
-
-            if (!order) {
-                mockLogger.warn("stripe-worker", "No order found for refunded charge", {
-                    paymentIntentId,
-                    chargeId: charge.id,
-                });
-                return;
-            }
-
-            const isFullRefund = charge.refunded || charge.amount_refunded === charge.amount;
-            const refundAmountCents = charge.amount_refunded;
-
-            // Update PaymentCollection
-            const { data: ordersWithPC } = await mockQuery();
-            const orderWithPC = ordersWithPC[0];
-            const paymentCollection = orderWithPC?.payment_collections?.[0];
-
-            if (paymentCollection) {
-                const newStatus = isFullRefund ? "canceled" : "completed";
-                await mockPaymentModuleUpdate([{ id: paymentCollection.id, status: newStatus }]);
-            }
-
-            // Create OrderTransaction
-            const amountInMajorUnits = refundAmountCents / 100;
-            await mockOrderModuleAdd({
-                order_id: order.id,
-                amount: -amountInMajorUnits,
-                currency_code: charge.currency,
-                reference: "refund",
-                reference_id: paymentIntentId,
-            });
-
-            // Update order status if full refund
-            if (isFullRefund) {
-                await mockOrderServiceUpdate([{ id: order.id, status: "canceled" }]);
-            }
-        };
     });
 
     describe("Full refund scenarios", () => {
@@ -181,11 +143,18 @@ describe("charge.refunded webhook handler", () => {
                 ],
             });
 
+            // Mock OrderTransaction idempotency check
+            mockQuery.mockResolvedValueOnce({
+                data: [],
+            });
+
             mockPaymentModuleUpdate.mockResolvedValueOnce(undefined);
             mockOrderModuleAdd.mockResolvedValueOnce(undefined);
             mockOrderServiceUpdate.mockResolvedValueOnce(undefined);
 
-            await processWebhookEvent(chargeEvent);
+            await expect(
+                handleChargeRefunded(chargeEvent.data.object as Stripe.Charge, container)
+            ).resolves.not.toThrow();
 
             // Verify PaymentCollection was updated to canceled
             expect(mockPaymentModuleUpdate).toHaveBeenCalledWith([
@@ -195,11 +164,11 @@ describe("charge.refunded webhook handler", () => {
                 },
             ]);
 
-            // Verify OrderTransaction was created with negative amount
+            // Verify OrderTransaction was created with negative amount and uppercase currency
             expect(mockOrderModuleAdd).toHaveBeenCalledWith({
                 order_id: "order_123",
                 amount: -50.0, // Negative for refund, in major units
-                currency_code: "usd",
+                currency_code: "USD", // Uppercase per ISO 4217
                 reference: "refund",
                 reference_id: "pi_123",
             });
@@ -247,6 +216,7 @@ describe("charge.refunded webhook handler", () => {
                 ],
             });
 
+            // Mock PaymentCollection query
             mockQuery.mockResolvedValueOnce({
                 data: [
                     {
@@ -256,11 +226,16 @@ describe("charge.refunded webhook handler", () => {
                 ],
             });
 
+            // Mock OrderTransaction idempotency check
+            mockQuery.mockResolvedValueOnce({
+                data: [],
+            });
+
             mockPaymentModuleUpdate.mockResolvedValueOnce(undefined);
             mockOrderModuleAdd.mockResolvedValueOnce(undefined);
             mockOrderServiceUpdate.mockResolvedValueOnce(undefined);
 
-            await processWebhookEvent(chargeEvent);
+            await handleChargeRefunded(chargeEvent.data.object as Stripe.Charge, container);
 
             expect(mockPaymentModuleUpdate).toHaveBeenCalledWith([
                 { id: "paycol_124", status: "canceled" },
@@ -306,6 +281,7 @@ describe("charge.refunded webhook handler", () => {
                 ],
             });
 
+            // Mock PaymentCollection query
             mockQuery.mockResolvedValueOnce({
                 data: [
                     {
@@ -315,10 +291,15 @@ describe("charge.refunded webhook handler", () => {
                 ],
             });
 
+            // Mock OrderTransaction idempotency check
+            mockQuery.mockResolvedValueOnce({
+                data: [],
+            });
+
             mockPaymentModuleUpdate.mockResolvedValueOnce(undefined);
             mockOrderModuleAdd.mockResolvedValueOnce(undefined);
 
-            await processWebhookEvent(chargeEvent);
+            await handleChargeRefunded(chargeEvent.data.object as Stripe.Charge, container);
 
             // Verify PaymentCollection status remains "completed" for partial refund
             expect(mockPaymentModuleUpdate).toHaveBeenCalledWith([
@@ -328,11 +309,11 @@ describe("charge.refunded webhook handler", () => {
                 },
             ]);
 
-            // Verify OrderTransaction was created with partial refund amount
+            // Verify OrderTransaction was created with partial refund amount and uppercase currency
             expect(mockOrderModuleAdd).toHaveBeenCalledWith({
                 order_id: "order_125",
                 amount: -25.0, // Negative for refund
-                currency_code: "usd",
+                currency_code: "USD", // Uppercase per ISO 4217
                 reference: "refund",
                 reference_id: "pi_125",
             });
@@ -376,6 +357,7 @@ describe("charge.refunded webhook handler", () => {
                 ],
             });
 
+            // Mock PaymentCollection query
             mockQuery.mockResolvedValueOnce({
                 data: [
                     {
@@ -385,15 +367,20 @@ describe("charge.refunded webhook handler", () => {
                 ],
             });
 
+            // Mock OrderTransaction idempotency check
+            mockQuery.mockResolvedValueOnce({
+                data: [],
+            });
+
             mockPaymentModuleUpdate.mockResolvedValueOnce(undefined);
             mockOrderModuleAdd.mockResolvedValueOnce(undefined);
 
-            await processWebhookEvent(firstRefund);
+            await handleChargeRefunded(firstRefund.data.object as Stripe.Charge, container);
 
             expect(mockOrderModuleAdd).toHaveBeenCalledWith({
                 order_id: "order_126",
                 amount: -30.0,
-                currency_code: "usd",
+                currency_code: "USD", // Uppercase per ISO 4217
                 reference: "refund",
                 reference_id: "pi_126",
             });
@@ -427,9 +414,9 @@ describe("charge.refunded webhook handler", () => {
                 request: null,
             };
 
-            await processWebhookEvent(chargeEvent);
+            await handleChargeRefunded(chargeEvent.data.object as Stripe.Charge, container);
 
-            expect(mockLogger.warn).toHaveBeenCalledWith(
+            expect(logger.warn).toHaveBeenCalledWith(
                 "stripe-worker",
                 "charge.refunded event missing payment_intent",
                 { chargeId: "ch_127" }
@@ -466,9 +453,9 @@ describe("charge.refunded webhook handler", () => {
                 data: [],
             });
 
-            await processWebhookEvent(chargeEvent);
+            await handleChargeRefunded(chargeEvent.data.object as Stripe.Charge, container);
 
-            expect(mockLogger.warn).toHaveBeenCalledWith(
+            expect(logger.warn).toHaveBeenCalledWith(
                 "stripe-worker",
                 "No order found for refunded charge",
                 {
@@ -517,6 +504,7 @@ describe("charge.refunded webhook handler", () => {
                 ],
             });
 
+            // Mock PaymentCollection query (empty)
             mockQuery.mockResolvedValueOnce({
                 data: [
                     {
@@ -526,15 +514,20 @@ describe("charge.refunded webhook handler", () => {
                 ],
             });
 
+            // Mock OrderTransaction idempotency check
+            mockQuery.mockResolvedValueOnce({
+                data: [],
+            });
+
             mockOrderModuleAdd.mockResolvedValueOnce(undefined);
 
-            await processWebhookEvent(chargeEvent);
+            await handleChargeRefunded(chargeEvent.data.object as Stripe.Charge, container);
 
             // OrderTransaction should still be created even without PaymentCollection
             expect(mockOrderModuleAdd).toHaveBeenCalled();
         });
 
-        it("should handle PaymentCollection update failure gracefully", async () => {
+        it("should handle PaymentCollection update failure gracefully (logs error, continues)", async () => {
             const chargeEvent: Stripe.Event = {
                 id: "evt_test_130",
                 type: "charge.refunded",
@@ -568,6 +561,7 @@ describe("charge.refunded webhook handler", () => {
                 ],
             });
 
+            // Mock PaymentCollection query
             mockQuery.mockResolvedValueOnce({
                 data: [
                     {
@@ -577,18 +571,33 @@ describe("charge.refunded webhook handler", () => {
                 ],
             });
 
-            // Mock PaymentCollection update failure
+            // Mock OrderTransaction idempotency check
+            mockQuery.mockResolvedValueOnce({
+                data: [],
+            });
+
+            // Mock PaymentCollection update failure (implementation catches and logs, doesn't throw)
             mockPaymentModuleUpdate.mockRejectedValueOnce(new Error("Database connection lost"));
 
             mockOrderModuleAdd.mockResolvedValueOnce(undefined);
             mockOrderServiceUpdate.mockResolvedValueOnce(undefined);
 
-            // Expect the error to be thrown since PaymentCollection update failed
-            await expect(processWebhookEvent(chargeEvent)).rejects.toThrow("Database connection lost");
+            // Implementation logs error but continues processing
+            await handleChargeRefunded(chargeEvent.data.object as Stripe.Charge, container);
 
-            // OrderTransaction and order status update should NOT have been called due to error
-            expect(mockOrderModuleAdd).not.toHaveBeenCalled();
-            expect(mockOrderServiceUpdate).not.toHaveBeenCalled();
+            // Verify error was logged
+            expect(logger.error).toHaveBeenCalledWith(
+                "stripe-worker",
+                "Failed to update PaymentCollection on refund",
+                expect.objectContaining({
+                    orderId: "order_130",
+                    error: "Database connection lost",
+                })
+            );
+
+            // OrderTransaction and order status update should still be called (error handling continues)
+            expect(mockOrderModuleAdd).toHaveBeenCalled();
+            expect(mockOrderServiceUpdate).toHaveBeenCalled();
         });
     });
 
@@ -627,6 +636,7 @@ describe("charge.refunded webhook handler", () => {
                 ],
             });
 
+            // Mock PaymentCollection query
             mockQuery.mockResolvedValueOnce({
                 data: [
                     {
@@ -636,19 +646,265 @@ describe("charge.refunded webhook handler", () => {
                 ],
             });
 
+            // Mock OrderTransaction idempotency check
+            mockQuery.mockResolvedValueOnce({
+                data: [],
+            });
+
             mockPaymentModuleUpdate.mockResolvedValueOnce(undefined);
             mockOrderModuleAdd.mockResolvedValueOnce(undefined);
             mockOrderServiceUpdate.mockResolvedValueOnce(undefined);
 
-            await processWebhookEvent(chargeEvent);
+            await handleChargeRefunded(chargeEvent.data.object as Stripe.Charge, container);
 
             expect(mockOrderModuleAdd).toHaveBeenCalledWith({
                 order_id: "order_131",
                 amount: -50.0,
-                currency_code: "eur",
+                currency_code: "EUR", // Uppercase per ISO 4217
                 reference: "refund",
                 reference_id: "pi_131",
             });
+        });
+    });
+
+    describe("Input validation", () => {
+        it("should reject negative refund amounts", async () => {
+            const chargeEvent: Stripe.Event = {
+                id: "evt_test_132",
+                type: "charge.refunded",
+                object: "event",
+                api_version: "2023-10-16",
+                created: Date.now(),
+                data: {
+                    object: {
+                        id: "ch_132",
+                        object: "charge",
+                        amount: 5000,
+                        amount_refunded: -100, // Invalid negative amount
+                        refunded: false,
+                        currency: "usd",
+                        payment_intent: "pi_132",
+                    } as any,
+                },
+                livemode: false,
+                pending_webhooks: 0,
+                request: null,
+            };
+
+            mockQuery.mockResolvedValueOnce({
+                data: [
+                    {
+                        id: "order_132",
+                        status: "completed",
+                        metadata: { stripe_payment_intent_id: "pi_132" },
+                    },
+                ],
+            });
+
+            await handleChargeRefunded(chargeEvent.data.object as Stripe.Charge, container);
+
+            expect(logger.error).toHaveBeenCalledWith(
+                "stripe-worker",
+                "Invalid refund amount",
+                expect.objectContaining({
+                    chargeId: "ch_132",
+                    refundAmountCents: -100,
+                })
+            );
+
+            expect(mockOrderModuleAdd).not.toHaveBeenCalled();
+        });
+
+        it("should reject refund amounts exceeding original charge", async () => {
+            const chargeEvent: Stripe.Event = {
+                id: "evt_test_133",
+                type: "charge.refunded",
+                object: "event",
+                api_version: "2023-10-16",
+                created: Date.now(),
+                data: {
+                    object: {
+                        id: "ch_133",
+                        object: "charge",
+                        amount: 5000,
+                        amount_refunded: 6000, // Exceeds original
+                        refunded: false,
+                        currency: "usd",
+                        payment_intent: "pi_133",
+                    } as Stripe.Charge,
+                },
+                livemode: false,
+                pending_webhooks: 0,
+                request: null,
+            };
+
+            mockQuery.mockResolvedValueOnce({
+                data: [
+                    {
+                        id: "order_133",
+                        status: "completed",
+                        metadata: { stripe_payment_intent_id: "pi_133" },
+                    },
+                ],
+            });
+
+            await handleChargeRefunded(chargeEvent.data.object as Stripe.Charge, container);
+
+            expect(logger.error).toHaveBeenCalledWith(
+                "stripe-worker",
+                "Refund amount exceeds original charge amount",
+                expect.objectContaining({
+                    refundAmountCents: 6000,
+                    originalAmount: 5000,
+                })
+            );
+
+            expect(mockOrderModuleAdd).not.toHaveBeenCalled();
+        });
+    });
+
+    describe("Idempotency", () => {
+        it("should skip duplicate refund transactions", async () => {
+            const chargeEvent: Stripe.Event = {
+                id: "evt_test_134",
+                type: "charge.refunded",
+                object: "event",
+                api_version: "2023-10-16",
+                created: Date.now(),
+                data: {
+                    object: {
+                        id: "ch_134",
+                        object: "charge",
+                        amount: 5000,
+                        amount_refunded: 5000,
+                        refunded: true,
+                        currency: "usd",
+                        payment_intent: "pi_134",
+                    } as Stripe.Charge,
+                },
+                livemode: false,
+                pending_webhooks: 0,
+                request: null,
+            };
+
+            mockQuery.mockResolvedValueOnce({
+                data: [
+                    {
+                        id: "order_134",
+                        status: "completed",
+                        metadata: { stripe_payment_intent_id: "pi_134" },
+                        payment_collections: [{ id: "paycol_134", status: "completed" }],
+                    },
+                ],
+            });
+
+            // Mock PaymentCollection query
+            mockQuery.mockResolvedValueOnce({
+                data: [
+                    {
+                        id: "order_134",
+                        payment_collections: [{ id: "paycol_134", status: "completed" }],
+                    },
+                ],
+            });
+
+            // Mock existing OrderTransaction (idempotency check finds duplicate)
+            mockQuery.mockResolvedValueOnce({
+                data: [
+                    {
+                        id: "txn_134",
+                        reference: "refund",
+                        reference_id: "pi_134",
+                        amount: -50.0,
+                    },
+                ],
+            });
+
+            await handleChargeRefunded(chargeEvent.data.object as Stripe.Charge, container);
+
+            // Should log that transaction already exists
+            expect(logger.info).toHaveBeenCalledWith(
+                "stripe-worker",
+                "Refund transaction already exists - skipping duplicate",
+                expect.objectContaining({
+                    orderId: "order_134",
+                    paymentIntentId: "pi_134",
+                })
+            );
+
+            // Should NOT create duplicate transaction
+            expect(mockOrderModuleAdd).not.toHaveBeenCalled();
+        });
+
+        it("should skip order status update if already canceled", async () => {
+            const chargeEvent: Stripe.Event = {
+                id: "evt_test_135",
+                type: "charge.refunded",
+                object: "event",
+                api_version: "2023-10-16",
+                created: Date.now(),
+                data: {
+                    object: {
+                        id: "ch_135",
+                        object: "charge",
+                        amount: 5000,
+                        amount_refunded: 5000,
+                        refunded: true,
+                        currency: "usd",
+                        payment_intent: "pi_135",
+                    } as Stripe.Charge,
+                },
+                livemode: false,
+                pending_webhooks: 0,
+                request: null,
+            };
+
+            mockQuery.mockResolvedValueOnce({
+                data: [
+                    {
+                        id: "order_135",
+                        status: "canceled", // Already canceled
+                        metadata: { stripe_payment_intent_id: "pi_135" },
+                        payment_collections: [{ id: "paycol_135", status: "completed" }],
+                    },
+                ],
+            });
+
+            // Mock PaymentCollection query
+            mockQuery.mockResolvedValueOnce({
+                data: [
+                    {
+                        id: "order_135",
+                        payment_collections: [{ id: "paycol_135", status: "completed" }],
+                    },
+                ],
+            });
+
+            // Mock OrderTransaction idempotency check
+            mockQuery.mockResolvedValueOnce({
+                data: [],
+            });
+
+            mockPaymentModuleUpdate.mockResolvedValueOnce(undefined);
+            mockOrderModuleAdd.mockResolvedValueOnce(undefined);
+
+            await handleChargeRefunded(chargeEvent.data.object as Stripe.Charge, container);
+
+            // Should log that order is already canceled
+            expect(logger.info).toHaveBeenCalledWith(
+                "stripe-worker",
+                "Order already canceled - skipping status update",
+                expect.objectContaining({
+                    orderId: "order_135",
+                })
+            );
+
+            // Should NOT update order status (already canceled)
+            expect(mockOrderServiceUpdate).not.toHaveBeenCalled();
+
+            // Should still process PaymentCollection and OrderTransaction for audit
+            expect(mockPaymentModuleUpdate).toHaveBeenCalled();
+            expect(mockOrderModuleAdd).toHaveBeenCalled();
         });
     });
 });

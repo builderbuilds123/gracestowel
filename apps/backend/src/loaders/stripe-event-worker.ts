@@ -198,7 +198,7 @@ async function findOrderByPaymentIntentId(
         order.metadata?.stripe_payment_intent_id === paymentIntentId
     );
 
-    if (!matchingOrder && recentOrders.length >= 1000) {
+    if (!matchingOrder && recentOrders.length >= 5000) {
         // If we hit the limit and didn't find it, log warning
         logger.warn("stripe-worker", "Order lookup incomplete - hit 5000 order limit", {
             paymentIntentId,
@@ -350,15 +350,16 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session):
  * This handler processes Stripe charge.refunded webhooks to:
  * 1. Find the associated order via PaymentIntent ID
  * 2. Update PaymentCollection status based on refund amount
- * 3. Create OrderTransaction record for the refund
+ * 3. Create OrderTransaction record for the refund (with idempotency check)
  * 4. Update order status if fully refunded
  *
  * Supports both full and partial refunds.
+ * Includes idempotency checks to prevent duplicate processing.
  *
  * @param charge - Stripe Charge object from webhook
  * @param container - Medusa dependency injection container
  */
-async function handleChargeRefunded(charge: Stripe.Charge, container: MedusaContainer): Promise<void> {
+export async function handleChargeRefunded(charge: Stripe.Charge, container: MedusaContainer): Promise<void> {
     const paymentIntentId = typeof charge.payment_intent === 'string'
         ? charge.payment_intent
         : charge.payment_intent?.id;
@@ -396,9 +397,39 @@ async function handleChargeRefunded(charge: Stripe.Charge, container: MedusaCont
             currentStatus: order.status,
         });
 
-        // Step 2: Determine refund type (full vs partial)
-        const isFullRefund = charge.refunded || charge.amount_refunded === charge.amount;
+        // Step 2: Validate refund amount and determine refund type
         const refundAmountCents = charge.amount_refunded;
+        
+        // Input validation: ensure refund amount is valid
+        if (typeof refundAmountCents !== 'number' || refundAmountCents < 0) {
+            logger.error("stripe-worker", "Invalid refund amount", {
+                chargeId: charge.id,
+                paymentIntentId,
+                refundAmountCents,
+            });
+            return;
+        }
+        
+        if (refundAmountCents > charge.amount) {
+            logger.error("stripe-worker", "Refund amount exceeds original charge amount", {
+                chargeId: charge.id,
+                paymentIntentId,
+                refundAmountCents,
+                originalAmount: charge.amount,
+            });
+            return;
+        }
+        
+        const isFullRefund = charge.refunded || charge.amount_refunded === charge.amount;
+        
+        // Check if order is already canceled (idempotency)
+        if (order.status === "canceled" && isFullRefund) {
+            logger.info("stripe-worker", "Order already canceled - skipping status update", {
+                orderId: order.id,
+                paymentIntentId,
+            });
+            // Still process PaymentCollection and OrderTransaction for audit trail
+        }
 
         // Step 3: Update PaymentCollection status
         await updatePaymentCollectionOnRefund(
@@ -408,7 +439,7 @@ async function handleChargeRefunded(charge: Stripe.Charge, container: MedusaCont
             container
         );
 
-        // Step 4: Create OrderTransaction for refund
+        // Step 4: Create OrderTransaction for refund (with idempotency check)
         await createOrderTransactionOnRefund(
             order.id,
             refundAmountCents,
@@ -417,8 +448,8 @@ async function handleChargeRefunded(charge: Stripe.Charge, container: MedusaCont
             container
         );
 
-        // Step 5: Update order status if fully refunded
-        if (isFullRefund) {
+        // Step 5: Update order status if fully refunded (skip if already canceled)
+        if (isFullRefund && order.status !== "canceled") {
             await updateOrderStatusOnFullRefund(order.id, container);
         }
 
@@ -542,17 +573,42 @@ async function createOrderTransactionOnRefund(
 ): Promise<void> {
     try {
         const orderModuleService = container.resolve(Modules.ORDER) as any;
+        const query = container.resolve("query");
+
+        // IDEMPOTENCY CHECK: Verify if refund transaction already exists
+        // Query existing OrderTransactions for this order with matching reference
+        const { data: existingTransactions } = await query.graph({
+            entity: "order_transaction",
+            fields: ["id", "reference", "reference_id", "amount"],
+            filters: {
+                order_id: orderId,
+                reference: "refund",
+                reference_id: paymentIntentId,
+            },
+        });
+
+        if (existingTransactions && existingTransactions.length > 0) {
+            logger.info("stripe-worker", "Refund transaction already exists - skipping duplicate", {
+                orderId,
+                paymentIntentId,
+                existingTransactionId: existingTransactions[0].id,
+            });
+            return; // Idempotent: already processed
+        }
 
         // Medusa v2 uses MAJOR UNITS for all amount fields
         // Convert Stripe minor units (cents) → Medusa major units (dollars)
         const amountInMajorUnits = refundAmountCents / 100;
+
+        // Normalize currency code to uppercase (ISO 4217 standard)
+        const normalizedCurrencyCode = currencyCode.toUpperCase();
 
         // Create OrderTransaction with reference to the refund
         // Note: Amount is NEGATIVE for refunds to indicate money going back to customer
         await orderModuleService.addOrderTransactions({
             order_id: orderId,
             amount: -amountInMajorUnits, // Negative for refund
-            currency_code: currencyCode,
+            currency_code: normalizedCurrencyCode,
             reference: "refund",
             reference_id: paymentIntentId,
         });
@@ -560,7 +616,7 @@ async function createOrderTransactionOnRefund(
         logger.info("stripe-worker", "OrderTransaction created for refund", {
             orderId,
             amount: -amountInMajorUnits,
-            currencyCode: currencyCode.toUpperCase(),
+            currencyCode: normalizedCurrencyCode,
             referenceId: paymentIntentId,
         });
 
