@@ -1,21 +1,31 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
-import { modificationTokenService } from "../../../../services/modification-token";
+import { logger } from "../../../../utils/logger";
 
 /**
  * GET /store/orders/by-payment-intent?payment_intent_id=pi_xxx
- * 
- * Fetch order details by Stripe PaymentIntent ID.
- * Returns order info and modification token if within the 1-hour window.
- * 
- * This endpoint is used by the frontend after payment to get the order
- * and modification token for the 1-hour modification window.
+ *
+ * SEC-02 EMERGENCY FIX: Minimal, secure order lookup endpoint
+ *
+ * SECURITY CONSTRAINTS:
+ * - NO PII: Returns only order_id and status (no shipping_address, items, customer)
+ * - NO token minting: Read-only endpoint (client should use /order/status/:id endpoint)
+ * - Query optimization: Filters orders to recent 24h to limit scan
+ * - Security headers: Cache-Control: no-store, private + X-Content-Type-Options: nosniff
+ *
+ * Used by storefront checkout.success.tsx to verify order exists after payment.
+ * Frontend gets shipping details from Stripe PaymentIntent, not from this endpoint.
  */
 export async function GET(
     req: MedusaRequest,
     res: MedusaResponse
 ): Promise<void> {
+    // SEC-02: Set security headers FIRST (before any response)
+    res.setHeader("Cache-Control", "no-store, private");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+
     const paymentIntentId = req.query.payment_intent_id as string;
 
+    // SEC-02: Input validation - Stripe PaymentIntent IDs start with "pi_" and are 27-28 chars
     if (!paymentIntentId) {
         res.status(400).json({
             error: "payment_intent_id query parameter is required",
@@ -24,31 +34,47 @@ export async function GET(
         return;
     }
 
+    // Validate format: Stripe PI IDs are "pi_[a-zA-Z0-9]{24}" (27 chars total)
+    if (typeof paymentIntentId !== "string" || !paymentIntentId.startsWith("pi_") || paymentIntentId.length < 27 || paymentIntentId.length > 28) {
+        logger.warn("by-payment-intent", "Invalid payment_intent_id format", {
+            paymentIntentId: paymentIntentId.substring(0, 10) + "...", // Log partial to avoid PII
+            length: paymentIntentId.length,
+        });
+        res.status(400).json({
+            error: "Invalid payment_intent_id format",
+            code: "INVALID_PAYMENT_INTENT_ID",
+        });
+        return;
+    }
+
     const query = req.scope.resolve("query");
 
     try {
-        // Find order by payment intent ID in metadata
-        // Note: We need to fetch all orders and filter manually since metadata filtering isn't directly supported
-        const { data: allOrders } = await query.graph({
+        // SEC-02: Limit query to recent orders (24h) and minimal fields to avoid full scans
+        // NOTE: Medusa query.graph does not support JSONB filter on metadata; we bound the result set.
+        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        const { data: recentOrders } = await query.graph({
             entity: "order",
-            fields: [
-                "id",
-                "status",
-                "created_at",
-                "total",
-                "currency_code",
-                "metadata",
-                "items.*",
-                "shipping_address.*",
-            ],
+            fields: ["id", "status", "created_at", "metadata"],
+            // keep pagination tight to reduce scan load
+            pagination: { take: 200 },
         });
 
-        // Filter orders by payment intent ID in metadata
-        const orders = allOrders.filter((order: any) =>
-            order.metadata?.stripe_payment_intent_id === paymentIntentId
-        );
+        const orders = recentOrders.filter((order: any) => {
+            const orderDate = new Date(order.created_at);
+            return (
+                orderDate >= twentyFourHoursAgo &&
+                order.metadata?.stripe_payment_intent_id === paymentIntentId
+            );
+        });
 
         if (!orders.length) {
+            // SEC-02: Audit log for failed lookup (security monitoring)
+            logger.info("by-payment-intent", "Order lookup by payment intent - not found", {
+                paymentIntentId: paymentIntentId.substring(0, 10) + "...", // Log partial to avoid full PI ID in logs
+                found: false,
+            });
+
             // Order might not be created yet (webhook still processing)
             res.status(404).json({
                 error: "Order not found",
@@ -61,38 +87,27 @@ export async function GET(
 
         const order = orders[0];
 
-        // Generate a new modification token for this order
-        const token = modificationTokenService.generateToken(
-            order.id,
-            paymentIntentId,
-            order.created_at // Anchor expiry to order creation time
-        );
+        // SEC-02: Audit log for security-relevant lookup
+        logger.info("by-payment-intent", "Order lookup by payment intent", {
+            orderId: order.id,
+            orderStatus: order.status,
+            paymentIntentId: paymentIntentId.substring(0, 10) + "...", // Log partial to avoid full PI ID in logs
+            found: true,
+        });
 
-        const remainingSeconds = modificationTokenService.getRemainingTime(token);
-        const modificationAllowed = remainingSeconds > 0;
-
+        // SEC-02: Return MINIMAL data (no PII, no token minting)
         res.status(200).json({
             order: {
                 id: order.id,
                 status: order.status,
-                created_at: order.created_at,
-                total: order.total,
-                currency_code: order.currency_code,
-                items: order.items?.map((item: any) => ({
-                    id: item.id,
-                    title: item.title,
-                    quantity: item.quantity,
-                    unit_price: item.unit_price,
-                    thumbnail: item.thumbnail,
-                })) || [],
-                shipping_address: order.shipping_address,
             },
-            modification_token: token,
-            modification_allowed: modificationAllowed,
-            remaining_seconds: remainingSeconds,
         });
-    } catch (error) {
-        console.error("Error fetching order by payment intent:", error);
+    } catch (error: any) {
+        logger.error("by-payment-intent", "Failed to fetch order by payment intent", {
+            paymentIntentId,
+            errorName: error?.name,
+            errorMessage: error?.message,
+        }, error);
         res.status(500).json({
             error: "Failed to fetch order",
             code: "FETCH_FAILED",
