@@ -7,6 +7,7 @@ import { posts } from "../data/blogPosts";
 import { getStripe, initStripe } from "../lib/stripe";
 import { monitoredFetch } from "../utils/monitored-fetch";
 import { createLogger } from "../lib/logger";
+import { migrateStorageItem } from "../lib/storage-migration";
 
 // Lazy load Map component to avoid SSR issues with Leaflet
 const Map = lazy(() => import("../components/Map.client"));
@@ -116,6 +117,9 @@ export default function CheckoutSuccess() {
     const { clearCart, items } = useCart();
     const [paymentStatus, setPaymentStatus] = useState<'loading' | 'success' | 'error' | 'canceled'>('loading');
 
+    // Create logger once at component top for log correlation across component lifecycle
+    const logger = createLogger();
+
     // Initialize Stripe on mount (required for retrievePaymentIntent)
     useEffect(() => {
         if (stripePublishableKey) {
@@ -156,8 +160,9 @@ export default function CheckoutSuccess() {
             } catch (error) {
                 // Non-critical: storage cleanup failures don't affect navigation
                 // Errors can occur in private browsing mode or when storage is disabled
-                const logger = createLogger();
-                logger.warn("Failed to cleanup sessionStorage on unmount", error instanceof Error ? error : new Error(String(error)));
+                logger.warn("Failed to cleanup sessionStorage on unmount", {
+                    error: error instanceof Error ? error.message : String(error),
+                });
             }
         };
     }, []);
@@ -199,7 +204,6 @@ export default function CheckoutSuccess() {
 
                     if (error) {
                         // Use existing logger for errors (without sensitive data)
-                        const logger = createLogger();
                         const errorObj = error instanceof Error ? error : new Error(error.message || String(error));
                         logger.error("Stripe retrieval error", errorObj, {
                             redirectStatus,
@@ -217,75 +221,8 @@ export default function CheckoutSuccess() {
                         // Handle Order Details Logic (Persistence)
                         // SEC-05: Recover from sessionStorage (clears on tab close)
                         // MED-2 FIX: Migrate from localStorage if data exists there
-                        let savedOrder: string | null = null;
-                        let savedOrderId: string | null = null;
-
-                        try {
-                            savedOrder = sessionStorage.getItem('lastOrder');
-                            savedOrderId = sessionStorage.getItem('orderId');
-                        } catch (error) {
-                            // sessionStorage may be disabled (private browsing, storage disabled)
-                            // Continue with migration from localStorage as fallback
-                            const logger = createLogger();
-                            logger.warn("sessionStorage access failed, attempting localStorage migration", error instanceof Error ? error : new Error(String(error)));
-                        }
-
-                        // Migration path: check localStorage for legacy data
-                        if (!savedOrder) {
-                            try {
-                                const legacyOrder = localStorage.getItem('lastOrder');
-                                if (legacyOrder) {
-                                    // Migrate to sessionStorage
-                                    try {
-                                        sessionStorage.setItem('lastOrder', legacyOrder);
-                                        localStorage.removeItem('lastOrder'); // Clean up old storage
-                                        savedOrder = legacyOrder;
-                                    } catch (error) {
-                                        // Migration failed (sessionStorage full or disabled)
-                                        // Use localStorage value directly as fallback
-                                        savedOrder = legacyOrder;
-                                        const logger = createLogger();
-                                        logger.warn("Failed to migrate lastOrder to sessionStorage, using localStorage value", error instanceof Error ? error : new Error(String(error)));
-                                    }
-                                }
-                            } catch (error) {
-                                // localStorage access failed - continue without saved order
-                                const logger = createLogger();
-                                logger.warn("localStorage access failed during migration", error instanceof Error ? error : new Error(String(error)));
-                            }
-                        }
-
-                        // Migration path: orderId legacy cleanup
-                        if (!savedOrderId) {
-                            try {
-                                const legacyOrderId = localStorage.getItem('orderId');
-                                if (legacyOrderId) {
-                                    try {
-                                        sessionStorage.setItem('orderId', legacyOrderId);
-                                        localStorage.removeItem('orderId');
-                                        savedOrderId = legacyOrderId;
-                                    } catch (error) {
-                                        // Migration failed, use localStorage value as fallback
-                                        savedOrderId = legacyOrderId;
-                                        const logger = createLogger();
-                                        logger.warn("Failed to migrate orderId to sessionStorage, using localStorage value", error instanceof Error ? error : new Error(String(error)));
-                                    }
-                                }
-                            } catch (error) {
-                                // localStorage access failed - continue without saved orderId
-                                const logger = createLogger();
-                                logger.warn("localStorage access failed during orderId migration", error instanceof Error ? error : new Error(String(error)));
-                            }
-                        } else {
-                            // Even if already in sessionStorage, ensure legacy localStorage copy is cleaned up
-                            try {
-                                localStorage.removeItem('orderId');
-                            } catch (error) {
-                                // Non-critical: localStorage cleanup failure
-                                const logger = createLogger();
-                                logger.warn("Failed to cleanup legacy orderId from localStorage", error instanceof Error ? error : new Error(String(error)));
-                            }
-                        }
+                        const savedOrder = migrateStorageItem('lastOrder', logger);
+                        const savedOrderId = migrateStorageItem('orderId', logger);
 
                         let orderData = null;
 
@@ -388,8 +325,9 @@ export default function CheckoutSuccess() {
                                     } catch (error) {
                                         // Non-critical: storage failures don't affect order processing
                                         // Errors can occur in private browsing mode or when storage is disabled
-                                        const logger = createLogger();
-                                        logger.warn("Failed to store orderId in sessionStorage", error instanceof Error ? error : new Error(String(error)));
+                                        logger.warn("Failed to store orderId in sessionStorage", {
+                                            error: error instanceof Error ? error.message : String(error),
+                                        });
                                     }
 
                                     // SECURITY: Don't log order IDs - removed debug log
@@ -399,11 +337,9 @@ export default function CheckoutSuccess() {
                                     // SECURITY: Don't log retry attempts (may expose order/payment context)
                                     setTimeout(fetchOrderWithToken, retryDelay);
                                 } else {
-                                    const logger = createLogger();
                                     logger.error("Failed to fetch order", new Error(`HTTP ${response.status}`));
                                 }
                             } catch (err) {
-                                const logger = createLogger();
                                 logger.error("Error fetching order", err instanceof Error ? err : new Error(String(err)));
                                 if (retries < maxRetries) {
                                     retries++;
@@ -418,8 +354,9 @@ export default function CheckoutSuccess() {
                             cartIdFromSession = sessionStorage.getItem('medusa_cart_id');
                         } catch (error) {
                             // Non-critical: storage access failures don't block cart completion
-                            const logger = createLogger();
-                            logger.warn("Failed to read medusa_cart_id from sessionStorage", error instanceof Error ? error : new Error(String(error)));
+                            logger.warn("Failed to read medusa_cart_id from sessionStorage", {
+                                error: error instanceof Error ? error.message : String(error),
+                            });
                         }
                         if (cartIdFromSession) {
                             try {
@@ -433,14 +370,12 @@ export default function CheckoutSuccess() {
                                 });
 
                                 if (!completeResponse.ok) {
-                                    const logger = createLogger();
                                     logger.error("Medusa cart completion failed", new Error("Cart completion failed"), {
                                         status: completeResponse.status,
                                     });
                                     // Non-critical failure: log and proceed, webhook should eventually create order
                                 }
                             } catch (err) {
-                                const logger = createLogger();
                                 logger.error("Error calling cart completion API", err instanceof Error ? err : new Error(String(err)));
                                 // Non-critical failure: log and proceed
                             }
@@ -463,12 +398,12 @@ export default function CheckoutSuccess() {
                             } catch (error) {
                                 // Non-critical: storage cleanup failures don't affect order processing
                                 // Errors can occur in private browsing mode or when storage is disabled
-                                const logger = createLogger();
-                                logger.warn("Failed to cleanup sessionStorage", error instanceof Error ? error : new Error(String(error)));
+                                logger.warn("Failed to cleanup sessionStorage", {
+                                    error: error instanceof Error ? error.message : String(error),
+                                });
                             }
                         }, 500);
                     } else {
-                        const logger = createLogger();
                         logger.error("Payment status not valid", new Error(`Invalid status: ${paymentIntent?.status}`), {
                             status: paymentIntent?.status,
                             // Don't include paymentIntentId
@@ -477,7 +412,6 @@ export default function CheckoutSuccess() {
                         setPaymentStatus('error');
                     }
                 } catch (error: any) {
-                    const logger = createLogger();
                     logger.error("Error fetching payment details", error instanceof Error ? error : new Error(String(error)), {
                         redirectStatus,
                         // Don't include paymentIntentId or clientSecret
@@ -486,7 +420,6 @@ export default function CheckoutSuccess() {
                     setPaymentStatus('error');
                 }
             } else {
-                const logger = createLogger();
                 logger.error("Missing required params or redirect status not succeeded", new Error("Invalid payment params"), {
                     redirectStatus,
                     // Don't include paymentIntentId

@@ -105,13 +105,13 @@ This layered approach balances security (ephemeral checkout data) with UX (persi
 2. **`checkout.success.tsx`:**
    - Changed `localStorage.getItem('lastOrder')` to `sessionStorage.getItem('lastOrder')`
    - Changed `localStorage.setItem('orderId', ...)` to `sessionStorage.setItem('orderId', ...)`
-   - Added migration logic for existing localStorage data (lines 205-212)
-   - Added cleanup on component unmount (lines 147-154)
+   - Added migration logic using `migrateStorageItem` utility function (lines 220-221)
+   - Added cleanup on component unmount (lines 151-166)
 
 3. **Explicit Cleanup:**
-   - Added `sessionStorage.removeItem('lastOrder')` after order confirmation (line 369)
-   - Added `sessionStorage.removeItem('medusa_cart_id')` cleanup (line 371)
-   - Added cleanup on component unmount when user navigates away (lines 150-152)
+   - Added `sessionStorage.removeItem('lastOrder')` and `sessionStorage.removeItem('orderId')` after order confirmation (lines 394-400)
+   - Added `sessionStorage.removeItem('medusa_cart_id')` cleanup (line 400)
+   - Added cleanup on component unmount when user navigates away (lines 156-158)
 
 4. **Token Context:**
    - Modification tokens are already stored in HttpOnly cookies via `guest-session.server.ts`, not client-side storage

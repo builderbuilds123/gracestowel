@@ -1,132 +1,33 @@
 /**
  * SEC-05: Checkout Success Page Storage Tests
- * Tests sessionStorage operations for checkout data (lastOrder, orderId)
- * Validates migration from localStorage and cleanup behavior
+ * Tests storage migration utility and cleanup behavior patterns
+ * 
+ * NOTE: These tests validate the storage behavior patterns and migration utility.
+ * Full component integration tests would require complex Stripe/PaymentIntent mocking.
+ * The actual migration logic is tested via migrateStorageItem utility tests.
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { migrateStorageItem } from "../app/lib/storage-migration";
+import { createLogger } from "../app/lib/logger";
 
 describe("SEC-05: Checkout Success Storage Operations", () => {
+  let logger: ReturnType<typeof createLogger>;
+
   beforeEach(() => {
     // Clear storage before each test
     sessionStorage.clear();
     localStorage.clear();
+    logger = createLogger();
   });
 
-  describe("sessionStorage.setItem error handling", () => {
-    it("should handle QuotaExceededError gracefully", () => {
-      // Mock sessionStorage to throw QuotaExceededError
-      const originalSetItem = sessionStorage.setItem;
-      vi.spyOn(sessionStorage, "setItem").mockImplementation(() => {
-        const error = new Error("QuotaExceededError");
-        error.name = "QuotaExceededError";
-        throw error;
-      });
-
-      // Attempt to set item - should not throw
-      expect(() => {
-        try {
-          sessionStorage.setItem("test", "value");
-        } catch (error) {
-          // Expected to catch and handle
-        }
-      }).not.toThrow();
-
-      // Restore original implementation
-      sessionStorage.setItem = originalSetItem;
-    });
-
-    it("should handle SecurityError (private browsing) gracefully", () => {
-      // Mock sessionStorage to throw SecurityError
-      const originalSetItem = sessionStorage.setItem;
-      vi.spyOn(sessionStorage, "setItem").mockImplementation(() => {
-        const error = new Error("SecurityError");
-        error.name = "SecurityError";
-        throw error;
-      });
-
-      // Attempt to set item - should not throw
-      expect(() => {
-        try {
-          sessionStorage.setItem("test", "value");
-        } catch (error) {
-          // Expected to catch and handle
-        }
-      }).not.toThrow();
-
-      // Restore original implementation
-      sessionStorage.setItem = originalSetItem;
-    });
-  });
-
-  describe("sessionStorage.getItem error handling", () => {
-    it("should handle storage access errors gracefully", () => {
-      // Mock sessionStorage.getItem to throw
-      const originalGetItem = sessionStorage.getItem;
-      vi.spyOn(sessionStorage, "getItem").mockImplementation(() => {
-        throw new Error("Storage access denied");
-      });
-
-      // Attempt to get item - should return null without throwing
-      let result: string | null = null;
-      expect(() => {
-        try {
-          result = sessionStorage.getItem("test");
-        } catch (error) {
-          result = null;
-        }
-      }).not.toThrow();
-
-      expect(result).toBeNull();
-
-      // Restore original implementation
-      sessionStorage.getItem = originalGetItem;
-    });
-  });
-
-  describe("sessionStorage.removeItem error handling", () => {
-    it("should handle storage cleanup errors gracefully", () => {
-      // Mock sessionStorage.removeItem to throw
-      const originalRemoveItem = sessionStorage.removeItem;
-      vi.spyOn(sessionStorage, "removeItem").mockImplementation(() => {
-        throw new Error("Storage access denied");
-      });
-
-      // Attempt to remove item - should not throw
-      expect(() => {
-        try {
-          sessionStorage.removeItem("test");
-        } catch (error) {
-          // Expected to catch and handle
-        }
-      }).not.toThrow();
-
-      // Restore original implementation
-      sessionStorage.removeItem = originalRemoveItem;
-    });
-  });
-
-  describe("localStorage to sessionStorage migration", () => {
+  describe("migrateStorageItem utility (used by checkout.success)", () => {
     it("should migrate lastOrder from localStorage to sessionStorage", () => {
       const testOrder = JSON.stringify({ items: [], total: 100 });
       localStorage.setItem("lastOrder", testOrder);
 
-      // Simulate migration logic
-      let savedOrder: string | null = null;
-      try {
-        savedOrder = sessionStorage.getItem("lastOrder");
-        if (!savedOrder) {
-          const legacyOrder = localStorage.getItem("lastOrder");
-          if (legacyOrder) {
-            sessionStorage.setItem("lastOrder", legacyOrder);
-            localStorage.removeItem("lastOrder");
-            savedOrder = legacyOrder;
-          }
-        }
-      } catch (error) {
-        // Error handling
-      }
+      const result = migrateStorageItem("lastOrder", logger);
 
-      expect(savedOrder).toBe(testOrder);
+      expect(result).toBe(testOrder);
       expect(sessionStorage.getItem("lastOrder")).toBe(testOrder);
       expect(localStorage.getItem("lastOrder")).toBeNull();
     });
@@ -135,23 +36,9 @@ describe("SEC-05: Checkout Success Storage Operations", () => {
       const testOrderId = "order_123";
       localStorage.setItem("orderId", testOrderId);
 
-      // Simulate migration logic
-      let savedOrderId: string | null = null;
-      try {
-        savedOrderId = sessionStorage.getItem("orderId");
-        if (!savedOrderId) {
-          const legacyOrderId = localStorage.getItem("orderId");
-          if (legacyOrderId) {
-            sessionStorage.setItem("orderId", legacyOrderId);
-            localStorage.removeItem("orderId");
-            savedOrderId = legacyOrderId;
-          }
-        }
-      } catch (error) {
-        // Error handling
-      }
+      const result = migrateStorageItem("orderId", logger);
 
-      expect(savedOrderId).toBe(testOrderId);
+      expect(result).toBe(testOrderId);
       expect(sessionStorage.getItem("orderId")).toBe(testOrderId);
       expect(localStorage.getItem("orderId")).toBeNull();
     });
@@ -162,37 +49,16 @@ describe("SEC-05: Checkout Success Storage Operations", () => {
 
       // Mock sessionStorage.setItem to throw (simulating full storage)
       const originalSetItem = sessionStorage.setItem;
-      let migrationAttempted = false;
-      vi.spyOn(sessionStorage, "setItem").mockImplementation((key, value) => {
-        migrationAttempted = true;
+      vi.spyOn(sessionStorage, "setItem").mockImplementation(() => {
         const error = new Error("QuotaExceededError");
         error.name = "QuotaExceededError";
         throw error;
       });
 
-      // Simulate migration logic with error handling
-      let savedOrder: string | null = null;
-      try {
-        savedOrder = sessionStorage.getItem("lastOrder");
-        if (!savedOrder) {
-          const legacyOrder = localStorage.getItem("lastOrder");
-          if (legacyOrder) {
-            try {
-              sessionStorage.setItem("lastOrder", legacyOrder);
-              localStorage.removeItem("lastOrder");
-              savedOrder = legacyOrder;
-            } catch (error) {
-              // Migration failed - use localStorage value as fallback
-              savedOrder = legacyOrder;
-            }
-          }
-        }
-      } catch (error) {
-        // Error handling
-      }
+      const result = migrateStorageItem("lastOrder", logger);
 
-      expect(migrationAttempted).toBe(true);
-      expect(savedOrder).toBe(testOrder); // Should fall back to localStorage value
+      // Should fall back to localStorage value
+      expect(result).toBe(testOrder);
       expect(localStorage.getItem("lastOrder")).toBe(testOrder); // Still in localStorage due to migration failure
 
       // Restore original implementation
@@ -200,20 +66,20 @@ describe("SEC-05: Checkout Success Storage Operations", () => {
     });
   });
 
-  describe("cleanup operations", () => {
+  describe("cleanup operations (pattern used in checkout.success)", () => {
     it("should clean up all checkout data (lastOrder, orderId, medusa_cart_id)", () => {
       // Setup: add data to sessionStorage
       sessionStorage.setItem("lastOrder", JSON.stringify({ items: [] }));
       sessionStorage.setItem("orderId", "order_123");
       sessionStorage.setItem("medusa_cart_id", "cart_456");
 
-      // Simulate cleanup (as done in setTimeout and unmount)
+      // Test cleanup pattern (as done in setTimeout and unmount)
       try {
         sessionStorage.removeItem("lastOrder");
         sessionStorage.removeItem("orderId");
         sessionStorage.removeItem("medusa_cart_id");
       } catch (error) {
-        // Error handling
+        // Error handling (non-critical)
       }
 
       expect(sessionStorage.getItem("lastOrder")).toBeNull();
@@ -237,14 +103,14 @@ describe("SEC-05: Checkout Success Storage Operations", () => {
         originalRemoveItem.call(sessionStorage, key);
       });
 
-      // Attempt cleanup - should not throw
+      // Test cleanup error handling pattern
       expect(() => {
         try {
           sessionStorage.removeItem("lastOrder");
           sessionStorage.removeItem("orderId");
           sessionStorage.removeItem("medusa_cart_id");
         } catch (error) {
-          // Expected to catch and handle
+          // Expected to catch and handle (non-critical)
         }
       }).not.toThrow();
 

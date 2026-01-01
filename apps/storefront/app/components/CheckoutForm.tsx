@@ -15,6 +15,7 @@ import type {
     StripeLinkAuthenticationElementChangeEvent,
 } from '@stripe/stripe-js';
 import type { CartItem } from '../context/CartContext';
+import { createLogger } from '../lib/logger';
 
 export interface ShippingOption {
     id: string;
@@ -67,6 +68,7 @@ export function CheckoutForm({
     const elements = useElements();
     const [message, setMessage] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const logger = createLogger();
 
     const handleEmailChange = useCallback(
         (event: StripeLinkAuthenticationElementChangeEvent) => {
@@ -100,7 +102,9 @@ export function CheckoutForm({
             // Non-critical: storage failures don't block checkout
             // Errors can occur in private browsing mode, storage full, or storage disabled
             // Order details will still be available from cart context on success page
-            console.warn('Failed to save order to sessionStorage:', error);
+            logger.warn('Failed to save order to sessionStorage', {
+                error: error instanceof Error ? error.message : String(error),
+            });
         }
     };
 
