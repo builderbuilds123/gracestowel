@@ -144,6 +144,24 @@ export default function CheckoutSuccess() {
         setUrlSanitized(true);
     }, []);
 
+    // MED-1 FIX: Cleanup checkout data when component unmounts (user navigates away)
+    useEffect(() => {
+        return () => {
+            // SEC-05 AC2: Clean up checkout data on unmount (navigation away from success page)
+            try {
+                sessionStorage.removeItem('lastOrder');
+                sessionStorage.removeItem('orderId');
+                // MED-3 FIX: Also clean up cart ID to prevent lingering session data on navigate-away
+                sessionStorage.removeItem('medusa_cart_id');
+            } catch (error) {
+                // Non-critical: storage cleanup failures don't affect navigation
+                // Errors can occur in private browsing mode or when storage is disabled
+                const logger = createLogger();
+                logger.warn("Failed to cleanup sessionStorage on unmount", error instanceof Error ? error : new Error(String(error)));
+            }
+        };
+    }, []);
+
     useEffect(() => {
         if (!urlSanitized) return;
         const paymentIntentId = initialParamsRef.current?.paymentIntentId;
@@ -197,8 +215,78 @@ export default function CheckoutSuccess() {
                     const validStatuses = ['succeeded', 'requires_capture'];
                     if (paymentIntent && validStatuses.includes(paymentIntent.status)) {
                         // Handle Order Details Logic (Persistence)
-                        // Always try to recover from localStorage first since we save it before redirect
-                        const savedOrder = localStorage.getItem('lastOrder');
+                        // SEC-05: Recover from sessionStorage (clears on tab close)
+                        // MED-2 FIX: Migrate from localStorage if data exists there
+                        let savedOrder: string | null = null;
+                        let savedOrderId: string | null = null;
+
+                        try {
+                            savedOrder = sessionStorage.getItem('lastOrder');
+                            savedOrderId = sessionStorage.getItem('orderId');
+                        } catch (error) {
+                            // sessionStorage may be disabled (private browsing, storage disabled)
+                            // Continue with migration from localStorage as fallback
+                            const logger = createLogger();
+                            logger.warn("sessionStorage access failed, attempting localStorage migration", error instanceof Error ? error : new Error(String(error)));
+                        }
+
+                        // Migration path: check localStorage for legacy data
+                        if (!savedOrder) {
+                            try {
+                                const legacyOrder = localStorage.getItem('lastOrder');
+                                if (legacyOrder) {
+                                    // Migrate to sessionStorage
+                                    try {
+                                        sessionStorage.setItem('lastOrder', legacyOrder);
+                                        localStorage.removeItem('lastOrder'); // Clean up old storage
+                                        savedOrder = legacyOrder;
+                                    } catch (error) {
+                                        // Migration failed (sessionStorage full or disabled)
+                                        // Use localStorage value directly as fallback
+                                        savedOrder = legacyOrder;
+                                        const logger = createLogger();
+                                        logger.warn("Failed to migrate lastOrder to sessionStorage, using localStorage value", error instanceof Error ? error : new Error(String(error)));
+                                    }
+                                }
+                            } catch (error) {
+                                // localStorage access failed - continue without saved order
+                                const logger = createLogger();
+                                logger.warn("localStorage access failed during migration", error instanceof Error ? error : new Error(String(error)));
+                            }
+                        }
+
+                        // Migration path: orderId legacy cleanup
+                        if (!savedOrderId) {
+                            try {
+                                const legacyOrderId = localStorage.getItem('orderId');
+                                if (legacyOrderId) {
+                                    try {
+                                        sessionStorage.setItem('orderId', legacyOrderId);
+                                        localStorage.removeItem('orderId');
+                                        savedOrderId = legacyOrderId;
+                                    } catch (error) {
+                                        // Migration failed, use localStorage value as fallback
+                                        savedOrderId = legacyOrderId;
+                                        const logger = createLogger();
+                                        logger.warn("Failed to migrate orderId to sessionStorage, using localStorage value", error instanceof Error ? error : new Error(String(error)));
+                                    }
+                                }
+                            } catch (error) {
+                                // localStorage access failed - continue without saved orderId
+                                const logger = createLogger();
+                                logger.warn("localStorage access failed during orderId migration", error instanceof Error ? error : new Error(String(error)));
+                            }
+                        } else {
+                            // Even if already in sessionStorage, ensure legacy localStorage copy is cleaned up
+                            try {
+                                localStorage.removeItem('orderId');
+                            } catch (error) {
+                                // Non-critical: localStorage cleanup failure
+                                const logger = createLogger();
+                                logger.warn("Failed to cleanup legacy orderId from localStorage", error instanceof Error ? error : new Error(String(error)));
+                            }
+                        }
+
                         let orderData = null;
 
                         if (savedOrder) {
@@ -294,8 +382,15 @@ export default function CheckoutSuccess() {
                                     const data = await response.json() as OrderApiResponse;
                                     setOrderId(data.order.id);
 
-                                    // Store in localStorage for persistence
-                                    localStorage.setItem('orderId', data.order.id);
+                                    // SEC-05: Store in sessionStorage for ephemeral access (clears on tab close)
+                                    try {
+                                        sessionStorage.setItem('orderId', data.order.id);
+                                    } catch (error) {
+                                        // Non-critical: storage failures don't affect order processing
+                                        // Errors can occur in private browsing mode or when storage is disabled
+                                        const logger = createLogger();
+                                        logger.warn("Failed to store orderId in sessionStorage", error instanceof Error ? error : new Error(String(error)));
+                                    }
 
                                     // SECURITY: Don't log order IDs - removed debug log
                                 } else if (response.status === 404 && retries < maxRetries) {
@@ -318,7 +413,14 @@ export default function CheckoutSuccess() {
                         };
 
                         // CHK-01: Call Medusa cart completion API
-                        const cartIdFromSession = sessionStorage.getItem('medusa_cart_id');
+                        let cartIdFromSession: string | null = null;
+                        try {
+                            cartIdFromSession = sessionStorage.getItem('medusa_cart_id');
+                        } catch (error) {
+                            // Non-critical: storage access failures don't block cart completion
+                            const logger = createLogger();
+                            logger.warn("Failed to read medusa_cart_id from sessionStorage", error instanceof Error ? error : new Error(String(error)));
+                        }
                         if (cartIdFromSession) {
                             try {
                                 // SECURITY: Don't log cart IDs or completion data
@@ -350,6 +452,20 @@ export default function CheckoutSuccess() {
                         // Clear cart after a delay to ensure UI updates
                         setTimeout(() => {
                             clearCart();
+                            // SEC-05 AC2: Explicit cleanup of checkout data
+                            // Defense-in-depth: clear order data after successful checkout
+                            // (sessionStorage also clears on tab close, this is extra protection)
+                            try {
+                                sessionStorage.removeItem('lastOrder');
+                                sessionStorage.removeItem('orderId');
+                                // MED-3 FIX: Also clean up cart ID to prevent lingering session data
+                                sessionStorage.removeItem('medusa_cart_id');
+                            } catch (error) {
+                                // Non-critical: storage cleanup failures don't affect order processing
+                                // Errors can occur in private browsing mode or when storage is disabled
+                                const logger = createLogger();
+                                logger.warn("Failed to cleanup sessionStorage", error instanceof Error ? error : new Error(String(error)));
+                            }
                         }, 500);
                     } else {
                         const logger = createLogger();

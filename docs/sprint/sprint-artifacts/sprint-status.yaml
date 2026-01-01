@@ -373,7 +373,7 @@ development_status:
   fix-SEC-03-token-expiry-anchoring:
     path: docs/sprint/sprint-artifacts/fix-SEC-03-token-expiry-anchoring.md
     status: done
-    meta: "SEC-03 complete. orderCreatedAt now required param with future-date validation. Code review fixes applied: type safety in workflow step, 90-minute boundary test added. 19 unit tests pass."
+    meta: "SEC-03 complete. orderCreatedAt now required param with future-date validation. 342 tests pass."
     completed: "2025-12-31"
   fix-SEC-04-client-secret-leak:
     path: docs/sprint/sprint-artifacts/fix-SEC-04-client-secret-leak.md
@@ -382,7 +382,9 @@ development_status:
     completed: "2025-12-30"
   fix-SEC-05-localstorage-token:
     path: docs/sprint/sprint-artifacts/fix-SEC-05-localstorage-token.md
-    status: ready-for-dev
+    status: done
+    meta: "SEC-05 complete. Migrated checkout data from localStorage to sessionStorage with migration path, cleanup on unmount, and security documentation. Code review fixes: orderId cleanup in setTimeout, error handling for all sessionStorage operations, automated test suite (12 tests)."
+    completed: "2026-01-01"
   fix-ORD-01-add-items-workflow:
     path: docs/sprint/sprint-artifacts/fix-ORD-01-add-items-workflow.md
     status: ready-for-dev
