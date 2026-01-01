@@ -15,6 +15,7 @@ import type {
     StripeLinkAuthenticationElementChangeEvent,
 } from '@stripe/stripe-js';
 import type { CartItem } from '../context/CartContext';
+import { createLogger } from '../lib/logger';
 
 export interface ShippingOption {
     id: string;
@@ -67,6 +68,7 @@ export function CheckoutForm({
     const elements = useElements();
     const [message, setMessage] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const logger = createLogger();
 
     const handleEmailChange = useCallback(
         (event: StripeLinkAuthenticationElementChangeEvent) => {
@@ -78,21 +80,32 @@ export function CheckoutForm({
         [onEmailChange]
     );
 
-    const saveOrderToLocalStorage = () => {
-        localStorage.setItem(
-            'lastOrder',
-            JSON.stringify({
-                items,
-                subtotal: cartTotal,
-                shipping: selectedShipping?.amount || 0,
-                total: cartTotal + (selectedShipping?.amount || 0),
-                date: new Date().toLocaleDateString('en-US', {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric',
-                }),
-            })
-        );
+    // SEC-05: Use sessionStorage instead of localStorage for ephemeral checkout data
+    // sessionStorage clears when tab closes, preventing shared device access
+    const saveOrderToSessionStorage = () => {
+        try {
+            sessionStorage.setItem(
+                'lastOrder',
+                JSON.stringify({
+                    items,
+                    subtotal: cartTotal,
+                    shipping: selectedShipping?.amount || 0,
+                    total: cartTotal + (selectedShipping?.amount || 0),
+                    date: new Date().toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                    }),
+                })
+            );
+        } catch (error) {
+            // Non-critical: storage failures don't block checkout
+            // Errors can occur in private browsing mode, storage full, or storage disabled
+            // Order details will still be available from cart context on success page
+            logger.warn('Failed to save order to sessionStorage', {
+                error: error instanceof Error ? error.message : String(error),
+            });
+        }
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -105,7 +118,7 @@ export function CheckoutForm({
         setIsLoading(true);
 
         // Persist order details for success page
-        saveOrderToLocalStorage();
+        saveOrderToSessionStorage();
 
         const { error } = await stripe.confirmPayment({
             elements,
@@ -179,7 +192,7 @@ export function CheckoutForm({
             }
 
             // Persist order details for success page
-            saveOrderToLocalStorage();
+            saveOrderToSessionStorage();
 
             const { error } = await stripe.confirmPayment({
                 elements,
