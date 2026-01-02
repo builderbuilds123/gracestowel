@@ -1078,9 +1078,7 @@ export async function updateOrderValuesHandler(
             {
                 id: input.orderId,
                 metadata: metadataUpdate,
-                // Update order.total to match the new authorization amount
-                // This ensures order.total stays in sync with PaymentIntent.amount (source of truth)
-                // The newTotal was calculated from PaymentIntent.amount + itemTotal
+                // Keep order as system of record; align DB totals with recalculated values
                 total: input.newTotal,
             },
         ]);
@@ -1165,41 +1163,21 @@ export const addItemToOrderWorkflow = createWorkflow(
         });
 
         // TAX-01: Pass current tax_total and subtotal for recalculation
-        // CRITICAL: Use Stripe PaymentIntent amount as source of truth for payment authorization
-        // to ensure we never authorize more than what's currently authorized and prevent
-        // perpetuating mismatches if order.total and paymentIntent.amount are out of sync
-        const totalsInput = transform({ validation, input }, (data) => {
-            // Validate order.total and paymentIntent.amount are in sync (or log warning)
-            const orderTotal = data.validation.order.total;
-            const paymentIntentAmount = data.validation.paymentIntent.amount;
-            const mismatch = Math.abs(orderTotal - paymentIntentAmount) > 1; // Allow 1 cent tolerance for rounding
-
-            if (mismatch) {
-                logger.warn("add-item-to-order", "Order total and PaymentIntent amount mismatch detected", {
-                    orderId: data.input.orderId,
-                    orderTotal,
-                    paymentIntentAmount,
-                    difference: orderTotal - paymentIntentAmount,
-                });
-            }
-
-            return {
-                orderId: data.input.orderId,
-                variantId: data.input.variantId,
-                quantity: data.input.quantity,
-                // Use PaymentIntent amount as source of truth for payment calculations
-                currentTotal: paymentIntentAmount,
-                currentTaxTotal: data.validation.order.tax_total,
-                currentSubtotal: data.validation.order.subtotal,
-                currencyCode: data.validation.order.currency_code,
-            };
-        });
+        const totalsInput = transform({ validation, input }, (data) => ({
+            orderId: data.input.orderId,
+            variantId: data.input.variantId,
+            quantity: data.input.quantity,
+            // Use order as source of truth; payment intent is downstream mirror
+            currentTotal: data.validation.order.total,
+            currentTaxTotal: data.validation.order.tax_total,
+            currentSubtotal: data.validation.order.subtotal,
+            currencyCode: data.validation.order.currency_code,
+        }));
         const totals = calculateTotalsStep(totalsInput);
 
         const stripeInput = transform({ validation, totals, input }, (data) => ({
             paymentIntentId: data.validation.paymentIntentId,
             currentAmount: data.validation.paymentIntent.amount,
-            // newAmount is calculated from PaymentIntent.amount + itemTotal (source of truth)
             newAmount: data.totals.newOrderTotal,
             orderId: data.input.orderId,
             variantId: data.input.variantId,
@@ -1222,11 +1200,10 @@ export const addItemToOrderWorkflow = createWorkflow(
         updateInventoryLevelsStep(inventoryAdjustments);
 
         // PAY-01: Update Payment Collection amount to stay in sync
-        // Use PaymentIntent.amount as previousAmount for consistency (source of truth)
         const pcInput = transform({ validation, totals }, (data) => ({
             paymentCollectionId: data.validation.paymentCollectionId,
-            amount: data.totals.newOrderTotal, // New amount based on PaymentIntent.amount + itemTotal
-            previousAmount: data.validation.paymentIntent.amount, // Current authorized amount (source of truth)
+            amount: data.totals.newOrderTotal,
+            previousAmount: data.validation.order.total, // Pass current order total for rollback
         }));
         updatePaymentCollectionStep(pcInput);
 
