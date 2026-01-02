@@ -1172,6 +1172,17 @@ const updateOrderValuesStep = createStep(
 // ============================================================================
 
 /**
+ * Type guard to check if a line item has a valid ID
+ * Validates that ID is not undefined, null, or empty string
+ * 
+ * @param item - The line item to check
+ * @returns True if item has a valid ID
+ */
+function hasValidId(item: LineItem): item is LineItem & { id: string } {
+    return item.id !== undefined && item.id !== null && item.id !== '';
+}
+
+/**
  * Finds the newly created line item by comparing original and updated order items
  * Uses ID-based comparison to definitively identify the new item
  * 
@@ -1195,9 +1206,7 @@ function findNewlyCreatedItem(
     // Filter out items without valid IDs (undefined, null, or empty string)
     const originalItemIds = new Set(
         (originalItems || [])
-            .filter((item): item is LineItem & { id: string } => 
-                item.id !== undefined && item.id !== null && item.id !== ''
-            )
+            .filter(hasValidId)
             .map((item) => item.id)
     );
 
@@ -1206,9 +1215,7 @@ function findNewlyCreatedItem(
     const newItem = updatedItems.find(
         (item) => 
             item.variant_id === variantId && 
-            item.id !== undefined && 
-            item.id !== null && 
-            item.id !== '' && 
+            hasValidId(item) && 
             !originalItemIds.has(item.id)
     );
 
@@ -1217,13 +1224,14 @@ function findNewlyCreatedItem(
     }
 
     // Fallback: Find most recent item with matching variant_id
-    // Items are typically ordered by creation time, so reverse to get latest first
-    const fallbackItem = updatedItems
-        .slice()
-        .reverse()
-        .find((item) => item.variant_id === variantId);
+    // Iterate backwards to find latest item without creating array copies
+    for (let i = updatedItems.length - 1; i >= 0; i--) {
+        if (updatedItems[i].variant_id === variantId) {
+            return updatedItems[i];
+        }
+    }
 
-    return fallbackItem ?? fallbackData;
+    return fallbackData;
 }
 
 // ============================================================================
