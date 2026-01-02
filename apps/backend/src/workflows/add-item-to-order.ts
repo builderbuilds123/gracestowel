@@ -170,12 +170,14 @@ export interface CalculateTotalsInput {
 }
 
 // Line item interface for type safety in item detection
-// Note: Fields are optional as they come from Medusa's order.items which may have partial data
-// variant_id is technically always present in real line items but marked optional for type compatibility
-// The fallbackData ensures we always return a valid structure
+// Design: variant_id is required (TypeScript enforces this) as it's always present in Medusa line items
+// id and other fields are optional because:
+// 1. They may not be present in partial/temporary data structures
+// 2. The fallbackData may not have an id yet
+// 3. Medusa's type system doesn't guarantee id presence in all contexts
 interface LineItem {
     id?: string;
-    variant_id: string;  // Present in all line items from Medusa
+    variant_id: string;  // Required by TypeScript, always present in Medusa line items
     title?: string;
     quantity?: number;
     unit_price?: number;
