@@ -51,6 +51,7 @@ export interface CheckoutFormProps {
     setSelectedShipping: (option: ShippingOption) => void;
     customerData?: CustomerData;
     isCalculatingShipping?: boolean;
+    isShippingPersisted?: boolean; // SHP-01 Review Fix (Issue 3): Block checkout until shipping is persisted
 }
 
 export function CheckoutForm({
@@ -63,6 +64,7 @@ export function CheckoutForm({
     setSelectedShipping,
     customerData,
     isCalculatingShipping = false,
+    isShippingPersisted = true, // SHP-01 Review Fix (Issue 3): Default to true for backward compatibility
 }: CheckoutFormProps) {
     const stripe = useStripe();
     const elements = useElements();
@@ -305,12 +307,13 @@ export function CheckoutForm({
 
             {/* Submit Button */}
             <button
-                disabled={isLoading || !stripe || !elements}
+                disabled={isLoading || !stripe || !elements || !isShippingPersisted}
                 id="submit"
                 className="w-full bg-accent-earthy hover:bg-accent-earthy/90 text-white font-medium py-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                title={!isShippingPersisted ? 'Please wait for shipping method to be saved' : undefined}
             >
                 <span id="button-text">
-                    {isLoading ? 'Processing...' : 'Pay now'}
+                    {isLoading ? 'Processing...' : !isShippingPersisted ? 'Saving shipping...' : 'Pay now'}
                 </span>
             </button>
 

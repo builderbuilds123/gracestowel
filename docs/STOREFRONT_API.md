@@ -98,6 +98,98 @@ routes/
 
 **Purpose**: Fetches available shipping options from Stripe with dynamic pricing.
 
+---
+
+### Add Shipping Method to Cart
+
+**Endpoint**: `POST /api/carts/:id/shipping-methods`
+
+**Purpose**: Persists the customer's shipping option selection to the Medusa cart. This ensures the `shipping_option_id` is available when the order is created from the cart data.
+
+**SHP-01**: This endpoint is critical for shipping option persistence. Without it, orders would be created without the selected shipping option ID, breaking fulfillment integrations.
+
+**Request Body**:
+```json
+{
+  "option_id": "so_1234567890"
+}
+```
+
+**Path Parameters**:
+- `id` (string, required): The cart ID
+
+**Request Body Fields**:
+- `option_id` (string, required): The Medusa shipping option ID. Must start with `so_` prefix.
+
+**Response** (Success - 200):
+```json
+{
+  "success": true,
+  "cart_id": "cart_123",
+  "shipping_method_id": "so_1234567890",
+  "shipping_methods": [
+    {
+      "id": "sm_abc",
+      "shipping_option_id": "so_1234567890",
+      "name": "Express Shipping",
+      "amount": 1500,
+      "data": {
+        "service_code": "UPS_EXPRESS"
+      }
+    }
+  ]
+}
+```
+
+**Error Responses**:
+
+**400 Bad Request** - Missing or invalid option_id:
+```json
+{
+  "error": "Invalid shipping option ID format",
+  "details": "Shipping option IDs must start with 'so_'"
+}
+```
+
+**404 Not Found** - Cart expired or not found:
+```json
+{
+  "error": "Cart not found",
+  "code": "CART_EXPIRED",
+  "details": "The cart may have expired. Please refresh the page to create a new cart."
+}
+```
+
+**422 Unprocessable Entity** - Invalid shipping option:
+```json
+{
+  "error": "Invalid shipping option"
+}
+```
+
+**502 Bad Gateway** - Upstream Medusa error:
+```json
+{
+  "error": "Failed to add shipping method",
+  "details": "[error message in development only]"
+}
+```
+
+**Implementation Details**:
+- Validates `option_id` format (must start with `so_`)
+- Verifies cart exists before adding shipping method
+- Handles expired carts with `CART_EXPIRED` error code
+- Uses structured logging with trace IDs
+- Replaces any existing shipping method on the cart
+
+**Source**: `apps/storefront/app/routes/api.carts.$id.shipping-methods.ts`
+
+**Related**:
+- See `fix-SHP-01-shipping-option-persistence.md` for full implementation details
+- Backend workflow `create-order-from-stripe.ts` uses the persisted `shipping_option_id` when creating orders
+
+---
+
 **Request Body**:
 ```json
 {
