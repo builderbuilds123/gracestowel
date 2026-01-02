@@ -171,10 +171,11 @@ export interface CalculateTotalsInput {
 
 // Line item interface for type safety in item detection
 // Note: Fields are optional as they come from Medusa's order.items which may have partial data
+// variant_id is technically always present in real line items but marked optional for type compatibility
 // The fallbackData ensures we always return a valid structure
 interface LineItem {
     id?: string;
-    variant_id: string;  // Required - always present in line items
+    variant_id: string;  // Present in all line items from Medusa
     title?: string;
     quantity?: number;
     unit_price?: number;
@@ -1202,8 +1203,8 @@ function findNewlyCreatedItem(
         return fallbackData;
     }
 
-    // Build set of original item IDs for O(1) lookup
-    // Filter out items without valid IDs (undefined, null, or empty string)
+    // Build set of original item IDs for efficient lookup
+    // Note: Set construction is O(n), but subsequent lookups are O(1)
     const originalItemIds = new Set(
         (originalItems || [])
             .filter(hasValidId)
@@ -1211,12 +1212,12 @@ function findNewlyCreatedItem(
     );
 
     // Find item that exists in updated order but not in original (primary method)
-    // Only consider items with valid IDs
+    // Only consider items with valid IDs - O(m) where m is number of updated items
     const newItem = updatedItems.find(
         (item) => 
             item.variant_id === variantId && 
             hasValidId(item) && 
-            !originalItemIds.has(item.id)
+            !originalItemIds.has(item.id)  // O(1) lookup
     );
 
     if (newItem) {
@@ -1224,7 +1225,10 @@ function findNewlyCreatedItem(
     }
 
     // Fallback: Find most recent item with matching variant_id
-    // Iterate backwards to find latest item without creating array copies
+    // Assumes items are ordered by creation time (Medusa default behavior)
+    // This is a best-effort fallback when ID-based comparison fails
+    // Note: May return incorrect item if multiple items with same variant exist
+    // and ordering is not by creation time
     for (let i = updatedItems.length - 1; i >= 0; i--) {
         if (updatedItems[i].variant_id === variantId) {
             return updatedItems[i];
