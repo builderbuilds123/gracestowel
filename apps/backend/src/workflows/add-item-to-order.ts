@@ -1259,9 +1259,18 @@ export const addItemToOrderWorkflow = createWorkflow(
             { validation, totals, stripeResult, updateResult, input },
             (data) => {
                 const authoritativeOrder = (data.updateResult as any)?.orderWithItems;
-                // Find the newly created item by looking for the most recent item with matching variant_id
-                // Since items are typically ordered by creation time, we reverse to get the latest first
+                
+                // Find the newly created item by comparing current items against original items
+                // The new item will be one that exists in the updated order but not in the original
+                const originalItemIds = new Set(
+                    (data.validation.order.items || []).map((item: any) => item.id)
+                );
+                
                 const newItem =
+                    authoritativeOrder?.items?.find(
+                        (item: any) => item.variant_id === data.input.variantId && !originalItemIds.has(item.id)
+                    ) ??
+                    // Fallback if we can't find by ID comparison
                     authoritativeOrder?.items
                         ?.slice()
                         .reverse()
