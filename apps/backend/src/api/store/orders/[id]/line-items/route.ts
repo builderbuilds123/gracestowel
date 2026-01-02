@@ -15,6 +15,7 @@ import {
     PaymentIntentMissingError,
     PriceNotFoundError,
     OrderLockedError,
+    CurrencyMismatchError,
 } from "../../../../../workflows/add-item-to-order";
 import { logger } from "../../../../../utils/logger";
 
@@ -189,7 +190,7 @@ export async function POST(
 
         // 500 Internal Server Error - Critical auth mismatch
         if (error instanceof AuthMismatchError) {
-            logger.critical("line-items", "AuthMismatch during line item addition", {
+            logger.critical("order-line-items", "AuthMismatch during line item addition", {
                 orderId: error.orderId,
                 paymentIntentId: error.paymentIntentId,
                 requestId,
@@ -258,6 +259,18 @@ export async function POST(
             return;
         }
 
+        // 400 Bad Request - Currency mismatch
+        if (error instanceof CurrencyMismatchError) {
+            res.status(400).json({
+                code: error.code,
+                message: error.message,
+                variant_id: error.variantId,
+                order_currency: error.orderCurrency,
+                variant_currency: error.variantCurrency,
+            });
+            return;
+        }
+
         // 400 Bad Request - No payment intent
         if (error instanceof PaymentIntentMissingError) {
             res.status(400).json({
@@ -269,7 +282,7 @@ export async function POST(
         }
 
         // Generic error handler
-        logger.error("line-items", "Error adding item to order", {
+        logger.error("order-line-items", "Error adding item to order", {
             orderId: id,
             variantId: variant_id,
             quantity,

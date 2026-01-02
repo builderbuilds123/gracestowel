@@ -12,22 +12,7 @@ import { modificationTokenService } from "../services/modification-token";
 import { retryWithBackoff, isRetryableStripeError } from "../utils/stripe-retry";
 import { updateInventoryLevelsStep } from "@medusajs/core-flows";
 import type { UpdateInventoryLevelInput } from "@medusajs/types";
-
-// Structured logger for add-item-to-order workflow
-const logger = {
-    info: (message: string, meta?: Record<string, any>) => {
-        console.log(JSON.stringify({ level: "info", workflow: "add-item-to-order", message, ...meta, timestamp: new Date().toISOString() }));
-    },
-    warn: (message: string, meta?: Record<string, any>) => {
-        console.warn(JSON.stringify({ level: "warn", workflow: "add-item-to-order", message, ...meta, timestamp: new Date().toISOString() }));
-    },
-    error: (message: string, meta?: Record<string, any>) => {
-        console.error(JSON.stringify({ level: "error", workflow: "add-item-to-order", message, ...meta, timestamp: new Date().toISOString() }));
-    },
-    metric: (metricName: string, value: number | string, meta?: Record<string, any>) => {
-        console.log(JSON.stringify({ level: "metric", workflow: "add-item-to-order", metric: metricName, value, ...meta, timestamp: new Date().toISOString() }));
-    },
-};
+import { logger } from "../utils/logger";
 
 // ... existing code ...
 
@@ -65,7 +50,7 @@ export async function prepareInventoryAdjustmentsHandler(
     // For reservation, we should ideally reserve from the location that has stock.
     const { data: inventoryLevels } = await query.graph({
         entity: "inventory_level",
-        fields: ["id", "location_id", "inventory_item_id", "stocked_quantity"],
+        fields: ["id", "location_id", "inventory_item_id", "stocked_quantity", "reserved_quantity"],
         filters: { inventory_item_id: inventoryItemId },
     });
 
@@ -95,7 +80,7 @@ export async function prepareInventoryAdjustmentsHandler(
             current.availableStock > best.availableStock ? current : best
         );
 
-        logger.warn("No single location has sufficient stock, using best available", {
+        logger.warn("add-item-to-order", "No single location has sufficient stock, using best available", {
             variantId: state.variantId,
             requested: state.quantity,
             selectedLocation: targetLevel.location_id,
@@ -103,34 +88,15 @@ export async function prepareInventoryAdjustmentsHandler(
         });
     }
 
-    const currentStockedQuantity = targetLevel.stocked_quantity || 0;
+    const currentReservedQuantity = targetLevel.reserved_quantity || 0;
 
     return [{
         inventory_item_id: inventoryItemId,
         location_id: targetLevel.location_id,
-        stocked_quantity: currentStockedQuantity - state.quantity, // Reduce stock
+        reserved_quantity: currentReservedQuantity + state.quantity, // Reserve stock for this order
     }];
 }
 
-export async function rollbackStripeAuth(prev: StripeIncrementResult): Promise<void> {
-    if (!prev || prev.skipped) {
-        return;
-    }
-
-    const stripe = getStripeClient();
-    const rollbackKey = prev.idempotencyKey ? `${prev.idempotencyKey}-rollback` : undefined;
-
-    await stripe.paymentIntents.update(
-        prev.paymentIntentId,
-        { amount: prev.previousAmount },
-        rollbackKey ? { idempotencyKey: rollbackKey } : undefined
-    );
-    logger.info("Rolled back Stripe authorization", {
-        paymentIntentId: prev.paymentIntentId,
-        previousAmount: prev.previousAmount,
-        idempotencyKey: rollbackKey
-    });
-}
 
 export const prepareInventoryAdjustmentsStep = createStep(
     "prepare-inventory-adjustments-add-item",
@@ -436,6 +402,21 @@ export class PriceNotFoundError extends Error {
     }
 }
 
+export class CurrencyMismatchError extends Error {
+    public readonly code = "CURRENCY_MISMATCH" as const;
+    public readonly variantId: string;
+    public readonly orderCurrency: string;
+    public readonly variantCurrency: string;
+
+    constructor(variantId: string, orderCurrency: string, variantCurrency: string) {
+        super(`Currency mismatch: Order uses ${orderCurrency} but variant price is in ${variantCurrency}`);
+        this.name = "CurrencyMismatchError";
+        this.variantId = variantId;
+        this.orderCurrency = orderCurrency;
+        this.variantCurrency = variantCurrency;
+    }
+}
+
 // ============================================================================
 // Utility Functions
 // ============================================================================
@@ -529,7 +510,7 @@ export async function validatePreconditionsHandler(
     // Story 6.3: Check if order is locked for capture (race condition guard)
     const editStatus = order.metadata?.edit_status;
     if (editStatus === "locked_for_capture") {
-        logger.warn("Edit rejected: Order locked for capture", { orderId: input.orderId });
+        logger.warn("add-item-to-order", "Edit rejected: Order locked for capture", { orderId: input.orderId });
         throw new OrderLockedError(input.orderId);
     }
 
@@ -565,7 +546,7 @@ export async function validatePreconditionsHandler(
             throw new InsufficientStockError(input.variantId, totalAvailableStock, input.quantity);
         }
 
-        logger.info("Stock check passed", {
+        logger.info("add-item-to-order", "Stock check passed", {
             variantId: input.variantId,
             availableStock: totalAvailableStock,
             locationCount: inventoryLevels.length,
@@ -573,7 +554,7 @@ export async function validatePreconditionsHandler(
         });
     }
 
-    logger.info("Preconditions validated", { orderId: input.orderId });
+    logger.info("add-item-to-order", "Preconditions validated", { orderId: input.orderId });
 
     return {
         valid: true,
@@ -638,7 +619,7 @@ export async function updatePaymentCollectionHandler(
     // Since we manually updated Stripe PI in incrementStripeAuthStep, the provider side is "done".
     // We just need Medusa records to match.
 
-    logger.info("Updated PaymentCollection", {
+    logger.info("add-item-to-order", "Updated PaymentCollection", {
         paymentCollectionId: input.paymentCollectionId,
         amount: input.amount
     });
@@ -655,12 +636,24 @@ export const updatePaymentCollectionStep = createStep(
         { container }
     ) => {
         if (!input.paymentCollectionId) {
-            logger.warn("No PaymentCollection ID found, skipping update (legacy order?)");
+            logger.warn("add-item-to-order", "No PaymentCollection ID found, skipping update (legacy order?)");
             return new StepResponse({ updated: false, paymentCollectionId: "", previousAmount: 0 });
         }
 
-        // Use previousAmount from input (caller should provide it)
-        const previousAmount = input.previousAmount || 0;
+        // Retrieve current amount if not provided
+        // Use order.total from validation as source of truth (PaymentCollection should match)
+        let previousAmount = input.previousAmount;
+        if (previousAmount === undefined) {
+            // Fallback: Query PaymentCollection if previousAmount not provided
+            // In practice, caller should provide order.total from validation step
+            const query = container.resolve("query");
+            const { data: collections } = await query.graph({
+                entity: "payment_collection",
+                fields: ["id", "amount"],
+                filters: { id: input.paymentCollectionId },
+            });
+            previousAmount = collections?.[0]?.amount || 0;
+        }
 
         await updatePaymentCollectionHandler({
              paymentCollectionId: input.paymentCollectionId,
@@ -756,10 +749,12 @@ export async function calculateTotalsHandler(
     }
 
     // Validate currency matches between order and variant price
-    if (price.currency_code && price.currency_code.toLowerCase() !== input.currencyCode.toLowerCase()) {
-        throw new Error(
-            `Currency mismatch: Order uses ${input.currencyCode} but variant price is in ${price.currency_code}`
-        );
+    if (!price.currency_code) {
+        throw new PriceNotFoundError(input.variantId, input.currencyCode);
+    }
+    
+    if (price.currency_code.toLowerCase() !== input.currencyCode.toLowerCase()) {
+        throw new CurrencyMismatchError(input.variantId, input.currencyCode, price.currency_code);
     }
 
     // TAX-01: Calculate tax for the added items
@@ -790,7 +785,7 @@ export async function calculateTotalsHandler(
     const difference = itemTotal;
     const variantTitle = `${variant.product?.title || ""} - ${variant.title || ""}`.trim();
 
-    logger.info("TAX-01: Calculated totals", {
+    logger.info("add-item-to-order", "TAX-01: Calculated totals", {
         variantId: input.variantId,
         unitPrice,
         taxPerUnit,
@@ -840,7 +835,7 @@ const incrementStripeAuthStep = createStep(
         const difference = input.newAmount - input.currentAmount;
 
         if (difference <= 0) {
-            logger.info("Skipping Stripe increment (no increase)", {
+            logger.info("add-item-to-order", "Skipping Stripe increment (no increase)", {
                 difference,
                 currentAmount: input.currentAmount,
                 newAmount: input.newAmount
@@ -875,7 +870,7 @@ const incrementStripeAuthStep = createStep(
                 }
             );
 
-            logger.info("Stripe authorization incremented", {
+            logger.info("add-item-to-order", "Stripe authorization incremented", {
                 paymentIntentId: input.paymentIntentId,
                 previousAmount: input.currentAmount,
                 newAmount: input.newAmount,
@@ -893,7 +888,9 @@ const incrementStripeAuthStep = createStep(
         } catch (error) {
             if (error instanceof Stripe.errors.StripeCardError) {
                 // Story 6.4: Emit metric for decline tracking
-                logger.metric("payment_increment_decline_count", 1, {
+                logger.info("add-item-to-order", "Payment increment declined", {
+                    metric: "payment_increment_decline_count",
+                    value: 1,
                     reason: error.decline_code || 'unknown',
                     orderId: input.orderId,
                     paymentIntentId: input.paymentIntentId
@@ -909,7 +906,7 @@ const incrementStripeAuthStep = createStep(
                 error instanceof Stripe.errors.StripeIdempotencyError ||
                 (error as any).type === "idempotency_error"
             ) {
-                logger.info("Idempotency collision detected, fetching current state", {
+                logger.info("add-item-to-order", "Idempotency collision detected, fetching current state", {
                     paymentIntentId: input.paymentIntentId,
                     idempotencyKey
                 });
@@ -942,16 +939,15 @@ const incrementStripeAuthStep = createStep(
                 { amount: prev.previousAmount },
                 rollbackKey ? { idempotencyKey: rollbackKey } : undefined
             );
-            logger.info("Rolled back Stripe authorization in compensation", {
+            logger.info("add-item-to-order", "Rolled back Stripe authorization in compensation", {
                 paymentIntentId: prev.paymentIntentId,
                 previousAmount: prev.previousAmount,
                 idempotencyKey: rollbackKey
             });
         } catch (rollbackError) {
-            logger.error("Failed to rollback Stripe authorization", {
+            logger.error("add-item-to-order", "Failed to rollback Stripe authorization", {
                 paymentIntentId: prev.paymentIntentId,
-                error: (rollbackError as Error).message
-            });
+            }, rollbackError instanceof Error ? rollbackError : new Error(String(rollbackError)));
             throw rollbackError;
         }
     }
@@ -1028,20 +1024,17 @@ export async function updateOrderValuesHandler(
             }
             
             if (errorMessage.includes("duplicate") || errorMessage.includes("already exists")) {
+                // A duplicate line item indicates this workflow step has already been executed.
+                // To avoid silently masking potential double-charging or double-reservation on retries,
+                // we surface this as an error instead of treating it as a successful outcome.
                 logger.warn("add-item-to-order", "Duplicate line item creation attempted", {
                     orderId: input.orderId,
                     variantId: input.variantId,
                     quantity: input.quantity,
                 });
-                // If duplicate, retrieve existing order and return it
-                const existingOrder = await orderService.retrieve(input.orderId, {
-                    relations: ["items"],
-                });
-                return {
-                    success: true,
-                    orderId: input.orderId,
-                    orderWithItems: existingOrder,
-                };
+                throw new Error(
+                    `Duplicate line item creation detected for order ${input.orderId} and variant ${input.variantId}. This may indicate a retry of a partially completed workflow.`
+                );
             }
             
             if (errorMessage.includes("state") || errorMessage.includes("status")) {
@@ -1075,6 +1068,10 @@ export async function updateOrderValuesHandler(
         };
 
         // Remove added_items from metadata to avoid confusion/duplication
+        // NOTE: Since we're creating real line items immediately, we no longer need metadata tracking.
+        // Each add-item operation creates actual line items, so previous metadata entries are obsolete.
+        // If there were items in added_items from previous operations, they should have already been
+        // converted to line items in those operations. This cleanup ensures we don't have stale metadata.
         delete metadataUpdate.added_items;
 
         await orderService.updateOrders([
@@ -1091,7 +1088,7 @@ export async function updateOrderValuesHandler(
             relations: ["items"],
         });
 
-        logger.info("TAX-01: Order updated with line item", {
+        logger.info("add-item-to-order", "TAX-01: Order updated with line item", {
             orderId: input.orderId,
             variantId: input.variantId,
             quantity: input.quantity,
@@ -1112,15 +1109,14 @@ export async function updateOrderValuesHandler(
                 `DB commit failed after Stripe increment. Amount: ${input.newTotal}. Error: ${(error as Error).message}`
             );
 
-            logger.error("🚨 CRITICAL AUDIT ALERT - AUTH_MISMATCH_OVERSOLD 🚨", {
+            logger.critical("add-item-to-order", "AUTH_MISMATCH_OVERSOLD - DB commit failed after Stripe increment", {
                 alert: "CRITICAL",
                 issue: "AUTH_MISMATCH_OVERSOLD",
                 orderId: input.orderId,
                 paymentIntentId: input.paymentIntentId,
                 intendedAmount: input.newTotal,
-                error: (error as Error).message,
                 actionRequired: "Manual reconciliation required"
-            });
+            }, error instanceof Error ? error : new Error(String(error)));
 
             throw criticalError;
         }
@@ -1207,6 +1203,7 @@ export const addItemToOrderWorkflow = createWorkflow(
         const pcInput = transform({ validation, totals }, (data) => ({
             paymentCollectionId: data.validation.paymentCollectionId,
             amount: data.totals.newOrderTotal,
+            previousAmount: data.validation.order.total, // Pass current order total for rollback
         }));
         updatePaymentCollectionStep(pcInput);
 
