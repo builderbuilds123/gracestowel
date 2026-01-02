@@ -1259,10 +1259,13 @@ export const addItemToOrderWorkflow = createWorkflow(
             { validation, totals, stripeResult, updateResult, input },
             (data) => {
                 const authoritativeOrder = (data.updateResult as any)?.orderWithItems;
+                // Find the newly created item by looking for the most recent item with matching variant_id
+                // Since items are typically ordered by creation time, we reverse to get the latest first
                 const newItem =
-                    authoritativeOrder?.items?.find(
-                        (item: any) => item.variant_id === data.input.variantId && item.quantity === data.input.quantity
-                    ) ??
+                    authoritativeOrder?.items
+                        ?.slice()
+                        .reverse()
+                        .find((item: any) => item.variant_id === data.input.variantId) ??
                     {
                         variant_id: data.input.variantId,
                         title: data.totals.variantTitle,
