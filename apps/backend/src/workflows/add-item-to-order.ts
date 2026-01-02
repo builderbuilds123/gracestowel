@@ -275,6 +275,22 @@ export class InvalidPaymentStateError extends Error {
     }
 }
 
+export class DuplicateLineItemError extends Error {
+    public readonly orderId: string;
+    public readonly variantId: string;
+
+    constructor(orderId: string, variantId: string) {
+        super(
+            `Duplicate line item creation detected for order ${orderId} and variant ${variantId}. ` +
+                `This may indicate a retry of a partially completed workflow. Manual verification required to ` +
+                `ensure payment and inventory were not already modified.`
+        );
+        this.name = "DuplicateLineItemError";
+        this.orderId = orderId;
+        this.variantId = variantId;
+    }
+}
+
 /**
  * Story 6.4: Decline code to user-friendly message mapping
  * Per story requirements - sanitized messages that don't expose sensitive info
@@ -1102,11 +1118,7 @@ export async function updateOrderValuesHandler(
                     variantId: input.variantId,
                     quantity: input.quantity,
                 });
-                throw new Error(
-                    `Duplicate line item creation detected for order ${input.orderId} and variant ${input.variantId}. ` +
-                    `This may indicate a retry of a partially completed workflow. Manual verification required to ` +
-                    `ensure payment and inventory were not already modified.`
-                );
+                throw new DuplicateLineItemError(input.orderId, input.variantId);
             }
             
             if (errorMessage.includes("state") || errorMessage.includes("status")) {

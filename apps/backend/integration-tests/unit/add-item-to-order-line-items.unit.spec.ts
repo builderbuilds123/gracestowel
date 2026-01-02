@@ -4,8 +4,10 @@ import {
     addItemToOrderWorkflow,
     prepareInventoryAdjustmentsHandler,
     updatePaymentCollectionHandler,
+    updateOrderValuesHandler,
     hasValidId,
     findNewlyCreatedItem,
+    DuplicateLineItemError,
 } from "../../src/workflows/add-item-to-order";
 
 describe("add-item-to-order workflow - Line Item & Inventory", () => {
@@ -19,7 +21,7 @@ describe("add-item-to-order workflow - Line Item & Inventory", () => {
         vi.clearAllMocks();
 
         mockLogger = {
-            warn: vi.fn(),
+            warn: vi.fn((...args) => console.error("DEBUG: mockLogger.warn called with:", args[1])),
             error: vi.fn(),
             info: vi.fn(),
         };
@@ -166,6 +168,37 @@ describe("add-item-to-order workflow - Line Item & Inventory", () => {
 
              expect(result).toBeDefined();
              // Adjust verification based on actual return type if test fails.
-         });
+        });
+    });
+
+    describe("updateOrderValuesHandler - Duplicate Error Handling", () => {
+        it("should throw DuplicateLineItemError when createLineItems fails with duplicate message", async () => {
+            const input = {
+                orderId: "ord_123",
+                paymentIntentId: "pi_123",
+                variantId: "var_123",
+                variantTitle: "Variant Title",
+                quantity: 1,
+                unitPrice: 1000,
+                itemTotal: 1000,
+                taxAmount: 0,
+                newTotal: 2000,
+                stripeIncrementSucceeded: false,
+                currentOrderMetadata: {},
+            };
+            
+            mockContainer.resolve.mockImplementation((key: string) => {
+                if (key === "orderService" || key === "order") return mockOrderService;
+                if (key === ContainerRegistrationKeys.LOGGER) return mockLogger;
+                // return null;
+            });
+
+            mockOrderService.createLineItems.mockRejectedValue(new Error("duplicate line item"));
+
+            await expect(updateOrderValuesHandler(input, { container: mockContainer }))
+                .rejects.toThrow(DuplicateLineItemError);
+            
+            expect(mockOrderService.createLineItems).toHaveBeenCalled();
+        });
     });
 });

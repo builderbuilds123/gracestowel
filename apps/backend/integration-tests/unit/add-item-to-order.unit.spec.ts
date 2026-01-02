@@ -26,6 +26,7 @@ import {
     VariantNotFoundError,
     PaymentIntentMissingError,
     PriceNotFoundError,
+    DuplicateLineItemError,
 } from "../../src/workflows/add-item-to-order";
 
 // Import retry utilities
@@ -51,6 +52,18 @@ describe("add-item-to-order workflow - Error Classes", () => {
             expect(error.orderId).toBe("ord_123");
             expect(error.status).toBe("completed");
             expect(error.message).toContain("pending");
+        });
+    });
+
+    describe("DuplicateLineItemError", () => {
+        it("should create error with order id and variant id", () => {
+            const error = new DuplicateLineItemError("ord_123", "var_123");
+            expect(error.name).toBe("DuplicateLineItemError");
+            expect(error.orderId).toBe("ord_123");
+            expect(error.variantId).toBe("var_123");
+            expect(error.message).toContain("Duplicate line item creation detected");
+            expect(error.message).toContain("ord_123");
+            expect(error.message).toContain("var_123");
         });
     });
 
