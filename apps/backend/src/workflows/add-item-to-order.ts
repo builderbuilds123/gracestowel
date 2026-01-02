@@ -33,6 +33,49 @@ interface InventoryLevelWithAvailable extends InventoryLevel {
  * Step to prepare inventory adjustments for expected item addition
  * Logic mirrored from create-order-from-stripe workflow
  */
+// ============================================================================
+// Helper Functions - Exported for testing
+// ============================================================================
+
+export function hasValidId(item: any): boolean {
+    return item && typeof item.id === "string" && item.id.length > 0;
+}
+
+export function findNewlyCreatedItem(
+    items: any[],
+    variantId: string,
+    quantity: number,
+    logger?: any
+): any {
+    if (!items || !Array.isArray(items)) {
+        return null;
+    }
+
+    // Try to find exact match by variant_id and quantity
+    const exactMatch = items.find(
+        (item) => item.variant_id === variantId && item.quantity === quantity
+    );
+
+    if (exactMatch) {
+        return exactMatch;
+    }
+
+    // Fallback: This logic handles cases where quantity might have been merged or adjusted,
+    // although strictly speaking for this workflow we expect a new line item.
+    // We log this occurrence if a logger is provided.
+    if (logger) {
+        logger.warn(
+            `findNewlyCreatedItem: No exact match found for variant ${variantId} qty ${quantity}. Returning default structure.`
+        );
+    }
+
+    return null;
+}
+
+// ============================================================================
+// Workflow Steps & Handlers
+// ============================================================================
+
 export async function prepareInventoryAdjustmentsHandler(
     state: { variantId: string; quantity: number },
     { container }: { container: any }
@@ -170,7 +213,7 @@ export interface TotalsResult {
 }
 
 export interface CalculateTotalsInput {
-    orderId: string;
+    // variant_id is required for line items created via add-item workflow
     variantId: string;
     quantity: number;
     currentTotal: number;
@@ -1279,17 +1322,22 @@ export const addItemToOrderWorkflow = createWorkflow(
             { validation, totals, stripeResult, updateResult, input },
             (data) => {
                 const authoritativeOrder = (data.updateResult as any)?.orderWithItems;
-                const newItem =
-                    authoritativeOrder?.items?.find(
-                        (item: any) => item.variant_id === data.input.variantId && item.quantity === data.input.quantity
-                    ) ??
-                    {
+                const items = authoritativeOrder?.items || [];
+                
+                const foundItem = findNewlyCreatedItem(
+                    items,
+                    data.input.variantId,
+                    data.input.quantity
+                );
+
+                const newItem = foundItem ?? {
                         variant_id: data.input.variantId,
                         title: data.totals.variantTitle,
                         quantity: data.input.quantity,
                         unit_price: data.totals.unitPrice,
                         total: data.totals.itemTotal,
                     };
+
                 return {
                     order:
                         authoritativeOrder && authoritativeOrder.items
