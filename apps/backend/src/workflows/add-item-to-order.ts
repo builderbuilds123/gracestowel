@@ -1156,6 +1156,54 @@ const updateOrderValuesStep = createStep(
 );
 
 // ============================================================================
+// Helper Functions
+// ============================================================================
+
+/**
+ * Finds the newly created line item by comparing original and updated order items
+ * Uses ID-based comparison to definitively identify the new item
+ * 
+ * @param originalItems - Items from the order before the add-item operation
+ * @param updatedItems - Items from the order after the add-item operation
+ * @param variantId - The variant ID that was added
+ * @param fallbackData - Data to return if item cannot be found (for response construction)
+ * @returns The newly created line item
+ */
+function findNewlyCreatedItem(
+    originalItems: any[] | undefined,
+    updatedItems: any[] | undefined,
+    variantId: string,
+    fallbackData: { variant_id: string; title: string; quantity: number; unit_price: number; total: number }
+): any {
+    if (!updatedItems) {
+        return fallbackData;
+    }
+
+    // Build set of original item IDs for O(1) lookup
+    const originalItemIds = new Set(
+        (originalItems || []).map((item: any) => item.id)
+    );
+
+    // Find item that exists in updated order but not in original (primary method)
+    const newItem = updatedItems.find(
+        (item: any) => item.variant_id === variantId && !originalItemIds.has(item.id)
+    );
+
+    if (newItem) {
+        return newItem;
+    }
+
+    // Fallback: Find most recent item with matching variant_id
+    // Items are typically ordered by creation time, so reverse to get latest first
+    const fallbackItem = updatedItems
+        .slice()
+        .reverse()
+        .find((item: any) => item.variant_id === variantId);
+
+    return fallbackItem ?? fallbackData;
+}
+
+// ============================================================================
 // Workflow Definition
 // ============================================================================
 
@@ -1260,28 +1308,20 @@ export const addItemToOrderWorkflow = createWorkflow(
             (data) => {
                 const authoritativeOrder = (data.updateResult as any)?.orderWithItems;
                 
-                // Find the newly created item by comparing current items against original items
-                // The new item will be one that exists in the updated order but not in the original
-                const originalItemIds = new Set(
-                    (data.validation.order.items || []).map((item: any) => item.id)
-                );
-                
-                const newItem =
-                    authoritativeOrder?.items?.find(
-                        (item: any) => item.variant_id === data.input.variantId && !originalItemIds.has(item.id)
-                    ) ??
-                    // Fallback if we can't find by ID comparison
-                    authoritativeOrder?.items
-                        ?.slice()
-                        .reverse()
-                        .find((item: any) => item.variant_id === data.input.variantId) ??
+                // Find the newly created item using helper function
+                const newItem = findNewlyCreatedItem(
+                    data.validation.order.items,
+                    authoritativeOrder?.items,
+                    data.input.variantId,
                     {
                         variant_id: data.input.variantId,
                         title: data.totals.variantTitle,
                         quantity: data.input.quantity,
                         unit_price: data.totals.unitPrice,
                         total: data.totals.itemTotal,
-                    };
+                    }
+                );
+                
                 return {
                     order:
                         authoritativeOrder && authoritativeOrder.items
