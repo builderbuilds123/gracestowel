@@ -169,6 +169,16 @@ export interface CalculateTotalsInput {
     currencyCode: string;
 }
 
+// Line item interface for type safety in item detection
+interface LineItem {
+    id?: string;
+    variant_id: string;
+    title?: string;
+    quantity?: number;
+    unit_price?: number;
+    total?: number;
+}
+
 interface StripeIncrementResult {
     success: boolean;
     previousAmount: number;
@@ -1170,23 +1180,26 @@ const updateOrderValuesStep = createStep(
  * @returns The newly created line item
  */
 function findNewlyCreatedItem(
-    originalItems: any[] | undefined,
-    updatedItems: any[] | undefined,
+    originalItems: LineItem[] | undefined,
+    updatedItems: LineItem[] | undefined,
     variantId: string,
-    fallbackData: { variant_id: string; title: string; quantity: number; unit_price: number; total: number }
-): any {
+    fallbackData: LineItem
+): LineItem {
     if (!updatedItems) {
         return fallbackData;
     }
 
     // Build set of original item IDs for O(1) lookup
+    // Filter out items without IDs to ensure type safety
     const originalItemIds = new Set(
-        (originalItems || []).map((item: any) => item.id)
+        (originalItems || [])
+            .filter((item): item is LineItem & { id: string } => item.id !== undefined)
+            .map((item) => item.id)
     );
 
     // Find item that exists in updated order but not in original (primary method)
     const newItem = updatedItems.find(
-        (item: any) => item.variant_id === variantId && !originalItemIds.has(item.id)
+        (item) => item.variant_id === variantId && item.id && !originalItemIds.has(item.id)
     );
 
     if (newItem) {
@@ -1198,7 +1211,7 @@ function findNewlyCreatedItem(
     const fallbackItem = updatedItems
         .slice()
         .reverse()
-        .find((item: any) => item.variant_id === variantId);
+        .find((item) => item.variant_id === variantId);
 
     return fallbackItem ?? fallbackData;
 }
