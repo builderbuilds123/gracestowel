@@ -14,6 +14,19 @@ import { updateInventoryLevelsStep } from "@medusajs/core-flows";
 import type { UpdateInventoryLevelInput } from "@medusajs/types";
 import { logger } from "../utils/logger";
 
+// Type interface for inventory levels to improve type safety
+interface InventoryLevel {
+    id: string;
+    location_id: string;
+    inventory_item_id: string;
+    stocked_quantity: number | null;
+    reserved_quantity: number | null;
+}
+
+interface InventoryLevelWithAvailable extends InventoryLevel {
+    availableStock: number;
+}
+
 // ... existing code ...
 
 /**
@@ -63,20 +76,20 @@ export async function prepareInventoryAdjustmentsHandler(
     //    The precondition check already verified total stock across all locations is sufficient
 
     // Calculate available stock for each location (stocked - reserved)
-    const levelsWithAvailable = inventoryLevels.map((level: any) => ({
+    const levelsWithAvailable: InventoryLevelWithAvailable[] = inventoryLevels.map((level: InventoryLevel) => ({
         ...level,
         availableStock: (level.stocked_quantity || 0) - (level.reserved_quantity || 0)
     }));
 
     // Strategy: Find location with enough available stock
-    let targetLevel = levelsWithAvailable.find((level: any) => level.availableStock >= state.quantity);
+    let targetLevel = levelsWithAvailable.find((level: InventoryLevelWithAvailable) => level.availableStock >= state.quantity);
 
     if (!targetLevel) {
         // Fallback: Use location with most available stock
         // This handles the case where no single location has enough, but total across locations does
         // In this case, we'll allocate from the best location and allow it to go slightly negative
         // (This is acceptable since preconditions verified total stock exists)
-        targetLevel = levelsWithAvailable.reduce((best: any, current: any) =>
+        targetLevel = levelsWithAvailable.reduce((best: InventoryLevelWithAvailable, current: InventoryLevelWithAvailable) =>
             current.availableStock > best.availableStock ? current : best
         );
 
@@ -644,20 +657,17 @@ export const updatePaymentCollectionStep = createStep(
             return new StepResponse({ updated: false, paymentCollectionId: "", previousAmount: 0 });
         }
 
-        // Retrieve current amount if not provided
-        // Use order.total from validation as source of truth (PaymentCollection should match)
-        let previousAmount = input.previousAmount;
-        if (previousAmount === undefined) {
-            // Fallback: Query PaymentCollection if previousAmount not provided
-            // In practice, caller should provide order.total from validation step
-            const query = container.resolve("query");
-            const { data: collections } = await query.graph({
-                entity: "payment_collection",
-                fields: ["id", "amount"],
-                filters: { id: input.paymentCollectionId },
-            });
-            previousAmount = collections?.[0]?.amount || 0;
+        // CRITICAL: previousAmount must be provided from order.total (source of truth)
+        // We do NOT query PaymentCollection as fallback because if it's out of sync with order.total,
+        // we would rollback to an incorrect value, causing data inconsistency.
+        // The caller must provide previousAmount from order.total.
+        if (input.previousAmount === undefined) {
+            throw new Error(
+                `previousAmount is required for updatePaymentCollectionStep. ` +
+                `It must be provided from order.total (source of truth) to ensure correct compensation rollback.`
+            );
         }
+        const previousAmount = input.previousAmount;
 
         await updatePaymentCollectionHandler({
              paymentCollectionId: input.paymentCollectionId,
@@ -1009,9 +1019,13 @@ export async function updateOrderValuesHandler(
             await orderService.createLineItems(input.orderId, [lineItemData]);
         } catch (createError: any) {
             // Enhanced error handling for createLineItems failures
+            // NOTE: Medusa's orderService.createLineItems() does not throw typed error classes,
+            // so we cannot use instanceof checks. We must rely on error message parsing.
+            // This is a limitation of the Medusa v2 API - we would prefer typed errors for robustness.
             const errorMessage = createError?.message || String(createError);
             
-            // Check for common failure scenarios
+            // Check for common failure scenarios using string matching
+            // (Type-safe instanceof checks are not possible without typed errors from Medusa)
             if (errorMessage.includes("variant") && errorMessage.includes("not found")) {
                 logger.error("add-item-to-order", "Variant not found when creating line item", {
                     orderId: input.orderId,
@@ -1028,16 +1042,25 @@ export async function updateOrderValuesHandler(
             }
             
             if (errorMessage.includes("duplicate") || errorMessage.includes("already exists")) {
-                // A duplicate line item indicates this workflow step has already been executed.
-                // To avoid silently masking potential double-charging or double-reservation on retries,
-                // we surface this as an error instead of treating it as a successful outcome.
+                // IDEMPOTENCY CONSIDERATION:
+                // A duplicate line item could indicate:
+                // 1. A retry of a fully completed workflow (idempotent - should succeed)
+                // 2. A retry of a partially completed workflow where payment/inventory were modified
+                //    but line item creation failed (non-idempotent - would cause double-charging)
+                //
+                // Since we cannot distinguish between these cases without additional state tracking,
+                // we choose to throw an error to force investigation rather than silently mask
+                // potential double-charging or double-reservation issues.
+                // This is a safer default than assuming idempotency.
                 logger.warn("add-item-to-order", "Duplicate line item creation attempted", {
                     orderId: input.orderId,
                     variantId: input.variantId,
                     quantity: input.quantity,
                 });
                 throw new Error(
-                    `Duplicate line item creation detected for order ${input.orderId} and variant ${input.variantId}. This may indicate a retry of a partially completed workflow.`
+                    `Duplicate line item creation detected for order ${input.orderId} and variant ${input.variantId}. ` +
+                    `This may indicate a retry of a partially completed workflow. Manual verification required to ` +
+                    `ensure payment and inventory were not already modified.`
                 );
             }
             
