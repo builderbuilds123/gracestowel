@@ -170,9 +170,11 @@ export interface CalculateTotalsInput {
 }
 
 // Line item interface for type safety in item detection
+// Note: Fields are optional as they come from Medusa's order.items which may have partial data
+// The fallbackData ensures we always return a valid structure
 interface LineItem {
     id?: string;
-    variant_id: string;
+    variant_id: string;  // Required - always present in line items
     title?: string;
     quantity?: number;
     unit_price?: number;
@@ -1190,16 +1192,24 @@ function findNewlyCreatedItem(
     }
 
     // Build set of original item IDs for O(1) lookup
-    // Filter out items without IDs to ensure type safety
+    // Filter out items without valid IDs (undefined, null, or empty string)
     const originalItemIds = new Set(
         (originalItems || [])
-            .filter((item): item is LineItem & { id: string } => item.id !== undefined)
+            .filter((item): item is LineItem & { id: string } => 
+                item.id !== undefined && item.id !== null && item.id !== ''
+            )
             .map((item) => item.id)
     );
 
     // Find item that exists in updated order but not in original (primary method)
+    // Only consider items with valid IDs
     const newItem = updatedItems.find(
-        (item) => item.variant_id === variantId && item.id && !originalItemIds.has(item.id)
+        (item) => 
+            item.variant_id === variantId && 
+            item.id !== undefined && 
+            item.id !== null && 
+            item.id !== '' && 
+            !originalItemIds.has(item.id)
     );
 
     if (newItem) {
