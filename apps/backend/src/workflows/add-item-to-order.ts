@@ -1187,6 +1187,9 @@ function hasValidId(item: LineItem): item is LineItem & { id: string } {
  * Finds the newly created line item by comparing original and updated order items
  * Uses ID-based comparison to definitively identify the new item
  * 
+ * Overall complexity: O(n + m) where n = original items, m = updated items
+ * Space complexity: O(n) for the Set of original IDs
+ * 
  * @param originalItems - Items from the order before the add-item operation
  * @param updatedItems - Items from the order after the add-item operation
  * @param variantId - The variant ID that was added
@@ -1229,12 +1232,25 @@ function findNewlyCreatedItem(
     // This is a best-effort fallback when ID-based comparison fails
     // Note: May return incorrect item if multiple items with same variant exist
     // and ordering is not by creation time
+    logger.warn(LOG_COMPONENT, "Item detection fallback: ID-based comparison failed, using order-based detection", {
+        variantId,
+        originalItemCount: originalItems?.length || 0,
+        updatedItemCount: updatedItems.length,
+        context: "This may indicate missing IDs or data integrity issues"
+    });
+    
     for (let i = updatedItems.length - 1; i >= 0; i--) {
         if (updatedItems[i].variant_id === variantId) {
             return updatedItems[i];
         }
     }
 
+    // Last resort: return fallback data if no matching item found
+    logger.warn(LOG_COMPONENT, "Item detection failed: No matching item found, using fallback data", {
+        variantId,
+        context: "This indicates a serious data integrity issue"
+    });
+    
     return fallbackData;
 }
 
