@@ -90,11 +90,14 @@ export async function prepareInventoryAdjustmentsHandler(
 
     const currentReservedQuantity = targetLevel.reserved_quantity || 0;
 
+    // ORD-01: Reserve inventory by incrementing reserved_quantity
+    // Note: UpdateInventoryLevelInput type may not include reserved_quantity in TypeScript,
+    // but Medusa v2 inventory service supports it at runtime
     return [{
         inventory_item_id: inventoryItemId,
         location_id: targetLevel.location_id,
         reserved_quantity: currentReservedQuantity + state.quantity, // Reserve stock for this order
-    }];
+    } as UpdateInventoryLevelInput & { reserved_quantity: number }];
 }
 
 
@@ -613,11 +616,12 @@ export async function updatePaymentCollectionHandler(
         { amount: input.amount }
     );
 
-    // Note: If we had a direct reference to the payment session, we might want to update it excessively,
-    // but typically updating the collection is the canonical sync in Medusa v2.
-    // The Stripe provider logic in Medusa usually pulls from the upstream or manages the session update via collection update if configured.
-    // Since we manually updated Stripe PI in incrementStripeAuthStep, the provider side is "done".
-    // We just need Medusa records to match.
+    // ARCHITECTURE: PaymentCollection is Medusa's canonical payment record
+    // - Order.total is the source of truth for order amounts
+    // - PaymentCollection.amount must match Order.total (Medusa canonical)
+    // - Stripe PaymentIntent mirrors PaymentCollection/Order (payment provider state)
+    // - We manually update Stripe PI in incrementStripeAuthStep to keep it in sync
+    // - PaymentCollection update ensures Medusa's payment records match Order.total
 
     logger.info("add-item-to-order", "Updated PaymentCollection", {
         paymentCollectionId: input.paymentCollectionId,
@@ -1163,22 +1167,45 @@ export const addItemToOrderWorkflow = createWorkflow(
         });
 
         // TAX-01: Pass current tax_total and subtotal for recalculation
-        const totalsInput = transform({ validation, input }, (data) => ({
-            orderId: data.input.orderId,
-            variantId: data.input.variantId,
-            quantity: data.input.quantity,
-            // Use order as source of truth; payment intent is downstream mirror
-            currentTotal: data.validation.order.total,
-            currentTaxTotal: data.validation.order.tax_total,
-            currentSubtotal: data.validation.order.subtotal,
-            currencyCode: data.validation.order.currency_code,
-        }));
+        // CRITICAL: Medusa Order.total is the source of truth for payment amounts
+        // Stripe PaymentIntent is the mirrored payment provider state
+        // PaymentCollection should always match Order.total (Medusa canonical payment record)
+        const totalsInput = transform({ validation, input }, (data) => {
+            // Validate Order.total and PaymentIntent.amount are in sync
+            // If mismatch detected, log warning but use Order.total as authoritative source
+            const orderTotal = data.validation.order.total;
+            const paymentIntentAmount = data.validation.paymentIntent.amount;
+            const mismatch = Math.abs(orderTotal - paymentIntentAmount) > 1; // 1 cent tolerance for rounding
+
+            if (mismatch) {
+                logger.warn("add-item-to-order", "Order.total and PaymentIntent.amount mismatch detected - using Order.total as source of truth", {
+                    orderId: data.input.orderId,
+                    orderTotal,
+                    paymentIntentAmount,
+                    difference: orderTotal - paymentIntentAmount,
+                    action: "Using Order.total as authoritative source, Stripe will be updated to match"
+                });
+            }
+
+            return {
+                orderId: data.input.orderId,
+                variantId: data.input.variantId,
+                quantity: data.input.quantity,
+                // Use Order.total as source of truth (Medusa canonical)
+                currentTotal: orderTotal,
+                currentTaxTotal: data.validation.order.tax_total,
+                currentSubtotal: data.validation.order.subtotal,
+                currencyCode: data.validation.order.currency_code,
+            };
+        });
         const totals = calculateTotalsStep(totalsInput);
 
+        // Update Stripe PaymentIntent to mirror the new Order.total
+        // Stripe is the payment provider mirror, Medusa Order is the source of truth
         const stripeInput = transform({ validation, totals, input }, (data) => ({
             paymentIntentId: data.validation.paymentIntentId,
-            currentAmount: data.validation.paymentIntent.amount,
-            newAmount: data.totals.newOrderTotal,
+            currentAmount: data.validation.paymentIntent.amount, // Current Stripe state (may be out of sync)
+            newAmount: data.totals.newOrderTotal, // New amount from Order.total + itemTotal (source of truth)
             orderId: data.input.orderId,
             variantId: data.input.variantId,
             quantity: data.input.quantity,
@@ -1199,11 +1226,12 @@ export const addItemToOrderWorkflow = createWorkflow(
         // Update inventory levels
         updateInventoryLevelsStep(inventoryAdjustments);
 
-        // PAY-01: Update Payment Collection amount to stay in sync
+        // PAY-01: Update Payment Collection amount to match Order.total (source of truth)
+        // PaymentCollection is Medusa's canonical payment record and must match Order.total
         const pcInput = transform({ validation, totals }, (data) => ({
             paymentCollectionId: data.validation.paymentCollectionId,
-            amount: data.totals.newOrderTotal,
-            previousAmount: data.validation.order.total, // Pass current order total for rollback
+            amount: data.totals.newOrderTotal, // New Order.total (source of truth)
+            previousAmount: data.validation.order.total, // Current Order.total for rollback
         }));
         updatePaymentCollectionStep(pcInput);
 
