@@ -25,6 +25,63 @@ export interface CreateOrderFromStripeInput {
 }
 
 /**
+ * SHP-01 Review Fix (Issue 10): Proper TypeScript types for shipping methods
+ */
+export interface ShippingMethodInput {
+    shipping_option_id?: string;
+    name?: string;
+    amount?: number;
+    data?: Record<string, unknown>;
+}
+
+export interface ShippingMethodOutput {
+    shipping_option_id: string;
+    name: string;
+    amount: number;
+    data: Record<string, unknown>;
+}
+
+/**
+ * Ensure shipping methods include option ID and provider data
+ * AC guard for SHP-01.
+ * 
+ * SHP-01 Review Fix (Issue 10): Added proper TypeScript types instead of `any`
+ */
+export const validateShippingMethods = (
+    shippingMethods: ShippingMethodInput[] | null | undefined
+): ShippingMethodOutput[] => {
+    const validMethods = (shippingMethods || []).filter(
+        (sm): sm is NonNullable<ShippingMethodInput> => sm != null
+    );
+
+    return validMethods.map((sm) => {
+        if (!sm.shipping_option_id) {
+            throw new Error("Shipping method missing shipping_option_id (SHP-01 violation)");
+        }
+
+        if (typeof sm.name !== 'string' || sm.name === '') {
+            throw new Error(`Shipping method ${sm.shipping_option_id} missing name (SHP-01 violation)`);
+        }
+
+        if (typeof sm.amount !== 'number') {
+            throw new Error(`Shipping method ${sm.shipping_option_id} missing amount (SHP-01 violation)`);
+        }
+
+        const hasProviderData = sm.data && Object.keys(sm.data).length > 0;
+        if (!hasProviderData) {
+            throw new Error(`Shipping method ${sm.shipping_option_id} missing provider data (SHP-01 AC2)`);
+        }
+
+        return {
+            shipping_option_id: sm.shipping_option_id,
+            name: sm.name,
+            amount: sm.amount,
+            data: sm.data!,
+        };
+    });
+};
+
+/**
  * Step to validate and prepare order data from Stripe payment
  */
 const prepareOrderDataStep = createStep(
@@ -52,6 +109,7 @@ const prepareOrderDataStep = createStep(
                     "items.variant.*",
                     "region.*",
                     "shipping_methods.*",
+                    "shipping_methods.shipping_option_id", // SHP-01: Explicitly fetch option ID
                     "shipping_address.*",
                 ],
                 filters: { id: cartId },
@@ -92,11 +150,7 @@ const prepareOrderDataStep = createStep(
                     country_code: cart.shipping_address.country_code,
                     phone: cart.shipping_address.phone,
                 } : undefined,
-                shipping_methods: cart.shipping_methods?.filter((sm): sm is NonNullable<typeof sm> => sm != null).map(sm => ({
-                    name: sm.name,
-                    amount: sm.amount,
-                    data: sm.data ?? undefined, // Convert null to undefined
-                })),
+                shipping_methods: validateShippingMethods(cart.shipping_methods as any),
                 status: "pending" as const,
                 sales_channel_id: cart.sales_channel_id ?? undefined, // Convert null to undefined
                 currency_code: cart.region?.currency_code || currency,

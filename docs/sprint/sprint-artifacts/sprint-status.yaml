@@ -406,7 +406,9 @@ development_status:
     status: done
   fix-SHP-01-shipping-option-persistence:
     path: docs/sprint/sprint-artifacts/fix-SHP-01-shipping-option-persistence.md
-    status: ready-for-dev
+    status: done
+    meta: "SHP-01 complete with code review fixes. CRITICAL: Added shipping_option_id to order creation workflow (AC1). Added error handling, race condition fixes, cart expiry handling. 11 tests passing."
+    completed: "2026-01-02"
   fix-TAX-01-end-to-end-tax:
     path: docs/sprint/sprint-artifacts/fix-TAX-01-end-to-end-tax.md
     status: done

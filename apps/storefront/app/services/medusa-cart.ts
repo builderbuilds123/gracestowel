@@ -85,6 +85,8 @@ export class MedusaCartService {
   /**
    * Retrieve a cart by ID
    * Uses Medusa v2 SDK: client.store.cart.retrieve()
+   *
+   * SHP-01 Review Fix: Returns null on 404 to enable graceful cart expiry handling
    */
   async getCart(cartId: string): Promise<Cart | null> {
     return retry(async () => {
@@ -92,9 +94,10 @@ export class MedusaCartService {
         const { cart } = await this.client.store.cart.retrieve(cartId);
         return cart;
       } catch (error: any) {
-        // Check for 404 in various error formats
+        // Check for 404 in various error formats (cart expired or doesn't exist)
         if (error.status === 404 || error.response?.status === 404) {
-          return null; // Don't retry on 404
+          console.warn(`[Cart] Cart ${cartId} not found (possibly expired)`);
+          return null; // Don't retry on 404 - allows caller to create new cart
         }
         throw error;
       }
@@ -196,8 +199,8 @@ export class MedusaCartService {
         } catch (error: any) {
         console.error("Error updating shipping address:", error);
         
-        // Log deep error details if available (Medusa SDK often hides them)
-        if (error.response) {
+        // Log deep error details if available (only in dev)
+        if (error.response && import.meta.env.DEV) {
             console.error("Upstream Medusa Error Data:", JSON.stringify(error.response.data || {}, null, 2));
         }
 
@@ -238,6 +241,42 @@ export class MedusaCartService {
         console.error("Error fetching shipping options:", error);
         throw error;
         }
+    });
+  }
+
+  /**
+   * Add a shipping method to the cart
+   * Uses Medusa v2 SDK: client.store.cart.addShippingMethod()
+   * 
+   * This persists the customer's shipping selection to the cart so it
+   * is available when the order is created from the cart data.
+   * 
+   * SHP-01: Fix shipping option not being persisted
+   */
+  async addShippingMethod(cartId: string, optionId: string): Promise<Cart> {
+    return retry(async () => {
+      try {
+        const { cart } = await this.client.store.cart.addShippingMethod(cartId, {
+          option_id: optionId,
+        });
+        return cart;
+      } catch (error: any) {
+        // Do not retry on client-side errors (4xx)
+        const status = error.status || error.response?.status;
+        if (status >= 400 && status < 500) {
+          // Re-throw to exit retry loop immediately
+          throw error;
+        }
+
+        console.error(`Error adding shipping method ${optionId} to cart ${cartId}:`, error);
+        
+        // Log deep error details if available (only in dev)
+        if (error.response && import.meta.env.DEV) {
+          console.error("Upstream Medusa Error Data:", JSON.stringify(error.response.data || {}, null, 2));
+        }
+        
+        throw error;
+      }
     });
   }
 }
