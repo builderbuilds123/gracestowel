@@ -96,7 +96,7 @@ export class MedusaCartService {
       } catch (error: any) {
         // Check for 404 in various error formats (cart expired or doesn't exist)
         if (error.status === 404 || error.response?.status === 404) {
-          console.log(`[Cart] Cart ${cartId} not found (possibly expired)`);
+          console.warn(`[Cart] Cart ${cartId} not found (possibly expired)`);
           return null; // Don't retry on 404 - allows caller to create new cart
         }
         throw error;
@@ -199,8 +199,8 @@ export class MedusaCartService {
         } catch (error: any) {
         console.error("Error updating shipping address:", error);
         
-        // Log deep error details if available (Medusa SDK often hides them)
-        if (error.response) {
+        // Log deep error details if available (only in dev)
+        if (error.response && import.meta.env.DEV) {
             console.error("Upstream Medusa Error Data:", JSON.stringify(error.response.data || {}, null, 2));
         }
 
@@ -261,10 +261,17 @@ export class MedusaCartService {
         });
         return cart;
       } catch (error: any) {
+        // Do not retry on client-side errors (4xx)
+        const status = error.status || error.response?.status;
+        if (status >= 400 && status < 500) {
+          // Re-throw to exit retry loop immediately
+          throw error;
+        }
+
         console.error(`Error adding shipping method ${optionId} to cart ${cartId}:`, error);
         
-        // Log deep error details if available
-        if (error.response) {
+        // Log deep error details if available (only in dev)
+        if (error.response && import.meta.env.DEV) {
           console.error("Upstream Medusa Error Data:", JSON.stringify(error.response.data || {}, null, 2));
         }
         

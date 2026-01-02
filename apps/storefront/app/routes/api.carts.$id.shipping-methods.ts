@@ -92,13 +92,14 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
     if (status >= 400 && status < 500) {
       return data({
         error: error.message || "Invalid request",
-        details: error.details || undefined,
+        // Only show detailed errors in development to prevent leaking sensitive info
+        details: import.meta.env.DEV ? error.details : undefined,
       }, { status });
     }
 
     return data({
       error: "Failed to add shipping method",
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      details: import.meta.env.DEV ? error.message : undefined,
     }, { status: 502 }); // 502 indicates upstream (Medusa) failure
   }
 }

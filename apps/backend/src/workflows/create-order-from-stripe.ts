@@ -59,6 +59,14 @@ export const validateShippingMethods = (
             throw new Error("Shipping method missing shipping_option_id (SHP-01 violation)");
         }
 
+        if (typeof sm.name !== 'string' || sm.name === '') {
+            throw new Error(`Shipping method ${sm.shipping_option_id} missing name (SHP-01 violation)`);
+        }
+
+        if (typeof sm.amount !== 'number') {
+            throw new Error(`Shipping method ${sm.shipping_option_id} missing amount (SHP-01 violation)`);
+        }
+
         const hasProviderData = sm.data && Object.keys(sm.data).length > 0;
         if (!hasProviderData) {
             throw new Error(`Shipping method ${sm.shipping_option_id} missing provider data (SHP-01 AC2)`);
@@ -66,9 +74,9 @@ export const validateShippingMethods = (
 
         return {
             shipping_option_id: sm.shipping_option_id,
-            name: sm.name || "",
-            amount: sm.amount || 0,
-            data: sm.data || {},
+            name: sm.name,
+            amount: sm.amount,
+            data: sm.data!,
         };
     });
 };
@@ -142,7 +150,7 @@ const prepareOrderDataStep = createStep(
                     country_code: cart.shipping_address.country_code,
                     phone: cart.shipping_address.phone,
                 } : undefined,
-                shipping_methods: validateShippingMethods(cart.shipping_methods),
+                shipping_methods: validateShippingMethods(cart.shipping_methods as any),
                 status: "pending" as const,
                 sales_channel_id: cart.sales_channel_id ?? undefined, // Convert null to undefined
                 currency_code: cart.region?.currency_code || currency,

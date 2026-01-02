@@ -60,6 +60,18 @@ vi.mock('react-router', async () => {
     };
 });
 
+// Mock hooks
+const mockPersistShippingOption = vi.fn();
+vi.mock('../hooks/useShippingPersistence', () => ({
+    useShippingPersistence: () => ({
+        isShippingPersisted: true,
+        setIsShippingPersisted: vi.fn(),
+        shippingPersistError: null,
+        setShippingPersistError: vi.fn(),
+        persistShippingOption: mockPersistShippingOption
+    }),
+}));
+
 
 describe('Checkout Route', () => {
     beforeEach(() => {
@@ -73,9 +85,9 @@ describe('Checkout Route', () => {
         });
 
         // Mock fetch for payment-intent
-        global.fetch = vi.fn(() => Promise.resolve({
+        vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({
             json: () => Promise.resolve({ clientSecret: 'test_secret' }),
-        } as any));
+        } as any)));
     });
 
     it('should fire checkout_started when cart loads (late load scenario)', async () => {
