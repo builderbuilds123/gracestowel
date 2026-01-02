@@ -21,14 +21,26 @@ import {
 /**
  * POST /store/orders/:id/line-items/update
  *
- * Update quantity of an existing line item.
+ * Update the quantity of an existing line item within the 1-hour modification window.
+ * Handles incremental authorization if increasing quantity, refund if decreasing.
  *
  * Headers:
- * - x-modification-token: JWT token (required)
+ * - x-modification-token: JWT token from order creation (REQUIRED - must be in header, not body)
+ * - x-publishable-api-key: Medusa publishable key (required)
  *
  * Body:
  * - item_id: string (required)
- * - quantity: number (required, >= 0)
+ * - quantity: number (required, non-negative integer)
+ *
+ * Error Codes:
+ * - 400 TOKEN_REQUIRED: Missing x-modification-token header
+ * - 401 TOKEN_EXPIRED: Token has expired
+ * - 401 TOKEN_INVALID: Malformed or invalid token
+ * - 403 TOKEN_MISMATCH: Token order_id doesn't match route parameter
+ * - 404 LINE_ITEM_NOT_FOUND: Item ID not found in order
+ * - 409 insufficient_stock: Requested quantity exceeds available stock
+ * - 422 invalid_state: Order or payment in invalid state for modification
+ * - 402 card_declined: Payment authorization failed
  */
 
 interface UpdateItemBody {
@@ -76,14 +88,12 @@ export async function POST(
     res: MedusaResponse
 ): Promise<void> {
     const { id } = req.params;
-    const modificationToken = req.headers["x-modification-token"] as string;
-    const bodyToken = (req.body as any)?.token as string;
-    const token = modificationToken || bodyToken;
+    const token = req.headers["x-modification-token"] as string;
 
     if (!token) {
         res.status(400).json({
             code: "TOKEN_REQUIRED",
-            message: "x-modification-token header is required",
+            message: "x-modification-token header is required. Token must be sent in header, not request body.",
         });
         return;
     }

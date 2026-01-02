@@ -38,7 +38,7 @@ interface InventoryLevelWithAvailable extends InventoryLevel {
 // ============================================================================
 
 export function hasValidId(item: any): boolean {
-    return item && typeof item.id === "string" && item.id.length > 0;
+    return !!(item && typeof item.id === "string" && item.id.length > 0);
 }
 
 export function findNewlyCreatedItem(
@@ -65,7 +65,9 @@ export function findNewlyCreatedItem(
     // We log this occurrence if a logger is provided.
     if (logger) {
         logger.warn(
-            `findNewlyCreatedItem: No exact match found for variant ${variantId} qty ${quantity}. Returning default structure.`
+            "add-item-to-order",
+            "findNewlyCreatedItem: No exact match found for variant. Returning default structure.",
+            { variantId, quantity }
         );
     }
 
