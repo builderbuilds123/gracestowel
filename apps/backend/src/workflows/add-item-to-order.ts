@@ -14,6 +14,9 @@ import { updateInventoryLevelsStep } from "@medusajs/core-flows";
 import type { UpdateInventoryLevelInput } from "@medusajs/types";
 import { logger } from "../utils/logger";
 
+// Component name for structured logging
+const LOG_COMPONENT = "add-item-to-order";
+
 // ... existing code ...
 
 /**
@@ -80,7 +83,7 @@ export async function prepareInventoryAdjustmentsHandler(
             current.availableStock > best.availableStock ? current : best
         );
 
-        logger.warn("add-item-to-order", "No single location has sufficient stock, using best available", {
+        logger.warn(LOG_COMPONENT, "No single location has sufficient stock, using best available", {
             variantId: state.variantId,
             requested: state.quantity,
             selectedLocation: targetLevel.location_id,
@@ -513,7 +516,7 @@ export async function validatePreconditionsHandler(
     // Story 6.3: Check if order is locked for capture (race condition guard)
     const editStatus = order.metadata?.edit_status;
     if (editStatus === "locked_for_capture") {
-        logger.warn("add-item-to-order", "Edit rejected: Order locked for capture", { orderId: input.orderId });
+        logger.warn(LOG_COMPONENT, "Edit rejected: Order locked for capture", { orderId: input.orderId });
         throw new OrderLockedError(input.orderId);
     }
 
@@ -549,7 +552,7 @@ export async function validatePreconditionsHandler(
             throw new InsufficientStockError(input.variantId, totalAvailableStock, input.quantity);
         }
 
-        logger.info("add-item-to-order", "Stock check passed", {
+        logger.info(LOG_COMPONENT, "Stock check passed", {
             variantId: input.variantId,
             availableStock: totalAvailableStock,
             locationCount: inventoryLevels.length,
@@ -557,7 +560,7 @@ export async function validatePreconditionsHandler(
         });
     }
 
-    logger.info("add-item-to-order", "Preconditions validated", { orderId: input.orderId });
+    logger.info(LOG_COMPONENT, "Preconditions validated", { orderId: input.orderId });
 
     return {
         valid: true,
@@ -623,7 +626,7 @@ export async function updatePaymentCollectionHandler(
     // - We manually update Stripe PI in incrementStripeAuthStep to keep it in sync
     // - PaymentCollection update ensures Medusa's payment records match Order.total
 
-    logger.info("add-item-to-order", "Updated PaymentCollection", {
+    logger.info(LOG_COMPONENT, "Updated PaymentCollection", {
         paymentCollectionId: input.paymentCollectionId,
         amount: input.amount
     });
@@ -640,7 +643,7 @@ export const updatePaymentCollectionStep = createStep(
         { container }
     ) => {
         if (!input.paymentCollectionId) {
-            logger.warn("add-item-to-order", "No PaymentCollection ID found, skipping update (legacy order?)");
+            logger.warn(LOG_COMPONENT, "No PaymentCollection ID found, skipping update (legacy order?)");
             return new StepResponse({ updated: false, paymentCollectionId: "", previousAmount: 0 });
         }
 
@@ -685,14 +688,14 @@ export const updatePaymentCollectionStep = createStep(
                 compensation.paymentCollectionId,
                 { amount: compensation.previousAmount }
             );
-            logger.info("add-item-to-order", "Rolled back PaymentCollection", {
+            logger.info(LOG_COMPONENT, "Rolled back PaymentCollection", {
                 paymentCollectionId: compensation.paymentCollectionId,
                 previousAmount: compensation.previousAmount
             });
         } catch (rollbackError) {
             // CRITICAL: PaymentCollection rollback failure means payment state is inconsistent
             // This requires immediate attention as PaymentCollection amount may be out of sync
-            logger.critical("add-item-to-order", "Failed to rollback PaymentCollection - payment state inconsistent", {
+            logger.critical(LOG_COMPONENT, "Failed to rollback PaymentCollection - payment state inconsistent", {
                 paymentCollectionId: compensation.paymentCollectionId,
                 previousAmount: compensation.previousAmount,
                 alert: "CRITICAL",
@@ -789,7 +792,7 @@ export async function calculateTotalsHandler(
     const difference = itemTotal;
     const variantTitle = `${variant.product?.title || ""} - ${variant.title || ""}`.trim();
 
-    logger.info("add-item-to-order", "TAX-01: Calculated totals", {
+    logger.info(LOG_COMPONENT, "TAX-01: Calculated totals", {
         variantId: input.variantId,
         unitPrice,
         taxPerUnit,
@@ -839,7 +842,7 @@ const incrementStripeAuthStep = createStep(
         const difference = input.newAmount - input.currentAmount;
 
         if (difference <= 0) {
-            logger.info("add-item-to-order", "Skipping Stripe increment (no increase)", {
+            logger.info(LOG_COMPONENT, "Skipping Stripe increment (no increase)", {
                 difference,
                 currentAmount: input.currentAmount,
                 newAmount: input.newAmount
@@ -874,7 +877,7 @@ const incrementStripeAuthStep = createStep(
                 }
             );
 
-            logger.info("add-item-to-order", "Stripe authorization incremented", {
+            logger.info(LOG_COMPONENT, "Stripe authorization incremented", {
                 paymentIntentId: input.paymentIntentId,
                 previousAmount: input.currentAmount,
                 newAmount: input.newAmount,
@@ -892,7 +895,7 @@ const incrementStripeAuthStep = createStep(
         } catch (error) {
             if (error instanceof Stripe.errors.StripeCardError) {
                 // Story 6.4: Emit metric for decline tracking
-                logger.info("add-item-to-order", "Payment increment declined", {
+                logger.info(LOG_COMPONENT, "Payment increment declined", {
                     metric: "payment_increment_decline_count",
                     value: 1,
                     reason: error.decline_code || 'unknown',
@@ -910,7 +913,7 @@ const incrementStripeAuthStep = createStep(
                 error instanceof Stripe.errors.StripeIdempotencyError ||
                 (error as any).type === "idempotency_error"
             ) {
-                logger.info("add-item-to-order", "Idempotency collision detected, fetching current state", {
+                logger.info(LOG_COMPONENT, "Idempotency collision detected, fetching current state", {
                     paymentIntentId: input.paymentIntentId,
                     idempotencyKey
                 });
@@ -943,13 +946,13 @@ const incrementStripeAuthStep = createStep(
                 { amount: prev.previousAmount },
                 rollbackKey ? { idempotencyKey: rollbackKey } : undefined
             );
-            logger.info("add-item-to-order", "Rolled back Stripe authorization in compensation", {
+            logger.info(LOG_COMPONENT, "Rolled back Stripe authorization in compensation", {
                 paymentIntentId: prev.paymentIntentId,
                 previousAmount: prev.previousAmount,
                 idempotencyKey: rollbackKey
             });
         } catch (rollbackError) {
-            logger.error("add-item-to-order", "Failed to rollback Stripe authorization", {
+            logger.error(LOG_COMPONENT, "Failed to rollback Stripe authorization", {
                 paymentIntentId: prev.paymentIntentId,
             }, rollbackError instanceof Error ? rollbackError : new Error(String(rollbackError)));
             throw rollbackError;
@@ -1013,7 +1016,7 @@ export async function updateOrderValuesHandler(
             
             // Check for common failure scenarios
             if (errorMessage.includes("variant") && errorMessage.includes("not found")) {
-                logger.error("add-item-to-order", "Variant not found when creating line item", {
+                logger.error(LOG_COMPONENT, "Variant not found when creating line item", {
                     orderId: input.orderId,
                     variantId: input.variantId,
                 }, createError instanceof Error ? createError : new Error(errorMessage));
@@ -1021,7 +1024,7 @@ export async function updateOrderValuesHandler(
             }
             
             if (errorMessage.includes("order") && (errorMessage.includes("not found") || errorMessage.includes("does not exist"))) {
-                logger.error("add-item-to-order", "Order not found when creating line item", {
+                logger.error(LOG_COMPONENT, "Order not found when creating line item", {
                     orderId: input.orderId,
                 }, createError instanceof Error ? createError : new Error(errorMessage));
                 throw new OrderNotFoundError(input.orderId);
@@ -1031,7 +1034,7 @@ export async function updateOrderValuesHandler(
                 // A duplicate line item indicates this workflow step has already been executed.
                 // To avoid silently masking potential double-charging or double-reservation on retries,
                 // we surface this as an error instead of treating it as a successful outcome.
-                logger.warn("add-item-to-order", "Duplicate line item creation attempted", {
+                logger.warn(LOG_COMPONENT, "Duplicate line item creation attempted", {
                     orderId: input.orderId,
                     variantId: input.variantId,
                     quantity: input.quantity,
@@ -1042,7 +1045,7 @@ export async function updateOrderValuesHandler(
             }
             
             if (errorMessage.includes("state") || errorMessage.includes("status")) {
-                logger.error("add-item-to-order", "Order state conflict when creating line item", {
+                logger.error(LOG_COMPONENT, "Order state conflict when creating line item", {
                     orderId: input.orderId,
                     error: errorMessage,
                 }, createError instanceof Error ? createError : new Error(errorMessage));
@@ -1050,7 +1053,7 @@ export async function updateOrderValuesHandler(
             }
             
             // Generic error - log with context and rethrow
-            logger.error("add-item-to-order", "Failed to create line item", {
+            logger.error(LOG_COMPONENT, "Failed to create line item", {
                 orderId: input.orderId,
                 variantId: input.variantId,
                 quantity: input.quantity,
@@ -1092,7 +1095,7 @@ export async function updateOrderValuesHandler(
             relations: ["items"],
         });
 
-        logger.info("add-item-to-order", "TAX-01: Order updated with line item", {
+        logger.info(LOG_COMPONENT, "TAX-01: Order updated with line item", {
             orderId: input.orderId,
             variantId: input.variantId,
             quantity: input.quantity,
@@ -1113,7 +1116,7 @@ export async function updateOrderValuesHandler(
                 `DB commit failed after Stripe increment. Amount: ${input.newTotal}. Error: ${(error as Error).message}`
             );
 
-            logger.critical("add-item-to-order", "AUTH_MISMATCH_OVERSOLD - DB commit failed after Stripe increment", {
+            logger.critical(LOG_COMPONENT, "AUTH_MISMATCH_OVERSOLD - DB commit failed after Stripe increment", {
                 alert: "CRITICAL",
                 issue: "AUTH_MISMATCH_OVERSOLD",
                 orderId: input.orderId,
@@ -1178,7 +1181,7 @@ export const addItemToOrderWorkflow = createWorkflow(
             const mismatch = Math.abs(orderTotal - paymentIntentAmount) > 1; // 1 cent tolerance for rounding
 
             if (mismatch) {
-                logger.warn("add-item-to-order", "Order.total and PaymentIntent.amount mismatch detected - using Order.total as source of truth", {
+                logger.warn(LOG_COMPONENT, "Order.total and PaymentIntent.amount mismatch detected - using Order.total as source of truth", {
                     orderId: data.input.orderId,
                     orderTotal,
                     paymentIntentAmount,
