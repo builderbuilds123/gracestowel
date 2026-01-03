@@ -4,9 +4,11 @@ import { Job } from "bullmq";
 
 const mockQueueAdd = vi.fn().mockResolvedValue({ id: "test-job-id" });
 const mockQueueGetJob = vi.fn();
+const mockQueueClose = vi.fn().mockResolvedValue(undefined);
 const mockQueueInstance = {
     add: mockQueueAdd,
     getJob: mockQueueGetJob,
+    close: mockQueueClose,
 };
 
 const mockWorkerOn = vi.fn();
