@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { ContainerRegistrationKeys } from "@medusajs/utils";
+import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import {
     addItemToOrderWorkflow,
     prepareInventoryAdjustmentsHandler,
