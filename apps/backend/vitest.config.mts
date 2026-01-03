@@ -14,9 +14,6 @@ export default defineConfig({
       "**/dist/**",
       "**/integration-tests/http/**",
       "**/integration-tests/modules/**",
-      // TEMPORARY: Skip this file in CI due to Vite module graph corruption from vi.resetModules()
-      // See issue: TODO - create GitHub issue
-      "**/add-item-to-order-line-items.unit.spec.ts",
     ],
   },
 })
