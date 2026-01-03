@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
 /**
  * Unit tests for charge.refunded webhook handler
  *
@@ -16,23 +17,23 @@ import Stripe from "stripe";
 import { Modules } from "@medusajs/framework/utils";
 
 // Mock dependencies
-const mockQuery = jest.fn();
-const mockOrderServiceUpdate = jest.fn();
-const mockPaymentModuleUpdate = jest.fn();
-const mockOrderModuleAdd = jest.fn();
+const mockQuery = vi.fn();
+const mockOrderServiceUpdate = vi.fn();
+const mockPaymentModuleUpdate = vi.fn();
+const mockOrderModuleAdd = vi.fn();
 const mockLogger = {
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-    critical: jest.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    critical: vi.fn(),
 };
 
-jest.mock("../../src/utils/logger", () => ({
+vi.mock("../../src/utils/logger", () => ({
     logger: {
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn(),
-        critical: jest.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        critical: vi.fn(),
     },
 }));
 
@@ -41,13 +42,13 @@ import { handleChargeRefunded } from "../../src/loaders/stripe-event-worker";
 import { logger } from "../../src/utils/logger";
 
 // Mock startStripeEventWorker to prevent actual worker startup
-jest.mock("../../src/workers/stripe-event-worker", () => ({
-    startStripeEventWorker: jest.fn(),
+vi.mock("../../src/workers/stripe-event-worker", () => ({
+    startStripeEventWorker: vi.fn(),
 }));
 
 // Mock registerProjectSubscribers
-jest.mock("../../src/utils/register-subscribers", () => ({
-    registerProjectSubscribers: jest.fn(),
+vi.mock("../../src/utils/register-subscribers", () => ({
+    registerProjectSubscribers: vi.fn(),
 }));
 
 describe("charge.refunded webhook handler", () => {
@@ -67,10 +68,10 @@ describe("charge.refunded webhook handler", () => {
         mockOrderServiceUpdate.mockResolvedValue(undefined);
 
         // Reset mock logger functions
-        (logger.info as jest.Mock) = jest.fn();
-        (logger.warn as jest.Mock) = jest.fn();
-        (logger.error as jest.Mock) = jest.fn();
-        (logger.critical as jest.Mock) = jest.fn();
+        (logger.info as any) = vi.fn();
+        (logger.warn as any) = vi.fn();
+        (logger.error as any) = vi.fn();
+        (logger.critical as any) = vi.fn();
 
         // Setup mock container with proper Medusa v2 service resolution
         // Create service objects once and reuse them to ensure mock tracking works
@@ -82,7 +83,7 @@ describe("charge.refunded webhook handler", () => {
         };
         
         container = {
-            resolve: jest.fn((service: string) => {
+            resolve: vi.fn((service: string) => {
                 if (service === "query") {
                     return {
                         graph: mockQuery,
@@ -196,7 +197,7 @@ describe("charge.refunded webhook handler", () => {
             expect(mockQuery).toHaveBeenCalledTimes(3);
             
             // Debug: Check if idempotency log exists (would mean function returned early)
-            const idempotencyLog = (logger.info as jest.Mock).mock.calls.some(call =>
+            const idempotencyLog = (logger.info as any).mock.calls.some(call =>
                 call[0] === "stripe-worker" &&
                 call[1] === "Refund transaction already exists - skipping duplicate"
             );
@@ -208,7 +209,7 @@ describe("charge.refunded webhook handler", () => {
             }
 
             // Debug: Check what services were resolved
-            const resolveCalls = (container.resolve as jest.Mock).mock.calls;
+            const resolveCalls = (container.resolve as any).mock.calls;
             const resolvedServices = resolveCalls.map(call => call[0]);
             
             // Verify container.resolve was called for payment and order modules
@@ -229,7 +230,7 @@ describe("charge.refunded webhook handler", () => {
             );
             
             // Debug: Check if errors were logged (would indicate errors being caught)
-            const errorCalls = (logger.error as jest.Mock).mock.calls;
+            const errorCalls = (logger.error as any).mock.calls;
             const paymentCollectionErrors = errorCalls.filter(call => 
                 call[0] === "stripe-worker" && 
                 call[1] === "Failed to update PaymentCollection on refund"
@@ -256,7 +257,7 @@ describe("charge.refunded webhook handler", () => {
             );
             // Check if OrderTransaction was created (log comes AFTER service call)
             // If log doesn't exist, check if error was logged or if service wasn't called
-            const orderTxCreated = (logger.info as jest.Mock).mock.calls.some(call =>
+            const orderTxCreated = (logger.info as any).mock.calls.some(call =>
                 call[0] === "stripe-worker" &&
                 call[1] === "OrderTransaction created for refund"
             );

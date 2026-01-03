@@ -1,67 +1,64 @@
-/**
- * Unit tests for fallback-capture.ts
- * 
- * Story: 2.4 Fallback Cron (Queue Health Check)
- * Coverage:
- * - Skips orders with already captured payments
- * - Skips orders with active BullMQ jobs
- * - Logs critical alerts for failed jobs
- * - Triggers capture for missing jobs
- */
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock dependencies before imports
-const mockStripeRetrieve = jest.fn();
-jest.mock("../../src/utils/stripe", () => ({
-    getStripeClient: jest.fn().mockReturnValue({
+const mockStripeRetrieve = vi.fn();
+vi.mock("../../src/utils/stripe", () => ({
+    getStripeClient: vi.fn().mockReturnValue({
         paymentIntents: {
             retrieve: mockStripeRetrieve,
         },
     }),
 }));
 
-const mockQueueAdd = jest.fn();
-const mockQueueGetJob = jest.fn();
-const mockGetJobState = jest.fn();
-const mockGetPendingRecoveryOrders = jest.fn();
-jest.mock("../../src/lib/payment-capture-queue", () => ({
-    getPaymentCaptureQueue: jest.fn().mockReturnValue({
+const { mockQueueAdd, mockQueueGetJob, mockGetJobState, mockGetPendingRecoveryOrders } = vi.hoisted(() => {
+    return {
+        mockQueueAdd: vi.fn(),
+        mockQueueGetJob: vi.fn(),
+        mockGetJobState: vi.fn(),
+        mockGetPendingRecoveryOrders: vi.fn(),
+    };
+});
+
+vi.mock("../../src/lib/payment-capture-queue", () => ({
+    getPaymentCaptureQueue: vi.fn().mockReturnValue({
         add: mockQueueAdd,
         getJob: mockQueueGetJob,
     }),
     getJobState: mockGetJobState,
 }));
-jest.mock("../../src/repositories/order-recovery", () => ({
+
+vi.mock("../../src/repositories/order-recovery", () => ({
     getPendingRecoveryOrders: mockGetPendingRecoveryOrders,
 }));
 
 describe("fallback-capture", () => {
     let mockContainer: any;
-    let mockQueryGraph: jest.Mock;
+    let mockQueryGraph: vi.Mock;
     let fallbackCaptureJob: any;
     const originalEnv = process.env;
-    const mockPgConnection: any = { query: jest.fn() };
+    const mockPgConnection: any = { query: vi.fn() };
     
     // Mock logger for structured logging tests
     const mockLogger = {
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
     };
 
-    beforeEach(() => {
-        jest.clearAllMocks();
+    beforeEach(async () => {
+        vi.clearAllMocks();
         mockGetPendingRecoveryOrders.mockResolvedValue([]);
         
         // Reset modules to get fresh import
-        jest.resetModules();
+        vi.resetModules();
 
         // Ensure REDIS_URL present for default test flows
         process.env = { ...originalEnv, REDIS_URL: "redis://localhost:6379" } as any;
         
         // Setup mock container with logger support
-        mockQueryGraph = jest.fn();
+        mockQueryGraph = vi.fn();
         mockContainer = {
-            resolve: jest.fn((key: string) => {
+            resolve: vi.fn((key: string) => {
                 if (key === "logger" || key === "LOGGER" || key.includes("LOGGER")) {
                     return mockLogger;
                 }
@@ -71,17 +68,17 @@ describe("fallback-capture", () => {
         };
         
         // Mock console methods (for any legacy logging)
-        jest.spyOn(console, "log").mockImplementation(() => {});
-        jest.spyOn(console, "error").mockImplementation(() => {});
-        jest.spyOn(console, "warn").mockImplementation(() => {});
+        vi.spyOn(console, "log").mockImplementation(() => {});
+        vi.spyOn(console, "error").mockImplementation(() => {});
+        vi.spyOn(console, "warn").mockImplementation(() => {});
         
         // Re-import the module
-        fallbackCaptureJob = require("../../src/jobs/fallback-capture").default;
+        fallbackCaptureJob = (await import("../../src/jobs/fallback-capture")).default;
     });
 
     afterEach(() => {
         process.env = originalEnv;
-        jest.restoreAllMocks();
+        vi.restoreAllMocks();
     });
 
     const createMockOrder = (id: string, paymentIntentId: string) => ({
@@ -160,12 +157,11 @@ describe("fallback-capture", () => {
             }),
             expect.objectContaining({
                 delay: 0,
-                jobId: "capture-ord_4",
+                jobId: "capture-ord_4", // Job options
             })
         );
     });
 
-    // M3: Test for completed job state
     it("should trigger capture for completed jobs (stale completed state with requires_capture)", async () => {
         mockQueryGraph.mockResolvedValue({
             data: [createMockOrder("ord_5", "pi_completed")],
@@ -203,9 +199,10 @@ describe("fallback-capture", () => {
 
     it("should skip cron when REDIS_URL is missing", async () => {
         process.env = { ...originalEnv }; // remove REDIS_URL
+        delete process.env.REDIS_URL;
 
         // Re-import to apply env
-        fallbackCaptureJob = require("../../src/jobs/fallback-capture").default;
+        fallbackCaptureJob = (await import("../../src/jobs/fallback-capture")).default;
 
         await fallbackCaptureJob(mockContainer);
 
@@ -232,16 +229,16 @@ describe("fallback-capture", () => {
     // Code Review: Test for Redis guard
     it("should exit gracefully when Redis/BullMQ is unavailable", async () => {
         // Reset and re-mock to throw error
-        jest.resetModules();
-        jest.doMock("../../src/lib/payment-capture-queue", () => ({
-            getPaymentCaptureQueue: jest.fn().mockImplementation(() => {
+        vi.resetModules();
+        vi.doMock("../../src/lib/payment-capture-queue", () => ({
+            getPaymentCaptureQueue: vi.fn().mockImplementation(() => {
                 throw new Error("Redis connection failed");
             }),
             getJobState: mockGetJobState,
         }));
         
         // Re-import with new mock
-        const fallbackCaptureJobWithError = require("../../src/jobs/fallback-capture").default;
+        const fallbackCaptureJobWithError = (await import("../../src/jobs/fallback-capture")).default;
         
         await fallbackCaptureJobWithError(mockContainer);
         
@@ -252,24 +249,24 @@ describe("fallback-capture", () => {
     // Code Review: Test that order query filters to pending status only
     it("should only query pending orders (not processing/completed)", async () => {
         // Re-import fresh due to previous test's resetModules
-        jest.resetModules();
+        vi.resetModules();
         
         // Explicitly mock happy path for this test
-        jest.doMock("../../src/lib/payment-capture-queue", () => ({
-            getPaymentCaptureQueue: jest.fn().mockReturnValue({
-                add: jest.fn(),
+        vi.doMock("../../src/lib/payment-capture-queue", () => ({
+            getPaymentCaptureQueue: vi.fn().mockReturnValue({
+                add: vi.fn(),
             }),
-            getJobState: jest.fn(),
+            getJobState: vi.fn(),
         }));
-        jest.doMock("../../src/repositories/order-recovery", () => ({
-            getPendingRecoveryOrders: jest.fn().mockResolvedValue([]),
+        vi.doMock("../../src/repositories/order-recovery", () => ({
+            getPendingRecoveryOrders: vi.fn().mockResolvedValue([]),
         }));
 
-        const freshFallbackCaptureJob = require("../../src/jobs/fallback-capture").default;
+        const freshFallbackCaptureJob = (await import("../../src/jobs/fallback-capture")).default;
         
-        const freshMockQueryGraph = jest.fn().mockResolvedValue({ data: [] });
+        const freshMockQueryGraph = vi.fn().mockResolvedValue({ data: [] });
         const freshMockContainer = {
-            resolve: jest.fn((key: string) => {
+            resolve: vi.fn((key: string) => {
                 if (key === "logger" || key === "LOGGER" || key.includes("LOGGER")) {
                     return mockLogger;
                 }
@@ -294,7 +291,7 @@ describe("fallback-capture", () => {
     // Story 6.2: Redis Recovery Logic
     describe("Redis recovery logic (Story 6.2)", () => {
         const mockOrderService = {
-            updateOrders: jest.fn().mockResolvedValue([{}]),
+            updateOrders: vi.fn().mockResolvedValue([{}]),
         };
 
         const createRecoveryOrder = (id: string, paymentIntentId: string) => ({
@@ -309,27 +306,27 @@ describe("fallback-capture", () => {
         });
 
         it("should process orders flagged with needs_recovery: true and clear flag", async () => {
-            jest.resetModules();
+            vi.resetModules();
             
-            jest.doMock("../../src/lib/payment-capture-queue", () => ({
-                getPaymentCaptureQueue: jest.fn().mockReturnValue({
+            vi.doMock("../../src/lib/payment-capture-queue", () => ({
+                getPaymentCaptureQueue: vi.fn().mockReturnValue({
                     add: mockQueueAdd,
                 }),
                 getJobState: mockGetJobState,
             }));
-            jest.doMock("../../src/repositories/order-recovery", () => ({
-                getPendingRecoveryOrders: jest.fn().mockResolvedValue([createRecoveryOrder("ord_recovery", "pi_recovery")]),
+            vi.doMock("../../src/repositories/order-recovery", () => ({
+                getPendingRecoveryOrders: vi.fn().mockResolvedValue([createRecoveryOrder("ord_recovery", "pi_recovery")]),
             }));
 
-            const freshFallbackJob = require("../../src/jobs/fallback-capture").default;
+            const freshFallbackJob = (await import("../../src/jobs/fallback-capture")).default;
 
             const recoveryOrder = createRecoveryOrder("ord_recovery", "pi_recovery");
-            const recoveryQueryGraph = jest.fn().mockResolvedValue({
+            const recoveryQueryGraph = vi.fn().mockResolvedValue({
                 data: [recoveryOrder],
             });
 
             const recoveryContainer = {
-                resolve: jest.fn((key: string) => {
+                resolve: vi.fn((key: string) => {
                     if (key === "logger" || key === "LOGGER" || key.includes("LOGGER")) {
                         return mockLogger;
                     }

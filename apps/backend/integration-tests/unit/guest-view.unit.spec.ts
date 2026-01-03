@@ -1,7 +1,8 @@
-jest.mock('../../src/services/modification-token', () => ({
+import { beforeEach, describe, expect, it, vi } from "vitest";
+vi.mock('../../src/services/modification-token', () => ({
     modificationTokenService: {
-        validateToken: jest.fn(),
-        getRemainingTime: jest.fn()
+        validateToken: vi.fn(),
+        getRemainingTime: vi.fn()
     }
 }));
 
@@ -10,31 +11,31 @@ import { GET } from '../../src/api/store/orders/[id]/guest-view/route';
 import { modificationTokenService } from '../../src/services/modification-token';
 
 // Mock Dependencies
-const mockGraph = jest.fn();
+const mockGraph = vi.fn();
 
-jest.mock('@medusajs/framework', () => ({
-    MedusaRequest: jest.fn(),
-    MedusaResponse: jest.fn()
+vi.mock('@medusajs/framework', () => ({
+    MedusaRequest: vi.fn(),
+    MedusaResponse: vi.fn()
 }));
 
-const mockResolve = jest.fn((key: string) => {
+const mockResolve = vi.fn((key: string) => {
     if (key === 'query') return { graph: mockGraph };
     return null;
 });
 
 let mockReq: Partial<MedusaRequest>;
 let mockRes: Partial<MedusaResponse>;
-let jsonMock: jest.Mock;
-let statusMock: jest.Mock;
-let setHeaderMock: jest.Mock;
+let jsonMock: vi.Mock;
+let statusMock: vi.Mock;
+let setHeaderMock: vi.Mock;
 
 describe('GET /store/orders/:id/guest-view', () => {
     beforeEach(() => {
-        jest.clearAllMocks();
+        vi.clearAllMocks();
         
-        jsonMock = jest.fn();
-        statusMock = jest.fn().mockReturnThis();
-        setHeaderMock = jest.fn();
+        jsonMock = vi.fn();
+        statusMock = vi.fn().mockReturnThis();
+        setHeaderMock = vi.fn();
         
         mockReq = {
             scope: { resolve: mockResolve } as any,

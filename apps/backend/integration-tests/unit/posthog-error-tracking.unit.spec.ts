@@ -1,37 +1,47 @@
-/**
- * Unit Tests for Backend Error Tracking (Story 4.4)
- */
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { captureBackendError, captureBusinessEvent, getPostHog } from '../../src/utils/posthog';
+// Mock PostHog with hoisted values
+const { MockPostHog, mockPostHogInstance } = vi.hoisted(() => {
+  const instance = {
+    capture: vi.fn(),
+    shutdown: vi.fn(),
+  };
+  const MockClass = vi.fn(function() { return instance; });
+  return { MockPostHog: MockClass, mockPostHogInstance: instance };
+});
 
-// Mock PostHog
-jest.mock('posthog-node', () => ({
-  PostHog: jest.fn().mockImplementation(() => ({
-    capture: jest.fn(),
-    shutdown: jest.fn(),
-  })),
+vi.mock('posthog-node', () => ({
+  PostHog: MockPostHog,
 }));
 
 describe('Backend Error Tracking (Story 4.4)', () => {
-  let mockCapture: jest.Mock;
+  const originalEnv = process.env;
 
-  beforeEach(() => {
-    jest.clearAllMocks();
-    // Set up environment
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    vi.resetModules();
+    process.env = { ...originalEnv };
+    // Clear interfering VITE_ vars
+    delete process.env.VITE_POSTHOG_API_KEY;
+    delete process.env.VITE_POSTHOG_HOST;
+
     process.env.POSTHOG_API_KEY = 'test_api_key';
     process.env.NODE_ENV = 'test';
-    
-    // Get fresh client and mock
-    const client = getPostHog();
-    mockCapture = client?.capture as unknown as jest.Mock;
   });
 
   afterEach(() => {
-    delete process.env.POSTHOG_API_KEY;
+    process.env = originalEnv;
   });
 
+  // Helper to get fresh module
+  async function getUtils() {
+    return await import('../../src/utils/posthog');
+  }
+
   describe('captureBackendError', () => {
-    it('should capture backend_error event with error details (AC1)', () => {
+    it('should capture backend_error event with error details (AC1)', async () => {
+      const { captureBackendError } = await getUtils();
+      
       const error = new Error('Test error message');
       error.name = 'TestError';
 
@@ -41,7 +51,7 @@ describe('Backend Error Tracking (Story 4.4)', () => {
         method: 'POST',
       });
 
-      expect(mockCapture).toHaveBeenCalledWith(expect.objectContaining({
+      expect(mockPostHogInstance.capture).toHaveBeenCalledWith(expect.objectContaining({
         event: 'backend_error',
         properties: expect.objectContaining({
           $exception_type: 'TestError',
@@ -53,41 +63,45 @@ describe('Backend Error Tracking (Story 4.4)', () => {
       }));
     });
 
-    it('should include stack trace (AC1)', () => {
+    it('should include stack trace (AC1)', async () => {
+      const { captureBackendError } = await getUtils();
       const error = new Error('Error with stack');
 
       captureBackendError(error);
 
-      expect(mockCapture).toHaveBeenCalledWith(expect.objectContaining({
+      expect(mockPostHogInstance.capture).toHaveBeenCalledWith(expect.objectContaining({
         properties: expect.objectContaining({
           $exception_stack_trace_raw: expect.stringContaining('Error: Error with stack'),
         }),
       }));
     });
 
-    it('should use userId as distinctId when provided', () => {
+    it('should use userId as distinctId when provided', async () => {
+      const { captureBackendError } = await getUtils();
       const error = new Error('User error');
 
       captureBackendError(error, {
         userId: 'user_123',
       });
 
-      expect(mockCapture).toHaveBeenCalledWith(expect.objectContaining({
+      expect(mockPostHogInstance.capture).toHaveBeenCalledWith(expect.objectContaining({
         distinctId: 'user_123',
       }));
     });
 
-    it('should use "system" as distinctId when no userId provided', () => {
+    it('should use "system" as distinctId when no userId provided', async () => {
+      const { captureBackendError } = await getUtils();
       const error = new Error('System error');
 
       captureBackendError(error);
 
-      expect(mockCapture).toHaveBeenCalledWith(expect.objectContaining({
+      expect(mockPostHogInstance.capture).toHaveBeenCalledWith(expect.objectContaining({
         distinctId: 'system',
       }));
     });
 
-    it('should include business context (orderId, paymentIntentId)', () => {
+    it('should include business context (orderId, paymentIntentId)', async () => {
+      const { captureBackendError } = await getUtils();
       const error = new Error('Payment failed');
 
       captureBackendError(error, {
@@ -96,7 +110,7 @@ describe('Backend Error Tracking (Story 4.4)', () => {
         paymentIntentId: 'pi_789',
       });
 
-      expect(mockCapture).toHaveBeenCalledWith(expect.objectContaining({
+      expect(mockPostHogInstance.capture).toHaveBeenCalledWith(expect.objectContaining({
         properties: expect.objectContaining({
           order_id: 'order_456',
           payment_intent_id: 'pi_789',
@@ -104,12 +118,13 @@ describe('Backend Error Tracking (Story 4.4)', () => {
       }));
     });
 
-    it('should include environment and timestamp', () => {
+    it('should include environment and timestamp', async () => {
+      const { captureBackendError } = await getUtils();
       const error = new Error('Test');
 
       captureBackendError(error);
 
-      expect(mockCapture).toHaveBeenCalledWith(expect.objectContaining({
+      expect(mockPostHogInstance.capture).toHaveBeenCalledWith(expect.objectContaining({
         properties: expect.objectContaining({
           environment: 'test',
           timestamp: expect.any(String),
@@ -119,14 +134,15 @@ describe('Backend Error Tracking (Story 4.4)', () => {
   });
 
   describe('captureBusinessEvent', () => {
-    it('should capture custom business events (AC2)', () => {
+    it('should capture custom business events (AC2)', async () => {
+      const { captureBusinessEvent } = await getUtils();
       captureBusinessEvent('payment_failed', {
         payment_intent_id: 'pi_123',
         error_code: 'card_declined',
         amount: 5000,
       });
 
-      expect(mockCapture).toHaveBeenCalledWith(expect.objectContaining({
+      expect(mockPostHogInstance.capture).toHaveBeenCalledWith(expect.objectContaining({
         event: 'payment_failed',
         distinctId: 'system',
         properties: expect.objectContaining({
@@ -137,12 +153,13 @@ describe('Backend Error Tracking (Story 4.4)', () => {
       }));
     });
 
-    it('should use custom distinctId when provided', () => {
+    it('should use custom distinctId when provided', async () => {
+      const { captureBusinessEvent } = await getUtils();
       captureBusinessEvent('order_cancelled', {
         order_id: 'order_123',
       }, 'customer_456');
 
-      expect(mockCapture).toHaveBeenCalledWith(expect.objectContaining({
+      expect(mockPostHogInstance.capture).toHaveBeenCalledWith(expect.objectContaining({
         distinctId: 'customer_456',
       }));
     });

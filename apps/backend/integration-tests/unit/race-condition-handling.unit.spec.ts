@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 /**
  * Unit tests for Story 6.3: Race Condition Handling
  * 
@@ -12,28 +13,39 @@
 
 import { Job } from "bullmq";
 
-// Mock BullMQ
-const mockQueueAdd = jest.fn().mockResolvedValue({ id: "test-job-id" });
-const mockQueueGetJob = jest.fn();
-const mockQueueInstance = {
-    add: mockQueueAdd,
-    getJob: mockQueueGetJob,
-};
+// Mock BullMQ with hoisted mocks
+const { mockQueueInstance, mockQueueAdd, mockQueueGetJob } = vi.hoisted(() => {
+    const mockAdd = vi.fn().mockResolvedValue({ id: "test-job-id" });
+    const mockGetJob = vi.fn();
+    return {
+        mockQueueAdd: mockAdd,
+        mockQueueGetJob: mockGetJob,
+        mockQueueInstance: {
+            add: mockAdd,
+            getJob: mockGetJob,
+        }
+    };
+});
 
-jest.mock("bullmq", () => ({
-    Queue: jest.fn().mockImplementation(() => mockQueueInstance),
-    Worker: jest.fn().mockImplementation(() => ({
-        on: jest.fn(),
-        close: jest.fn(),
-    })),
-    Job: jest.fn(),
+vi.mock("bullmq", () => ({
+    Queue: vi.fn(function() { return mockQueueInstance; }),
+    Worker: vi.fn(function() {
+        return {
+            on: vi.fn(),
+            close: vi.fn(),
+        };
+    }),
+    Job: vi.fn(),
 }));
 
 // Mock Stripe client
-const mockStripeRetrieve = jest.fn();
-const mockStripeCapture = jest.fn();
-jest.mock("../../src/utils/stripe", () => ({
-    getStripeClient: jest.fn().mockReturnValue({
+const { mockStripeRetrieve, mockStripeCapture } = vi.hoisted(() => ({
+    mockStripeRetrieve: vi.fn(),
+    mockStripeCapture: vi.fn(),
+}));
+
+vi.mock("../../src/utils/stripe", () => ({
+    getStripeClient: vi.fn().mockReturnValue({
         paymentIntents: {
             retrieve: mockStripeRetrieve,
             capture: mockStripeCapture,
@@ -43,13 +55,13 @@ jest.mock("../../src/utils/stripe", () => ({
 
 describe("Story 6.3: Race Condition Handling", () => {
     describe("Timing Buffer (Task 1 - 59:30)", () => {
-        it("should default PAYMENT_CAPTURE_DELAY_MS to 59:30 (3570000ms)", () => {
+        it("should default PAYMENT_CAPTURE_DELAY_MS to 59:30 (3570000ms)", async () => {
             // Reset modules to get fresh constants
-            jest.resetModules();
+            vi.resetModules();
             delete process.env.PAYMENT_CAPTURE_DELAY_MS;
             delete process.env.CAPTURE_BUFFER_SECONDS;
             
-            const { PAYMENT_CAPTURE_DELAY_MS, CAPTURE_BUFFER_SECONDS } = require("../../src/lib/payment-capture-queue");
+            const { PAYMENT_CAPTURE_DELAY_MS, CAPTURE_BUFFER_SECONDS } = await import("../../src/lib/payment-capture-queue");
             
             // Default buffer is 30 seconds
             expect(CAPTURE_BUFFER_SECONDS).toBe(30);
@@ -57,12 +69,12 @@ describe("Story 6.3: Race Condition Handling", () => {
             expect(PAYMENT_CAPTURE_DELAY_MS).toBe(3570000);
         });
 
-        it("should allow CAPTURE_BUFFER_SECONDS to be configured via env", () => {
-            jest.resetModules();
+        it("should allow CAPTURE_BUFFER_SECONDS to be configured via env", async () => {
+            vi.resetModules();
             process.env.CAPTURE_BUFFER_SECONDS = "60";
             delete process.env.PAYMENT_CAPTURE_DELAY_MS;
             
-            const { PAYMENT_CAPTURE_DELAY_MS, CAPTURE_BUFFER_SECONDS } = require("../../src/lib/payment-capture-queue");
+            const { PAYMENT_CAPTURE_DELAY_MS, CAPTURE_BUFFER_SECONDS } = await import("../../src/lib/payment-capture-queue");
             
             expect(CAPTURE_BUFFER_SECONDS).toBe(60);
             // 60*60 - 60 = 3540 seconds = 3540000ms
@@ -72,8 +84,8 @@ describe("Story 6.3: Race Condition Handling", () => {
 
     const originalEnv = process.env;
     let mockContainer: any;
-    let mockQueryGraph: jest.Mock;
-    let mockUpdateOrders: jest.Mock;
+    let mockQueryGraph: vi.Mock;
+    let mockUpdateOrders: vi.Mock;
 
     // Module functions under test
     let processPaymentCapture: any;
@@ -82,24 +94,24 @@ describe("Story 6.3: Race Condition Handling", () => {
     let validatePreconditionsHandler: any;
     let addItemToOrderModule: any;
 
-    beforeEach(() => {
-        jest.clearAllMocks();
+    beforeEach(async () => {
+        vi.clearAllMocks();
         // Don't reset modules - this causes workflow re-registration errors
-        // jest.resetModules();
+        // vi.resetModules();
         process.env = { ...originalEnv };
         process.env.REDIS_URL = "redis://localhost:6379";
 
-        jest.spyOn(console, "log").mockImplementation(() => {});
-        jest.spyOn(console, "warn").mockImplementation(() => {});
-        jest.spyOn(console, "error").mockImplementation(() => {});
+        vi.spyOn(console, "log").mockImplementation(() => {});
+        vi.spyOn(console, "warn").mockImplementation(() => {});
+        vi.spyOn(console, "error").mockImplementation(() => {});
 
-        mockQueryGraph = jest.fn();
-        mockUpdateOrders = jest.fn().mockResolvedValue({});
-        const mockUpdatePaymentCollections = jest.fn().mockResolvedValue({});
-        const mockCapturePayment = jest.fn().mockResolvedValue({});
-        const mockAddOrderTransactions = jest.fn().mockResolvedValue({});
+        mockQueryGraph = vi.fn();
+        mockUpdateOrders = vi.fn().mockResolvedValue({});
+        const mockUpdatePaymentCollections = vi.fn().mockResolvedValue({});
+        const mockCapturePayment = vi.fn().mockResolvedValue({});
+        const mockAddOrderTransactions = vi.fn().mockResolvedValue({});
         mockContainer = {
-            resolve: jest.fn((serviceName: string) => {
+            resolve: vi.fn((serviceName: string) => {
                 if (serviceName === "query") {
                     return { graph: mockQueryGraph };
                 }
@@ -119,20 +131,20 @@ describe("Story 6.3: Race Condition Handling", () => {
 
         // Require add-item-to-order module once and cache it to avoid workflow re-registration
         if (!addItemToOrderModule) {
-            addItemToOrderModule = require("../../src/workflows/add-item-to-order");
+            addItemToOrderModule = await import("../../src/workflows/add-item-to-order");
             OrderLockedError = addItemToOrderModule.OrderLockedError;
             validatePreconditionsHandler = addItemToOrderModule.validatePreconditionsHandler;
         }
         
         // Worker functions are now in a separate module
-        const workerMod = require("../../src/workers/payment-capture-worker");
+        const workerMod = await import("../../src/workers/payment-capture-worker");
         processPaymentCapture = workerMod.processPaymentCapture;
         startPaymentCaptureWorker = workerMod.startPaymentCaptureWorker;
     });
 
     afterEach(() => {
         process.env = originalEnv;
-        jest.restoreAllMocks();
+        vi.restoreAllMocks();
     });
 
     describe("Task 1: Optimistic Locking / State Management (AC 1, 3, 8)", () => {

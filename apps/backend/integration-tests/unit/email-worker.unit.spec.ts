@@ -1,15 +1,15 @@
-// Uses Worker dynamically in mocks
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock dependencies
-jest.mock("bullmq", () => {
+vi.mock("bullmq", () => {
   return {
-    Worker: jest.fn().mockImplementation((name, processor, options) => {
+    Worker: vi.fn(function(name, processor, options) {
       const callbacks: Record<string, Function> = {};
       return {
-        on: jest.fn().mockImplementation((event, cb) => {
+        on: vi.fn().mockImplementation((event, cb) => {
           callbacks[event] = cb;
         }),
-        close: jest.fn(),
+        close: vi.fn(),
         processor,
         callbacks, // expose for testing
       };
@@ -18,19 +18,28 @@ jest.mock("bullmq", () => {
 });
 
 // Mock ioredis
-const mockLpush = jest.fn();
-jest.mock("ioredis", () => {
-  return jest.fn().mockImplementation(() => ({
+const mockLpush = vi.fn();
+// Use a real function for the constructor mock
+const MockRedis = vi.fn(function() {
+  return {
     lpush: mockLpush,
-  }));
+    quit: vi.fn(), // email-worker calls quit() in shutdown
+  };
 });
 
-jest.mock("../../src/lib/redis", () => ({
-  getRedisConnection: jest.fn().mockReturnValue({}),
+vi.mock("ioredis", () => {
+  return {
+    default: MockRedis,
+    Redis: MockRedis, // Ensure named export is also present if needed
+  };
+});
+
+vi.mock("../../src/lib/redis", () => ({
+  getRedisConnection: vi.fn().mockReturnValue({}),
 }));
 
-jest.mock("../../src/utils/email-masking", () => ({
-  maskEmail: jest.fn().mockReturnValue("m***@test.com"),
+vi.mock("../../src/utils/email-masking", () => ({
+  maskEmail: vi.fn().mockReturnValue("m***@test.com"),
 }));
 
 describe("Email Worker", () => {
@@ -39,20 +48,20 @@ describe("Email Worker", () => {
   let mockResendService: any;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     mockLogger = {
-      info: jest.fn(),
-      error: jest.fn(),
-      warn: jest.fn(),
+      info: vi.fn(),
+      error: vi.fn(),
+      warn: vi.fn(),
     };
 
     mockResendService = {
-      send: jest.fn().mockResolvedValue({ id: "sent_123" }),
+      send: vi.fn().mockResolvedValue({ id: "sent_123" }),
     };
 
     mockContainer = {
-      resolve: jest.fn((key) => {
+      resolve: vi.fn((key) => {
         if (key === "logger") return mockLogger;
         if (key === "resendNotificationProviderService") return mockResendService;
         return null;
@@ -60,13 +69,22 @@ describe("Email Worker", () => {
     };
   });
 
-  afterEach(() => {
-     jest.resetModules();
+  afterEach(async () => {
+      // Ensure we clean up the worker singleton if possible, or reset modules
+     vi.resetModules();
+     const { shutdownEmailWorker } = await import("../../src/workers/email-worker");
+     await shutdownEmailWorker();
   });
+
+  // Helper helper to get module
+  async function getEmailWorker() {
+      // Must use dynamic import after resetModules
+      return await import("../../src/workers/email-worker");
+  }
 
   describe("Core Functionality (Story 1.2)", () => {
     it("processes job and calls Resend service", async () => {
-      const { startEmailWorker } = require("../../src/workers/email-worker");
+      const { startEmailWorker } = await getEmailWorker();
       const worker = startEmailWorker(mockContainer) as any;
       const processor = worker.processor;
 
@@ -91,7 +109,7 @@ describe("Email Worker", () => {
     });
 
     it("logs success with masked email", async () => {
-      const { startEmailWorker } = require("../../src/workers/email-worker");
+      const { startEmailWorker } = await getEmailWorker();
       const worker = startEmailWorker(mockContainer) as any;
       const processor = worker.processor;
 
@@ -114,7 +132,7 @@ describe("Email Worker", () => {
     });
 
     it("logs failure and throws on Resend error", async () => {
-      const { startEmailWorker } = require("../../src/workers/email-worker");
+      const { startEmailWorker } = await getEmailWorker();
       const worker = startEmailWorker(mockContainer) as any;
       const processor = worker.processor;
 
@@ -141,7 +159,7 @@ describe("Email Worker", () => {
 
   describe("Retry Logic (Story 2.1)", () => {
     it("logs retry attempt when attemptsMade > 0", async () => {
-      const { startEmailWorker } = require("../../src/workers/email-worker");
+      const { startEmailWorker } = await getEmailWorker();
       const worker = startEmailWorker(mockContainer) as any;
       const processor = worker.processor;
 
@@ -166,7 +184,7 @@ describe("Email Worker", () => {
 
   describe("Failure Alerting (Story 4.3)", () => {
       it("logs alert when job moves to DLQ via 'failed' event", async () => {
-        const { startEmailWorker } = require("../../src/workers/email-worker");
+        const { startEmailWorker } = await getEmailWorker();
         const worker = startEmailWorker(mockContainer) as any;
 
         // Simulate failed event
@@ -198,7 +216,7 @@ describe("Email Worker", () => {
       });
 
       it("alert log is parseable", async () => {
-        const { startEmailWorker } = require("../../src/workers/email-worker");
+        const { startEmailWorker } = await getEmailWorker();
         const worker = startEmailWorker(mockContainer) as any;
         const failedHandler = worker.callbacks['failed'];
 
@@ -229,7 +247,7 @@ describe("Email Worker", () => {
       });
 
       it("logs alert when invalid email moves directly to DLQ", async () => {
-        const { startEmailWorker } = require("../../src/workers/email-worker");
+        const { startEmailWorker } = await getEmailWorker();
         const worker = startEmailWorker(mockContainer) as any;
         const processor = worker.processor;
 
@@ -260,7 +278,7 @@ describe("Email Worker", () => {
 
   describe("DLQ Storage (Story 2.2)", () => {
     it("stores correct DLQ entry format with masked email", async () => {
-      const { startEmailWorker } = require("../../src/workers/email-worker");
+      const { startEmailWorker } = await getEmailWorker();
       const worker = startEmailWorker(mockContainer) as any;
       const failedHandler = worker.callbacks['failed'];
 
@@ -298,28 +316,28 @@ describe("Email Worker", () => {
   });
 
   describe("Invalid Email Handling (Story 2.3)", () => {
-    it("isRetryableError returns false for 400 status", () => {
-      const { isRetryableError } = require("../../src/workers/email-worker");
+    it("isRetryableError returns false for 400 status", async () => {
+      const { isRetryableError } = await getEmailWorker();
       expect(isRetryableError({ statusCode: 400 })).toBe(false);
       expect(isRetryableError({ status: 400 })).toBe(false);
       expect(isRetryableError({ response: { status: 400 } })).toBe(false);
     });
 
-    it("isRetryableError returns false for specific error messages", () => {
-      const { isRetryableError } = require("../../src/workers/email-worker");
+    it("isRetryableError returns false for specific error messages", async () => {
+      const { isRetryableError } = await getEmailWorker();
       expect(isRetryableError({ message: "Some invalid email error" })).toBe(false);
       expect(isRetryableError({ message: "Email address is not valid" })).toBe(false);
     });
 
-    it("isRetryableError returns true for 500/429/Network", () => {
-      const { isRetryableError } = require("../../src/workers/email-worker");
+    it("isRetryableError returns true for 500/429/Network", async () => {
+      const { isRetryableError } = await getEmailWorker();
       expect(isRetryableError({ statusCode: 500 })).toBe(true);
       expect(isRetryableError({ statusCode: 429 })).toBe(true);
       expect(isRetryableError({ message: "Network timeout" })).toBe(true);
     });
 
     it("moves invalid email directly to DLQ without throwing", async () => {
-      const { startEmailWorker } = require("../../src/workers/email-worker");
+      const { startEmailWorker } = await getEmailWorker();
       const worker = startEmailWorker(mockContainer) as any;
       const processor = worker.processor;
 
