@@ -118,6 +118,7 @@ export async function POST(
         logger.warn("order-line-items-update", "Missing x-request-id header - using random UUID (not idempotent)", {
             orderId: id,
             itemId: item_id,
+            requestId, // Include generated requestId for traceability
         });
     }
 

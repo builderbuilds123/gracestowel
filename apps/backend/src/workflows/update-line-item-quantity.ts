@@ -509,6 +509,16 @@ const updateStripeAuthStepWithComp = createStep(
                  });
              }
 
+             // Handle invalid request errors (e.g., PI status changed between validation and update)
+             if (error instanceof Stripe.errors.StripeInvalidRequestError) {
+                 logger.warn("update-line-item-quantity", "Stripe invalid request error during update", {
+                     paymentIntentId: input.paymentIntentId,
+                     error: error.message,
+                     orderId: input.orderId,
+                 });
+                 throw new InvalidPaymentStateError(input.paymentIntentId, "unknown - likely changed state");
+             }
+
              throw error;
          }
     },
@@ -755,7 +765,7 @@ export const updateLineItemQuantityWorkflow = createWorkflow(
     }));
     updatePaymentCollectionStep(pcInput);
 
-    const dbResult = updateOrderDbStep({
+    updateOrderDbStep({
         orderId: input.orderId,
         itemId: input.itemId,
         quantity: input.quantity,
