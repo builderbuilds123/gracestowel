@@ -69,13 +69,19 @@ vi.mock("bullmq", () => ({
 }));
 
 describe("Story 6.3: Race Condition Handling", () => {
-    describe("Timing Buffer (Task 1 - 59:30)", () => {
-        afterEach(() => {
-            // Reapply the static Stripe mock after tests that call vi.resetModules()
-            // so subsequent tests in other describe blocks have the mock available
-            vi.doMock("../../src/utils/stripe", createStripeMock);
-        });
+    const originalEnv = process.env;
+    let mockContainer: any;
+    let mockQueryGraph: vi.Mock;
+    let mockUpdateOrders: vi.Mock;
 
+    // Module functions under test
+    let processPaymentCapture: any;
+    let startPaymentCaptureWorker: any;
+    let OrderLockedError: any;
+    let validatePreconditionsHandler: any;
+    let addItemToOrderModule: any;
+
+    describe("Timing Buffer (Task 1 - 59:30)", () => {
         it("should default PAYMENT_CAPTURE_DELAY_MS to 59:30 (3570000ms)", async () => {
             // Reset modules to get fresh constants
             vi.resetModules();
@@ -106,18 +112,6 @@ describe("Story 6.3: Race Condition Handling", () => {
             expect(PAYMENT_CAPTURE_DELAY_MS).toBe(3540000);
         });
     });
-
-    const originalEnv = process.env;
-    let mockContainer: any;
-    let mockQueryGraph: vi.Mock;
-    let mockUpdateOrders: vi.Mock;
-
-    // Module functions under test
-    let processPaymentCapture: any;
-    let startPaymentCaptureWorker: any;
-    let OrderLockedError: any;
-    let validatePreconditionsHandler: any;
-    let addItemToOrderModule: any;
 
     beforeEach(async () => {
         vi.clearAllMocks();
