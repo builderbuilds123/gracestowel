@@ -16,7 +16,6 @@ export type Product = {
 };
 
 export const createProduct = (overrides: Partial<Product> = {}): Product => ({
-  id: faker.string.uuid(),
   title: faker.commerce.productName(),
   description: faker.commerce.productDescription(),
   handle: faker.helpers.slugify(faker.commerce.productName()).toLowerCase(),
