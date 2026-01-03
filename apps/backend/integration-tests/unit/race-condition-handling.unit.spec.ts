@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 /**
  * Unit tests for Story 6.3: Race Condition Handling
  * 
@@ -77,6 +77,7 @@ describe("Story 6.3: Race Condition Handling", () => {
     // Module functions under test
     let processPaymentCapture: any;
     let startPaymentCaptureWorker: any;
+    let shutdownPaymentCaptureWorker: any;
     let OrderLockedError: any;
     let validatePreconditionsHandler: any;
     let addItemToOrderModule: any;
@@ -111,12 +112,14 @@ describe("Story 6.3: Race Condition Handling", () => {
             // 60*60 - 60 = 3540 seconds = 3540000ms
             expect(PAYMENT_CAPTURE_DELAY_MS).toBe(3540000);
         });
+
     });
 
     beforeEach(async () => {
         vi.clearAllMocks();
 
-        // Reset modules to get fresh imports with mocks applied
+        // Reset modules to ensure fresh imports with mocks applied
+        // This is necessary because timing buffer tests modify the module cache
         vi.resetModules();
 
         // Reapply Stripe mock after reset
@@ -129,6 +132,19 @@ describe("Story 6.3: Race Condition Handling", () => {
         // Re-configure BullMQ mocks after clearAllMocks
         mockQueueAdd.mockResolvedValue({ id: "test-job-id" });
         mockQueueGetJob.mockResolvedValue(null);
+
+        // Re-configure Stripe mocks after clearAllMocks
+        // Provide a default so tests don't fail if they don't explicitly configure the mock
+        mockStripeRetrieve.mockResolvedValue({
+            id: "pi_default",
+            status: "requires_capture",
+            amount: 5000,
+            currency: "usd",
+        });
+        mockStripeCapture.mockResolvedValue({
+            id: "pi_default",
+            status: "succeeded",
+        });
 
         vi.spyOn(console, "log").mockImplementation(() => {});
         vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -163,10 +179,11 @@ describe("Story 6.3: Race Condition Handling", () => {
         OrderLockedError = addItemToOrderModule.OrderLockedError;
         validatePreconditionsHandler = addItemToOrderModule.validatePreconditionsHandler;
 
-        // Worker functions are now in a separate module - import fresh with mocks applied
+        // Worker functions are now in a separate module - import with existing mocks
         const workerMod = await import("../../src/workers/payment-capture-worker");
         processPaymentCapture = workerMod.processPaymentCapture;
         startPaymentCaptureWorker = workerMod.startPaymentCaptureWorker;
+        shutdownPaymentCaptureWorker = workerMod.shutdownPaymentCaptureWorker;
     });
 
     afterEach(() => {
@@ -184,6 +201,12 @@ describe("Story 6.3: Race Condition Handling", () => {
 
         beforeEach(() => {
             startPaymentCaptureWorker(mockContainer);
+        });
+
+        afterEach(async () => {
+            // Shutdown the worker to clear the cached worker instance
+            // This ensures fresh worker creation in the next test
+            await shutdownPaymentCaptureWorker();
         });
 
         it("should set edit_status to locked_for_capture before capture attempt (AC 1, 3)", async () => {
