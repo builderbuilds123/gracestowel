@@ -52,14 +52,20 @@ vi.mock("stripe", () => {
 // Mock Stripe client
 const mockStripeRetrieve = vi.fn();
 const mockStripeCapture = vi.fn();
-vi.mock("../../src/utils/stripe", () => ({
+const mockResetStripeClient = vi.fn();
+
+// Create the factory function for the Stripe mock
+const createStripeMock = () => ({
     getStripeClient: vi.fn().mockReturnValue({
         paymentIntents: {
             retrieve: mockStripeRetrieve,
             capture: mockStripeCapture,
         },
     }),
-}));
+    resetStripeClient: mockResetStripeClient,
+    STRIPE_API_VERSION: "2025-10-29.clover",
+    createStripeClient: vi.fn(),
+});
 
 describe("payment-capture-queue", () => {
     const originalEnv = process.env;
@@ -79,10 +85,18 @@ describe("payment-capture-queue", () => {
         vi.resetModules();
         process.env = { ...originalEnv };
         process.env.REDIS_URL = "redis://localhost:6379";
-        
+        process.env.STRIPE_SECRET_KEY = "sk_test_mock";
+
         vi.spyOn(console, "log").mockImplementation(() => {});
         vi.spyOn(console, "warn").mockImplementation(() => {});
         vi.spyOn(console, "error").mockImplementation(() => {});
+
+        // Re-apply the Stripe mock after resetModules
+        vi.doMock("../../src/utils/stripe", createStripeMock);
+
+        // Re-configure BullMQ mocks after clearAllMocks
+        mockQueueAdd.mockResolvedValue({ id: "test-job-id" });
+        mockQueueGetJob.mockResolvedValue(null);
 
         mockQueryGraph = vi.fn();
         const mockUpdateOrders = vi.fn().mockResolvedValue({});

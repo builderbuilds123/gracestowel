@@ -2,13 +2,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock dependencies before imports
 const mockStripeRetrieve = vi.fn();
-vi.mock("../../src/utils/stripe", () => ({
+const mockResetStripeClient = vi.fn();
+
+// Create the factory function for the Stripe mock
+const createStripeMock = () => ({
     getStripeClient: vi.fn().mockReturnValue({
         paymentIntents: {
             retrieve: mockStripeRetrieve,
         },
     }),
-}));
+    resetStripeClient: mockResetStripeClient,
+    STRIPE_API_VERSION: "2025-10-29.clover",
+    createStripeClient: vi.fn(),
+});
 
 const { mockQueueAdd, mockQueueGetJob, mockGetJobState, mockGetPendingRecoveryOrders } = vi.hoisted(() => {
     return {
@@ -19,17 +25,18 @@ const { mockQueueAdd, mockQueueGetJob, mockGetJobState, mockGetPendingRecoveryOr
     };
 });
 
-vi.mock("../../src/lib/payment-capture-queue", () => ({
+// Create factory functions for the mocks
+const createPaymentCaptureQueueMock = () => ({
     getPaymentCaptureQueue: vi.fn().mockReturnValue({
         add: mockQueueAdd,
         getJob: mockQueueGetJob,
     }),
     getJobState: mockGetJobState,
-}));
+});
 
-vi.mock("../../src/repositories/order-recovery", () => ({
+const createOrderRecoveryMock = () => ({
     getPendingRecoveryOrders: mockGetPendingRecoveryOrders,
-}));
+});
 
 describe("fallback-capture", () => {
     let mockContainer: any;
@@ -48,12 +55,22 @@ describe("fallback-capture", () => {
     beforeEach(async () => {
         vi.clearAllMocks();
         mockGetPendingRecoveryOrders.mockResolvedValue([]);
-        
+
         // Reset modules to get fresh import
         vi.resetModules();
 
+        // Re-apply all mocks after resetModules
+        vi.doMock("../../src/utils/stripe", createStripeMock);
+        vi.doMock("../../src/lib/payment-capture-queue", createPaymentCaptureQueueMock);
+        vi.doMock("../../src/repositories/order-recovery", createOrderRecoveryMock);
+
+        // Re-configure BullMQ mocks after clearAllMocks
+        mockQueueAdd.mockResolvedValue({ id: "test-job-id" });
+        mockQueueGetJob.mockResolvedValue(null);
+        mockGetJobState.mockResolvedValue(null);
+
         // Ensure REDIS_URL present for default test flows
-        process.env = { ...originalEnv, REDIS_URL: "redis://localhost:6379" } as any;
+        process.env = { ...originalEnv, REDIS_URL: "redis://localhost:6379", STRIPE_SECRET_KEY: "sk_test_mock" } as any;
         
         // Setup mock container with logger support
         mockQueryGraph = vi.fn();
