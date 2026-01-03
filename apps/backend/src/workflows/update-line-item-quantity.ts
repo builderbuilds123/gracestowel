@@ -5,10 +5,12 @@ import {
     WorkflowResponse,
     transform,
 } from "@medusajs/framework/workflows-sdk";
+import { Modules } from "@medusajs/framework/utils";
 import Stripe from "stripe";
 import { getStripeClient } from "../utils/stripe";
 import { modificationTokenService } from "../services/modification-token";
 import { retryWithBackoff, isRetryableStripeError } from "../utils/stripe-retry";
+import { logger } from "../utils/logger";
 import {
     InsufficientStockError,
     InvalidOrderStateError,
@@ -21,7 +23,9 @@ import {
     OrderNotFoundError,
     PaymentIntentMissingError,
     OrderLockedError,
-} from "./add-item-to-order"; // Reuse error classes
+    mapDeclineCodeToUserMessage,
+    updatePaymentCollectionHandler,
+} from "./add-item-to-order"; // Reuse error classes and utilities
 
 // ============================================================================
 // Input/Output Types
@@ -40,9 +44,11 @@ interface ValidationResult {
     valid: boolean;
     orderId: string;
     paymentIntentId: string;
+    paymentCollectionId?: string; // ORD-02: For Payment Collection sync
     order: {
         id: string;
         status: string;
+        total: number; // ORD-02: Order.total is source of truth
         currency_code: string;
         metadata: Record<string, any>;
         items: any[];
@@ -108,6 +114,15 @@ export class InvalidQuantityError extends Error {
     }
 }
 
+export class NoQuantityChangeError extends Error {
+    public readonly code = "NO_QUANTITY_CHANGE" as const;
+    
+    constructor(itemId: string, currentQuantity: number) {
+        super(`Quantity unchanged for item ${itemId} (current: ${currentQuantity})`);
+        this.name = "NoQuantityChangeError";
+    }
+}
+
 // ============================================================================
 // Utility Functions
 // ============================================================================
@@ -149,15 +164,25 @@ export const validateUpdatePreconditionsStep = createStep(
             throw new TokenMismatchError(input.orderId, tokenValidation.payload?.order_id || "unknown");
         }
 
-        // 2. Fetch Order & Items
+        // 2. Fetch Order & Items (ORD-02: Include total and payment_collections)
         const { data: orders } = await query.graph({
             entity: "order",
-            fields: ["id", "status", "currency_code", "metadata", "items.*"],
+            fields: [
+                "id", 
+                "status", 
+                "total", // ORD-02: Order.total is source of truth
+                "currency_code", 
+                "metadata", 
+                "items.*",
+                "payment_collections.id", // ORD-02: For Payment Collection sync
+                "payment_collections.status"
+            ],
             filters: { id: input.orderId },
         });
 
         if (!orders.length) throw new OrderNotFoundError(input.orderId);
         const order = orders[0];
+        const paymentCollection = order.payment_collections?.[0];
 
         if (order.status !== "pending") {
             throw new InvalidOrderStateError(input.orderId, order.status);
@@ -173,8 +198,12 @@ export const validateUpdatePreconditionsStep = createStep(
         if (input.quantity < 0) {
             throw new InvalidQuantityError("Quantity cannot be negative");
         }
+        if (input.quantity === 0) {
+            throw new InvalidQuantityError("Quantity cannot be zero. Use the remove item endpoint to remove items from the order.");
+        }
         if (input.quantity === lineItem.quantity) {
-             console.log(`[update-item-qty] No change in quantity for item ${input.itemId}`);
+            // Early return for no-op: throw specific error that API route handles gracefully
+            throw new NoQuantityChangeError(input.itemId, lineItem.quantity);
         }
 
         // 5. Payment Intent Check
@@ -185,7 +214,7 @@ export const validateUpdatePreconditionsStep = createStep(
         let paymentIntent: { id: string; status: string; amount: number; };
 
         if ((paymentIntentId as string).startsWith("pi_mock_")) {
-             console.log("[DEV] Using mock Payment Intent for validation");
+             logger.info("update-line-item-quantity", "Using mock Payment Intent for validation");
              paymentIntent = {
                  id: paymentIntentId as string,
                  status: "requires_capture",
@@ -240,9 +269,11 @@ export const validateUpdatePreconditionsStep = createStep(
             valid: true,
             orderId: input.orderId,
             paymentIntentId: (paymentIntentId || "") as string,
+            paymentCollectionId: paymentCollection?.id, // ORD-02: Return for sync
             order: {
                 id: order.id,
                 status: order.status,
+                total: order.total, // ORD-02: Source of truth
                 currency_code: order.currency_code,
                 metadata: order.metadata || {},
                 items: order.items as any[],
@@ -268,6 +299,9 @@ export const validateUpdatePreconditionsStep = createStep(
 
 /**
  * Step 2: Calculate New Totals
+ * 
+ * ORD-02: Uses Order.total as source of truth (not PaymentIntent.amount)
+ * This ensures consistency with add-item-to-order workflow.
  */
 const calculateUpdateTotalsStep = createStep(
     "calculate-update-totals",
@@ -277,7 +311,7 @@ const calculateUpdateTotalsStep = createStep(
             newQuantity: number;
         }
     ): Promise<StepResponse<TotalsResult>> => {
-        const { lineItem, paymentIntent } = input.validation;
+        const { lineItem, order } = input.validation;
         
         const oldQuantity = lineItem.quantity;
         const newQuantity = input.newQuantity;
@@ -285,24 +319,25 @@ const calculateUpdateTotalsStep = createStep(
         
         const unitPrice = lineItem.unit_price; // Assuming unit price doesn't change
         
-        // Calculate totals
-        // NOTE: This simple calculation assumes no complex tax/discount recalculation is needed for the MVP.
-        // If taxes are separate, we'd need to fetch tax lines. 
-        // For now, consistent with add-item, we assume unit_price * quantity is the delta.
-        //
-        // IMPORTANT: Currency unit conversion
-        // - paymentIntent.amount is in CENTS (from Stripe)
-        // - unitPrice is in DOLLARS (from Medusa order items, per create-order-from-stripe.ts:96)
-        // - We need to convert unitPrice to cents before adding to paymentIntent.amount
-        const unitPriceCents = Math.round(unitPrice * 100); // Convert dollars to cents
+        // ORD-02: Use Order.total as source of truth (consistent with add-item-to-order)
+        // Order.total is in cents (Medusa stores amounts in smallest currency unit)
+        // unitPrice is also in cents from line item
+        const unitPriceCents = unitPrice; // Already in cents
         
         const oldItemTotalCents = unitPriceCents * oldQuantity;
         const newItemTotalCents = unitPriceCents * newQuantity;
         const totalDiffCents = newItemTotalCents - oldItemTotalCents;
         
-        const newOrderTotal = paymentIntent.amount + totalDiffCents;
+        // ORD-02: Calculate new total from Order.total (source of truth)
+        const newOrderTotal = order.total + totalDiffCents;
 
-        console.log(`[update-item-qty] Diff: ${quantityDiff} items, Amount: ${totalDiffCents} cents, New Total: ${newOrderTotal} cents`);
+        logger.info("update-line-item-quantity", "Calculated totals", {
+            quantityDiff,
+            totalDiffCents,
+            orderTotal: order.total,
+            newOrderTotal,
+            unitPriceCents
+        });
 
         return new StepResponse({
             itemId: lineItem.id,
@@ -310,10 +345,10 @@ const calculateUpdateTotalsStep = createStep(
             oldQuantity,
             newQuantity,
             quantityDiff,
-            unitPrice, // In dollars (for reference)
-            oldItemTotal: oldItemTotalCents, // In cents
-            newItemTotal: newItemTotalCents, // In cents
-            totalDiff: totalDiffCents, // In cents
+            unitPrice, // In cents
+            oldItemTotal: oldItemTotalCents,
+            newItemTotal: newItemTotalCents,
+            totalDiff: totalDiffCents,
             newOrderTotal,
         });
     }
@@ -321,8 +356,14 @@ const calculateUpdateTotalsStep = createStep(
 
 /**
  * Step 3: Update Stripe PaymentIntent
+ * 
+ * ORD-02: Implements incremental authorization for amount increases.
+ * - For decreases: Skip update (will partial capture later)
+ * - For increases: Attempt stripe.paymentIntents.update() with retry logic
+ * - On card decline: Throw CardDeclinedError for graceful rollback
+ * 
+ * This matches the behavior of add-item-to-order workflow for consistency.
  */
-
 
 // Add Compensator to Stripe Step
 // We need to detach logic to attach compensator properly using `createStep` robustly or `addCompensation`.
@@ -349,7 +390,12 @@ const updateStripeAuthStepWithComp = createStep(
          const stripe = getStripeClient();
          const idempotencyKey = generateIdempotencyKey(input.orderId, input.itemId, input.quantity, input.requestId);
          
+         // No change needed
          if (input.currentAmount === input.newAmount) {
+            logger.info("update-line-item-quantity", "Skipping Stripe update (no change)", {
+                paymentIntentId: input.paymentIntentId,
+                amount: input.currentAmount
+            });
             return new StepResponse({
                 success: true,
                 paymentIntentId: input.paymentIntentId,
@@ -364,45 +410,57 @@ const updateStripeAuthStepWithComp = createStep(
          }
          
          try {
-             const currentPI = await stripe.paymentIntents.retrieve(input.paymentIntentId);
-             
-             // If authorized (requires_capture), we cannot update amount directly.
-             // If new amount is LOWER, we rely on partial capture later.
-             if (currentPI.status === "requires_capture") {
-                if (input.newAmount <= currentPI.amount) {
-                    console.log(`[update-item-qty] Authorized PI ${input.paymentIntentId}. New Amount ${input.newAmount} <= Auth ${currentPI.amount}. Skipping update (will partial capture).`);
-                    return new StepResponse({
-                        success: true,
-                        paymentIntentId: input.paymentIntentId,
-                        previousAmount: input.currentAmount,
-                        newAmount: input.newAmount, // We report new logic amount
-                        idempotencyKey,
-                        skipped: true 
-                    }, {
-                         paymentIntentId: input.paymentIntentId,
-                         amountToRevertTo: input.currentAmount
-                    });
-                } else {
-                    // Increasing amount on authorized PI is not supported by update.
-                    // We'd need to cancel and re-auth, or use overcapture if enabled (not standard).
-                    throw new Error(`Cannot increase amount of authorized PaymentIntent (${currentPI.amount} -> ${input.newAmount}). Cancel and reorder.`);
-                }
+             // ORD-02: For decreases, skip Stripe update (will partial capture later)
+             // For increases, attempt incremental authorization
+             if (input.newAmount < input.currentAmount) {
+                 logger.info("update-line-item-quantity", "Skipping Stripe update for decrease (will partial capture)", {
+                     paymentIntentId: input.paymentIntentId,
+                     currentAmount: input.currentAmount,
+                     newAmount: input.newAmount
+                 });
+                 return new StepResponse({
+                     success: true,
+                     paymentIntentId: input.paymentIntentId,
+                     previousAmount: input.currentAmount,
+                     newAmount: input.newAmount,
+                     idempotencyKey,
+                     skipped: true
+                 }, {
+                     paymentIntentId: input.paymentIntentId,
+                     amountToRevertTo: input.currentAmount
+                 });
              }
 
-             // We need to cast the retry return type or expected output
-             const updated = await stripe.paymentIntents.update(
-                 input.paymentIntentId,
-                 { amount: input.newAmount },
-                 { idempotencyKey }
+             // ORD-02: Attempt incremental authorization for increases
+             // Use retry logic with exponential backoff (same as add-item-to-order)
+             const updatedPaymentIntent = await retryWithBackoff(
+                 async () => {
+                     return stripe.paymentIntents.update(
+                         input.paymentIntentId,
+                         { amount: input.newAmount },
+                         { idempotencyKey }
+                     );
+                 },
+                 {
+                     maxRetries: 3,
+                     initialDelayMs: 200,
+                     factor: 2,
+                     shouldRetry: isRetryableStripeError,
+                 }
              );
 
+             logger.info("update-line-item-quantity", "Stripe authorization updated", {
+                 paymentIntentId: input.paymentIntentId,
+                 previousAmount: input.currentAmount,
+                 newAmount: updatedPaymentIntent.amount
+             });
              
              return new StepResponse(
                  { 
                      success: true, 
                      paymentIntentId: input.paymentIntentId,
                      previousAmount: input.currentAmount,
-                     newAmount: updated.amount,
+                     newAmount: updatedPaymentIntent.amount,
                      idempotencyKey,
                      skipped: false
                  },
@@ -411,24 +469,156 @@ const updateStripeAuthStepWithComp = createStep(
                      amountToRevertTo: input.currentAmount
                  }
              );
-         } catch (e: any) {
-             throw e;
+         } catch (error) {
+             // ORD-02: Handle card decline errors gracefully
+             if (error instanceof Stripe.errors.StripeCardError) {
+                 logger.info("update-line-item-quantity", "Payment increment declined", {
+                     metric: "payment_increment_decline_count",
+                     value: 1,
+                     reason: error.decline_code || 'unknown',
+                     orderId: input.orderId,
+                     paymentIntentId: input.paymentIntentId
+                 });
+                 throw new CardDeclinedError(
+                     error.message || "Card was declined",
+                     error.code || "card_declined",
+                     error.decline_code
+                 );
+             }
+
+             // Handle idempotency collision
+             if (
+                 error instanceof Stripe.errors.StripeIdempotencyError ||
+                 (error as any).type === "idempotency_error"
+             ) {
+                 logger.info("update-line-item-quantity", "Idempotency collision, fetching current state", {
+                     paymentIntentId: input.paymentIntentId,
+                     idempotencyKey
+                 });
+                 const currentPI = await stripe.paymentIntents.retrieve(input.paymentIntentId);
+                 return new StepResponse({
+                     success: true,
+                     paymentIntentId: input.paymentIntentId,
+                     previousAmount: input.currentAmount,
+                     newAmount: currentPI.amount,
+                     idempotencyKey,
+                     skipped: false
+                 }, {
+                     paymentIntentId: input.paymentIntentId,
+                     amountToRevertTo: input.currentAmount
+                 });
+             }
+
+             // Handle invalid request errors (e.g., PI status changed between validation and update)
+             if (error instanceof Stripe.errors.StripeInvalidRequestError) {
+                 logger.warn("update-line-item-quantity", "Stripe invalid request error during update", {
+                     paymentIntentId: input.paymentIntentId,
+                     error: error.message,
+                     orderId: input.orderId,
+                 });
+                 throw new InvalidPaymentStateError(input.paymentIntentId, "unknown - likely changed state");
+             }
+
+             throw error;
          }
     },
+    // Compensation: rollback Stripe amount if downstream steps fail
     async (compInput: StripeCompInput, { container }) => {
         if (!compInput) return;
         const stripe = getStripeClient();
-        console.log(`[update-item-qty] Rolling back Stripe to ${compInput.amountToRevertTo}`);
-        await stripe.paymentIntents.update(
-            compInput.paymentIntentId,
-            { amount: compInput.amountToRevertTo }
-        );
+        
+        try {
+            logger.info("update-line-item-quantity", "Rolling back Stripe authorization", {
+                paymentIntentId: compInput.paymentIntentId,
+                amountToRevertTo: compInput.amountToRevertTo
+            });
+            await stripe.paymentIntents.update(
+                compInput.paymentIntentId,
+                { amount: compInput.amountToRevertTo }
+            );
+        } catch (rollbackError) {
+            logger.error("update-line-item-quantity", "Failed to rollback Stripe authorization", {
+                paymentIntentId: compInput.paymentIntentId,
+            }, rollbackError instanceof Error ? rollbackError : new Error(String(rollbackError)));
+            throw rollbackError;
+        }
     }
 );
 
 /**
- * Step 4: Update Order in DB
+ * Step 4: Update Payment Collection (ORD-02)
+ * Ensures Medusa's payment record stays in sync with Order.total
  */
+const updatePaymentCollectionStep = createStep(
+    "update-payment-collection-qty",
+    async (
+        input: {
+            paymentCollectionId: string | undefined;
+            amount: number;
+            previousAmount: number;
+        },
+        { container }
+    ) => {
+        if (!input.paymentCollectionId) {
+            logger.warn("update-line-item-quantity", "No PaymentCollection ID found, skipping update");
+            return new StepResponse({ updated: false, paymentCollectionId: "", previousAmount: 0 });
+        }
+
+        await updatePaymentCollectionHandler({
+            paymentCollectionId: input.paymentCollectionId,
+            amount: input.amount
+        }, { container });
+
+        logger.info("update-line-item-quantity", "Updated PaymentCollection", {
+            paymentCollectionId: input.paymentCollectionId,
+            amount: input.amount
+        });
+
+        return new StepResponse(
+            { updated: true, paymentCollectionId: input.paymentCollectionId, previousAmount: input.previousAmount },
+            { paymentCollectionId: input.paymentCollectionId, previousAmount: input.previousAmount }
+        );
+    },
+    // Compensation: rollback PaymentCollection amount if downstream steps fail
+    async (compensation, { container }) => {
+        if (!compensation || !compensation.paymentCollectionId) {
+            return;
+        }
+
+        const paymentModuleService = container.resolve(Modules.PAYMENT);
+
+        try {
+            await paymentModuleService.updatePaymentCollections(
+                compensation.paymentCollectionId,
+                { amount: compensation.previousAmount }
+            );
+            logger.info("update-line-item-quantity", "Rolled back PaymentCollection", {
+                paymentCollectionId: compensation.paymentCollectionId,
+                previousAmount: compensation.previousAmount
+            });
+        } catch (rollbackError) {
+            logger.critical("update-line-item-quantity", "Failed to rollback PaymentCollection", {
+                paymentCollectionId: compensation.paymentCollectionId,
+                previousAmount: compensation.previousAmount,
+                alert: "CRITICAL",
+                issue: "PAYMENT_COLLECTION_ROLLBACK_FAILED"
+            }, rollbackError instanceof Error ? rollbackError : new Error(String(rollbackError)));
+            throw rollbackError;
+        }
+    }
+);
+
+/**
+ * Step 5: Update Order in DB
+ */
+interface OrderCompInput {
+    orderId: string;
+    itemId: string;
+    previousQuantity: number;
+    previousTotal: number;
+    previousMetadata: Record<string, unknown>;
+}
+
 const updateOrderDbStep = createStep(
     "update-order-db",
     async (
@@ -439,39 +629,55 @@ const updateOrderDbStep = createStep(
             newTotal: number;
             stripeSucceeded: boolean;
             paymentIntentId: string;
+            previousQuantity: number;
+            previousTotal: number;
+            previousMetadata: Record<string, unknown>;
         },
         { container }
-    ): Promise<StepResponse<{ success: boolean }>> => {
+    ): Promise<StepResponse<{ success: boolean }, OrderCompInput>> => {
         const orderService = container.resolve("order");
 
 
         try {
-            // Medusa v2 doesn't have a direct updateOrderLineItems method
-            // We need to update the order with the modified items array
-            // For now, we store the update in metadata and update the order total
-            // The actual line item quantity update would need to be handled via
-            // a workflow or by updating the order.items array directly
-            // Since we're in a modification window and items are stored in metadata,
-            // we update metadata to track the change
-            
+            // Update the existing line item quantity and align order.total
+            await orderService.updateOrderLineItems([
+                {
+                    selector: { id: input.itemId },
+                    data: { quantity: input.quantity },
+                },
+            ]);
+
             await orderService.updateOrders([
                 {
                     id: input.orderId,
                     metadata: {
+                        ...input.previousMetadata,
                         last_modified_action: "update_quantity",
                         last_modified_item: input.itemId,
                         last_modified_qty: input.quantity,
                         updated_total: input.newTotal,
                         updated_at: new Date().toISOString()
                     },
-                    // Note: Direct item quantity updates via updateOrders would require
-                    // fetching current order, modifying items array, and updating
-                    // For now, metadata tracks the modification
                 },
             ]);
 
+            logger.info("update-line-item-quantity", "Order updated", {
+                orderId: input.orderId,
+                itemId: input.itemId,
+                quantity: input.quantity,
+                newTotal: input.newTotal
+            });
 
-            return new StepResponse({ success: true });
+            return new StepResponse(
+                { success: true },
+                {
+                    orderId: input.orderId,
+                    itemId: input.itemId,
+                    previousQuantity: input.previousQuantity,
+                    previousTotal: input.previousTotal,
+                    previousMetadata: input.previousMetadata,
+                }
+            );
 
         } catch (error) {
              if (input.stripeSucceeded) {
@@ -480,56 +686,102 @@ const updateOrderDbStep = createStep(
                     input.paymentIntentId,
                     `DB commit failed after Stripe update. Amount: ${input.newTotal}. Error: ${(error as Error).message}`
                  );
-                 console.error("🚨 CRITICAL AUDIT ALERT: AUTH_MISMATCH_OVERSOLD 🚨");
+                 logger.critical(
+                    "update-line-item-quantity",
+                    "AUTH_MISMATCH_OVERSOLD - DB commit failed after Stripe update",
+                    {
+                        alert: "CRITICAL",
+                        issue: "AUTH_MISMATCH_OVERSOLD",
+                        orderId: input.orderId,
+                        paymentIntentId: input.paymentIntentId,
+                        intendedAmount: input.newTotal,
+                    },
+                    error instanceof Error ? error : new Error(String(error))
+                 );
                  throw criticalError;
              }
              throw error;
         }
     },
-    // COMPENSATING STEP
-    async () => {
-        // No-op for now (Manual intervention required if DB fails after Stripe commit)
+// COMPENSATING STEP
+async (compensation, { container }) => {
+    if (!compensation) {
+        return;
     }
+
+    const orderService = container.resolve("order");
+
+    await orderService.updateOrderLineItems([
+        {
+            selector: { id: compensation.itemId },
+            data: { quantity: compensation.previousQuantity },
+        },
+    ]);
+
+    await orderService.updateOrders([
+        {
+            id: compensation.orderId,
+            metadata: {
+                ...compensation.previousMetadata,
+                rollback: true,
+                rollback_at: new Date().toISOString(),
+                updated_total: compensation.previousTotal,
+            },
+        },
+    ]);
+}
 );
 
 export const updateLineItemQuantityWorkflow = createWorkflow(
-    "update-line-item-quantity",
-    (input: UpdateLineItemQuantityInput) => {
-        const validation = validateUpdatePreconditionsStep({
-            orderId: input.orderId,
-            modificationToken: input.modificationToken,
-            itemId: input.itemId,
-            quantity: input.quantity,
-        });
+"update-line-item-quantity",
+(input: UpdateLineItemQuantityInput) => {
+    const validation = validateUpdatePreconditionsStep({
+        orderId: input.orderId,
+        modificationToken: input.modificationToken,
+        itemId: input.itemId,
+        quantity: input.quantity,
+    });
+    const totals = calculateUpdateTotalsStep({
+        validation,
+        newQuantity: input.quantity
+    });
 
-        const totals = calculateUpdateTotalsStep({
-            validation,
-            newQuantity: input.quantity
-        });
+    // ORD-02: Update Stripe PaymentIntent (supports incremental authorization)
+    const stripeResult = updateStripeAuthStepWithComp({
+        paymentIntentId: validation.paymentIntentId,
+        currentAmount: validation.paymentIntent.amount,
+        newAmount: totals.newOrderTotal,
+        orderId: input.orderId,
+        itemId: input.itemId,
+        quantity: input.quantity,
+        requestId: input.requestId,
+    });
 
-        const stripeResult = updateStripeAuthStepWithComp({
-            paymentIntentId: validation.paymentIntentId,
-            currentAmount: validation.paymentIntent.amount,
-            newAmount: totals.newOrderTotal,
-            orderId: input.orderId,
-            itemId: input.itemId,
-            quantity: input.quantity,
-            requestId: input.requestId,
-        });
+    // ORD-02: Update Payment Collection to match Order.total
+    const pcInput = transform({ validation, totals }, (data) => ({
+        paymentCollectionId: data.validation.paymentCollectionId,
+        amount: data.totals.newOrderTotal,
+        previousAmount: data.validation.order.total,
+    }));
+    updatePaymentCollectionStep(pcInput);
 
-        const dbResult = updateOrderDbStep({
-            orderId: input.orderId,
-            itemId: input.itemId,
-            quantity: input.quantity,
-            newTotal: totals.newOrderTotal,
-            stripeSucceeded: stripeResult.success,
-            paymentIntentId: validation.paymentIntentId
-        });
+    updateOrderDbStep({
+        orderId: input.orderId,
+        itemId: input.itemId,
+        quantity: input.quantity,
+        newTotal: totals.newOrderTotal,
+        stripeSucceeded: stripeResult.success,
+        paymentIntentId: validation.paymentIntentId,
+        previousQuantity: validation.lineItem.quantity,
+        previousTotal: validation.order.total,
+        previousMetadata: validation.order.metadata,
+    });
 
-        return new WorkflowResponse({
-            orderId: input.orderId,
-            newTotal: totals.newOrderTotal,
-            quantityDiff: totals.quantityDiff
-        });
-    }
+    return new WorkflowResponse({
+        orderId: input.orderId,
+        newTotal: totals.newOrderTotal,
+        quantityDiff: totals.quantityDiff
+    });
+}
 );
+
