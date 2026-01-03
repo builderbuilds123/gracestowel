@@ -15,5 +15,11 @@ export default defineConfig({
       "**/integration-tests/http/**",
       "**/integration-tests/modules/**",
     ],
+    // Isolate tests that use vi.resetModules() to prevent module loading issues
+    poolOptions: {
+      threads: {
+        isolate: true,
+      },
+    },
   },
 })
