@@ -33,25 +33,73 @@ import { logger } from "../../../../../utils/logger";
  * - 404 ORDER_NOT_FOUND: Order does not exist
  * - 400 ORDER_CANCELED: Cannot modify a canceled order
  */
+interface UpdateAddressBody {
+    address: {
+        first_name: string;
+        last_name: string;
+        address_1: string;
+        address_2?: string;
+        city: string;
+        province?: string;
+        postal_code: string;
+        country_code: string;
+        phone?: string;
+    };
+}
+
+function validateRequestBody(body: unknown): {
+    valid: boolean;
+    data?: UpdateAddressBody;
+    error?: { code: string; message: string };
+} {
+    if (!body || typeof body !== "object") {
+        return { valid: false, error: { code: "ADDRESS_REQUIRED", message: "Address is required in request body" } };
+    }
+
+    const b = body as Record<string, unknown>;
+    
+    // Check if address object exists
+    if (!b.address || typeof b.address !== "object") {
+        return { valid: false, error: { code: "ADDRESS_REQUIRED", message: "Address is required in request body" } };
+    }
+
+    const address = b.address as Record<string, unknown>;
+    const requiredFields = ['first_name', 'last_name', 'address_1', 'city', 'postal_code', 'country_code'];
+    
+    for (const field of requiredFields) {
+        if (!address[field] || typeof address[field] !== 'string' || (address[field] as string).trim() === '') {
+            return { 
+                valid: false, 
+                error: { code: "INVALID_ADDRESS", message: `${field} is required` } 
+            };
+        }
+    }
+
+    // Construct valid object
+    return {
+        valid: true,
+        data: {
+            address: {
+                first_name: address.first_name as string,
+                last_name: address.last_name as string,
+                address_1: address.address_1 as string,
+                address_2: (address.address_2 as string) || undefined,
+                city: address.city as string,
+                province: (address.province as string) || undefined,
+                postal_code: address.postal_code as string,
+                country_code: address.country_code as string,
+                phone: (address.phone as string) || undefined,
+            }
+        }
+    };
+}
+
 export async function POST(
     req: MedusaRequest,
     res: MedusaResponse
 ): Promise<void> {
     const { id } = req.params;
     const token = req.headers["x-modification-token"] as string;
-    const { address } = (req.body ?? {}) as {
-        address?: {
-            first_name: string;
-            last_name: string;
-            address_1: string;
-            address_2?: string;
-            city: string;
-            province?: string;
-            postal_code: string;
-            country_code: string;
-            phone?: string;
-        };
-    };
 
     // Validate required fields
     if (!token) {
@@ -62,25 +110,16 @@ export async function POST(
         return;
     }
 
-    if (!address) {
+    const validationResult = validateRequestBody(req.body);
+    if (!validationResult.valid) {
         res.status(400).json({
-            code: "ADDRESS_REQUIRED",
-            message: "Address is required in request body",
+            code: validationResult.error!.code,
+            message: validationResult.error!.message,
         });
         return;
     }
 
-    // Validate address fields
-    const requiredFields = ['first_name', 'last_name', 'address_1', 'city', 'postal_code', 'country_code'];
-    for (const field of requiredFields) {
-        if (!address[field as keyof typeof address]) {
-            res.status(400).json({
-                code: "INVALID_ADDRESS",
-                message: `${field} is required`,
-            });
-            return;
-        }
-    }
+    const { address } = validationResult.data!;
 
     // Validate the token
     const validation = modificationTokenService.validateToken(token);
