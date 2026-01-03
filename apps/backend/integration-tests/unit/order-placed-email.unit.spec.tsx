@@ -1,3 +1,4 @@
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import React from "react"
 import { OrderPlacedEmailComponent } from "../../src/modules/resend/emails/order-placed"
@@ -35,7 +36,7 @@ describe("OrderPlacedEmail", () => {
   const OLD_ENV = process.env
 
   beforeEach(() => {
-    jest.resetModules()
+    vi.resetModules()
     process.env = { ...OLD_ENV }
     process.env.STOREFRONT_URL = "http://localhost:8000"
   })

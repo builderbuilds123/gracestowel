@@ -1,4 +1,5 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
+import { randomUUID } from "crypto";
 import {
     addItemToOrderWorkflow,
     InsufficientStockError,
@@ -14,7 +15,9 @@ import {
     PaymentIntentMissingError,
     PriceNotFoundError,
     OrderLockedError,
+    CurrencyMismatchError,
 } from "../../../../../workflows/add-item-to-order";
+import { logger } from "../../../../../utils/logger";
 
 /**
  * POST /store/orders/:id/line-items
@@ -23,12 +26,22 @@ import {
  * Handles incremental authorization for the additional amount.
  *
  * Headers:
- * - x-modification-token: JWT token from order creation (required)
+ * - x-modification-token: JWT token from order creation (REQUIRED - must be in header, not body)
+ * - x-publishable-api-key: Medusa publishable key (required)
  *
  * Body:
  * - variant_id: string (required)
  * - quantity: number (required, positive integer)
  * - metadata: object (optional)
+ *
+ * Error Codes:
+ * - 400 TOKEN_REQUIRED: Missing x-modification-token header
+ * - 401 TOKEN_EXPIRED: Token has expired
+ * - 401 TOKEN_INVALID: Malformed or invalid token
+ * - 403 TOKEN_MISMATCH: Token order_id doesn't match route parameter
+ * - 409 insufficient_stock: Requested quantity exceeds available stock
+ * - 422 invalid_state: Order or payment in invalid state for modification
+ * - 402 card_declined: Payment authorization failed
  */
 
 function validateRequestBody(body: unknown): {
@@ -76,14 +89,12 @@ export async function POST(
     res: MedusaResponse
 ): Promise<void> {
     const { id } = req.params;
-    const modificationToken = req.headers["x-modification-token"] as string;
-    const bodyToken = (req.body as any)?.token as string;
-    const token = modificationToken || bodyToken;
+    const token = req.headers["x-modification-token"] as string;
 
     if (!token) {
         res.status(400).json({
             code: "TOKEN_REQUIRED",
-            message: "x-modification-token header is required",
+            message: "x-modification-token header is required. Token must be sent in header, not request body.",
         });
         return;
     }
@@ -102,7 +113,7 @@ export async function POST(
 
     // Generate stable request ID for idempotency
     // Use x-request-id header if provided, otherwise generate a UUID
-    const requestId = (req.headers["x-request-id"] as string) || crypto.randomUUID();
+    const requestId = (req.headers["x-request-id"] as string) || randomUUID();
 
     try {
         const result = await addItemToOrderWorkflow(req.scope).run({
@@ -179,7 +190,11 @@ export async function POST(
 
         // 500 Internal Server Error - Critical auth mismatch
         if (error instanceof AuthMismatchError) {
-            console.error("CRITICAL: AuthMismatch during line item addition", error);
+            logger.critical("order-line-items", "AuthMismatch during line item addition", {
+                orderId: error.orderId,
+                paymentIntentId: error.paymentIntentId,
+                requestId,
+            }, error);
             res.status(500).json({
                 code: "AUTH_MISMATCH_OVERSOLD",
                 message: "A critical error occurred. Please contact support.",
@@ -244,6 +259,18 @@ export async function POST(
             return;
         }
 
+        // 400 Bad Request - Currency mismatch
+        if (error instanceof CurrencyMismatchError) {
+            res.status(400).json({
+                code: error.code,
+                message: error.message,
+                variant_id: error.variantId,
+                order_currency: error.orderCurrency,
+                variant_currency: error.variantCurrency,
+            });
+            return;
+        }
+
         // 400 Bad Request - No payment intent
         if (error instanceof PaymentIntentMissingError) {
             res.status(400).json({
@@ -255,7 +282,12 @@ export async function POST(
         }
 
         // Generic error handler
-        console.error("[line-items] Error adding item to order:", error);
+        logger.error("order-line-items", "Error adding item to order", {
+            orderId: id,
+            variantId: variant_id,
+            quantity,
+            requestId,
+        }, error instanceof Error ? error : new Error(String(error)));
         res.status(500).json({
             code: "ADD_ITEMS_FAILED",
             message: "An error occurred while adding items.",

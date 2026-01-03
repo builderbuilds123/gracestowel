@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 /**
  * Unit tests for payment-capture-worker.ts (loader)
  * 
@@ -5,9 +6,9 @@
  * Coverage: Loader initialization, REDIS_URL validation, error handling
  */
 
-// Use jest.fn directly in the mock factory
-jest.mock("../../src/workers/payment-capture-worker", () => ({
-    startPaymentCaptureWorker: jest.fn(),
+// Use vi.fn directly in the mock factory
+vi.mock("../../src/workers/payment-capture-worker", () => ({
+    startPaymentCaptureWorker: vi.fn(),
 }))
 
 // Import after mock setup
@@ -16,23 +17,23 @@ import { startPaymentCaptureWorker } from "../../src/workers/payment-capture-wor
 import { RedisNotConfiguredError } from "../../src/lib/payment-capture-queue"
 
 // Get typed mock reference
-const mockStartPaymentCaptureWorker = startPaymentCaptureWorker as jest.Mock
+const mockStartPaymentCaptureWorker = startPaymentCaptureWorker as any
 
 describe("paymentCaptureWorkerLoader", () => {
     const originalEnv = process.env
     const mockContainer = {} as any
 
     beforeEach(() => {
-        jest.clearAllMocks()
+        vi.clearAllMocks()
         process.env = { ...originalEnv }
-        jest.spyOn(console, "log").mockImplementation(() => {})
-        jest.spyOn(console, "warn").mockImplementation(() => {})
-        jest.spyOn(console, "error").mockImplementation(() => {})
+        vi.spyOn(console, "log").mockImplementation(() => {})
+        vi.spyOn(console, "warn").mockImplementation(() => {})
+        vi.spyOn(console, "error").mockImplementation(() => {})
     })
 
     afterEach(() => {
         process.env = originalEnv
-        jest.restoreAllMocks()
+        vi.restoreAllMocks()
     })
 
     describe("when REDIS_URL is configured", () => {
@@ -47,7 +48,7 @@ describe("paymentCaptureWorkerLoader", () => {
         })
 
         it("should not log a warning", async () => {
-            const warnSpy = jest.spyOn(console, "warn")
+            const warnSpy = vi.spyOn(console, "warn")
 
             await paymentCaptureWorkerLoader(mockContainer)
 
@@ -70,7 +71,7 @@ describe("paymentCaptureWorkerLoader", () => {
         })
 
         it("should log a warning about missing REDIS_URL", async () => {
-            const warnSpy = jest.spyOn(console, "warn")
+            const warnSpy = vi.spyOn(console, "warn")
 
             await paymentCaptureWorkerLoader(mockContainer)
 
@@ -90,7 +91,7 @@ describe("paymentCaptureWorkerLoader", () => {
             mockStartPaymentCaptureWorker.mockImplementationOnce(() => {
                 throw testError
             })
-            const errorSpy = jest.spyOn(console, "error")
+            const errorSpy = vi.spyOn(console, "error")
 
             await expect(paymentCaptureWorkerLoader(mockContainer)).rejects.toThrow("Connection failed")
 

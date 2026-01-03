@@ -1,3 +1,4 @@
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 /**
  * Unit tests for Stripe webhook route
  * 
@@ -10,26 +11,26 @@
 
 import { EventEmitter } from "events";
 
-// Create shared mock functions at module level (before jest.mock calls)
-const mockConstructEvent = jest.fn();
-const mockQueueStripeEvent = jest.fn();
-const mockIsEventProcessed = jest.fn();
+// Create shared mock functions at module level (before vi.mock calls)
+const mockConstructEvent = vi.fn();
+const mockQueueStripeEvent = vi.fn();
+const mockIsEventProcessed = vi.fn();
 
 // Mock getStripeClient from utils/stripe
-jest.mock("../../../../src/utils/stripe", () => ({
-    getStripeClient: jest.fn(() => ({
+vi.mock("../../../../src/utils/stripe", () => ({
+    getStripeClient: vi.fn(() => ({
         webhooks: {
             constructEvent: mockConstructEvent,
         },
     })),
-    resetStripeClient: jest.fn(),
+    resetStripeClient: vi.fn(),
     STRIPE_API_VERSION: "2025-10-29.clover",
 }));
 
 // Mock stripe-event-queue
-jest.mock("../../../../src/lib/stripe-event-queue", () => ({
-    isEventProcessed: jest.fn(),
-    queueStripeEvent: jest.fn(),
+vi.mock("../../../../src/lib/stripe-event-queue", () => ({
+    isEventProcessed: vi.fn(),
+    queueStripeEvent: vi.fn(),
 }));
 
 import { POST } from "../../../../src/api/webhooks/stripe/route";
@@ -42,7 +43,7 @@ import { isEventProcessed, queueStripeEvent } from "../../../../src/lib/stripe-e
 function createMockStreamRequest(options: {
     headers?: Record<string, string>;
     body?: string;
-    scope?: { resolve: jest.Mock };
+    scope?: { resolve: vi.Mock };
 }): any {
     const emitter = new EventEmitter();
     const req = Object.assign(emitter, {
@@ -64,22 +65,22 @@ describe("Stripe Webhook POST - Story 6.1", () => {
     const originalEnv = process.env;
 
     beforeEach(() => {
-        jest.clearAllMocks();
+        vi.clearAllMocks();
         resetStripeClient();
         process.env = { ...originalEnv };
         process.env.STRIPE_WEBHOOK_SECRET = "whsec_test";
         process.env.STRIPE_SECRET_KEY = "sk_test_key";
 
         mockConstructEvent.mockReset();
-        (isEventProcessed as jest.Mock).mockReset().mockResolvedValue(false);
-        (queueStripeEvent as jest.Mock).mockReset().mockResolvedValue({ id: "job_123" });
+        (isEventProcessed as any).mockReset().mockResolvedValue(false);
+        (queueStripeEvent as any).mockReset().mockResolvedValue({ id: "job_123" });
 
-        jest.spyOn(console, "log").mockImplementation(() => {});
-        jest.spyOn(console, "error").mockImplementation(() => {});
+        vi.spyOn(console, "log").mockImplementation(() => {});
+        vi.spyOn(console, "error").mockImplementation(() => {});
     });
 
     afterEach(() => {
-        jest.restoreAllMocks();
+        vi.restoreAllMocks();
     });
 
     afterAll(() => {
@@ -95,8 +96,8 @@ describe("Stripe Webhook POST - Story 6.1", () => {
             } as any;
 
             const res = {
-                status: jest.fn().mockReturnThis(),
-                json: jest.fn(),
+                status: vi.fn().mockReturnThis(),
+                json: vi.fn(),
             } as any;
 
             await POST(req, res);
@@ -111,8 +112,8 @@ describe("Stripe Webhook POST - Story 6.1", () => {
             } as any;
 
             const res = {
-                status: jest.fn().mockReturnThis(),
-                json: jest.fn(),
+                status: vi.fn().mockReturnThis(),
+                json: vi.fn(),
             } as any;
 
             await POST(req, res);
@@ -132,8 +133,8 @@ describe("Stripe Webhook POST - Story 6.1", () => {
             });
 
             const res = {
-                status: jest.fn().mockReturnThis(),
-                json: jest.fn(),
+                status: vi.fn().mockReturnThis(),
+                json: vi.fn(),
             } as any;
 
             await POST(req, res);
@@ -154,8 +155,8 @@ describe("Stripe Webhook POST - Story 6.1", () => {
             });
 
             const res = {
-                status: jest.fn().mockReturnThis(),
-                json: jest.fn(),
+                status: vi.fn().mockReturnThis(),
+                json: vi.fn(),
             } as any;
 
             await POST(req, res);
@@ -178,8 +179,8 @@ describe("Stripe Webhook POST - Story 6.1", () => {
             });
 
             const res = {
-                status: jest.fn().mockReturnThis(),
-                json: jest.fn(),
+                status: vi.fn().mockReturnThis(),
+                json: vi.fn(),
             } as any;
 
             await POST(req, res);
@@ -202,7 +203,7 @@ describe("Stripe Webhook POST - Story 6.1", () => {
                 data: { object: { id: "pi_123" } }
             };
             mockConstructEvent.mockReturnValue(mockEvent);
-            (queueStripeEvent as jest.Mock).mockResolvedValue({ id: "job_123" });
+            (queueStripeEvent as any).mockResolvedValue({ id: "job_123" });
 
             const req = createMockStreamRequest({
                 headers: { "stripe-signature": "sig_valid" },
@@ -210,8 +211,8 @@ describe("Stripe Webhook POST - Story 6.1", () => {
             });
 
             const res = {
-                status: jest.fn().mockReturnThis(),
-                json: jest.fn(),
+                status: vi.fn().mockReturnThis(),
+                json: vi.fn(),
             } as any;
 
             await POST(req, res);
@@ -228,7 +229,7 @@ describe("Stripe Webhook POST - Story 6.1", () => {
                 data: { object: {} }
             };
             mockConstructEvent.mockReturnValue(mockEvent);
-            (queueStripeEvent as jest.Mock).mockRejectedValue(new Error("Redis connection failed"));
+            (queueStripeEvent as any).mockRejectedValue(new Error("Redis connection failed"));
 
             const req = createMockStreamRequest({
                 headers: { "stripe-signature": "sig_valid" },
@@ -236,8 +237,8 @@ describe("Stripe Webhook POST - Story 6.1", () => {
             });
 
             const res = {
-                status: jest.fn().mockReturnThis(),
-                json: jest.fn(),
+                status: vi.fn().mockReturnThis(),
+                json: vi.fn(),
             } as any;
 
             await POST(req, res);
@@ -258,7 +259,7 @@ describe("Stripe Webhook POST - Story 6.1", () => {
                 data: { object: {} }
             };
             mockConstructEvent.mockReturnValue(mockEvent);
-            (queueStripeEvent as jest.Mock).mockRejectedValue(new Error("Job evt_already_queued already exists"));
+            (queueStripeEvent as any).mockRejectedValue(new Error("Job evt_already_queued already exists"));
 
             const req = createMockStreamRequest({
                 headers: { "stripe-signature": "sig_valid" },
@@ -266,8 +267,8 @@ describe("Stripe Webhook POST - Story 6.1", () => {
             });
 
             const res = {
-                status: jest.fn().mockReturnThis(),
-                json: jest.fn(),
+                status: vi.fn().mockReturnThis(),
+                json: vi.fn(),
             } as any;
 
             await POST(req, res);
@@ -291,8 +292,8 @@ describe("Stripe Webhook POST - Story 6.1", () => {
             });
 
             const res = {
-                status: jest.fn().mockReturnThis(),
-                json: jest.fn(),
+                status: vi.fn().mockReturnThis(),
+                json: vi.fn(),
             } as any;
 
             await POST(req, res);
@@ -305,7 +306,7 @@ describe("Stripe Webhook POST - Story 6.1", () => {
 
     describe("Idempotency (AC 8)", () => {
         it("should return 200 with duplicate flag for already processed events", async () => {
-            (isEventProcessed as jest.Mock).mockResolvedValue(true);
+            (isEventProcessed as any).mockResolvedValue(true);
 
             const mockEvent = {
                 id: "evt_duplicate_123",
@@ -320,8 +321,8 @@ describe("Stripe Webhook POST - Story 6.1", () => {
             });
 
             const res = {
-                status: jest.fn().mockReturnThis(),
-                json: jest.fn(),
+                status: vi.fn().mockReturnThis(),
+                json: vi.fn(),
             } as any;
 
             await POST(req, res);
@@ -333,7 +334,7 @@ describe("Stripe Webhook POST - Story 6.1", () => {
         });
 
         it("should check idempotency before queueing", async () => {
-            (isEventProcessed as jest.Mock).mockResolvedValue(false);
+            (isEventProcessed as any).mockResolvedValue(false);
 
             const mockEvent = {
                 id: "evt_new_123",
@@ -348,8 +349,8 @@ describe("Stripe Webhook POST - Story 6.1", () => {
             });
 
             const res = {
-                status: jest.fn().mockReturnThis(),
-                json: jest.fn(),
+                status: vi.fn().mockReturnThis(),
+                json: vi.fn(),
             } as any;
 
             await POST(req, res);
@@ -365,7 +366,7 @@ describe("Stripe Webhook POST - Story 6.1", () => {
                 data: { object: {} }
             };
             mockConstructEvent.mockReturnValue(mockEvent);
-            (queueStripeEvent as jest.Mock).mockResolvedValue(null);
+            (queueStripeEvent as any).mockResolvedValue(null);
 
             const req = createMockStreamRequest({
                 headers: { "stripe-signature": "sig_valid" },
@@ -373,8 +374,8 @@ describe("Stripe Webhook POST - Story 6.1", () => {
             });
 
             const res = {
-                status: jest.fn().mockReturnThis(),
-                json: jest.fn(),
+                status: vi.fn().mockReturnThis(),
+                json: vi.fn(),
             } as any;
 
             await POST(req, res);

@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 /**
  * Unit tests for cancel-order-with-refund workflow
  * 
@@ -11,8 +12,8 @@
  */
 
 // Mock BullMQ before imports
-jest.mock("../../src/lib/payment-capture-queue", () => ({
-    cancelPaymentCaptureJob: jest.fn(),
+vi.mock("../../src/lib/payment-capture-queue", () => ({
+    cancelPaymentCaptureJob: vi.fn(),
     JobActiveError: class JobActiveError extends Error {
         code = "JOB_ACTIVE";
         constructor(orderId: string) {
@@ -23,8 +24,8 @@ jest.mock("../../src/lib/payment-capture-queue", () => ({
 }));
 
 // Mock Stripe
-jest.mock("../../src/utils/stripe", () => ({
-    getStripeClient: jest.fn()
+vi.mock("../../src/utils/stripe", () => ({
+    getStripeClient: vi.fn()
 }));
 
 import {
@@ -43,36 +44,36 @@ import { PaymentCollectionStatus } from "../../src/types/payment-collection-stat
 
 describe("Cancel Order Workflow Steps", () => {
     beforeEach(() => {
-        jest.clearAllMocks();
-        jest.spyOn(console, "log").mockImplementation(() => {});
-        jest.spyOn(console, "warn").mockImplementation(() => {});
-        jest.spyOn(console, "error").mockImplementation(() => {});
+        vi.clearAllMocks();
+        vi.spyOn(console, "log").mockImplementation(() => {});
+        vi.spyOn(console, "warn").mockImplementation(() => {});
+        vi.spyOn(console, "error").mockImplementation(() => {});
     });
 
     afterEach(() => {
-        jest.restoreAllMocks();
+        vi.restoreAllMocks();
     });
 
     describe("removeCaptureJobHandler", () => {
         beforeEach(() => {
-            jest.clearAllMocks();
+            vi.clearAllMocks();
         });
 
         it("should return removed: true when queue job is removed", async () => {
-            (cancelPaymentCaptureJob as jest.Mock).mockResolvedValue(true);
+            (cancelPaymentCaptureJob as any).mockResolvedValue(true);
             const result = await removeCaptureJobHandler({ orderId: "ord_123" });
             expect(result).toEqual({ orderId: "ord_123", removed: true });
         });
 
         it("should return removed: false (notFound) when job missing", async () => {
-            (cancelPaymentCaptureJob as jest.Mock).mockResolvedValue(false);
+            (cancelPaymentCaptureJob as any).mockResolvedValue(false);
             const result = await removeCaptureJobHandler({ orderId: "ord_miss" });
             expect(result).toEqual({ orderId: "ord_miss", removed: false, notFound: true });
         });
 
         it("should propagate JobActiveError (Race Condition)", async () => {
             const activeError = new JobActiveError("ord_active");
-            (cancelPaymentCaptureJob as jest.Mock).mockRejectedValue(activeError);
+            (cancelPaymentCaptureJob as any).mockRejectedValue(activeError);
 
             await expect(removeCaptureJobHandler({ orderId: "ord_active" }))
                 .rejects.toThrow(JobActiveError);
@@ -82,7 +83,7 @@ describe("Cancel Order Workflow Steps", () => {
             // Note: The Handler throws raw error, the STEP wrapper catches it.
             // Unit testing the handler directly means we expect the raw error here.
             const redisError = new Error("Redis Down");
-            (cancelPaymentCaptureJob as jest.Mock).mockRejectedValue(redisError);
+            (cancelPaymentCaptureJob as any).mockRejectedValue(redisError);
 
             await expect(removeCaptureJobHandler({ orderId: "ord_fail" }))
                 .rejects.toThrow("Redis Down");
@@ -91,25 +92,25 @@ describe("Cancel Order Workflow Steps", () => {
 
     describe("lockOrderHandler", () => {
         let container: MedusaContainer;
-        let queryMock: jest.Mock;
+        let queryMock: vi.Mock;
         let stripeMock: any;
 
         beforeEach(() => {
-            jest.clearAllMocks();
+            vi.clearAllMocks();
 
-            queryMock = jest.fn();
+            queryMock = vi.fn();
             container = {
-                resolve: jest.fn().mockReturnValue({
+                resolve: vi.fn().mockReturnValue({
                     graph: queryMock
                 })
             } as any;
 
             stripeMock = {
                 paymentIntents: {
-                    retrieve: jest.fn()
+                    retrieve: vi.fn()
                 }
             };
-            (getStripeClient as jest.Mock).mockReturnValue(stripeMock);
+            (getStripeClient as any).mockReturnValue(stripeMock);
         });
 
         it("should succeed when PaymentCollection status is authorized (PAY-01)", async () => {
@@ -409,7 +410,7 @@ describe("Cancel Order Workflow Steps", () => {
          */
         it("should fail hard when Redis is unavailable", async () => {
             const redisError = new Error("ECONNREFUSED");
-            (cancelPaymentCaptureJob as jest.Mock).mockRejectedValue(redisError);
+            (cancelPaymentCaptureJob as any).mockRejectedValue(redisError);
 
             // The handler throws, which the step wrapper catches and converts to QueueRemovalError
             // This test verifies the handler propagates the error
@@ -419,7 +420,7 @@ describe("Cancel Order Workflow Steps", () => {
 
         it("should succeed when job not found (not an error)", async () => {
             // Job not found is OK - it means the job either doesn't exist or already completed
-            (cancelPaymentCaptureJob as jest.Mock).mockResolvedValue(false);
+            (cancelPaymentCaptureJob as any).mockResolvedValue(false);
 
             const result = await removeCaptureJobHandler({ orderId: "ord_no_job" });
 

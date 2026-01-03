@@ -1,16 +1,17 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import orderPlacedHandler from "../../src/subscribers/order-placed";
 import { enqueueEmail } from "../../src/lib/email-queue";
 
-jest.mock("../../src/lib/email-queue", () => ({
-  enqueueEmail: jest.fn(),
+vi.mock("../../src/lib/email-queue", () => ({
+  enqueueEmail: vi.fn(),
 }));
 
-jest.mock("../../src/lib/payment-capture-queue", () => ({
-  schedulePaymentCapture: jest.fn(),
+vi.mock("../../src/lib/payment-capture-queue", () => ({
+  schedulePaymentCapture: vi.fn(),
 }));
 
-jest.mock("../../src/utils/posthog", () => ({
-  getPostHog: jest.fn().mockReturnValue(null),
+vi.mock("../../src/utils/posthog", () => ({
+  getPostHog: vi.fn().mockReturnValue(null),
 }));
 
 describe("Order Placed Subscriber", () => {
@@ -18,28 +19,28 @@ describe("Order Placed Subscriber", () => {
   let mockLogger: any;
   let mockQuery: any;
   const originalEnv = process.env;
-  let generateTokenSpy: jest.SpyInstance;
+  let generateTokenSpy: vi.SpyInstance;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     process.env = { ...originalEnv };
     process.env.STOREFRONT_URL = "http://test-store.com";
 
     mockLogger = {
-      info: jest.fn(),
-      error: jest.fn(),
-      warn: jest.fn(),
+      info: vi.fn(),
+      error: vi.fn(),
+      warn: vi.fn(),
     };
 
     // Create a mock service instance with generateToken spy
     const mockModificationTokenService = {
-      generateToken: jest.fn().mockReturnValue("mock_token_123"),
+      generateToken: vi.fn().mockReturnValue("mock_token_123"),
     };
 
-    generateTokenSpy = jest.spyOn(mockModificationTokenService, "generateToken");
+    generateTokenSpy = vi.spyOn(mockModificationTokenService, "generateToken");
 
     mockContainer = {
-      resolve: jest.fn((key) => {
+      resolve: vi.fn((key) => {
         if (key === "logger") return mockLogger;
         if (key === "query") return mockQuery;
         if (key === "modificationTokenService") return mockModificationTokenService;
@@ -55,7 +56,7 @@ describe("Order Placed Subscriber", () => {
 
   const createQueryMock = (orderData: any) => {
     mockQuery = {
-      graph: jest.fn().mockResolvedValue({
+      graph: vi.fn().mockResolvedValue({
         data: [orderData]
       })
     };
@@ -271,7 +272,7 @@ describe("Order Placed Subscriber", () => {
     };
     createQueryMock(orderData);
 
-    (enqueueEmail as jest.Mock).mockRejectedValueOnce(new Error("Queue full"));
+    (enqueueEmail as any).mockRejectedValueOnce(new Error("Queue full"));
 
     const event = { data: { id: "order_queue_fail" } };
     

@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GET } from "../../src/api/store/orders/by-payment-intent/route";
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 
@@ -11,26 +12,26 @@ describe("GET /store/orders/by-payment-intent - SEC-02 Security Tests", () => {
 
     let mockReq: Partial<MedusaRequest>;
     let mockRes: Partial<MedusaResponse>;
-    let mockQuery: jest.Mock;
-    let setHeaderSpy: jest.Mock;
-    let statusSpy: jest.Mock;
-    let jsonSpy: jest.Mock;
+    let mockQuery: vi.Mock;
+    let setHeaderSpy: vi.Mock;
+    let statusSpy: vi.Mock;
+    let jsonSpy: vi.Mock;
 
     beforeEach(() => {
-        jest.clearAllMocks();
+        vi.clearAllMocks();
 
         // Mock query service
-        mockQuery = jest.fn();
+        mockQuery = vi.fn();
 
         // Mock response methods
-        setHeaderSpy = jest.fn();
-        jsonSpy = jest.fn();
-        statusSpy = jest.fn(() => ({ json: jsonSpy }));
+        setHeaderSpy = vi.fn();
+        jsonSpy = vi.fn();
+        statusSpy = vi.fn(() => ({ json: jsonSpy }));
 
         mockReq = {
             query: {},
             scope: {
-                resolve: jest.fn((service: string) => {
+                resolve: vi.fn((service: string) => {
                     if (service === "query") return { graph: mockQuery };
                     throw new Error(`Unknown service: ${service}`);
                 }),

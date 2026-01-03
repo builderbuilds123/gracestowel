@@ -1,4 +1,4 @@
-import { describe, it, expect } from "@jest/globals";
+import { describe, it, expect } from "vitest";
 import { validateShippingMethods } from "../create-order-from-stripe";
 
 describe("validateShippingMethods", () => {
@@ -31,7 +31,7 @@ describe("validateShippingMethods", () => {
           amount: 1500,
           data: { service_code: "EXP" },
         },
-      ])
+      ] as any)
     ).toThrow("shipping_option_id");
   });
 
@@ -44,7 +44,7 @@ describe("validateShippingMethods", () => {
           amount: 1500,
           data: undefined,
         },
-      ])
+      ] as any)
     ).toThrow("provider data");
   });
 

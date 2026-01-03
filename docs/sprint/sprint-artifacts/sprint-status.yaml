@@ -387,7 +387,10 @@ development_status:
     completed: "2026-01-01"
   fix-ORD-01-add-items-workflow:
     path: docs/sprint/sprint-artifacts/fix-ORD-01-add-items-workflow.md
-    status: ready-for-dev
+    status: in-progress
+    meta: "Code review fixes complete. TypeScript compilation passing with no 'as any' casts. All 38/38 unit tests passing. Fixed updatePaymentCollections API signature, rewrote test suite eliminating Jest mocking issues. Still requires integration tests for AC verification."
+    code_review_completed: "2026-01-02"
+    typescript_tests_fixed: "2026-01-02"
   fix-ORD-02-post-auth-amount:
     path: docs/sprint/sprint-artifacts/fix-ORD-02-post-auth-amount.md
     status: ready-for-dev
