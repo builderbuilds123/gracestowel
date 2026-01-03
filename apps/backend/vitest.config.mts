@@ -15,6 +15,12 @@ export default defineConfig({
       "**/integration-tests/http/**",
       "**/integration-tests/modules/**",
     ],
+    // Run test files sequentially to prevent vi.resetModules() from affecting other test files
+    // This is necessary because race-condition-handling.unit.spec.ts uses vi.resetModules()
+    // which can affect module resolution in other test files when run in parallel
+    sequence: {
+      concurrent: false,
+    },
     // Isolate tests that use vi.resetModules() to prevent module loading issues
     poolOptions: {
       threads: {
