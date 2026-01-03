@@ -20,8 +20,8 @@
     "dev": "medusa develop",
     "lint": "echo 'Lint not configured for backend'",
     "typecheck": "tsc --noEmit",
-    "test": "TEST_TYPE=unit NODE_OPTIONS=--experimental-vm-modules jest --silent --runInBand --forceExit",
-    "test:unit": "TEST_TYPE=unit NODE_OPTIONS=--experimental-vm-modules jest --silent --runInBand --forceExit",
+    "test": "vitest run",
+    "test:unit": "vitest run",
     "test:integration": "TEST_TYPE=integration:http NODE_OPTIONS=--experimental-vm-modules jest --silent=false --runInBand --forceExit",
     "test:integration:modules": "TEST_TYPE=integration:modules NODE_OPTIONS=--experimental-vm-modules jest --silent=false --runInBand --forceExit"
   },
@@ -70,7 +70,8 @@
     "prop-types": "^15.8.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.6.2",
-    "vite": "^5.4.14"
+    "vite": "^5.4.14",
+    "vitest": "^2.1.8"
   },
   "engines": {
     "node": ">=24"
