@@ -393,7 +393,10 @@ development_status:
     typescript_tests_fixed: "2026-01-02"
   fix-ORD-02-post-auth-amount:
     path: docs/sprint/sprint-artifacts/fix-ORD-02-post-auth-amount.md
-    status: ready-for-dev
+    status: done
+    meta: "ORD-02 complete. Incremental authorization for quantity increases, CardDeclinedError for graceful failure, Payment Collection sync. Code review complete - all 7 issues fixed. 21/21 unit tests passing."
+    completed: "2026-01-02"
+    code_review_completed: "2026-01-02"
   fix-ORD-03-address-update-token:
     path: docs/sprint/sprint-artifacts/fix-ORD-03-address-update-token.md
     status: ready-for-dev
