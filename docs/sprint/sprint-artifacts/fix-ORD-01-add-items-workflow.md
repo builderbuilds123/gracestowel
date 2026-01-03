@@ -1,6 +1,6 @@
 # IMPL-ORD-01: 'Add items' workflow is metadata-only
 
-**Status:** in-progress
+**Status:** done
 
 ## User Story
 
