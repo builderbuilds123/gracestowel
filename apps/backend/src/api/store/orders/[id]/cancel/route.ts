@@ -1,5 +1,6 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { modificationTokenService } from "../../../../../services/modification-token";
+import { logger } from "../../../../../utils/logger";
 import { 
     cancelOrderWithRefundWorkflow,
     LateCancelError,
@@ -39,7 +40,7 @@ export async function POST(
 ): Promise<void> {
     const { id } = req.params;
     const token = req.headers["x-modification-token"] as string;
-    const { reason } = req.body as { reason?: string };
+    const { reason } = (req.body ?? {}) as { reason?: string };
 
     if (!token) {
         res.status(400).json({
@@ -176,11 +177,10 @@ export async function POST(
             return;
         }
 
-        console.error("Error canceling order:", error);
+        logger.error("order-cancel", "Error canceling order", { orderId: id }, error instanceof Error ? error : new Error(String(error)));
         res.status(500).json({
             code: "CANCELLATION_FAILED",
             message: "An error occurred while processing the cancellation. Please try again or contact support.",
         });
     }
 }
-

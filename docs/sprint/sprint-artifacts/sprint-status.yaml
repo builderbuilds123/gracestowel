@@ -399,7 +399,7 @@ development_status:
     code_review_completed: "2026-01-02"
   fix-ORD-03-address-update-token:
     path: docs/sprint/sprint-artifacts/fix-ORD-03-address-update-token.md
-    status: ready-for-dev
+    status: done
   fix-PAY-01-payment-status-model:
     path: docs/sprint/sprint-artifacts/fix-PAY-01-payment-status-model.md
     status: done

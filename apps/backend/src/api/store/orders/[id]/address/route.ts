@@ -1,5 +1,6 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { modificationTokenService } from "../../../../../services/modification-token";
+import { logger } from "../../../../../utils/logger";
 
 /**
  * POST /store/orders/:id/address
@@ -38,8 +39,8 @@ export async function POST(
 ): Promise<void> {
     const { id } = req.params;
     const token = req.headers["x-modification-token"] as string;
-    const { address } = req.body as {
-        address: {
+    const { address } = (req.body ?? {}) as {
+        address?: {
             first_name: string;
             last_name: string;
             address_1: string;
@@ -158,7 +159,7 @@ export async function POST(
             },
         }]);
 
-        console.log(`Address updated for order ${id}`);
+        logger.info("order-address", "Address updated", { orderId: id });
 
         res.status(200).json({
             success: true,
@@ -167,11 +168,10 @@ export async function POST(
             new_address: address,
         });
     } catch (error) {
-        console.error("Error updating address:", error);
+        logger.error("order-address", "Error updating address", { orderId: id }, error instanceof Error ? error : new Error(String(error)));
         res.status(500).json({
             code: "UPDATE_FAILED",
             message: "An error occurred while updating the address. Please try again.",
         });
     }
 }
-
