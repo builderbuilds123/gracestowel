@@ -433,6 +433,8 @@ development_status:
   fix-INV-01-inventory-decrement:
     path: docs/sprint/sprint-artifacts/fix-INV-01-inventory-decrement.md
     status: done
+    meta: "Atomic inventory decrement implemented via InventoryDecrementService. PR #118 merged. Functional locking tests verified."
+    completed: "2026-01-04"
   inv-02-backorder-negative-inventory:
     path: docs/sprint/sprint-artifacts/inv-02-backorder-negative-inventory.md
     status: drafted
