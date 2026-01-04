@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { InventoryDecrementService } from "../../src/services/inventory-decrement-logic";
+import { InventoryDecrementService, InventoryAdjustment } from "../../src/services/inventory-decrement-logic";
 import { InsufficientStockError } from "../../src/workflows/add-item-to-order";
+import { clampAvailability } from "../../src/lib/inventory/availability";
 
 describe("InventoryDecrementService", () => {
     let service: InventoryDecrementService;
@@ -67,16 +68,20 @@ describe("InventoryDecrementService", () => {
 
         expect(adjustments).toEqual([
             {
+                variant_id: "variant_1",
                 inventory_item_id: "inv_variant_1",
                 location_id: "loc_pref",
                 stocked_quantity: 3,
                 previous_stocked_quantity: 5,
+                available_quantity: 3,
             },
             {
+                variant_id: "variant_2",
                 inventory_item_id: "inv_variant_2",
                 location_id: "loc_pref",
                 stocked_quantity: 0,
                 previous_stocked_quantity: 1,
+                available_quantity: 0,
             },
         ]);
     });
@@ -134,10 +139,12 @@ describe("InventoryDecrementService", () => {
         const adjustments = await service.atomicDecrementInventory(input);
 
         expect(adjustments[0]).toEqual({
+            variant_id: "variant_1",
             inventory_item_id: "inv_variant_1",
             location_id: "loc_b",
             stocked_quantity: -1, 
             previous_stocked_quantity: 2,
+            available_quantity: 0,
         });
     });
 
@@ -151,5 +158,92 @@ describe("InventoryDecrementService", () => {
         query.graph.mockResolvedValue({ data: [] });
 
         await expect(service.atomicDecrementInventory(input)).rejects.toBeInstanceOf(InsufficientStockError);
+    });
+
+    /**
+     * AC5(c): Backorder event fires when result < 0
+     * This test verifies that adjustment data for backordered items contains:
+     * - negative stocked_quantity (indicating backorder)
+     * - correct previous_stocked_quantity for delta calculation
+     * - available_quantity clamped to 0
+     *
+     * The actual event emission happens in the workflow (create-order-from-stripe.ts)
+     * which transforms these adjustments into the inventory.backordered event payload.
+     */
+    it("provides correct adjustment data for backorder event emission (AC5c)", async () => {
+        const input = {
+            cartItems: [{ variant_id: "variant_backorder", quantity: 5 }],
+            preferredLocationIds: [],
+            salesChannelId: "sc_1",
+        };
+
+        query.graph.mockImplementation(async ({ entity, filters }: any) => {
+            if (entity === "product_variant") {
+                return { data: [{ inventory_items: [{ inventory_item_id: "inv_backorder" }] }] };
+            }
+            if (entity === "inventory_level") {
+                return { data: [{ id: "level_backorder", location_id: "loc_backorder", stocked_quantity: 2 }] };
+            }
+            if (entity === "sales_channel") {
+                return { data: [{ id: "sc_1", stock_locations: [{ stock_location_id: "loc_backorder" }] }] };
+            }
+            return { data: [] };
+        });
+
+        // Enable backorder for this test
+        pg_connection.mockReturnValue({
+            where: vi.fn().mockReturnThis(),
+            select: vi.fn().mockResolvedValue([{ allow_backorder: true }]),
+        });
+
+        const adjustments = await service.atomicDecrementInventory(input);
+
+        // Verify adjustment contains all data needed for backorder event (AC3)
+        expect(adjustments).toHaveLength(1);
+        const adj = adjustments[0];
+
+        // AC3: Required fields for inventory.backordered event
+        expect(adj.variant_id).toBe("variant_backorder");
+        expect(adj.inventory_item_id).toBe("inv_backorder");
+        expect(adj.location_id).toBe("loc_backorder");
+
+        // AC3: delta calculation (previous - new = 2 - (-3) = 5)
+        const expectedDelta = adj.previous_stocked_quantity - adj.stocked_quantity;
+        expect(expectedDelta).toBe(5); // quantity requested
+
+        // AC3: new_stock is negative (backorder condition)
+        expect(adj.stocked_quantity).toBe(-3); // 2 - 5 = -3
+        expect(adj.stocked_quantity).toBeLessThan(0);
+
+        // AC4: available_quantity clamped to 0 for storefront
+        expect(adj.available_quantity).toBe(0);
+        expect(adj.previous_stocked_quantity).toBe(2);
+    });
+});
+
+/**
+ * Unit tests for clampAvailability helper
+ * AC4 (INV-02): Storefront availability masking
+ */
+describe("clampAvailability", () => {
+    it("returns positive values unchanged", () => {
+        expect(clampAvailability(10)).toBe(10);
+        expect(clampAvailability(1)).toBe(1);
+        expect(clampAvailability(100)).toBe(100);
+    });
+
+    it("clamps negative values to 0 (AC4)", () => {
+        expect(clampAvailability(-1)).toBe(0);
+        expect(clampAvailability(-10)).toBe(0);
+        expect(clampAvailability(-100)).toBe(0);
+    });
+
+    it("returns 0 for zero", () => {
+        expect(clampAvailability(0)).toBe(0);
+    });
+
+    it("handles null and undefined", () => {
+        expect(clampAvailability(null)).toBe(0);
+        expect(clampAvailability(undefined)).toBe(0);
     });
 });

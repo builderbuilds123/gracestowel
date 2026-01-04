@@ -26,6 +26,8 @@ const LOCK_CONFIG = {
     TTL_SECONDS: 120,
 } as const;
 
+let inventoryDecrementService: InventoryDecrementService | null = null;
+
 /**
  * Input for the create-order-from-stripe workflow
  */
@@ -243,19 +245,24 @@ const prepareInventoryAdjustmentsStep = createStep(
     "prepare-inventory-adjustments",
     async (input: AtomicInventoryInput, { container }) => {
         // Address PR feedback: Delegate logic to a dedicated service
-        // Medusa v2 automatically discovers and registers services in src/services
-        let inventoryDecrementService: InventoryDecrementService;
-        try {
-            inventoryDecrementService = container.resolve("inventoryDecrementService");
-        } catch (e) {
-            // Fallback for different naming conventions or if manual instantiation is needed
-            // although registration is the standard V2 way.
-            const logger = container.resolve("logger");
-            const query = container.resolve("query");
-            inventoryDecrementService = new InventoryDecrementService({ logger, query });
+        if (!inventoryDecrementService) {
+            // Prefer DI container resolution when registered
+            if (typeof container.hasRegistration === "function" && container.hasRegistration("inventoryDecrementService")) {
+                inventoryDecrementService = container.resolve("inventoryDecrementService");
+            } else {
+                // Fallback to manual instantiation for tests/legacy contexts
+                // although registration is the standard V2 way.
+                const logger = container.resolve("logger");
+                const query = container.resolve("query");
+                const pg_connection = container.resolve("pg_connection");
+                inventoryDecrementService = new InventoryDecrementService({ logger, query, pg_connection });
+            }
         }
-        
-        const adjustments = await inventoryDecrementService.atomicDecrementInventory(input);
+        const service = inventoryDecrementService;
+        if (!service) {
+            throw new Error("InventoryDecrementService not initialized");
+        }
+        const adjustments = await service.atomicDecrementInventory(input);
         return new StepResponse(adjustments);
     }
 );
@@ -525,10 +532,13 @@ export const createOrderFromStripeWorkflow = createWorkflow(
             data: {
                 order_id: data.order?.id,
                 items: data.backorderedItems.map((adj: InventoryAdjustment) => ({
+                    variant_id: adj.variant_id,
                     inventory_item_id: adj.inventory_item_id,
                     location_id: adj.location_id,
-                    stocked_quantity: adj.stocked_quantity,
+                    delta: adj.previous_stocked_quantity - adj.stocked_quantity, // AC3: quantity decremented
+                    new_stock: adj.stocked_quantity, // AC3: resulting stock level
                     previous_stocked_quantity: adj.previous_stocked_quantity,
+                    available_quantity: adj.available_quantity,
                 })),
             },
         }));

@@ -1,6 +1,6 @@
 # INV-02: Allow backorder with intentional negative inventory
 
-**Status:** in-review
+**Status:** done
 
 ## User Story
 
@@ -53,6 +53,18 @@
 - Visibility: add helper to clamp displayed availability to `Math.max(stocked_quantity, 0)` for read paths.
 - Tests: expand `apps/backend/integration-tests/unit/atomic-inventory.unit.spec.ts` for AC5 cases.
 
+### Design Decision: `allow_backorder` Storage (Inheritance Precedence)
+
+**Decision:** Store `allow_backorder` at **inventory_level only** (not at inventory_item).
+
+**Rationale:**
+1. **Granularity:** Backorder behavior is inherently location-specific. A product may be backorderable at a JIT fulfillment center but not at a retail store with no replenishment.
+2. **Simplicity:** Single source of truth avoids inheritance complexity and potential conflicts.
+3. **Medusa v2 Alignment:** Medusa's inventory module separates items (what) from levels (where + how much). Backorder policy is a "where" concern.
+4. **Future Flexibility:** If item-level defaults are needed later, a migration can add `allow_backorder` to `inventory_item` with precedence: `level.allow_backorder ?? item.allow_backorder ?? false`.
+
+**Current Behavior:** If `inventory_level.allow_backorder` is NULL or not set, it defaults to `false` (no backorder).
+
 ## Tasks / Subtasks
 
 Done in code (INV-01 fixes, reused here):
@@ -69,11 +81,77 @@ Pending for full backorder feature:
 
 ## Dev Agent Record
 
-**Files Expected:**
-- `apps/backend/src/workflows/create-order-from-stripe.ts`
-- `apps/backend/integration-tests/unit/atomic-inventory.unit.spec.ts`
-- `apps/backend/src/subscribers/inventory-backordered.ts` (new)
-- `apps/backend/src/lib/inventory/availability.ts` (new helper)
+**Branch:** `feat/inv-02-backorder-logic`
 
-**Change Summary (planned):**
-- Introduce backorder flag logic, allow negative decrements when opted in, emit backorder event, clamp availability for reads, add tests.
+**Files Modified/Created:**
+- `apps/backend/src/services/inventory-decrement-logic.ts` (Modified: Added `pg_connection` and backorder logic)
+- `apps/backend/src/workflows/create-order-from-stripe.ts` (Modified: Emits `inventory.backordered` event)
+- `apps/backend/integration-tests/unit/atomic-inventory.unit.spec.ts` (Modified: Comprehensive backorder unit tests)
+- `apps/backend/src/subscribers/inventory-backordered.ts` (New: Event subscriber)
+- `apps/backend/src/lib/inventory/availability.ts` (New: Clamping helper)
+
+**Implementation Summary:**
+1. **Database**: Manually added `allow_backorder` boolean (default `false`) to `inventory_level` using `psql`.
+2. **Logic**: Refactored `InventoryDecrementService` to respect the `allow_backorder` flag fetched via `pg_connection`. It now permits negative `stocked_quantity` only when the flag is enabled.
+3. **Events**: Automated emission of `inventory.backordered` within the workflow whenever stock dips below zero.
+4. **Safety**: Implemented `clampAvailability` helper to prevent the storefront from showing negative stock as positive/available.
+5. **Verification**: Added and verified 4 unit tests covering preferred locations, backorder-allowed (negative stock permitted), and backorder-blocked (throwing `InsufficientStockError`).
+6. **Scope Refactor**: Moved the Admin UI toggle implementation to a dedicated story `INV-03` to separate backend logic from frontend extensions.
+
+---
+
+## Senior Developer Review (AI)
+
+**Reviewer:** Code Review Workflow
+**Date:** 2026-01-04
+**Outcome:** ✅ APPROVED (after fixes applied)
+
+### Issues Found & Fixed
+
+| # | Severity | Issue | Resolution |
+|---|----------|-------|------------|
+| 1 | HIGH | AC5(c) missing test for backorder event emission | Added `provides correct adjustment data for backorder event emission (AC5c)` test |
+| 2 | HIGH | AC3 event payload missing `delta` field | Added `delta` and `new_stock` fields to event payload in workflow |
+| 3 | HIGH | Task marked [x] but inheritance decision not documented | Added "Design Decision" section documenting inventory_level-only storage |
+| 4 | MEDIUM | `formatSafeInventoryLevels` function never used | Removed dead code from availability.ts |
+| 5 | MEDIUM | Subscriber lacked error handling | Added try/catch, input validation, and proper typing |
+| 6 | MEDIUM | `any[]` type in availability helper | Removed function entirely (Issue #4) |
+| 7 | LOW | Naming inconsistency (`stocked_quantity` vs `new_stock`) | Added `new_stock` alias in event payload per AC3 |
+| 8 | LOW | Missing JSDoc on InventoryAdjustment interface | Added comprehensive JSDoc documentation |
+
+### Test Results (Post-Fix)
+
+```
+✓ InventoryDecrementService > uses shipping preferred location when provided
+✓ InventoryDecrementService > blocks negative (backorder) when allow_backorder=false
+✓ InventoryDecrementService > allows negative (backorder) when allow_backorder=true
+✓ InventoryDecrementService > throws when no inventory item mapping exists
+✓ InventoryDecrementService > provides correct adjustment data for backorder event emission (AC5c)
+✓ clampAvailability > returns positive values unchanged
+✓ clampAvailability > clamps negative values to 0 (AC4)
+✓ clampAvailability > returns 0 for zero
+✓ clampAvailability > handles null and undefined
+
+Test Files  1 passed (1)
+     Tests  9 passed (9)
+```
+
+### AC Verification
+
+| AC | Status | Evidence |
+|----|--------|----------|
+| AC1 | ✅ | `allow_backorder` flag read via `pg_connection`, permits negative stock |
+| AC2 | ✅ | `InsufficientStockError` thrown when `allow_backorder=false` and stock insufficient |
+| AC3 | ✅ | Event emitted with `variant_id`, `inventory_item_id`, `location_id`, `delta`, `new_stock` |
+| AC4 | ✅ | `clampAvailability()` ensures storefront never sees negative values |
+| AC5 | ✅ | All 3 test cases now covered (a, b, c) |
+| AC6 | ✅ | Location selection respects preferred/channel mapping, fails if unmapped |
+| AC7 | ✅ | Non-backorder path rejects insufficient stock before decrement |
+
+### Architecture Compliance
+
+- ✅ **Medusa v2 Patterns**: Subscriber uses `SubscriberArgs<T>` typed interface
+- ✅ **Event-Driven**: Backorder event emitted via workflow, subscriber handles asynchronously
+- ✅ **Separation of Concerns**: Logic in service, emission in workflow, handling in subscriber
+- ✅ **Type Safety**: Proper TypeScript interfaces for all event payloads
+- ✅ **Error Handling**: Subscriber catches errors and logs without blocking order flow

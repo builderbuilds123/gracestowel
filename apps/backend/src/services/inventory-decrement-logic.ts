@@ -1,4 +1,5 @@
 import { Logger } from "@medusajs/framework/types";
+import { clampAvailability } from "../lib/inventory/availability";
 import { InsufficientStockError } from "../workflows/add-item-to-order";
 
 export interface CartItemForInventory {
@@ -12,11 +13,25 @@ export interface AtomicInventoryInput {
     salesChannelId?: string | null;
 }
 
+/**
+ * Represents an inventory adjustment prepared for decrement.
+ * Used by the workflow to apply inventory level updates atomically.
+ *
+ * @see AC1-AC7 (INV-02): Backorder logic with negative inventory support
+ */
 export interface InventoryAdjustment {
+    /** The product variant being adjusted */
+    variant_id: string;
+    /** The inventory item ID in Medusa's inventory module */
     inventory_item_id: string;
+    /** The stock location where inventory is being decremented */
     location_id: string;
+    /** The new stock level after decrement (may be negative if allow_backorder=true) */
     stocked_quantity: number;
+    /** The stock level before this decrement */
     previous_stocked_quantity: number;
+    /** The clamped availability for storefront display (always >= 0) */
+    available_quantity: number;
 }
 
 type InjectedDependencies = {
@@ -121,23 +136,27 @@ export class InventoryDecrementService {
             const [levelDetails] = await this.pg_connection("inventory_level")
                 .where({ id: level.id })
                 .select("allow_backorder");
-            
+
             const allowBackorder = levelDetails?.allow_backorder ?? false;
 
             const previousStock = level.stocked_quantity ?? 0;
             const newStock = previousStock - item.quantity;
 
-            // AC2 & AC7: Enforce stock check if backorders are NOT allowed
+            // AC2 & AC7: Enforce stock check if backorders are NOT allowed (stocked only per architecture)
             if (!allowBackorder && newStock < 0) {
-                this.logger.warn(`[Inventory] Insufficient stock for ${item.variant_id} at ${level.location_id}: requested ${item.quantity}, available ${previousStock}`);
+                this.logger.warn(
+                    `[Inventory] Insufficient stock for ${item.variant_id} at ${level.location_id}: requested ${item.quantity}, available ${previousStock}`
+                );
                 throw new InsufficientStockError(item.variant_id, previousStock, item.quantity);
             }
 
             adjustments.push({
+                variant_id: item.variant_id,
                 inventory_item_id: inventoryItemId,
                 location_id: level.location_id,
                 stocked_quantity: newStock,
                 previous_stocked_quantity: previousStock,
+                available_quantity: clampAvailability(newStock),
             });
 
             this.logger.info(
