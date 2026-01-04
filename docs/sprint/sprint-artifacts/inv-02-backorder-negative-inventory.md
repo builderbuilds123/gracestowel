@@ -155,3 +155,157 @@ Test Files  1 passed (1)
 - ✅ **Separation of Concerns**: Logic in service, emission in workflow, handling in subscriber
 - ✅ **Type Safety**: Proper TypeScript interfaces for all event payloads
 - ✅ **Error Handling**: Subscriber catches errors and logs without blocking order flow
+
+---
+
+## Code Review Fix Implementation Details
+
+### Fix #1: AC5(c) Test for Backorder Event Emission
+
+**File:** `apps/backend/integration-tests/unit/atomic-inventory.unit.spec.ts`
+
+Added test `provides correct adjustment data for backorder event emission (AC5c)` that verifies:
+- Adjustment data contains all required fields for the `inventory.backordered` event
+- `stocked_quantity` goes negative when `allow_backorder=true`
+- `delta` can be calculated from `previous_stocked_quantity - stocked_quantity`
+- `available_quantity` is clamped to 0 for storefront display
+
+```typescript
+it("provides correct adjustment data for backorder event emission (AC5c)", async () => {
+    // ... setup with allow_backorder: true, quantity: 5, stock: 2
+    const adjustments = await service.atomicDecrementInventory(input);
+
+    expect(adj.stocked_quantity).toBe(-3); // 2 - 5 = -3 (negative = backorder)
+    expect(adj.available_quantity).toBe(0); // clamped for storefront
+    const expectedDelta = adj.previous_stocked_quantity - adj.stocked_quantity;
+    expect(expectedDelta).toBe(5); // quantity requested
+});
+```
+
+Also added `clampAvailability` unit tests (4 tests) covering positive values, negative values, zero, null, and undefined.
+
+---
+
+### Fix #2: AC3 Event Payload - Added `delta` and `new_stock` Fields
+
+**File:** `apps/backend/src/workflows/create-order-from-stripe.ts:530-544`
+
+Updated the backorder event payload to include all AC3-required fields:
+
+```typescript
+const backorderEventData = transform({ backorderedItems, order }, (data) => ({
+    eventName: "inventory.backordered" as const,
+    data: {
+        order_id: data.order?.id,
+        items: data.backorderedItems.map((adj: InventoryAdjustment) => ({
+            variant_id: adj.variant_id,
+            inventory_item_id: adj.inventory_item_id,
+            location_id: adj.location_id,
+            delta: adj.previous_stocked_quantity - adj.stocked_quantity, // AC3: quantity decremented
+            new_stock: adj.stocked_quantity, // AC3: resulting stock level
+            previous_stocked_quantity: adj.previous_stocked_quantity,
+            available_quantity: adj.available_quantity,
+        })),
+    },
+}));
+```
+
+---
+
+### Fix #4 & #6: Removed Dead Code from Availability Helper
+
+**File:** `apps/backend/src/lib/inventory/availability.ts`
+
+Removed unused `formatSafeInventoryLevels` function that had `any[]` typing. Kept only the essential `clampAvailability` function with proper JSDoc:
+
+```typescript
+/**
+ * Clamps inventory availability to 0 for storefront/backend read paths.
+ * Prevents negative numbers from being surfaced as "false stock" to users.
+ *
+ * @param quantity - The raw stocked_quantity value (may be negative for backorders)
+ * @returns The clamped quantity (minimum 0)
+ */
+export function clampAvailability(quantity: number | null | undefined): number {
+    if (quantity === null || quantity === undefined) {
+        return 0;
+    }
+    return Math.max(0, quantity);
+}
+```
+
+---
+
+### Fix #5: Subscriber Error Handling and Proper Typing
+
+**File:** `apps/backend/src/subscribers/inventory-backordered.ts`
+
+Added:
+1. **TypeScript interfaces** for event payload (`BackorderedItem`, `InventoryBackorderedEventData`)
+2. **Input validation** for `data.order_id` and `data.items`
+3. **Try/catch error handling** that logs errors but doesn't throw (prevents blocking order flow)
+
+```typescript
+interface BackorderedItem {
+    variant_id: string;
+    inventory_item_id: string;
+    location_id: string;
+    delta: number;
+    new_stock: number;
+    previous_stocked_quantity: number;
+    available_quantity: number;
+}
+
+export default async function inventoryBackorderedSubscriber({
+    event: { data },
+    container,
+}: SubscriberArgs<InventoryBackorderedEventData>) {
+    const logger = container.resolve("logger")
+
+    // Input validation
+    if (!data || !data.order_id) {
+        logger.error("[Subscriber][inventory.backordered] Invalid event data: missing order_id")
+        return
+    }
+
+    try {
+        // ... process items
+    } catch (error) {
+        logger.error(
+            `[Subscriber][inventory.backordered] Error processing backorder for order ${data.order_id}:`,
+            error instanceof Error ? error.message : error
+        )
+    }
+}
+```
+
+---
+
+### Fix #8: JSDoc Documentation for InventoryAdjustment Interface
+
+**File:** `apps/backend/src/services/inventory-decrement-logic.ts:16-35`
+
+Added comprehensive JSDoc documentation:
+
+```typescript
+/**
+ * Represents an inventory adjustment prepared for decrement.
+ * Used by the workflow to apply inventory level updates atomically.
+ *
+ * @see AC1-AC7 (INV-02): Backorder logic with negative inventory support
+ */
+export interface InventoryAdjustment {
+    /** The product variant being adjusted */
+    variant_id: string;
+    /** The inventory item ID in Medusa's inventory module */
+    inventory_item_id: string;
+    /** The stock location where inventory is being decremented */
+    location_id: string;
+    /** The new stock level after decrement (may be negative if allow_backorder=true) */
+    stocked_quantity: number;
+    /** The stock level before this decrement */
+    previous_stocked_quantity: number;
+    /** The clamped availability for storefront display (always >= 0) */
+    available_quantity: number;
+}
+```
