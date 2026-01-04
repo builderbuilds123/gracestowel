@@ -95,7 +95,7 @@ Pending for full backorder feature:
 2. **Logic**: Refactored `InventoryDecrementService` to respect the `allow_backorder` flag fetched via `pg_connection`. It now permits negative `stocked_quantity` only when the flag is enabled.
 3. **Events**: Automated emission of `inventory.backordered` within the workflow whenever stock dips below zero.
 4. **Safety**: Implemented `clampAvailability` helper to prevent the storefront from showing negative stock as positive/available.
-5. **Verification**: Added and verified 4 unit tests covering preferred locations, backorder-allowed (negative stock permitted), and backorder-blocked (throwing `InsufficientStockError`).
+5. **Verification**: Added and verified 9 unit tests covering preferred locations, backorder-allowed (negative stock permitted), backorder-blocked (throwing `InsufficientStockError`), AC7 reservation checks, and clampAvailability helper.
 6. **Scope Refactor**: Moved the Admin UI toggle implementation to a dedicated story `INV-03` to separate backend logic from frontend extensions.
 
 ---

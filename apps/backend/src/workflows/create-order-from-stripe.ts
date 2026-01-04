@@ -521,7 +521,7 @@ export const createOrderFromStripeWorkflow = createWorkflow(
             data.inventoryAdjustments && data.inventoryAdjustments.length > 0
         );
 
-        // Step 4b: Emit inventory.backordered event for items that went negative (AC4)
+        // Step 4b: Emit inventory.backordered event for items that went negative (AC3)
         const backorderedItems = transform({ inventoryAdjustments }, (data) =>
             (data.inventoryAdjustments || []).filter(
                 (adj: InventoryAdjustment) => adj.stocked_quantity < 0
