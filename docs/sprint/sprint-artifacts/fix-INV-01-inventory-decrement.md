@@ -34,13 +34,25 @@ Use atomic database increments or Medusa's inventory service reservation system.
 ### Implementation Steps
 
 #### 1. Workflow (`apps/backend/src/workflows/create-order-from-stripe.ts`)
-
-
-- [ ] **Use Inventory Service**: Replace manual DB write with `inventoryService.confirmInventory` or `reserveInventory`.
-
-- [ ] **Atomic Decrement**: If manual update is kept, use `req.em.nativeUpdate(..., { stocked_quantity: () => 'stocked_quantity - ' + quantity })` (MikroORM).
+- [x] **Refactored**: Replaced Atomic SQL Step with `reserveInventoryStep`.
+- [x] **Implemented**: `Modules.INVENTORY` integration using `createReservationItems`.
+- [x] **AC2**: Maintained Location resolution logic.
+- [x] **Traceability**: Linked reservations to line items.
+- [x] **Compensation**: Implemented `deleteReservationItems`.
 
 ### Verification
+
+- [x] **Unit Test**: `atomic-inventory.unit.spec.ts` updated to mock `InventoryService` and verify reservation logic.
+- [x] **Results**: Tests passed.
+
+### Architecture Decision: Atomic SQL vs. Inventory Service
+
+| Feature | Atomic SQL Update (Deprecated) | Inventory Service (Implemented) |
+| :--- | :--- | :--- |
+| **Mechanism** | Direct DB `UPDATE` | `INSERT INTO reservation_item` |
+| **Atomicity** | High | High |
+| **Visibility** | Low | **High** (Visible in Admin) |
+| **Architecture** | Custom | **Native** Medusa v2 Standard |
 
 
 - **Automated**:

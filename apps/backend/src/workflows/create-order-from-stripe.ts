@@ -5,7 +5,7 @@ import {
     WorkflowResponse,
     transform,
 } from "@medusajs/framework/workflows-sdk";
-import { createOrdersWorkflow, updateInventoryLevelsStep } from "@medusajs/core-flows";
+import { createOrdersWorkflow } from "@medusajs/core-flows";
 import type { UpdateInventoryLevelInput } from "@medusajs/types";
 import { Modules } from "@medusajs/framework/utils";
 import { modificationTokenService } from "../services/modification-token";
@@ -217,20 +217,51 @@ interface CartItemForInventory {
 /**
  * Step to prepare inventory adjustments from cart items
  */
-const prepareInventoryAdjustmentsStep = createStep(
-    "prepare-inventory-adjustments",
-    async (input: { cartItems: CartItemForInventory[] }, { container }) => {
+/**
+ * Step to reserve inventory (Fix-INV-01)
+ * Addresses:
+ * - Race conditions (atomic inserts via InventoryService)
+ * - Negative inventory (Service handles availability checks)
+ * - Location selection (Access via sales channel)
+ * - Traceability (Links reservation to line item)
+ */
+const reserveInventoryStep = createStep(
+    "reserve-inventory",
+    async (input: { items: { variant_id: string; quantity: number; line_item_id?: string }[], salesChannelId: string }, { container }) => {
         const query = container.resolve("query");
-        const adjustments: UpdateInventoryLevelInput[] = [];
+        const inventoryService = container.resolve(Modules.INVENTORY);
+        const reservationIds: string[] = [];
+        
+        // 1. Resolve Location from Sales Channel (AC2)
+        let validLocationIds: string[] = [];
+        if (input.salesChannelId) {
+             try {
+                // Reverse query: Get Sales Channel and its stock locations
+                const { data: salesChannels } = await query.graph({
+                    entity: "sales_channel",
+                    fields: ["stock_locations.id"],
+                    filters: { id: input.salesChannelId },
+                });
+                
+                if (salesChannels.length && salesChannels[0].stock_locations) {
+                    validLocationIds = salesChannels[0].stock_locations.map((sl: any) => sl.id);
+                }
+             } catch (e) {
+                console.warn(`[Inventory] Failed to resolve locations for sales channel ${input.salesChannelId}, falling back to all locations.`);
+             }
+        }
 
-        for (const item of input.cartItems) {
+        // Batched reservation input
+        const reservationInputs: any[] = [];
+
+        for (const item of input.items) {
             if (!item.variant_id) continue;
 
             try {
-                // Get the inventory item linked to this variant
+                // 2. Get the inventory item linked to this variant
                 const { data: variants } = await query.graph({
                     entity: "product_variant",
-                    fields: ["id", "inventory_items.inventory_item_id"],
+                    fields: ["inventory_items.inventory_item_id"],
                     filters: { id: item.variant_id },
                 });
 
@@ -241,32 +272,75 @@ const prepareInventoryAdjustmentsStep = createStep(
 
                 if (!inventoryItemId) continue;
 
-                // Get the stock location for this inventory item
+                // 3. Find inventory level / location
+                // Filter by validLocationIds if available (AC2)
+                const locationFilter: any = { inventory_item_id: inventoryItemId };
+                if (validLocationIds.length > 0) {
+                    locationFilter.location_id = validLocationIds;
+                }
+
                 const { data: inventoryLevels } = await query.graph({
                     entity: "inventory_level",
-                    fields: ["id", "location_id", "inventory_item_id", "stocked_quantity"],
-                    filters: { inventory_item_id: inventoryItemId },
+                    fields: ["id", "location_id"],
+                    filters: locationFilter,
                 });
 
-                if (!inventoryLevels.length) continue;
+                if (!inventoryLevels.length) {
+                     throw new Error(`Item ${inventoryItemId} not stocked in any valid location for Sales Channel ${input.salesChannelId || 'default'}`);
+                }
 
+                // Strategy: Pick the first valid location (Simple strategy).
                 const locationId = inventoryLevels[0].location_id;
 
-                // Get current stocked quantity
-                const currentStockedQuantity = inventoryLevels[0].stocked_quantity || 0;
-
-                // Add update to reduce stock
-                adjustments.push({
+                // Prepare input for batch creation
+                reservationInputs.push({
                     inventory_item_id: inventoryItemId,
                     location_id: locationId,
-                    stocked_quantity: currentStockedQuantity - item.quantity, // Reduce stock
+                    quantity: item.quantity,
+                    line_item_id: item.line_item_id, // Link to order line item
+                    description: "Order Created from Stripe",
+                    metadata: {
+                        source: "create-order-from-stripe"
+                    }
                 });
-            } catch (error) {
-                console.error(`Error preparing inventory adjustment for variant ${item.variant_id}:`, error);
+
+            } catch (error: any) {
+                console.error(`[Inventory] Error preparing reservation for variant ${item.variant_id}:`, error);
+                throw new Error(`Failed to prepare inventory reservation for variant ${item.variant_id}: ${error.message}`); 
             }
         }
 
-        return new StepResponse(adjustments);
+        if (reservationInputs.length > 0) {
+            try {
+                // 4. Batch Create Reservations
+                // Use createReservationItems (plural) for efficiency and atomicity
+                const reservations = await inventoryService.createReservationItems(reservationInputs);
+                
+                // Map results to IDs
+                // Handle case where result might be single object or array
+                const result = Array.isArray(reservations) ? reservations : [reservations];
+                result.forEach((res: any) => reservationIds.push(res.id));
+                
+                console.log(`[Inventory] Created ${reservationIds.length} reservations.`);
+            } catch (error: any) {
+                console.error(`[Inventory] Batch reservation failed:`, error);
+                throw new Error(`Failed to create inventory reservations: ${error.message}`);
+            }
+        }
+
+        return new StepResponse(reservationIds);
+    },
+    // Compensation: Delete reservations if workflow fails
+    async (reservationIds, { container }) => {
+        if (!reservationIds || !Array.isArray(reservationIds) || reservationIds.length === 0) return;
+        const inventoryService = container.resolve(Modules.INVENTORY);
+
+        try {
+            await inventoryService.deleteReservationItems(reservationIds);
+            console.log(`[Inventory] Compensation: Deleted ${reservationIds.length} reservations`);
+        } catch (err) {
+            console.error(`[Inventory] Failed to delete reservations during compensation`, err);
+        }
     }
 );
 
@@ -487,31 +561,23 @@ export const createOrderFromStripeWorkflow = createWorkflow(
             input: orderData,
         });
 
-        // Step 3: Prepare inventory adjustments from cart items
-        // Use items from the prepared order data (which came from authoritative cart)
-        const cartItemsInput = transform({ orderData }, (data) => ({
-            cartItems: data.orderData.items.map(item => ({
-                variant_id: item.variant_id,
+        // Step 3: Reserve Inventory
+        // Use items from the created order to ensure we have line_item_ids for traceability
+        const reservationInput = transform({ order, orderData }, (data) => ({
+            items: (data.order?.items || []).map(item => ({
+                variant_id: item.variant_id || "", 
                 quantity: item.quantity,
-            }))
+                line_item_id: item.id
+            })),
+            salesChannelId: data.orderData.sales_channel_id || data.order?.sales_channel_id || ""
         }));
-        const inventoryAdjustments = prepareInventoryAdjustmentsStep(cartItemsInput);
 
-        // Step 4: Update inventory levels (decrement stock)
-        const shouldAdjustInventory = transform({ inventoryAdjustments }, (data) =>
-            data.inventoryAdjustments.length > 0
+        // Reserve inventory step (replaces atomic decrement)
+        const reservationResult = reserveInventoryStep(reservationInput);
+
+        const shouldAdjustInventory = transform({ reservationResult }, (data) => 
+            data.reservationResult && data.reservationResult.length > 0
         );
-
-        // Only adjust if there are adjustments to make
-        const adjustedInventory = transform({ inventoryAdjustments, shouldAdjustInventory }, (data) => {
-            if (data.shouldAdjustInventory) {
-                return data.inventoryAdjustments;
-            }
-            return [];
-        });
-
-        // Call the inventory update step
-        updateInventoryLevelsStep(adjustedInventory);
 
         // Step 5: PAY-01 - Create PaymentCollection for canonical payment tracking
         const paymentCollectionInput = transform({ order, input, orderData }, (data) => ({

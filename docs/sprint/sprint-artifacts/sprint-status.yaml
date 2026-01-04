@@ -432,7 +432,10 @@ development_status:
     status: done
   fix-INV-01-inventory-decrement:
     path: docs/sprint/sprint-artifacts/fix-INV-01-inventory-decrement.md
-    status: ready-for-dev
+    status: done
+  inv-02-backorder-negative-inventory:
+    path: docs/sprint/sprint-artifacts/inv-02-backorder-negative-inventory.md
+    status: drafted
   fix-REL-01-idempotency-key:
     path: docs/sprint/sprint-artifacts/fix-REL-01-idempotency-key.md
     status: done
