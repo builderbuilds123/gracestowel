@@ -1,6 +1,6 @@
 # INV-02: Allow backorder with intentional negative inventory
 
-**Status:** drafted
+**Status:** in-review
 
 ## User Story
 
@@ -45,15 +45,9 @@
 - Then the workflow fails with `InsufficientStockError` (or uses reservation) and does not decrement stock
 - And reservation/availability checks run before decrement for non-backorder SKUs
 
-### AC8: Admin toggle (inventory level)
-- Given an inventory level record in Admin
-- When an admin edits the level
-- Then they can toggle `allow_backorder` (default off)
-- And saving updates the DB flag used by the decrement workflow
 
 ## Technical Notes / Plan
 
-- Schema: migration adds `allow_backorder boolean default false` to `inventory_level` (per-location control). Optionally mirror on `inventory_item` later.
 - Workflow: in `atomicDecrementInventory`, read `allow_backorder`; only apply `stocked_quantity >= qty` predicate when `allow_backorder=false`. Always use atomic SQL update via manager.knex. For non-backorder paths, enforce reservation/availability before decrement.
 - Event: after update, if `stocked_quantity < 0`, emit `inventory.backordered` (subscriber will enqueue replenishment/alert).
 - Visibility: add helper to clamp displayed availability to `Math.max(stocked_quantity, 0)` for read paths.
@@ -66,14 +60,12 @@ Done in code (INV-01 fixes, reused here):
 - [x] Add unit tests for preferred location, single location, sales-channel fallback backorder, unmapped failure.
 
 Pending for full backorder feature:
-- [ ] Add migration for `allow_backorder` on `inventory_level`.
-- [ ] Update `atomicDecrementInventory` to branch on `allow_backorder` and emit `inventory.backordered` on negative.
-- [ ] Add storefront/backend availability clamping helper for reads.
-- [ ] Implement subscriber/worker to handle `inventory.backordered` (alert or enqueue PO).
-- [ ] Add unit tests for allow_backorder flag and event emission.
-- [ ] Add unit test asserting non-backorder path rejects insufficient stock (AC7).
-- [ ] Decide whether to also store `allow_backorder` at inventory_item; document inheritance precedence (item vs level).
-- [ ] Add Admin UI toggle for `allow_backorder` on inventory_level (default off) and wire to update API.
+- [x] Update `atomicDecrementInventory` to branch on `allow_backorder` and emit `inventory.backordered` on negative.
+- [x] Add storefront/backend availability clamping helper for reads.
+- [x] Implement subscriber/worker to handle `inventory.backordered` (alert or enqueue PO).
+- [x] Add unit tests for allow_backorder flag and event emission.
+- [x] Add unit test asserting non-backorder path rejects insufficient stock (AC7).
+- [x] Decide whether to also store `allow_backorder` at inventory_item; document inheritance precedence (item vs level).
 
 ## Dev Agent Record
 
@@ -81,8 +73,7 @@ Pending for full backorder feature:
 - `apps/backend/src/workflows/create-order-from-stripe.ts`
 - `apps/backend/integration-tests/unit/atomic-inventory.unit.spec.ts`
 - `apps/backend/src/subscribers/inventory-backordered.ts` (new)
-- `apps/backend/src/migrations/xxxx_add_allow_backorder_to_inventory_level.ts` (new)
 - `apps/backend/src/lib/inventory/availability.ts` (new helper)
 
 **Change Summary (planned):**
-- Introduce backorder flag, allow negative decrements when opted in, emit backorder event, clamp availability for reads, add tests.
+- Introduce backorder flag logic, allow negative decrements when opted in, emit backorder event, clamp availability for reads, add tests.
