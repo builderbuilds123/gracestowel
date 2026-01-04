@@ -5,10 +5,13 @@ import {
     WorkflowResponse,
     transform,
 } from "@medusajs/framework/workflows-sdk";
-import { createOrdersWorkflow, updateInventoryLevelsStep } from "@medusajs/core-flows";
+import { createOrdersWorkflow } from "@medusajs/core-flows";
 import type { UpdateInventoryLevelInput } from "@medusajs/types";
+import type { MedusaContainer } from "@medusajs/framework/types";
 import { Modules } from "@medusajs/framework/utils";
 import { modificationTokenService } from "../services/modification-token";
+import { InsufficientStockError } from "./add-item-to-order";
+import { logger } from "../utils/logger";
 
 /**
  * Input for the create-order-from-stripe workflow
@@ -217,56 +220,187 @@ interface CartItemForInventory {
 /**
  * Step to prepare inventory adjustments from cart items
  */
-const prepareInventoryAdjustmentsStep = createStep(
-    "prepare-inventory-adjustments",
-    async (input: { cartItems: CartItemForInventory[] }, { container }) => {
-        const query = container.resolve("query");
-        const adjustments: UpdateInventoryLevelInput[] = [];
+interface AtomicInventoryInput {
+    cartItems: CartItemForInventory[];
+    preferredLocationIds?: string[];
+}
 
-        for (const item of input.cartItems) {
-            if (!item.variant_id) continue;
+/**
+ * Inventory level data structure from Medusa query
+ */
+interface InventoryLevelData {
+    id: string;
+    location_id: string;
+    stocked_quantity: number | null;
+}
 
-            try {
-                // Get the inventory item linked to this variant
-                const { data: variants } = await query.graph({
-                    entity: "product_variant",
-                    fields: ["id", "inventory_items.inventory_item_id"],
-                    filters: { id: item.variant_id },
-                });
+/**
+ * Knex query builder interface for inventory updates
+ */
+interface KnexQueryBuilder {
+    where(conditions: Record<string, string>): KnexQueryBuilder;
+    andWhere(column: string, operator: string, value: number): KnexQueryBuilder;
+    update(data: Record<string, unknown>, returning?: string[]): Promise<Array<{ id: string; stocked_quantity: number }>>;
+}
 
-                if (!variants.length) continue;
+/**
+ * Manager interface for raw database access
+ */
+interface DatabaseManager {
+    knex(table: string): KnexQueryBuilder;
+}
 
-                const variant = variants[0];
-                const inventoryItemId = variant.inventory_items?.[0]?.inventory_item_id;
+// Extend DatabaseManager.knex with static methods
+interface KnexStatic {
+    (table: string): KnexQueryBuilder;
+    raw(sql: string, bindings: unknown[]): unknown;
+    fn: { now(): unknown };
+}
 
-                if (!inventoryItemId) continue;
+export const atomicDecrementInventory = async (
+    input: AtomicInventoryInput,
+    container: MedusaContainer
+): Promise<Array<{ inventoryItemId: string; locationId: string; quantity: number }>> => {
+    const query = container.resolve("query");
+    const manager = container.resolve("manager") as { knex: KnexStatic };
+    const adjustments: Array<{ inventoryItemId: string; locationId: string; quantity: number }> = [];
+    const preferred = new Set(input.preferredLocationIds?.filter(Boolean) ?? []);
 
-                // Get the stock location for this inventory item
-                const { data: inventoryLevels } = await query.graph({
-                    entity: "inventory_level",
-                    fields: ["id", "location_id", "inventory_item_id", "stocked_quantity"],
-                    filters: { inventory_item_id: inventoryItemId },
-                });
-
-                if (!inventoryLevels.length) continue;
-
-                const locationId = inventoryLevels[0].location_id;
-
-                // Get current stocked quantity
-                const currentStockedQuantity = inventoryLevels[0].stocked_quantity || 0;
-
-                // Add update to reduce stock
-                adjustments.push({
-                    inventory_item_id: inventoryItemId,
-                    location_id: locationId,
-                    stocked_quantity: currentStockedQuantity - item.quantity, // Reduce stock
-                });
-            } catch (error) {
-                console.error(`Error preparing inventory adjustment for variant ${item.variant_id}:`, error);
-            }
+    for (const item of input.cartItems) {
+        if (!item.variant_id) {
+            continue;
         }
 
+        if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
+            throw new Error(`Invalid quantity for variant ${item.variant_id}: ${item.quantity}`);
+        }
+
+        try {
+            const { data: variants } = await query.graph({
+                entity: "product_variant",
+                fields: ["inventory_items.inventory_item_id"],
+                filters: { id: item.variant_id },
+            });
+
+            const inventoryItemId = variants[0]?.inventory_items?.[0]?.inventory_item_id;
+
+            if (!inventoryItemId) {
+                throw new InsufficientStockError(item.variant_id, 0, item.quantity);
+            }
+
+            const { data: inventoryLevels } = await query.graph({
+                entity: "inventory_level",
+                fields: ["id", "location_id", "stocked_quantity"],
+                filters: { inventory_item_id: inventoryItemId },
+            });
+
+            if (!inventoryLevels.length) {
+                throw new InsufficientStockError(item.variant_id, 0, item.quantity);
+            }
+
+            const preferredLevels = inventoryLevels.filter((lvl: InventoryLevelData) =>
+                preferred.has(lvl.location_id)
+            );
+
+            let level: InventoryLevelData | undefined;
+            if (preferred.size > 0) {
+                level = preferredLevels.sort(
+                    (a: InventoryLevelData, b: InventoryLevelData) => (b.stocked_quantity ?? 0) - (a.stocked_quantity ?? 0)
+                )[0];
+                if (!level) {
+                    throw new InsufficientStockError(item.variant_id, 0, item.quantity);
+                }
+            } else if (inventoryLevels.length === 1) {
+                level = inventoryLevels[0];
+            } else {
+                // Multiple locations but no explicit stock_location_id from shipping method: unsafe to pick arbitrarily
+                throw new Error(
+                    `No stock_location_id provided for variant ${item.variant_id} with multiple locations`
+                );
+            }
+
+            const available = level.stocked_quantity ?? 0;
+            if (available < item.quantity) {
+                throw new InsufficientStockError(item.variant_id, available, item.quantity);
+            }
+
+            const updated = await manager
+                .knex("inventory_level")
+                .where({ inventory_item_id: inventoryItemId, location_id: level.location_id })
+                .andWhere("stocked_quantity", ">=", item.quantity)
+                .update(
+                    {
+                        stocked_quantity: manager.knex.raw("stocked_quantity - ?", [item.quantity]),
+                        updated_at: manager.knex.fn.now(),
+                    },
+                    ["id", "stocked_quantity"]
+                );
+
+            if (!updated || updated.length === 0) {
+                throw new InsufficientStockError(item.variant_id, available, item.quantity);
+            }
+
+            logger.info("inventory", "Atomically decremented inventory", {
+                quantity: item.quantity,
+                inventoryItemId,
+                locationId: level.location_id,
+                variantId: item.variant_id,
+            });
+            adjustments.push({ inventoryItemId, locationId: level.location_id, quantity: item.quantity });
+        } catch (error) {
+            logger.error("inventory", "Failed to atomically decrement inventory", {
+                variantId: item.variant_id,
+                quantity: item.quantity,
+            }, error instanceof Error ? error : new Error(String(error)));
+            throw error;
+        }
+    }
+
+    return adjustments;
+};
+
+/**
+ * Step to atomically decrement inventory
+ */
+const atomicDecrementInventoryStep = createStep(
+    "atomic-decrement-inventory",
+    async (input: AtomicInventoryInput, { container }) => {
+        const adjustments = await atomicDecrementInventory(input, container);
         return new StepResponse(adjustments);
+    },
+    // Compensation function to restore inventory if workflow fails later
+    async (adjustments, { container }) => {
+        if (!adjustments || !Array.isArray(adjustments)) return;
+        const manager = container.resolve("manager") as { knex: KnexStatic };
+
+        for (const adj of adjustments) {
+            try {
+                await manager
+                    .knex("inventory_level")
+                    .where({ inventory_item_id: adj.inventoryItemId, location_id: adj.locationId })
+                    .update({
+                        stocked_quantity: manager.knex.raw("stocked_quantity + ?", [adj.quantity]),
+                        updated_at: manager.knex.fn.now(),
+                    });
+                logger.info("inventory", "Compensation: Restored inventory", {
+                    quantity: adj.quantity,
+                    inventoryItemId: adj.inventoryItemId,
+                    locationId: adj.locationId,
+                });
+            } catch (err) {
+                logger.error("inventory", "Compensation failed: Could not restore inventory", {
+                    inventoryItemId: adj.inventoryItemId,
+                    locationId: adj.locationId,
+                    quantity: adj.quantity,
+                }, err instanceof Error ? err : new Error(String(err)));
+                // Emit metric for monitoring compensation failures
+                logger.warn("inventory", "[METRIC] inventory_compensation_failed", {
+                    inventoryItemId: adj.inventoryItemId,
+                    locationId: adj.locationId,
+                    quantity: adj.quantity,
+                });
+            }
+        }
     }
 );
 
@@ -487,31 +621,24 @@ export const createOrderFromStripeWorkflow = createWorkflow(
             input: orderData,
         });
 
-        // Step 3: Prepare inventory adjustments from cart items
+        // Step 3: Atomically decrement inventory
         // Use items from the prepared order data (which came from authoritative cart)
         const cartItemsInput = transform({ orderData }, (data) => ({
             cartItems: data.orderData.items.map(item => ({
                 variant_id: item.variant_id,
                 quantity: item.quantity,
-            }))
+            })),
+            preferredLocationIds: (data.orderData.shipping_methods || [])
+                .map((method: any) => method?.data?.stock_location_id)
+                .filter((id: string | undefined): id is string => Boolean(id)),
         }));
-        const inventoryAdjustments = prepareInventoryAdjustmentsStep(cartItemsInput);
 
-        // Step 4: Update inventory levels (decrement stock)
-        const shouldAdjustInventory = transform({ inventoryAdjustments }, (data) =>
-            data.inventoryAdjustments.length > 0
+        // Atomic inventory update step (replaces prepare + update steps)
+        const inventoryResult = atomicDecrementInventoryStep(cartItemsInput);
+
+        const shouldAdjustInventory = transform({ inventoryResult }, (data) => 
+            data.inventoryResult && data.inventoryResult.length > 0
         );
-
-        // Only adjust if there are adjustments to make
-        const adjustedInventory = transform({ inventoryAdjustments, shouldAdjustInventory }, (data) => {
-            if (data.shouldAdjustInventory) {
-                return data.inventoryAdjustments;
-            }
-            return [];
-        });
-
-        // Call the inventory update step
-        updateInventoryLevelsStep(adjustedInventory);
 
         // Step 5: PAY-01 - Create PaymentCollection for canonical payment tracking
         const paymentCollectionInput = transform({ order, input, orderData }, (data) => ({
