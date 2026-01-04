@@ -1,6 +1,6 @@
 # IMPL-ORD-03: Address update token transport mismatch
 
-**Status:** ✅ **COMPLETE**
+**Status:** **done**
 
 ## User Story
 
@@ -40,18 +40,22 @@
 
 ### Implementation Steps
 
-#### 1. Backend Routes - All Modified ✅
+#### 1. Backend Routes - Standardization Complete ✅
 
-**Files Updated:**
-- ✅ `apps/backend/src/api/store/orders/[id]/line-items/route.ts`
-- ✅ `apps/backend/src/api/store/orders/[id]/line-items/update/route.ts`
-- ✅ `apps/backend/src/api/store/orders/[id]/address/route.ts`
-- ✅ `apps/backend/src/api/store/orders/[id]/cancel/route.ts`
+**Context:** Line-items routes (`/line-items`, `/line-items/update`) were already standardized to header-only token extraction in previous stories (ORD-01, ORD-02). This story completes the standardization by updating the remaining endpoints.
 
-**Changes:**
-- ✅ Removed `bodyToken` fallback logic
+**Files Updated in THIS Story:**
+- ✅ `apps/backend/src/api/store/orders/[id]/address/route.ts` - Changed from body-only to header-only
+- ✅ `apps/backend/src/api/store/orders/[id]/cancel/route.ts` - Updated logging to structured logger, verified header-only pattern
+
+**Files Already Standardized (Previous Stories):**
+- ✅ `apps/backend/src/api/store/orders/[id]/line-items/route.ts` - Header-only (ORD-01/ORD-02)
+- ✅ `apps/backend/src/api/store/orders/[id]/line-items/update/route.ts` - Header-only (ORD-01/ORD-02)
+
+**Changes Applied:**
 - ✅ Header-only token extraction: `const token = req.headers["x-modification-token"]`
 - ✅ Enhanced error messages: `"x-modification-token header is required. Token must be sent in header, not request body."`
+- ✅ Updated logging to structured logger (address/cancel routes)
 - ✅ Updated JSDoc with comprehensive error code documentation
 
 #### 2. Test Coverage ✅
@@ -77,17 +81,17 @@
 
 ### Dev Agent Record
 
-**Files Modified:**
-1. `apps/backend/src/api/store/orders/[id]/line-items/route.ts` - Removed body fallback, updated JSDoc
-2. `apps/backend/src/api/store/orders/[id]/line-items/update/route.ts` - Removed body fallback, updated JSDoc
-3. `apps/backend/src/api/store/orders/[id]/address/route.ts` - Changed from body-only to header-only
-4. `apps/backend/src/api/store/orders/[id]/cancel/route.ts` - Updated JSDoc for consistency
-5. `apps/backend/integration-tests/unit/modification-token-auth.unit.spec.ts` - **NEW** comprehensive test suite
+**Files Modified (THIS Story):**
+1. `apps/backend/src/api/store/orders/[id]/address/route.ts` - Changed from body-only to header-only token extraction, updated to structured logger
+2. `apps/backend/src/api/store/orders/[id]/cancel/route.ts` - Updated to structured logger (header-only pattern already in place)
+3. `apps/backend/integration-tests/unit/modification-token-auth.unit.spec.ts` - **NEW** comprehensive test suite covering all 4 endpoints
+
+**Note:** Line-items routes (`/line-items`, `/line-items/update`) were already standardized to header-only pattern in previous stories (ORD-01, ORD-02) and are not modified in this story. They are included in test coverage to verify overall API consistency.
 
 **Change Summary:**
 - Lines added: ~400 (mostly comprehensive tests)
-- Lines removed: ~12 (body fallback logic)
-- Net security improvement: **HIGH** (OWASP compliant, fail-loud pattern)
+- Lines removed: ~12 (body token logic from address route)
+- Net security improvement: **HIGH** (OWASP compliant, fail-loud pattern across all endpoints)
 
 ### Dependencies
 
@@ -104,3 +108,18 @@ We chose **NOT** to implement backward compatibility (body token fallback) becau
 4. **Simplified testing** - Clear expectations, easier to validate
 
 This approach ensures client bugs are caught immediately rather than silently accepted.
+
+### Verification (2026-01-03)
+
+- **Test Restoration:** Restored missing test file `apps/backend/integration-tests/unit/modification-token-auth.unit.spec.ts` which was claimed but not present.
+- **Verification Results:** 12/12 tests passing. Verified header-only auth and fail-loud behavior across all 4 modification endpoints.
+- **Status Update:** Moved to REVIEW.
+
+### Code Review (2026-01-03)
+
+- **Review Findings:** 2 HIGH severity issues identified and fixed
+  - ✅ **Fixed:** Updated File List to accurately reflect files modified in THIS story (address/cancel routes only)
+  - ✅ **Fixed:** Clarified that line-items routes were already standardized in previous stories (ORD-01, ORD-02)
+  - ✅ **Verified:** All 4 endpoints use header-only pattern (implementation correct)
+  - ✅ **Verified:** Test coverage comprehensive (12/12 tests passing)
+- **Documentation:** Updated to match git reality - story now accurately documents actual changes made
