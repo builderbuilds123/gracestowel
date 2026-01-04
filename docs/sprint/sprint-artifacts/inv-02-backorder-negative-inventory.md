@@ -85,10 +85,13 @@ Pending for full backorder feature:
 
 **Files Modified/Created:**
 - `apps/backend/src/services/inventory-decrement-logic.ts` (Modified: Added `pg_connection` and backorder logic)
-- `apps/backend/src/workflows/create-order-from-stripe.ts` (Modified: Emits `inventory.backordered` event)
-- `apps/backend/integration-tests/unit/atomic-inventory.unit.spec.ts` (Modified: Comprehensive backorder unit tests)
+- `apps/backend/src/workflows/create-order-from-stripe.ts` (Modified: Emits `inventory.backordered` event, fixed AC comment)
+- `apps/backend/integration-tests/unit/atomic-inventory.unit.spec.ts` (Modified: Comprehensive backorder unit tests, enhanced AC7 test)
 - `apps/backend/src/subscribers/inventory-backordered.ts` (New: Event subscriber)
 - `apps/backend/src/lib/inventory/availability.ts` (New: Clamping helper)
+- `apps/storefront/app/lib/inventory.ts` (New: Storefront clampAvailability helper)
+- `apps/storefront/app/lib/medusa.ts` (Modified: Updated getStockStatus to use clampAvailability)
+- `apps/storefront/app/lib/product-transformer.ts` (Modified: Added clampAvailability to variant transformation)
 
 **Implementation Summary:**
 1. **Database**: Manually added `allow_backorder` boolean (default `false`) to `inventory_level` using `psql`.
@@ -309,3 +312,102 @@ export interface InventoryAdjustment {
     available_quantity: number;
 }
 ```
+
+---
+
+## Second Code Review (AI) - Storefront AC4 Implementation
+
+**Reviewer:** Code Review Workflow (Dev Agent)
+**Date:** 2026-01-04
+**Outcome:** ✅ FIXES APPLIED
+
+### Issues Found & Fixed
+
+| # | Severity | Issue | Resolution |
+|---|----------|-------|------------|
+| 1 | HIGH | AC4 NOT FULLY IMPLEMENTED - `clampAvailability` not used in storefront | Created `apps/storefront/app/lib/inventory.ts`, updated `product-transformer.ts` and `getStockStatus` to use clampAvailability |
+| 4 | HIGH | AC7 test doesn't verify reservation/availability checks run BEFORE decrement | Enhanced test with explicit verification that pg_connection (availability check) runs before adjustment creation |
+| 5 | HIGH | Comment mismatch: workflow references AC4 instead of AC3 | Fixed comment in `create-order-from-stripe.ts:524` from AC4 to AC3 |
+| 6 | MEDIUM | `getStockStatus` handles negatives but doesn't use `clampAvailability` helper | Updated to use clampAvailability helper for consistency |
+| 8 | LOW | Story documentation claims "4 unit tests" but 9 tests exist | Updated test count from 4 to 9 in Implementation Summary |
+
+### Fix Implementation Details
+
+#### Fix #1: AC4 Storefront Implementation
+
+**Files:**
+- `apps/storefront/app/lib/inventory.ts` (New)
+- `apps/storefront/app/lib/product-transformer.ts` (Modified)
+- `apps/storefront/app/lib/medusa.ts` (Modified)
+
+Created storefront-specific `clampAvailability` helper to ensure AC4 compliance. The helper is now used in:
+1. `transformToDetail()` - Clamps `inventory_quantity` when transforming variants for product detail pages
+2. `getStockStatus()` - Clamps quantity before determining stock status
+
+**Commit:** `c8dae5019`
+
+```typescript
+// apps/storefront/app/lib/inventory.ts
+export function clampAvailability(quantity: number | null | undefined): number {
+    if (quantity === null || quantity === undefined) {
+        return 0;
+    }
+    return Math.max(0, quantity);
+}
+```
+
+#### Fix #4: AC7 Test Enhancement
+
+**File:** `apps/backend/integration-tests/unit/atomic-inventory.unit.spec.ts`
+
+Enhanced the AC7 test to explicitly verify that availability checks (via `pg_connection`) run BEFORE any adjustment is created. Added test assertions that verify:
+- `pg_connection` is called (availability/reservation check ran)
+- Error is thrown before `adjustments.push()` (check ran BEFORE decrement)
+- Test renamed to explicitly mention AC7 requirement
+
+#### Fix #5: Comment Correction
+
+**File:** `apps/backend/src/workflows/create-order-from-stripe.ts:524`
+
+Corrected comment from "AC4" to "AC3" since event emission is AC3, not AC4 (AC4 is storefront availability masking).
+
+#### Fix #6: getStockStatus Consistency
+
+**File:** `apps/storefront/app/lib/medusa.ts`
+
+Updated `getStockStatus` to use the `clampAvailability` helper instead of inline `Math.max(0, quantity)` for consistency with the rest of the codebase.
+
+#### Fix #8: Documentation Accuracy
+
+**File:** `docs/sprint/sprint-artifacts/inv-02-backorder-negative-inventory.md:98`
+
+Updated test count from 4 to 9 to accurately reflect the actual number of unit tests (5 for InventoryDecrementService, 4 for clampAvailability).
+
+### Test Results (Post-Second Review)
+
+```
+✓ InventoryDecrementService > uses shipping preferred location when provided
+✓ InventoryDecrementService > blocks negative (backorder) when allow_backorder=false - AC7: checks run before decrement
+✓ InventoryDecrementService > allows negative (backorder) when allow_backorder=true
+✓ InventoryDecrementService > throws when no inventory item mapping exists
+✓ InventoryDecrementService > provides correct adjustment data for backorder event emission (AC5c)
+✓ clampAvailability > returns positive values unchanged
+✓ clampAvailability > clamps negative values to 0 (AC4)
+✓ clampAvailability > returns 0 for zero
+✓ clampAvailability > handles null and undefined
+
+Test Files  1 passed (1)
+     Tests  9 passed (9)
+```
+
+### AC Verification (Post-Second Review)
+
+| AC | Status | Evidence |
+|----|--------|----------|
+| AC1 | ✅ | `allow_backorder` flag read via `pg_connection`, permits negative stock |
+| AC2 | ✅ | `InsufficientStockError` thrown when `allow_backorder=false` and stock insufficient |
+| AC3 | ✅ | Event emitted with `variant_id`, `inventory_item_id`, `location_id`, `delta`, `new_stock` |
+| AC4 | ✅ | `clampAvailability()` used in storefront (`product-transformer.ts`, `getStockStatus`) - negative values clamped to 0 |
+| AC5 | ✅ | All 3 test cases covered (a, b, c) |
+| AC6 | ✅ | Location selection respects preferred/channel mapping, fails if unmapped |
+| AC7 | ✅ | Test explicitly verifies availability checks run BEFORE decrement |
