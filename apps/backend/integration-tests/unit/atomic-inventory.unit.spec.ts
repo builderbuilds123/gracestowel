@@ -1,22 +1,25 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { atomicDecrementInventory } from "../../src/workflows/create-order-from-stripe";
+import { InventoryDecrementService } from "../../src/services/inventory-decrement-logic";
 import { InsufficientStockError } from "../../src/workflows/add-item-to-order";
 
-describe("atomicDecrementInventory", () => {
+describe("InventoryDecrementService", () => {
+    let service: InventoryDecrementService;
     let container: any;
     let query: any;
+    let logger: any;
 
     beforeEach(() => {
         query = {
             graph: vi.fn(),
         };
 
-        container = {
-            resolve: vi.fn((key) => {
-                if (key === "query") return query;
-                return null;
-            }),
+        logger = {
+            info: vi.fn(),
+            error: vi.fn(),
+            warn: vi.fn(),
         };
+
+        service = new InventoryDecrementService({ logger, query });
     });
 
     it("uses shipping preferred location when provided", async () => {
@@ -55,7 +58,7 @@ describe("atomicDecrementInventory", () => {
             return { data: [] };
         });
 
-        const adjustments = await atomicDecrementInventory(input, container);
+        const adjustments = await service.atomicDecrementInventory(input);
 
         expect(adjustments).toEqual([
             {
@@ -98,7 +101,7 @@ describe("atomicDecrementInventory", () => {
             return { data: [] };
         });
 
-        const adjustments = await atomicDecrementInventory(input, container);
+        const adjustments = await service.atomicDecrementInventory(input);
 
         expect(adjustments[0]).toEqual({
             inventory_item_id: "inv_variant_1",
@@ -117,6 +120,6 @@ describe("atomicDecrementInventory", () => {
 
         query.graph.mockResolvedValue({ data: [] });
 
-        await expect(atomicDecrementInventory(input, container)).rejects.toBeInstanceOf(InsufficientStockError);
+        await expect(service.atomicDecrementInventory(input)).rejects.toBeInstanceOf(InsufficientStockError);
     });
 });
