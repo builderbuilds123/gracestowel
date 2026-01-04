@@ -4,11 +4,27 @@ import {
     StepResponse,
     WorkflowResponse,
     transform,
+    when,
 } from "@medusajs/framework/workflows-sdk";
-import { createOrdersWorkflow, updateInventoryLevelsStep } from "@medusajs/core-flows";
-import type { UpdateInventoryLevelInput } from "@medusajs/types";
+import {
+    createOrdersWorkflow,
+    updateInventoryLevelsStep,
+    acquireLockStep,
+    releaseLockStep,
+} from "@medusajs/core-flows";
 import { Modules } from "@medusajs/framework/utils";
 import { modificationTokenService } from "../services/modification-token";
+import { InsufficientStockError } from "./add-item-to-order";
+
+/**
+ * Lock configuration constants for concurrent order creation prevention
+ */
+const LOCK_CONFIG = {
+    /** Maximum time in seconds to wait for acquiring the lock */
+    TIMEOUT_SECONDS: 30,
+    /** Lock expiration time in seconds (safety mechanism) */
+    TTL_SECONDS: 120,
+} as const;
 
 /**
  * Input for the create-order-from-stripe workflow
@@ -206,66 +222,40 @@ const emitEventStep = createStep(
     }
 );
 
-/**
- * Interface for inventory adjustment input
- */
-interface CartItemForInventory {
-    variant_id: string;
-    quantity: number;
-}
+import InventoryDecrementService, { 
+    CartItemForInventory, 
+    AtomicInventoryInput, 
+    InventoryAdjustment 
+} from "../services/inventory-decrement-logic";
+
+// Logic moved to InventoryDecrementService
 
 /**
- * Step to prepare inventory adjustments from cart items
+ * Step to prepare inventory adjustments for decrement
+ *
+ * This step calculates what inventory adjustments need to be made based on cart items.
+ * The actual inventory update is performed by updateInventoryLevelsStep at the workflow level.
+ *
+ * Note: updateInventoryLevelsStep has built-in compensation that automatically restores
+ * previous inventory levels if a later step in the workflow fails.
  */
 const prepareInventoryAdjustmentsStep = createStep(
     "prepare-inventory-adjustments",
-    async (input: { cartItems: CartItemForInventory[] }, { container }) => {
-        const query = container.resolve("query");
-        const adjustments: UpdateInventoryLevelInput[] = [];
-
-        for (const item of input.cartItems) {
-            if (!item.variant_id) continue;
-
-            try {
-                // Get the inventory item linked to this variant
-                const { data: variants } = await query.graph({
-                    entity: "product_variant",
-                    fields: ["id", "inventory_items.inventory_item_id"],
-                    filters: { id: item.variant_id },
-                });
-
-                if (!variants.length) continue;
-
-                const variant = variants[0];
-                const inventoryItemId = variant.inventory_items?.[0]?.inventory_item_id;
-
-                if (!inventoryItemId) continue;
-
-                // Get the stock location for this inventory item
-                const { data: inventoryLevels } = await query.graph({
-                    entity: "inventory_level",
-                    fields: ["id", "location_id", "inventory_item_id", "stocked_quantity"],
-                    filters: { inventory_item_id: inventoryItemId },
-                });
-
-                if (!inventoryLevels.length) continue;
-
-                const locationId = inventoryLevels[0].location_id;
-
-                // Get current stocked quantity
-                const currentStockedQuantity = inventoryLevels[0].stocked_quantity || 0;
-
-                // Add update to reduce stock
-                adjustments.push({
-                    inventory_item_id: inventoryItemId,
-                    location_id: locationId,
-                    stocked_quantity: currentStockedQuantity - item.quantity, // Reduce stock
-                });
-            } catch (error) {
-                console.error(`Error preparing inventory adjustment for variant ${item.variant_id}:`, error);
-            }
+    async (input: AtomicInventoryInput, { container }) => {
+        // Address PR feedback: Delegate logic to a dedicated service
+        // Medusa v2 automatically discovers and registers services in src/services
+        let inventoryDecrementService: InventoryDecrementService;
+        try {
+            inventoryDecrementService = container.resolve("inventoryDecrementService");
+        } catch (e) {
+            // Fallback for different naming conventions or if manual instantiation is needed
+            // although registration is the standard V2 way.
+            const logger = container.resolve("logger");
+            const query = container.resolve("query");
+            inventoryDecrementService = new InventoryDecrementService({ logger, query });
         }
-
+        
+        const adjustments = await inventoryDecrementService.atomicDecrementInventory(input);
         return new StepResponse(adjustments);
     }
 );
@@ -479,6 +469,14 @@ const linkPaymentCollectionStep = createStep(
 export const createOrderFromStripeWorkflow = createWorkflow(
     "create-order-from-stripe",
     (input: CreateOrderFromStripeInput) => {
+        // Step 0: Acquire lock on PaymentIntent ID to prevent concurrent order creation
+        // This prevents race conditions when Stripe sends duplicate webhooks
+        acquireLockStep({
+            key: input.paymentIntentId,
+            timeout: LOCK_CONFIG.TIMEOUT_SECONDS,
+            ttl: LOCK_CONFIG.TTL_SECONDS,
+        });
+
         // Step 1: Prepare order data from Stripe payment
         const orderData = prepareOrderDataStep(input);
 
@@ -487,31 +485,59 @@ export const createOrderFromStripeWorkflow = createWorkflow(
             input: orderData,
         });
 
-        // Step 3: Prepare inventory adjustments from cart items
-        // Use items from the prepared order data (which came from authoritative cart)
-        const cartItemsInput = transform({ orderData }, (data) => ({
-            cartItems: data.orderData.items.map(item => ({
-                variant_id: item.variant_id,
+        // Step 3: Prepare inventory adjustments
+        const inventoryInput = transform({ orderData }, (data) => ({
+            cartItems: (data.orderData.items || []).map((item: any) => ({
+                variant_id: item.variant_id || "",
                 quantity: item.quantity,
-            }))
+            })),
+            preferredLocationIds: (data.orderData.shipping_methods || [])
+                .map((method: any) => method?.data && (method.data as any).stock_location_id)
+                .filter((id: string | undefined): id is string => Boolean(id)),
+            salesChannelId: data.orderData.sales_channel_id || null,
         }));
-        const inventoryAdjustments = prepareInventoryAdjustmentsStep(cartItemsInput);
 
-        // Step 4: Update inventory levels (decrement stock)
+        const inventoryAdjustments = prepareInventoryAdjustmentsStep(inventoryInput);
+
+        // Step 4: Apply inventory adjustments using Medusa's built-in step
+        // This step has automatic compensation (rollback) if any later step fails
+        const updateInput = transform({ inventoryAdjustments }, (data) =>
+            (data.inventoryAdjustments || []).map((adj: InventoryAdjustment) => ({
+                inventory_item_id: adj.inventory_item_id,
+                location_id: adj.location_id,
+                stocked_quantity: adj.stocked_quantity,
+            }))
+        );
+        updateInventoryLevelsStep(updateInput);
+
         const shouldAdjustInventory = transform({ inventoryAdjustments }, (data) =>
-            data.inventoryAdjustments.length > 0
+            data.inventoryAdjustments && data.inventoryAdjustments.length > 0
         );
 
-        // Only adjust if there are adjustments to make
-        const adjustedInventory = transform({ inventoryAdjustments, shouldAdjustInventory }, (data) => {
-            if (data.shouldAdjustInventory) {
-                return data.inventoryAdjustments;
-            }
-            return [];
+        // Step 4b: Emit inventory.backordered event for items that went negative (AC4)
+        const backorderedItems = transform({ inventoryAdjustments }, (data) =>
+            (data.inventoryAdjustments || []).filter(
+                (adj: InventoryAdjustment) => adj.stocked_quantity < 0
+            )
+        );
+        const backorderEventData = transform({ backorderedItems, order }, (data) => ({
+            eventName: "inventory.backordered" as const,
+            data: {
+                order_id: data.order?.id,
+                items: data.backorderedItems.map((adj: InventoryAdjustment) => ({
+                    inventory_item_id: adj.inventory_item_id,
+                    location_id: adj.location_id,
+                    stocked_quantity: adj.stocked_quantity,
+                    previous_stocked_quantity: adj.previous_stocked_quantity,
+                })),
+            },
+        }));
+        // Conditionally emit backorder event (only if there are backordered items)
+        when({ backorderedItems }, ({ backorderedItems }) => {
+            return backorderedItems && backorderedItems.length > 0;
+        }).then(() => {
+            emitEventStep(backorderEventData).config({ name: "emit-backorder-event" });
         });
-
-        // Call the inventory update step
-        updateInventoryLevelsStep(adjustedInventory);
 
         // Step 5: PAY-01 - Create PaymentCollection for canonical payment tracking
         const paymentCollectionInput = transform({ order, input, orderData }, (data) => ({
@@ -562,6 +588,12 @@ export const createOrderFromStripeWorkflow = createWorkflow(
             ...data.order,
             modification_token: data.tokenResult.token,
         }));
+
+        // Release lock after successful workflow completion
+        // Note: Lock is automatically released via compensation if workflow fails
+        releaseLockStep({
+            key: input.paymentIntentId,
+        });
 
         return new WorkflowResponse(result);
     }
