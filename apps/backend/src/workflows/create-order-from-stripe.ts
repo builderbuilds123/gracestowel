@@ -4,11 +4,27 @@ import {
     StepResponse,
     WorkflowResponse,
     transform,
+    when,
 } from "@medusajs/framework/workflows-sdk";
-import { createOrdersWorkflow } from "@medusajs/core-flows";
-import type { UpdateInventoryLevelInput } from "@medusajs/types";
+import {
+    createOrdersWorkflow,
+    updateInventoryLevelsStep,
+    acquireLockStep,
+    releaseLockStep,
+} from "@medusajs/core-flows";
 import { Modules } from "@medusajs/framework/utils";
 import { modificationTokenService } from "../services/modification-token";
+import { InsufficientStockError } from "./add-item-to-order";
+
+/**
+ * Lock configuration constants for concurrent order creation prevention
+ */
+const LOCK_CONFIG = {
+    /** Maximum time in seconds to wait for acquiring the lock */
+    TIMEOUT_SECONDS: 30,
+    /** Lock expiration time in seconds (safety mechanism) */
+    TTL_SECONDS: 120,
+} as const;
 
 /**
  * Input for the create-order-from-stripe workflow
@@ -214,134 +230,137 @@ interface CartItemForInventory {
     quantity: number;
 }
 
-/**
- * Step to prepare inventory adjustments from cart items
- */
-/**
- * Step to reserve inventory (Fix-INV-01)
- * Addresses:
- * - Race conditions (atomic inserts via InventoryService)
- * - Negative inventory (Service handles availability checks)
- * - Location selection (Access via sales channel)
- * - Traceability (Links reservation to line item)
- */
-const reserveInventoryStep = createStep(
-    "reserve-inventory",
-    async (input: { items: { variant_id: string; quantity: number; line_item_id?: string }[], salesChannelId: string }, { container }) => {
-        const query = container.resolve("query");
-        const inventoryService = container.resolve(Modules.INVENTORY);
-        const reservationIds: string[] = [];
-        
-        // 1. Resolve Location from Sales Channel (AC2)
-        let validLocationIds: string[] = [];
-        if (input.salesChannelId) {
-             try {
-                // Reverse query: Get Sales Channel and its stock locations
-                const { data: salesChannels } = await query.graph({
-                    entity: "sales_channel",
-                    fields: ["stock_locations.id"],
-                    filters: { id: input.salesChannelId },
-                });
-                
-                if (salesChannels.length && salesChannels[0].stock_locations) {
-                    validLocationIds = salesChannels[0].stock_locations.map((sl: any) => sl.id);
-                }
-             } catch (e) {
-                console.warn(`[Inventory] Failed to resolve locations for sales channel ${input.salesChannelId}, falling back to all locations.`);
-             }
-        }
+interface AtomicInventoryInput {
+    cartItems: CartItemForInventory[];
+    preferredLocationIds?: string[];
+    salesChannelId?: string | null;
+}
 
-        // Batched reservation input
-        const reservationInputs: any[] = [];
+interface InventoryAdjustment {
+    inventory_item_id: string;
+    location_id: string;
+    stocked_quantity: number;
+    previous_stocked_quantity: number;
+}
 
-        for (const item of input.items) {
-            if (!item.variant_id) continue;
-
-            try {
-                // 2. Get the inventory item linked to this variant
-                const { data: variants } = await query.graph({
-                    entity: "product_variant",
-                    fields: ["inventory_items.inventory_item_id"],
-                    filters: { id: item.variant_id },
-                });
-
-                if (!variants.length) continue;
-
-                const variant = variants[0];
-                const inventoryItemId = variant.inventory_items?.[0]?.inventory_item_id;
-
-                if (!inventoryItemId) continue;
-
-                // 3. Find inventory level / location
-                // Filter by validLocationIds if available (AC2)
-                const locationFilter: any = { inventory_item_id: inventoryItemId };
-                if (validLocationIds.length > 0) {
-                    locationFilter.location_id = validLocationIds;
-                }
-
-                const { data: inventoryLevels } = await query.graph({
-                    entity: "inventory_level",
-                    fields: ["id", "location_id"],
-                    filters: locationFilter,
-                });
-
-                if (!inventoryLevels.length) {
-                     throw new Error(`Item ${inventoryItemId} not stocked in any valid location for Sales Channel ${input.salesChannelId || 'default'}`);
-                }
-
-                // Strategy: Pick the first valid location (Simple strategy).
-                const locationId = inventoryLevels[0].location_id;
-
-                // Prepare input for batch creation
-                reservationInputs.push({
-                    inventory_item_id: inventoryItemId,
-                    location_id: locationId,
-                    quantity: item.quantity,
-                    line_item_id: item.line_item_id, // Link to order line item
-                    description: "Order Created from Stripe",
-                    metadata: {
-                        source: "create-order-from-stripe"
-                    }
-                });
-
-            } catch (error: any) {
-                console.error(`[Inventory] Error preparing reservation for variant ${item.variant_id}:`, error);
-                throw new Error(`Failed to prepare inventory reservation for variant ${item.variant_id}: ${error.message}`); 
-            }
-        }
-
-        if (reservationInputs.length > 0) {
-            try {
-                // 4. Batch Create Reservations
-                // Use createReservationItems (plural) for efficiency and atomicity
-                const reservations = await inventoryService.createReservationItems(reservationInputs);
-                
-                // Map results to IDs
-                // Handle case where result might be single object or array
-                const result = Array.isArray(reservations) ? reservations : [reservations];
-                result.forEach((res: any) => reservationIds.push(res.id));
-                
-                console.log(`[Inventory] Created ${reservationIds.length} reservations.`);
-            } catch (error: any) {
-                console.error(`[Inventory] Batch reservation failed:`, error);
-                throw new Error(`Failed to create inventory reservations: ${error.message}`);
-            }
-        }
-
-        return new StepResponse(reservationIds);
-    },
-    // Compensation: Delete reservations if workflow fails
-    async (reservationIds, { container }) => {
-        if (!reservationIds || !Array.isArray(reservationIds) || reservationIds.length === 0) return;
-        const inventoryService = container.resolve(Modules.INVENTORY);
-
-        try {
-            await inventoryService.deleteReservationItems(reservationIds);
-            console.log(`[Inventory] Compensation: Deleted ${reservationIds.length} reservations`);
-        } catch (err) {
-            console.error(`[Inventory] Failed to delete reservations during compensation`, err);
-        }
+const getSalesChannelLocationIds = async (query: any, salesChannelId?: string | null): Promise<string[]> => {
+    if (!salesChannelId) return [];
+    try {
+        const { data: salesChannels } = await query.graph({
+            entity: "sales_channel",
+            fields: ["stock_locations.stock_location_id"],
+            filters: { id: salesChannelId },
+        });
+        const channel = salesChannels?.[0];
+        const locations = channel?.stock_locations || [];
+        return locations
+            .map((loc: any) => loc?.stock_location_id)
+            .filter((id: string | undefined): id is string => Boolean(id));
+    } catch (err) {
+        console.error(
+            `[Inventory] Failed to resolve stock locations for sales channel ${salesChannelId}:`,
+            err instanceof Error ? err.message : err
+        );
+        throw new Error(`Failed to resolve stock locations for sales channel ${salesChannelId}: ${err instanceof Error ? err.message : String(err)}`);
     }
+};
+
+const resolveTargetLevel = (
+    levels: any[],
+    preferredIds: Set<string>,
+    channelIds: Set<string>
+) => {
+    const byPreferred = levels.find((lvl) => preferredIds.has(lvl.location_id));
+    if (byPreferred) return byPreferred;
+    const byChannel = levels.find((lvl) => channelIds.has(lvl.location_id));
+    if (byChannel) return byChannel;
+    // AC3: Removed arbitrary fallback to prevent shipping from unmapped locations
+    return null;
+};
+
+export const atomicDecrementInventory = async (
+    input: AtomicInventoryInput,
+    container: any
+) => {
+    const query = container.resolve("query");
+    const preferred = new Set<string>(input.preferredLocationIds?.filter(Boolean) ?? []);
+    const channelLocations = new Set<string>(
+        await getSalesChannelLocationIds(query, input.salesChannelId)
+    );
+    const adjustments: InventoryAdjustment[] = [];
+
+    for (const item of input.cartItems) {
+        if (!item.variant_id) {
+            continue;
+        }
+
+        if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
+            throw new Error(`Invalid quantity for variant ${item.variant_id}: ${item.quantity}`);
+        }
+
+        const { data: variants } = await query.graph({
+            entity: "product_variant",
+            fields: ["inventory_items.inventory_item_id"],
+            filters: { id: item.variant_id },
+        });
+
+        const inventoryItemId = variants[0]?.inventory_items?.[0]?.inventory_item_id;
+
+        if (!inventoryItemId) {
+            throw new InsufficientStockError(item.variant_id, 0, item.quantity);
+        }
+
+        const { data: inventoryLevels } = await query.graph({
+            entity: "inventory_level",
+            fields: ["id", "location_id", "stocked_quantity"],
+            filters: { inventory_item_id: inventoryItemId },
+        });
+
+        if (!inventoryLevels.length) {
+            throw new InsufficientStockError(item.variant_id, 0, item.quantity);
+        }
+
+        const level = resolveTargetLevel(inventoryLevels, preferred, channelLocations);
+
+        if (!level?.location_id) {
+            console.error(`[Inventory] No valid fulfillment location found for variant ${item.variant_id}. Preferred: [${Array.from(preferred)}], Channel: [${Array.from(channelLocations)}]`);
+            throw new Error(`No valid fulfillment location found for variant ${item.variant_id} (AC3 Violation)`);
+        }
+
+        const previousStock = level.stocked_quantity ?? 0;
+        const newStock = previousStock - item.quantity; // backorders allowed
+
+        adjustments.push({
+            inventory_item_id: inventoryItemId,
+            location_id: level.location_id,
+            stocked_quantity: newStock,
+            previous_stocked_quantity: previousStock,
+        });
+
+        console.log(
+            `[Inventory] Prepared decrement of ${item.quantity} for item ${inventoryItemId} at location ${level.location_id} (prev: ${previousStock}, next: ${newStock})`
+        );
+    }
+
+    return adjustments;
+};
+
+/**
+ * Step to prepare inventory adjustments for decrement
+ *
+ * This step calculates what inventory adjustments need to be made based on cart items.
+ * The actual inventory update is performed by updateInventoryLevelsStep at the workflow level.
+ *
+ * Note: updateInventoryLevelsStep has built-in compensation that automatically restores
+ * previous inventory levels if a later step in the workflow fails.
+ */
+const prepareInventoryAdjustmentsStep = createStep(
+    "prepare-inventory-adjustments",
+    async (input: AtomicInventoryInput, { container }) => {
+        const adjustments = await atomicDecrementInventory(input, container);
+        return new StepResponse(adjustments);
+    }
+    // No custom compensation needed - updateInventoryLevelsStep handles its own rollback
 );
 
 /**
@@ -553,6 +572,14 @@ const linkPaymentCollectionStep = createStep(
 export const createOrderFromStripeWorkflow = createWorkflow(
     "create-order-from-stripe",
     (input: CreateOrderFromStripeInput) => {
+        // Step 0: Acquire lock on PaymentIntent ID to prevent concurrent order creation
+        // This prevents race conditions when Stripe sends duplicate webhooks
+        acquireLockStep({
+            key: input.paymentIntentId,
+            timeout: LOCK_CONFIG.TIMEOUT_SECONDS,
+            ttl: LOCK_CONFIG.TTL_SECONDS,
+        });
+
         // Step 1: Prepare order data from Stripe payment
         const orderData = prepareOrderDataStep(input);
 
@@ -561,23 +588,59 @@ export const createOrderFromStripeWorkflow = createWorkflow(
             input: orderData,
         });
 
-        // Step 3: Reserve Inventory
-        // Use items from the created order to ensure we have line_item_ids for traceability
-        const reservationInput = transform({ order, orderData }, (data) => ({
-            items: (data.order?.items || []).map(item => ({
-                variant_id: item.variant_id || "", 
+        // Step 3: Prepare inventory adjustments
+        const inventoryInput = transform({ orderData }, (data) => ({
+            cartItems: (data.orderData.items || []).map((item: any) => ({
+                variant_id: item.variant_id || "",
                 quantity: item.quantity,
-                line_item_id: item.id
             })),
-            salesChannelId: data.orderData.sales_channel_id || data.order?.sales_channel_id || ""
+            preferredLocationIds: (data.orderData.shipping_methods || [])
+                .map((method: any) => method?.data && (method.data as any).stock_location_id)
+                .filter((id: string | undefined): id is string => Boolean(id)),
+            salesChannelId: data.orderData.sales_channel_id || null,
         }));
 
-        // Reserve inventory step (replaces atomic decrement)
-        const reservationResult = reserveInventoryStep(reservationInput);
+        const inventoryAdjustments = prepareInventoryAdjustmentsStep(inventoryInput);
 
-        const shouldAdjustInventory = transform({ reservationResult }, (data) => 
-            data.reservationResult && data.reservationResult.length > 0
+        // Step 4: Apply inventory adjustments using Medusa's built-in step
+        // This step has automatic compensation (rollback) if any later step fails
+        const updateInput = transform({ inventoryAdjustments }, (data) =>
+            (data.inventoryAdjustments || []).map((adj: InventoryAdjustment) => ({
+                inventory_item_id: adj.inventory_item_id,
+                location_id: adj.location_id,
+                stocked_quantity: adj.stocked_quantity,
+            }))
         );
+        updateInventoryLevelsStep(updateInput);
+
+        const shouldAdjustInventory = transform({ inventoryAdjustments }, (data) =>
+            data.inventoryAdjustments && data.inventoryAdjustments.length > 0
+        );
+
+        // Step 4b: Emit inventory.backordered event for items that went negative (AC4)
+        const backorderedItems = transform({ inventoryAdjustments }, (data) =>
+            (data.inventoryAdjustments || []).filter(
+                (adj: InventoryAdjustment) => adj.stocked_quantity < 0
+            )
+        );
+        const backorderEventData = transform({ backorderedItems, order }, (data) => ({
+            eventName: "inventory.backordered" as const,
+            data: {
+                order_id: data.order?.id,
+                items: data.backorderedItems.map((adj: InventoryAdjustment) => ({
+                    inventory_item_id: adj.inventory_item_id,
+                    location_id: adj.location_id,
+                    stocked_quantity: adj.stocked_quantity,
+                    previous_stocked_quantity: adj.previous_stocked_quantity,
+                })),
+            },
+        }));
+        // Conditionally emit backorder event (only if there are backordered items)
+        when({ backorderedItems }, ({ backorderedItems }) => {
+            return backorderedItems && backorderedItems.length > 0;
+        }).then(() => {
+            emitEventStep(backorderEventData).config({ name: "emit-backorder-event" });
+        });
 
         // Step 5: PAY-01 - Create PaymentCollection for canonical payment tracking
         const paymentCollectionInput = transform({ order, input, orderData }, (data) => ({
@@ -628,6 +691,12 @@ export const createOrderFromStripeWorkflow = createWorkflow(
             ...data.order,
             modification_token: data.tokenResult.token,
         }));
+
+        // Release lock after successful workflow completion
+        // Note: Lock is automatically released via compensation if workflow fails
+        releaseLockStep({
+            key: input.paymentIntentId,
+        });
 
         return new WorkflowResponse(result);
     }
