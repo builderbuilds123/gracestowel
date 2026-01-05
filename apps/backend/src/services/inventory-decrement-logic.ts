@@ -1,4 +1,5 @@
 import { Logger } from "@medusajs/framework/types";
+import { clampAvailability } from "../lib/inventory/availability";
 import { InsufficientStockError } from "../workflows/add-item-to-order";
 
 export interface CartItemForInventory {
@@ -12,25 +13,43 @@ export interface AtomicInventoryInput {
     salesChannelId?: string | null;
 }
 
+/**
+ * Represents an inventory adjustment prepared for decrement.
+ * Used by the workflow to apply inventory level updates atomically.
+ *
+ * @see AC1-AC7 (INV-02): Backorder logic with negative inventory support
+ */
 export interface InventoryAdjustment {
+    /** The product variant being adjusted */
+    variant_id: string;
+    /** The inventory item ID in Medusa's inventory module */
     inventory_item_id: string;
+    /** The stock location where inventory is being decremented */
     location_id: string;
+    /** The new stock level after decrement (may be negative if allow_backorder=true) */
     stocked_quantity: number;
+    /** The stock level before this decrement */
     previous_stocked_quantity: number;
+    /** The clamped availability for storefront display (always >= 0) */
+    available_quantity: number;
 }
 
 type InjectedDependencies = {
     logger: Logger;
     query: any;
+    pg_connection: any;
 };
 
 export class InventoryDecrementService {
     private logger: Logger;
     private query: any;
 
-    constructor({ logger, query }: InjectedDependencies) {
+    private pg_connection: any;
+
+    constructor({ logger, query, pg_connection }: InjectedDependencies) {
         this.logger = logger;
         this.query = query;
+        this.pg_connection = pg_connection;
     }
 
     async getSalesChannelLocationIds(salesChannelId?: string | null): Promise<string[]> {
@@ -75,7 +94,6 @@ export class InventoryDecrementService {
         const adjustments: InventoryAdjustment[] = [];
 
         for (const item of input.cartItems) {
-            // Address PR feedback: Fail loudly on missing variant_id
             if (!item.variant_id) {
                 throw new Error(`Missing variant_id for cart item. Cannot process inventory decrement.`);
             }
@@ -113,18 +131,36 @@ export class InventoryDecrementService {
                 throw new Error(`No valid fulfillment location found for variant ${item.variant_id} (AC3 Violation)`);
             }
 
+            // Fetch allow_backorder flag manually since it's a custom column on a core table
+            // Medusa's query engine might not see it without model extensions
+            const [levelDetails] = await this.pg_connection("inventory_level")
+                .where({ id: level.id })
+                .select("allow_backorder");
+
+            const allowBackorder = levelDetails?.allow_backorder ?? false;
+
             const previousStock = level.stocked_quantity ?? 0;
-            const newStock = previousStock - item.quantity; // backorders allowed
+            const newStock = previousStock - item.quantity;
+
+            // AC2 & AC7: Enforce stock check if backorders are NOT allowed (stocked only per architecture)
+            if (!allowBackorder && newStock < 0) {
+                this.logger.warn(
+                    `[Inventory] Insufficient stock for ${item.variant_id} at ${level.location_id}: requested ${item.quantity}, available ${previousStock}`
+                );
+                throw new InsufficientStockError(item.variant_id, previousStock, item.quantity);
+            }
 
             adjustments.push({
+                variant_id: item.variant_id,
                 inventory_item_id: inventoryItemId,
                 location_id: level.location_id,
                 stocked_quantity: newStock,
                 previous_stocked_quantity: previousStock,
+                available_quantity: clampAvailability(newStock),
             });
 
             this.logger.info(
-                `[Inventory] Prepared decrement of ${item.quantity} for item ${inventoryItemId} at location ${level.location_id} (prev: ${previousStock}, next: ${newStock})`
+                `[Inventory] Prepared decrement of ${item.quantity} for item ${inventoryItemId} at location ${level.location_id} (prev: ${previousStock}, next: ${newStock}, backorder: ${allowBackorder})`
             );
         }
 

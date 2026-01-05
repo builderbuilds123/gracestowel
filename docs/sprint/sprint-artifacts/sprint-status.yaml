@@ -437,6 +437,11 @@ development_status:
     completed: "2026-01-04"
   inv-02-backorder-negative-inventory:
     path: docs/sprint/sprint-artifacts/inv-02-backorder-negative-inventory.md
+    status: in-review
+    meta: "Backend logic implemented (allow_backorder flag, insufficient stock guard, event emission). UI toggle moved to INV-03."
+    completed: "2026-01-04"
+  inv-03-backorder-admin-ui:
+    path: docs/sprint/sprint-artifacts/inv-03-backorder-admin-ui.md
     status: drafted
   fix-REL-01-idempotency-key:
     path: docs/sprint/sprint-artifacts/fix-REL-01-idempotency-key.md

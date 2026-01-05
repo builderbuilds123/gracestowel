@@ -1,4 +1,5 @@
 import Medusa from "@medusajs/js-sdk"
+import { clampAvailability } from "./inventory"
 
 export const createMedusaClient = (backendUrl: string, publishableKey: string) => {
   return new Medusa({
@@ -183,11 +184,14 @@ export function getStockStatus(
         return "in_stock";
     }
 
-    if (inventoryQuantity <= 0) {
+    // AC4 (INV-02): Clamp negative values to 0 for storefront display
+    const clampedQuantity = clampAvailability(inventoryQuantity);
+
+    if (clampedQuantity <= 0) {
         return "out_of_stock";
     }
 
-    if (inventoryQuantity <= lowStockThreshold) {
+    if (clampedQuantity <= lowStockThreshold) {
         return "low_stock";
     }
 

@@ -9,6 +9,7 @@
 import { getProductPrice, type MedusaProduct } from "./medusa";
 import type { Product, ProductVariant } from "../types/product";
 import { formatPriceCents } from "./price";
+import { clampAvailability } from "./inventory";
 
 /**
  * Product for listing pages (towels.tsx)
@@ -147,7 +148,8 @@ export function transformToDetail(
             id: v.id,
             title: v.title,
             sku: v.sku || undefined,
-            inventory_quantity: v.inventory_quantity,
+            // AC4 (INV-02): Clamp negative inventory to 0 for storefront display
+            inventory_quantity: clampAvailability(v.inventory_quantity),
             options: v.options,
             prices: v.prices,
         })) || [],
