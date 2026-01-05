@@ -69,10 +69,45 @@ _This file contains critical rules and patterns that AI agents must follow when 
   - 🛑 DO NOT make cross-module database calls. Use the Module API/Loader.
 - **Workflows:** 
   - ✅ Use `createWorkflow` for business logic involving multiple steps.
-  - ✅ Implement rollback logic for all steps.
+  - ✅ Implement rollback logic for all steps (compensation functions).
+  - ✅ Use `acquireLockStep`/`releaseLockStep` from `@medusajs/core-flows` for concurrent operation protection.
 - **Subscribers:**
   - ✅ Listen to domain events using `subscribers/`.
   - 🛑 DO NOT block the main thread; use BullMQ jobs for heavy processing.
+
+### Inventory Patterns
+- **Atomic Decrements:**
+  - ✅ Use `InventoryDecrementService` for inventory operations
+  - ✅ Use `updateInventoryLevelsStep` from Medusa for atomic updates with compensation
+  - 🛑 DO NOT use raw SQL for inventory updates
+- **Location Selection:**
+  - ✅ Prefer shipping method `stock_location_id`, then sales-channel locations
+  - 🛑 DO NOT fall back to arbitrary locations; fail loudly if unmapped
+- **Backorders:**
+  - ✅ Check `allow_backorder` flag on `inventory_level` before permitting negative stock
+  - ✅ Emit `inventory.backordered` event when stock goes negative
+  - ✅ Use `clampAvailability()` helper to display 0 for negative stock on storefront
+
+### Payment Patterns
+- **Source of Truth Hierarchy:**
+  - ✅ `Order.total` is the canonical source for order amounts
+  - ✅ `PaymentCollection.amount` must match `Order.total`
+  - ✅ Stripe PaymentIntent is updated to match `Order.total`
+- **PaymentCollection Required:**
+  - ✅ All orders MUST have a linked PaymentCollection
+  - 🛑 DO NOT use `metadata.payment_status` for payment state (deprecated)
+  - 🛑 DO NOT support pre-PAY-01 orders without PaymentCollection (fail loudly)
+- **Currency Units:**
+  - ✅ Medusa uses major units (dollars): `capturePayment({ amount: 45.5 })` = $45.50
+  - ✅ Stripe uses minor units (cents): `paymentIntents.capture({ amount: 4550 })` = $45.50
+  - ✅ Conversion handled by `@medusajs/payment-stripe` provider
+
+### Workflow Locking Patterns
+- **Concurrent Protection:**
+  - ✅ Use `acquireLockStep` at workflow start for operations that must be atomic
+  - ✅ Use PaymentIntent ID as lock key for order creation (prevents duplicate webhook processing)
+  - ✅ Configure lock timeout (30s) and TTL (120s) via constants
+  - ✅ Lock automatically released via compensation on workflow failure
 
 ### Frontend Patterns (React Router v7)
 - **Data Loading:**
@@ -113,6 +148,9 @@ _This file contains critical rules and patterns that AI agents must follow when 
 - 🛑 **Never** mix Storefront and Backend types—they are distinct packages.
 - 🛑 **Never** send emails synchronously in subscribers—use BullMQ queue.
 - 🛑 **Never** log PII (email addresses) in plain text.
+- 🛑 **Never** use `metadata.payment_status` for payment state—use PaymentCollection.
+- 🛑 **Never** use raw SQL for inventory updates—use `updateInventoryLevelsStep`.
+- 🛑 **Never** fall back to arbitrary inventory locations—fail loudly if unmapped.
 
 ---
 
@@ -132,4 +170,4 @@ _This file contains critical rules and patterns that AI agents must follow when 
 - Review quarterly for outdated rules
 - Remove rules that become obvious over time
 
-Last Updated: 2025-12-14
+Last Updated: 2026-01-04
