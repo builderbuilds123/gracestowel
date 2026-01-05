@@ -12,18 +12,10 @@ apps/e2e/
 │   ├── fixtures/         # Test fixtures (composable, mergeTests pattern)
 │   ├── helpers/          # Utility functions (pure, framework-agnostic)
 │   └── factories/        # Data factories (faker-based, auto-cleanup)
-├── tests/
-│   ├── storefront/       # Storefront UI + shopper journeys
-│   └── backend/          # Admin/API and workflow coverage
+├── tests/                # Test files (users organize as needed)
 ├── resilience/           # Resilience/chaos tests
 └── playwright.config.ts  # Framework configuration
 ```
-
-### Suite Map
-
-- **Storefront** (`tests/storefront/*`): navigation, catalog/search/filter/sort/pagination, PDP variants/pricing/stock/images/reviews/related products, cart drawer/operations/persistence, checkout (guest + signed-in), auth session reuse, order status/grace period token flows, edge UX (404/offline), visual regression, and mobile coverage (projects `storefront-mobile-*`).
-- **Backend** (`tests/backend/*`): product CRUD (publish/unpublish, pricing), customers (creation, address updates, token issuance), carts/orders with discounts/shipping/tax/payment intents, grace period cancellation gating, webhook/idempotency/negative payload checks.
-- **Resilience** (`resilience/*`): chaos and durability checks (unchanged).
 
 ### Key Patterns
 
@@ -74,16 +66,10 @@ pnpm test:ui
 pnpm test:headed
 
 # Run specific test file
-pnpm test tests/storefront/cart-and-checkout.spec.ts
+pnpm test tests/checkout.spec.ts
 
-# Run storefront suite only
-pnpm test --project=storefront-chromium
-
-# Run backend/API suite only
-ADMIN_TOKEN=<admin jwt> pnpm test --project=backend-api
-
-# Run mobile storefront coverage
-pnpm test --project=storefront-mobile-chrome
+# Run specific project (browser)
+pnpm test --project=chromium
 
 # Debug mode
 pnpm test:debug

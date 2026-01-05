@@ -1,4 +1,4 @@
-import { test, expect } from "../../support/fixtures";
+import { test, expect } from "../support/fixtures";
 import jwt from "jsonwebtoken";
 
 /**

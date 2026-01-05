@@ -25,11 +25,10 @@ export class ProductFactory {
 
       if (created.product?.id) {
         this.createdProductIds.push(created.product.id);
-        return { ...product, id: created.product.id };
       }
     } catch (error) {
       // If API seeding fails, still return product data for UI tests
-      console.warn("Product seeding skipped; using generated data.");
+      console.warn('Could not seed product via API, using factory data only:', error);
     }
 
     return product;
@@ -46,7 +45,7 @@ export class ProductFactory {
         });
       } catch (error) {
         // Ignore cleanup errors
-        console.warn(`Could not cleanup product ${productId}.`);
+        console.warn(`Could not cleanup product ${productId}:`, error);
       }
     }
     this.createdProductIds = [];

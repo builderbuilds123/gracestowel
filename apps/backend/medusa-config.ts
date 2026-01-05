@@ -44,10 +44,12 @@ module.exports = defineConfig({
       resolve: "@medusajs/file",
       options: {
         providers: [
-          ...(process.env.S3_ACCESS_KEY_ID ? [{
+          {
             resolve: "@medusajs/file-s3",
             id: "s3",
             options: {
+              // For R2: file_url is the public URL (custom domain) for accessing uploaded files
+              //         endpoint is the R2 API URL for upload operations
               file_url: process.env.S3_PUBLIC_URL,
               bucket: process.env.S3_BUCKET,
               region: process.env.S3_REGION,
@@ -57,14 +59,6 @@ module.exports = defineConfig({
               download_file_duration: 60 * 60, // 1 hour
               endpoint: process.env.S3_ENDPOINT,
             },
-          }] : []),
-          {
-            resolve: "@medusajs/file-local",
-            id: "local",
-            options: {
-              upload_dir: "static",
-              backend_url: process.env.MEDUSA_BACKEND_URL || "http://localhost:9000"
-            }
           },
         ],
       },
