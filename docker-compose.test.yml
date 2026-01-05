@@ -86,7 +86,8 @@ services:
       - "5174:5173"
     command: pnpm run test:server
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:5173/ -o /dev/null || exit 1"]
+      test:
+        ["CMD-SHELL", "curl -sf http://localhost:5173/ -o /dev/null || exit 1"]
       interval: 5s
       timeout: 10s
       retries: 20
@@ -102,6 +103,8 @@ services:
     environment:
       STOREFRONT_URL: http://storefront:5173
       CI: "true"
+      MEDUSA_PUBLISHABLE_KEY: ${MEDUSA_PUBLISHABLE_KEY}
+      ADMIN_TOKEN: ${ADMIN_TOKEN}
     volumes:
       - ./apps/e2e:/app
       - ./apps/e2e/node_modules:/app/node_modules:ro

@@ -2,7 +2,7 @@
   "config": {
     "configFile": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/playwright.config.ts",
     "rootDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/tests",
-    "forbidOnly": false,
+    "forbidOnly": true,
     "fullyParallel": true,
     "globalSetup": null,
     "globalTeardown": null,
@@ -18,7 +18,7 @@
       [
         "html",
         {
-          "outputFolder": "test-results/html",
+          "outputFolder": "playwright-report",
           "open": "never"
         }
       ],
@@ -35,7 +35,7 @@
         }
       ],
       [
-        "list",
+        "github",
         null
       ]
     ],
@@ -48,7 +48,7 @@
       {
         "outputDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results",
         "repeatEach": 1,
-        "retries": 0,
+        "retries": 2,
         "metadata": {
           "actualWorkers": 1
         },
@@ -64,7 +64,7 @@
       {
         "outputDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results",
         "repeatEach": 1,
-        "retries": 0,
+        "retries": 2,
         "metadata": {
           "actualWorkers": 1
         },
@@ -80,7 +80,7 @@
       {
         "outputDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results",
         "repeatEach": 1,
-        "retries": 0,
+        "retries": 2,
         "metadata": {
           "actualWorkers": 1
         },
@@ -96,7 +96,7 @@
       {
         "outputDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results",
         "repeatEach": 1,
-        "retries": 0,
+        "retries": 2,
         "metadata": {
           "actualWorkers": 1
         },
@@ -112,7 +112,7 @@
       {
         "outputDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results",
         "repeatEach": 1,
-        "retries": 0,
+        "retries": 2,
         "metadata": {
           "actualWorkers": 1
         },
@@ -128,7 +128,7 @@
       {
         "outputDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results",
         "repeatEach": 1,
-        "retries": 0,
+        "retries": 2,
         "metadata": {
           "actualWorkers": 1
         },
@@ -144,7 +144,7 @@
       {
         "outputDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results",
         "repeatEach": 1,
-        "retries": 0,
+        "retries": 2,
         "metadata": {
           "actualWorkers": 1
         },
@@ -164,13 +164,7 @@
     "updateSourceMethod": "patch",
     "version": "1.57.0",
     "workers": 1,
-    "webServer": {
-      "command": "cd ../.. && MEDUSA_PUBLISHABLE_KEY=undefined CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE='undefined' npm run dev --workspace=apps/storefront",
-      "url": "https://localhost:5173",
-      "reuseExistingServer": true,
-      "ignoreHTTPSErrors": true,
-      "timeout": 120000
-    }
+    "webServer": null
   },
   "suites": [
     {
@@ -183,12 +177,12 @@
         {
           "title": "Backend API workflows (admin)",
           "file": "backend/api-workflows.spec.ts",
-          "line": 8,
+          "line": 9,
           "column": 6,
           "specs": [
             {
               "title": "products catalog CRUD with publish/unpublish and pricing updates",
-              "ok": false,
+              "ok": true,
               "tags": [],
               "tests": [
                 {
@@ -201,62 +195,32 @@
                     {
                       "workerIndex": 0,
                       "parallelIndex": 0,
-                      "status": "failed",
-                      "duration": 38,
-                      "error": {
-                        "message": "ApiError: API request failed: 401 Unauthorized :: {\"message\":\"Unauthorized\"}",
-                        "stack": "ApiError: API request failed: 401 Unauthorized :: {\"message\":\"Unauthorized\"}\n    at apiRequest (/Users/leonliang/Github Repo/gracestowel/apps/e2e/support/helpers/api-request.ts:70:11)\n    at /Users/leonliang/Github Repo/gracestowel/apps/e2e/tests/backend/api-workflows.spec.ts:17:23",
-                        "location": {
-                          "file": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/support/helpers/api-request.ts",
-                          "column": 11,
-                          "line": 70
-                        },
-                        "snippet": "\u001b[90m   at \u001b[39m../support/helpers/api-request.ts:70\n\n\u001b[0m \u001b[90m 68 |\u001b[39m   \u001b[36mif\u001b[39m (\u001b[33m!\u001b[39mresponse\u001b[33m.\u001b[39mok()) {\n \u001b[90m 69 |\u001b[39m     \u001b[36mconst\u001b[39m errorText \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m response\u001b[33m.\u001b[39mtext()\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 70 |\u001b[39m     \u001b[36mthrow\u001b[39m \u001b[36mnew\u001b[39m \u001b[33mApiError\u001b[39m(response\u001b[33m.\u001b[39mstatus()\u001b[33m,\u001b[39m response\u001b[33m.\u001b[39mstatusText()\u001b[33m,\u001b[39m errorText)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m           \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 71 |\u001b[39m   }\n \u001b[90m 72 |\u001b[39m\n \u001b[90m 73 |\u001b[39m   \u001b[36mreturn\u001b[39m response\u001b[33m.\u001b[39mjson()\u001b[33m;\u001b[39m\u001b[0m"
-                      },
-                      "errors": [
+                      "status": "passed",
+                      "duration": 258,
+                      "errors": [],
+                      "stdout": [
                         {
-                          "location": {
-                            "file": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/support/helpers/api-request.ts",
-                            "column": 11,
-                            "line": 70
-                          },
-                          "message": "ApiError: API request failed: 401 Unauthorized :: {\"message\":\"Unauthorized\"}\n\n\u001b[90m   at \u001b[39m../support/helpers/api-request.ts:70\n\n\u001b[0m \u001b[90m 68 |\u001b[39m   \u001b[36mif\u001b[39m (\u001b[33m!\u001b[39mresponse\u001b[33m.\u001b[39mok()) {\n \u001b[90m 69 |\u001b[39m     \u001b[36mconst\u001b[39m errorText \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m response\u001b[33m.\u001b[39mtext()\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 70 |\u001b[39m     \u001b[36mthrow\u001b[39m \u001b[36mnew\u001b[39m \u001b[33mApiError\u001b[39m(response\u001b[33m.\u001b[39mstatus()\u001b[33m,\u001b[39m response\u001b[33m.\u001b[39mstatusText()\u001b[33m,\u001b[39m errorText)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m           \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 71 |\u001b[39m   }\n \u001b[90m 72 |\u001b[39m\n \u001b[90m 73 |\u001b[39m   \u001b[36mreturn\u001b[39m response\u001b[33m.\u001b[39mjson()\u001b[33m;\u001b[39m\u001b[0m\n\u001b[2m    at apiRequest (/Users/leonliang/Github Repo/gracestowel/apps/e2e/support/helpers/api-request.ts:70:11)\u001b[22m\n\u001b[2m    at /Users/leonliang/Github Repo/gracestowel/apps/e2e/tests/backend/api-workflows.spec.ts:17:23\u001b[22m"
+                          "text": "Creating product with payload: {\n  \"title\": \"Unbranded Ceramic Mouse\",\n  \"description\": \"Featuring Cobalt-enhanced technology, our Cheese offers unparalleled normal performance\",\n  \"handle\": \"sleek-ceramic-bike\",\n  \"status\": \"published\",\n  \"images\": [\n    {\n      \"url\": \"https://picsum.photos/seed/2qD6YAb/3159/534\"\n    }\n  ],\n  \"options\": [\n    {\n      \"title\": \"Size\",\n      \"values\": [\n        \"Default\"\n      ]\n    }\n  ],\n  \"variants\": [\n    {\n      \"title\": \"Default\",\n      \"sku\": \"JT7btYPMg4\",\n      \"options\": {\n        \"Size\": \"Default\"\n      },\n      \"prices\": [\n        {\n          \"amount\": 2500,\n          \"currency_code\": \"usd\"\n        },\n        {\n          \"amount\": 3500,\n          \"currency_code\": \"cad\"\n        }\n      ],\n      \"allow_backorder\": true,\n      \"manage_inventory\": false\n    }\n  ]\n}\n"
                         }
                       ],
-                      "stdout": [],
-                      "stderr": [
-                        {
-                          "text": "Product seeding skipped; using generated data.\n"
-                        }
-                      ],
+                      "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-01-05T06:16:44.943Z",
+                      "startTime": "2026-01-05T22:40:38.293Z",
                       "annotations": [],
-                      "attachments": [
-                        {
-                          "name": "trace",
-                          "contentType": "application/zip",
-                          "path": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results/api-workflows-Backend-API--fd383-publish-and-pricing-updates-backend-api/trace.zip"
-                        }
-                      ],
-                      "errorLocation": {
-                        "file": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/support/helpers/api-request.ts",
-                        "column": 11,
-                        "line": 70
-                      }
+                      "attachments": []
                     }
                   ],
-                  "status": "unexpected"
+                  "status": "expected"
                 }
               ],
               "id": "ccf25a36e93e76d4a45a-61ded7e2b05a3f77dfcc",
               "file": "backend/api-workflows.spec.ts",
-              "line": 10,
+              "line": 11,
               "column": 7
             },
             {
               "title": "customers issue tokens and manage addresses",
-              "ok": false,
+              "ok": true,
               "tags": [],
               "tests": [
                 {
@@ -267,59 +231,25 @@
                   "projectName": "backend-api",
                   "results": [
                     {
-                      "workerIndex": 1,
+                      "workerIndex": 0,
                       "parallelIndex": 0,
-                      "status": "failed",
-                      "duration": 36,
-                      "error": {
-                        "message": "ApiError: API request failed: 401 Unauthorized :: {\"message\":\"Unauthorized\"}",
-                        "stack": "ApiError: API request failed: 401 Unauthorized :: {\"message\":\"Unauthorized\"}\n    at apiRequest (/Users/leonliang/Github Repo/gracestowel/apps/e2e/support/helpers/api-request.ts:70:11)\n    at /Users/leonliang/Github Repo/gracestowel/apps/e2e/tests/backend/api-workflows.spec.ts:46:21",
-                        "location": {
-                          "file": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/support/helpers/api-request.ts",
-                          "column": 11,
-                          "line": 70
-                        },
-                        "snippet": "\u001b[90m   at \u001b[39m../support/helpers/api-request.ts:70\n\n\u001b[0m \u001b[90m 68 |\u001b[39m   \u001b[36mif\u001b[39m (\u001b[33m!\u001b[39mresponse\u001b[33m.\u001b[39mok()) {\n \u001b[90m 69 |\u001b[39m     \u001b[36mconst\u001b[39m errorText \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m response\u001b[33m.\u001b[39mtext()\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 70 |\u001b[39m     \u001b[36mthrow\u001b[39m \u001b[36mnew\u001b[39m \u001b[33mApiError\u001b[39m(response\u001b[33m.\u001b[39mstatus()\u001b[33m,\u001b[39m response\u001b[33m.\u001b[39mstatusText()\u001b[33m,\u001b[39m errorText)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m           \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 71 |\u001b[39m   }\n \u001b[90m 72 |\u001b[39m\n \u001b[90m 73 |\u001b[39m   \u001b[36mreturn\u001b[39m response\u001b[33m.\u001b[39mjson()\u001b[33m;\u001b[39m\u001b[0m"
-                      },
-                      "errors": [
-                        {
-                          "location": {
-                            "file": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/support/helpers/api-request.ts",
-                            "column": 11,
-                            "line": 70
-                          },
-                          "message": "ApiError: API request failed: 401 Unauthorized :: {\"message\":\"Unauthorized\"}\n\n\u001b[90m   at \u001b[39m../support/helpers/api-request.ts:70\n\n\u001b[0m \u001b[90m 68 |\u001b[39m   \u001b[36mif\u001b[39m (\u001b[33m!\u001b[39mresponse\u001b[33m.\u001b[39mok()) {\n \u001b[90m 69 |\u001b[39m     \u001b[36mconst\u001b[39m errorText \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m response\u001b[33m.\u001b[39mtext()\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 70 |\u001b[39m     \u001b[36mthrow\u001b[39m \u001b[36mnew\u001b[39m \u001b[33mApiError\u001b[39m(response\u001b[33m.\u001b[39mstatus()\u001b[33m,\u001b[39m response\u001b[33m.\u001b[39mstatusText()\u001b[33m,\u001b[39m errorText)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m           \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 71 |\u001b[39m   }\n \u001b[90m 72 |\u001b[39m\n \u001b[90m 73 |\u001b[39m   \u001b[36mreturn\u001b[39m response\u001b[33m.\u001b[39mjson()\u001b[33m;\u001b[39m\u001b[0m\n\u001b[2m    at apiRequest (/Users/leonliang/Github Repo/gracestowel/apps/e2e/support/helpers/api-request.ts:70:11)\u001b[22m\n\u001b[2m    at /Users/leonliang/Github Repo/gracestowel/apps/e2e/tests/backend/api-workflows.spec.ts:46:21\u001b[22m"
-                        }
-                      ],
+                      "status": "passed",
+                      "duration": 25,
+                      "errors": [],
                       "stdout": [],
-                      "stderr": [
-                        {
-                          "text": "User seeding skipped; using generated data.\n"
-                        }
-                      ],
+                      "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-01-05T06:16:45.362Z",
+                      "startTime": "2026-01-05T22:40:38.558Z",
                       "annotations": [],
-                      "attachments": [
-                        {
-                          "name": "trace",
-                          "contentType": "application/zip",
-                          "path": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results/api-workflows-Backend-API--c8265-tokens-and-manage-addresses-backend-api/trace.zip"
-                        }
-                      ],
-                      "errorLocation": {
-                        "file": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/support/helpers/api-request.ts",
-                        "column": 11,
-                        "line": 70
-                      }
+                      "attachments": []
                     }
                   ],
-                  "status": "unexpected"
+                  "status": "expected"
                 }
               ],
               "id": "ccf25a36e93e76d4a45a-52efda107cd686901930",
               "file": "backend/api-workflows.spec.ts",
-              "line": 39,
+              "line": 56,
               "column": 7
             },
             {
@@ -329,121 +259,47 @@
               "tests": [
                 {
                   "timeout": 60000,
-                  "annotations": [
-                    {
-                      "type": "skip",
-                      "description": "Cart or product APIs unavailable",
-                      "location": {
-                        "file": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/tests/backend/api-workflows.spec.ts",
-                        "line": 71,
-                        "column": 10
-                      }
-                    }
-                  ],
-                  "expectedStatus": "skipped",
+                  "annotations": [],
+                  "expectedStatus": "passed",
                   "projectId": "backend-api",
                   "projectName": "backend-api",
                   "results": [
                     {
-                      "workerIndex": 2,
+                      "workerIndex": 0,
                       "parallelIndex": 0,
-                      "status": "skipped",
-                      "duration": 31,
+                      "status": "passed",
+                      "duration": 875,
                       "errors": [],
-                      "stdout": [],
+                      "stdout": [
+                        {
+                          "text": "Creating product with payload: {\n  \"title\": \"Intelligent Concrete Cheese\",\n  \"description\": \"Savor the bitter essence in our Ball, designed for ashamed culinary adventures\",\n  \"handle\": \"small-gold-pants\",\n  \"status\": \"published\",\n  \"images\": [\n    {\n      \"url\": \"https://loremflickr.com/1413/274?lock=4281164094410439\"\n    }\n  ],\n  \"options\": [\n    {\n      \"title\": \"Size\",\n      \"values\": [\n        \"Default\"\n      ]\n    }\n  ],\n  \"variants\": [\n    {\n      \"title\": \"Default\",\n      \"sku\": \"s7me7RmPPB\",\n      \"options\": {\n        \"Size\": \"Default\"\n      },\n      \"prices\": [\n        {\n          \"amount\": 2500,\n          \"currency_code\": \"usd\"\n        },\n        {\n          \"amount\": 3500,\n          \"currency_code\": \"cad\"\n        }\n      ],\n      \"allow_backorder\": true,\n      \"manage_inventory\": false\n    }\n  ]\n}\n"
+                        }
+                      ],
                       "stderr": [
                         {
-                          "text": "Product seeding skipped; using generated data.\n"
+                          "text": "API Error 404 at /admin/payment-intents/pay_col_01KE853KT2NZEHG2W0GABPDWC5: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>Cannot DELETE /admin/payment-intents/pay_col_01KE853KT2NZEHG2W0GABPDWC5</pre>\n</body>\n</html>\n\n"
                         },
                         {
-                          "text": "Cart seeding skipped; using generated data.\n"
+                          "text": "Payment intent cleanup skipped for pay_col_01KE853KT2NZEHG2W0GABPDWC5.\n"
                         }
                       ],
                       "retry": 0,
-                      "startTime": "2026-01-05T06:16:45.792Z",
-                      "annotations": [
-                        {
-                          "type": "skip",
-                          "description": "Cart or product APIs unavailable",
-                          "location": {
-                            "file": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/tests/backend/api-workflows.spec.ts",
-                            "line": 71,
-                            "column": 10
-                          }
-                        }
-                      ],
+                      "startTime": "2026-01-05T22:40:38.587Z",
+                      "annotations": [],
                       "attachments": []
                     }
                   ],
-                  "status": "skipped"
+                  "status": "expected"
                 }
               ],
               "id": "ccf25a36e93e76d4a45a-d2067b65907cadcde141",
               "file": "backend/api-workflows.spec.ts",
-              "line": 61,
+              "line": 78,
               "column": 7
             },
             {
               "title": "grace period tokens gate cancellation and edit windows",
               "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 60000,
-                  "annotations": [
-                    {
-                      "type": "skip",
-                      "description": "Order creation endpoint unavailable",
-                      "location": {
-                        "file": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/tests/backend/api-workflows.spec.ts",
-                        "line": 113,
-                        "column": 10
-                      }
-                    }
-                  ],
-                  "expectedStatus": "skipped",
-                  "projectId": "backend-api",
-                  "projectName": "backend-api",
-                  "results": [
-                    {
-                      "workerIndex": 2,
-                      "parallelIndex": 0,
-                      "status": "skipped",
-                      "duration": 7,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [
-                        {
-                          "text": "Order seeding skipped; using generated data.\n"
-                        }
-                      ],
-                      "retry": 0,
-                      "startTime": "2026-01-05T06:16:45.832Z",
-                      "annotations": [
-                        {
-                          "type": "skip",
-                          "description": "Order creation endpoint unavailable",
-                          "location": {
-                            "file": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/tests/backend/api-workflows.spec.ts",
-                            "line": 113,
-                            "column": 10
-                          }
-                        }
-                      ],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "skipped"
-                }
-              ],
-              "id": "ccf25a36e93e76d4a45a-2ef3c7da54398e579543",
-              "file": "backend/api-workflows.spec.ts",
-              "line": 108,
-              "column": 7
-            },
-            {
-              "title": "rejects invalid payloads with 4xx and retries idempotently",
-              "ok": false,
               "tags": [],
               "tests": [
                 {
@@ -454,55 +310,83 @@
                   "projectName": "backend-api",
                   "results": [
                     {
-                      "workerIndex": 2,
+                      "workerIndex": 0,
                       "parallelIndex": 0,
-                      "status": "failed",
-                      "duration": 14,
-                      "error": {
-                        "message": "ApiError: API request failed: 401 Unauthorized :: {\"message\":\"Unauthorized\"}",
-                        "stack": "ApiError: API request failed: 401 Unauthorized :: {\"message\":\"Unauthorized\"}\n    at apiRequest (/Users/leonliang/Github Repo/gracestowel/apps/e2e/support/helpers/api-request.ts:70:11)\n    at /Users/leonliang/Github Repo/gracestowel/apps/e2e/tests/backend/api-workflows.spec.ts:145:21",
-                        "location": {
-                          "file": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/support/helpers/api-request.ts",
-                          "column": 11,
-                          "line": 70
+                      "status": "passed",
+                      "duration": 667,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "Creating product with payload: {\n  \"title\": \"Rustic Aluminum Salad\",\n  \"description\": \"Stylish Mouse designed to make you stand out with aware looks\",\n  \"handle\": \"awesome-bronze-chair\",\n  \"status\": \"published\",\n  \"images\": [\n    {\n      \"url\": \"https://picsum.photos/seed/Cmr5IQLP/2978/2532\"\n    }\n  ],\n  \"options\": [\n    {\n      \"title\": \"Size\",\n      \"values\": [\n        \"Default\"\n      ]\n    }\n  ],\n  \"variants\": [\n    {\n      \"title\": \"Default\",\n      \"sku\": \"mNbTpurwGT\",\n      \"options\": {\n        \"Size\": \"Default\"\n      },\n      \"prices\": [\n        {\n          \"amount\": 2500,\n          \"currency_code\": \"usd\"\n        },\n        {\n          \"amount\": 3500,\n          \"currency_code\": \"cad\"\n        }\n      ],\n      \"allow_backorder\": true,\n      \"manage_inventory\": false\n    }\n  ]\n}\n"
+                        }
+                      ],
+                      "stderr": [
+                        {
+                          "text": "API Error 404 at /admin/orders/order_01KE853MGH9NYSBCJE5TGX11CM: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>Cannot DELETE /admin/orders/order_01KE853MGH9NYSBCJE5TGX11CM</pre>\n</body>\n</html>\n\n"
                         },
-                        "snippet": "\u001b[90m   at \u001b[39m../support/helpers/api-request.ts:70\n\n\u001b[0m \u001b[90m 68 |\u001b[39m   \u001b[36mif\u001b[39m (\u001b[33m!\u001b[39mresponse\u001b[33m.\u001b[39mok()) {\n \u001b[90m 69 |\u001b[39m     \u001b[36mconst\u001b[39m errorText \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m response\u001b[33m.\u001b[39mtext()\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 70 |\u001b[39m     \u001b[36mthrow\u001b[39m \u001b[36mnew\u001b[39m \u001b[33mApiError\u001b[39m(response\u001b[33m.\u001b[39mstatus()\u001b[33m,\u001b[39m response\u001b[33m.\u001b[39mstatusText()\u001b[33m,\u001b[39m errorText)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m           \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 71 |\u001b[39m   }\n \u001b[90m 72 |\u001b[39m\n \u001b[90m 73 |\u001b[39m   \u001b[36mreturn\u001b[39m response\u001b[33m.\u001b[39mjson()\u001b[33m;\u001b[39m\u001b[0m"
-                      },
-                      "errors": [
                         {
-                          "location": {
-                            "file": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/support/helpers/api-request.ts",
-                            "column": 11,
-                            "line": 70
-                          },
-                          "message": "ApiError: API request failed: 401 Unauthorized :: {\"message\":\"Unauthorized\"}\n\n\u001b[90m   at \u001b[39m../support/helpers/api-request.ts:70\n\n\u001b[0m \u001b[90m 68 |\u001b[39m   \u001b[36mif\u001b[39m (\u001b[33m!\u001b[39mresponse\u001b[33m.\u001b[39mok()) {\n \u001b[90m 69 |\u001b[39m     \u001b[36mconst\u001b[39m errorText \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m response\u001b[33m.\u001b[39mtext()\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 70 |\u001b[39m     \u001b[36mthrow\u001b[39m \u001b[36mnew\u001b[39m \u001b[33mApiError\u001b[39m(response\u001b[33m.\u001b[39mstatus()\u001b[33m,\u001b[39m response\u001b[33m.\u001b[39mstatusText()\u001b[33m,\u001b[39m errorText)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m           \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 71 |\u001b[39m   }\n \u001b[90m 72 |\u001b[39m\n \u001b[90m 73 |\u001b[39m   \u001b[36mreturn\u001b[39m response\u001b[33m.\u001b[39mjson()\u001b[33m;\u001b[39m\u001b[0m\n\u001b[2m    at apiRequest (/Users/leonliang/Github Repo/gracestowel/apps/e2e/support/helpers/api-request.ts:70:11)\u001b[22m\n\u001b[2m    at /Users/leonliang/Github Repo/gracestowel/apps/e2e/tests/backend/api-workflows.spec.ts:145:21\u001b[22m"
+                          "text": "Order cleanup skipped for order_01KE853MGH9NYSBCJE5TGX11CM.\n"
                         }
                       ],
-                      "stdout": [],
-                      "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-01-05T06:16:45.844Z",
+                      "startTime": "2026-01-05T22:40:39.470Z",
                       "annotations": [],
-                      "attachments": [
-                        {
-                          "name": "trace",
-                          "contentType": "application/zip",
-                          "path": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results/api-workflows-Backend-API--babf1-xx-and-retries-idempotently-backend-api/trace.zip"
-                        }
-                      ],
-                      "errorLocation": {
-                        "file": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/support/helpers/api-request.ts",
-                        "column": 11,
-                        "line": 70
-                      }
+                      "attachments": []
                     }
                   ],
-                  "status": "unexpected"
+                  "status": "expected"
+                }
+              ],
+              "id": "ccf25a36e93e76d4a45a-2ef3c7da54398e579543",
+              "file": "backend/api-workflows.spec.ts",
+              "line": 199,
+              "column": 7
+            },
+            {
+              "title": "rejects invalid payloads with 4xx and retries idempotently",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "backend-api",
+                  "projectName": "backend-api",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 7,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [
+                        {
+                          "text": "API Error 500 at /admin/products: {\"message\":\"Invalid request: Field 'variants, 0, prices' is required; Unrecognized fields: 'unrecognized'\",\"code\":\"INTERNAL_ERROR\",\"stack\":\"Error: Invalid request: Field 'variants, 0, prices' is required; Unrecognized fields: 'unrecognized'\\n    at zodValidator (/Users/leonliang/Github Repo/gracestowel/node_modules/.pnpm/@medusajs+framework@2.12.3_@medusajs+cli@2.12.3_@types+node@20.19.25__@types+node@20.19.25_io_pz7bcky5yx4vbfqh7fhf62s5pi/node_modules/@medusajs/framework/src/zod/zod-helpers.ts:126:13)\\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\\n    at async validateBody (/Users/leonliang/Github Repo/gracestowel/node_modules/.pnpm/@medusajs+framework@2.12.3_@medusajs+cli@2.12.3_@types+node@20.19.25__@types+node@20.19.25_io_pz7bcky5yx4vbfqh7fhf62s5pi/node_modules/@medusajs/framework/src/http/utils/validate-body.ts:31:27)\\n    at async validateBody (/Users/leonliang/Github Repo/gracestowel/node_modules/.pnpm/@medusajs+framework@2.12.3_@medusajs+cli@2.12.3_@types+node@20.19.25__@types+node@20.19.25_io_pz7bcky5yx4vbfqh7fhf62s5pi/node_modules/@medusajs/framework/src/http/utils/wrap-handler.ts:27:14)\"}\n"
+                        },
+                        {
+                          "text": "API Error 500 at /admin/products: {\"message\":\"Invalid request: Field 'variants, 0, prices' is required; Unrecognized fields: 'unrecognized'\",\"code\":\"INTERNAL_ERROR\",\"stack\":\"Error: Invalid request: Field 'variants, 0, prices' is required; Unrecognized fields: 'unrecognized'\\n    at zodValidator (/Users/leonliang/Github Repo/gracestowel/node_modules/.pnpm/@medusajs+framework@2.12.3_@medusajs+cli@2.12.3_@types+node@20.19.25__@types+node@20.19.25_io_pz7bcky5yx4vbfqh7fhf62s5pi/node_modules/@medusajs/framework/src/zod/zod-helpers.ts:126:13)\\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\\n    at async validateBody (/Users/leonliang/Github Repo/gracestowel/node_modules/.pnpm/@medusajs+framework@2.12.3_@medusajs+cli@2.12.3_@types+node@20.19.25__@types+node@20.19.25_io_pz7bcky5yx4vbfqh7fhf62s5pi/node_modules/@medusajs/framework/src/http/utils/validate-body.ts:31:27)\\n    at async validateBody (/Users/leonliang/Github Repo/gracestowel/node_modules/.pnpm/@medusajs+framework@2.12.3_@medusajs+cli@2.12.3_@types+node@20.19.25__@types+node@20.19.25_io_pz7bcky5yx4vbfqh7fhf62s5pi/node_modules/@medusajs/framework/src/http/utils/wrap-handler.ts:27:14)\"}\n"
+                        },
+                        {
+                          "text": "API Error 404 at /admin/webhooks/test: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>Cannot POST /admin/webhooks/test</pre>\n</body>\n</html>\n\n"
+                        },
+                        {
+                          "text": "Webhook test skipped or failed due to missing endpoint.\n"
+                        }
+                      ],
+                      "retry": 0,
+                      "startTime": "2026-01-05T22:40:40.143Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "ccf25a36e93e76d4a45a-b750e767d9e67dcd1291",
               "file": "backend/api-workflows.spec.ts",
-              "line": 122,
+              "line": 213,
               "column": 7
             }
           ]
@@ -512,11 +396,11 @@
   ],
   "errors": [],
   "stats": {
-    "startTime": "2026-01-05T06:16:44.146Z",
-    "duration": 1734.0880000000002,
-    "expected": 0,
-    "skipped": 2,
-    "unexpected": 3,
+    "startTime": "2026-01-05T22:40:37.789Z",
+    "duration": 2376.956,
+    "expected": 5,
+    "skipped": 0,
+    "unexpected": 0,
     "flaky": 0
   }
 }

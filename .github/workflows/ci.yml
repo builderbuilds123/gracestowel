@@ -253,8 +253,19 @@ jobs:
         if: always()
         run: docker compose -f docker-compose.test.yml logs storefront
 
+      - name: Generate Admin Token
+        id: generate-token
+        run: |
+          cd apps/e2e
+          TOKEN=$(node -e 'const jwt = require("jsonwebtoken"); const secret = "test-secret"; console.log(jwt.sign({ actor_id: "user_01KCQDPJ68BR9E69GS8A99RR9C", actor_type: "user", scope: "admin", iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + (3600 * 24 * 7) }, secret, { algorithm: "HS256" }));')
+          echo "ADMIN_TOKEN=$TOKEN" >> $GITHUB_ENV
+          echo "Generated Admin Token"
+
       - name: Run E2E tests
-        run: docker compose -f docker-compose.test.yml run --rm playwright npx playwright test --project=chromium
+        env:
+          MEDUSA_PUBLISHABLE_KEY: ${{ steps.get-api-key.outputs.MEDUSA_PUBLISHABLE_KEY }}
+          ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
+        run: docker compose -f docker-compose.test.yml run --rm -e MEDUSA_PUBLISHABLE_KEY -e ADMIN_TOKEN playwright npx playwright test --project=chromium
 
       - name: Upload Playwright report
         uses: actions/upload-artifact@v6
