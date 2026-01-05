@@ -883,12 +883,12 @@ pnpm deploy:api            # Deploy to Railway
 
 ### Project Documentation
 
-- **Architecture Details:** `docs/ARCHITECTURE.md`
-- **API Documentation:** `docs/BACKEND_API.md`
-- **Testing Strategy:** `docs/TESTING_STRATEGY.md`
-- **Environment Setup:** `docs/ENVIRONMENT_SETUP.md`
-- **Railway Infrastructure:** `docs/RAILWAY_INFRASTRUCTURE.md`
-- **Agent Context Rules:** `docs/project_context.md`
+- **Project Context (Gotchas):** `docs/project_context.md` — High-level gotchas and recent architectural decisions (read alongside this file)
+- **Architecture Overview:** `docs/architecture/overview.md`
+- **Backend Architecture:** `docs/architecture/backend.md`
+- **Storefront Architecture:** `docs/architecture/storefront.md`
+- **API Reference:** `docs/reference/backend-api.md`
+- **Testing Strategy:** `docs/guides/testing-strategy.md`
 
 ---
 

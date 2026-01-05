@@ -1,173 +1,113 @@
 ---
-project_name: 'gracestowel'
-user_name: 'Big Dick'
-date: '2025-12-05'
-sections_completed: ['technology_stack', 'implementation_rules', 'infrastructure', 'architecture', 'frontend', 'testing', 'anti_patterns', 'mcp_integration']
-status: 'complete'
-rule_count: 38
-optimized_for_llm: true
+project_name: gracestowel
+date: '2026-01-04'
+audience: ai-agents
+status: active
 ---
 
 # Project Context for AI Agents
 
-_This file contains critical rules and patterns that AI agents must follow when implementing code in this project. Focus on unobvious details that agents might otherwise miss._
+> **This file supplements [`AGENTS.md`](../AGENTS.md)**. Read both before working on this codebase.
+> 
+> - `AGENTS.md`: Comprehensive patterns, code examples, and how-to guides
+> - `project_context.md` (this file): High-level gotchas and recent architectural decisions
 
 ---
 
-## Technology Stack & Versions
+## Quick Start
 
-- **Runtime:** Node.js >=24 (Backend), Cloudflare Workers (Storefront)
-- **Backend Framework:** Medusa v2.12.0
-- **Storefront Framework:** React Router v7.10.0 (SSR), React v19.1.1
-- **Language:** TypeScript v5.6+
-- **Package Manager:** pnpm (monorepo with workspaces)
-- **Database:** PostgreSQL (Railway), Redis (BullMQ/Cache)
-- **Infrastructure:** Cloudflare Workers (Hyperdrive for DB access from Edge)
-- **Key Libraries:**
-  - Backend: `bullmq` (Jobs), `posthog-node` (Analytics)
-  - Storefront: `tailwindcss` v4, `posthog-js`
-- **MCP Servers:** Prioritize MCP servers for all external service interactions
-  - **Cloudflare:** Use MCP server for Workers, KV, D1, Hyperdrive operations
-  - **Stripe:** Use MCP server for payment operations and testing
-  - **Railway:** Use MCP server for deployments, logs, environment management
-  - **GitHub:** Use MCP server for repository operations, issues, PRs
-  - **GitHub Actions:** Use MCP server for CI/CD workflows and deployments
+```bash
+# Development
+pnpm dev              # All services
+pnpm dev:api          # Backend only (localhost:9000)
+pnpm dev:storefront   # Storefront only (localhost:5173)
 
-## Critical Implementation Rules
+# Testing
+pnpm test             # All tests
+pnpm typecheck        # Type checking
 
-### Infrastructure & Deployment
-- **Cloudflare Workers (Storefront):**
-  - 🛑 NEVER try to connect to TCP services (Postgres) directly without `hyperdrive`.
-  - ✅ ALWAYS use the `env.DATABASE_URL` binding injected by Hyperdrive.
-  - 🛑 DO NOT use Node.js specific APIs (fs, child_process) in Storefront execution paths.
-- **Medusa Backend (Railway):**
-  - ✅ Deploy as a standard Node.js service.
-  - ✅ Use `medusa-config.ts` for all module configurations.
-
-### MCP Server Integration (MANDATORY)
-- **Always Check MCP First:**
-  - 🛑 NEVER use direct API calls, CLI commands, or SDKs when MCP servers are available
-  - ✅ ALWAYS check for and use MCP servers first for: Cloudflare, Stripe, Railway, GitHub, GitHub Actions
-  - ✅ Use `list_mcp_resources()` to discover available MCP servers
-  - ✅ Use `fetch_mcp_resource()` to retrieve MCP server data
-
-- **Service-Specific MCP Usage:**
-  - **Cloudflare:** Use MCP for Workers deployment, KV operations, D1 database queries, Hyperdrive configuration
-  - **Stripe:** Use MCP for payment testing, webhook verification, balance checks, dispute management
-  - **Railway:** Use MCP for deployments, log retrieval, environment variable management, service scaling
-  - **GitHub:** Use MCP for repository management, issue/PR operations, release management, branch protection
-  - **GitHub Actions:** Use MCP for workflow execution, deployment triggers, artifact management
-
-- **Fallback Protocol:**
-  - Only use direct APIs/CLIs if MCP server is unavailable or insufficient
-  - Document when MCP servers are bypassed and why
-  - Update this file if new MCP servers become available
-
-### Architecture Patterns (Medusa v2)
-- **Modules:** 
-  - ✅ Encapsulate strictly related logic in `services` within modules.
-  - 🛑 DO NOT make cross-module database calls. Use the Module API/Loader.
-- **Workflows:** 
-  - ✅ Use `createWorkflow` for business logic involving multiple steps.
-  - ✅ Implement rollback logic for all steps (compensation functions).
-  - ✅ Use `acquireLockStep`/`releaseLockStep` from `@medusajs/core-flows` for concurrent operation protection.
-- **Subscribers:**
-  - ✅ Listen to domain events using `subscribers/`.
-  - 🛑 DO NOT block the main thread; use BullMQ jobs for heavy processing.
-
-### Inventory Patterns
-- **Atomic Decrements:**
-  - ✅ Use `InventoryDecrementService` for inventory operations
-  - ✅ Use `updateInventoryLevelsStep` from Medusa for atomic updates with compensation
-  - 🛑 DO NOT use raw SQL for inventory updates
-- **Location Selection:**
-  - ✅ Prefer shipping method `stock_location_id`, then sales-channel locations
-  - 🛑 DO NOT fall back to arbitrary locations; fail loudly if unmapped
-- **Backorders:**
-  - ✅ Check `allow_backorder` flag on `inventory_level` before permitting negative stock
-  - ✅ Emit `inventory.backordered` event when stock goes negative
-  - ✅ Use `clampAvailability()` helper to display 0 for negative stock on storefront
-
-### Payment Patterns
-- **Source of Truth Hierarchy:**
-  - ✅ `Order.total` is the canonical source for order amounts
-  - ✅ `PaymentCollection.amount` must match `Order.total`
-  - ✅ Stripe PaymentIntent is updated to match `Order.total`
-- **PaymentCollection Required:**
-  - ✅ All orders MUST have a linked PaymentCollection
-  - 🛑 DO NOT use `metadata.payment_status` for payment state (deprecated)
-  - 🛑 DO NOT support pre-PAY-01 orders without PaymentCollection (fail loudly)
-- **Currency Units:**
-  - ✅ Medusa uses major units (dollars): `capturePayment({ amount: 45.5 })` = $45.50
-  - ✅ Stripe uses minor units (cents): `paymentIntents.capture({ amount: 4550 })` = $45.50
-  - ✅ Conversion handled by `@medusajs/payment-stripe` provider
-
-### Workflow Locking Patterns
-- **Concurrent Protection:**
-  - ✅ Use `acquireLockStep` at workflow start for operations that must be atomic
-  - ✅ Use PaymentIntent ID as lock key for order creation (prevents duplicate webhook processing)
-  - ✅ Configure lock timeout (30s) and TTL (120s) via constants
-  - ✅ Lock automatically released via compensation on workflow failure
-
-### Frontend Patterns (React Router v7)
-- **Data Loading:**
-  - ✅ Use `loader` functions for server-side data fetching.
-  - ✅ Use `useLoaderData` to access data in components.
-- **Styling:**
-  - ✅ Use Tailwind Utility classes. Avoid custom CSS files unless necessary.
-  - ✅ Use `v4` syntax (no `tailwind.config.js`, configuration in CSS).
-
-### Testing Rules
-- **Backend:** `pnpm run test` (Jest). 
-  - ✅ Mock all external services (Payment, Fulfillment).
-- **Storefront:** `pnpm run test` (Vitest).
-  - ✅ Use `happy-dom` for environment.
-
-### Email Queue Patterns (Transactional Email)
-- **Queue Architecture:**
-  - ✅ Use BullMQ for async email processing (non-blocking)
-  - ✅ Enqueue emails from subscribers, never send directly
-  - ✅ Use `lib/email-queue.ts` singleton pattern for queue access
-  - 🛑 DO NOT send emails synchronously in event handlers
-- **Retry & DLQ:**
-  - ✅ Configure 3 retries with exponential backoff (1s, 2s, 4s)
-  - ✅ Move failed emails to Redis DLQ (`email:dlq`) after retries exhausted
-  - ✅ Log all email attempts with `[EMAIL]` prefix
-  - 🛑 DO NOT lose failed emails—always persist to DLQ
-- **PII Handling:**
-  - ✅ Mask email addresses in logs: `****@domain.com`
-  - 🛑 NEVER log full email addresses in production
-- **Resend Integration:**
-  - ✅ Use existing `src/modules/resend/service.ts` for sending
-  - ✅ Use React Email templates in `src/modules/resend/emails/`
-  - ✅ Store API key in `RESEND_API_KEY` env var
-
-### Critical Anti-Patterns
-- 🛑 **Never** commit `.env` files.
-- 🛑 **Never** ignore errors in `catch` blocks—log them or rethrow.
-- 🛑 **Never** mix Storefront and Backend types—they are distinct packages.
-- 🛑 **Never** send emails synchronously in subscribers—use BullMQ queue.
-- 🛑 **Never** log PII (email addresses) in plain text.
-- 🛑 **Never** use `metadata.payment_status` for payment state—use PaymentCollection.
-- 🛑 **Never** use raw SQL for inventory updates—use `updateInventoryLevelsStep`.
-- 🛑 **Never** fall back to arbitrary inventory locations—fail loudly if unmapped.
+# Database
+cd apps/backend && npm run migrate
+```
 
 ---
 
-## Usage Guidelines
+## Project-Specific Gotchas
 
-**For AI Agents:**
+### 1. Storefront Runs on Cloudflare Workers (Edge)
+- **No Node.js APIs** — `fs`, `path`, `child_process` will fail
+- **Database via Hyperdrive only** — use `env.HYPERDRIVE.connectionString`
+- **Reads from DB, Writes via Medusa API** — never write directly to DB from storefront
 
-- Read this file before implementing any code
-- Follow ALL rules exactly as documented
-- When in doubt, prefer the more restrictive option
-- Update this file if new patterns emerge
+### 2. Medusa v2 Only (Not v1)
+- Use `MedusaService({ Model })` not `TransactionBaseService`
+- Use `container.resolve()` not `@Inject` decorators
+- Use `createWorkflow()` for multi-step operations
+- **Always check [Medusa v2 docs](https://docs.medusajs.com/v2) first**
 
-**For Humans:**
+### 3. Email is Always Async
+- Use BullMQ queue via `src/lib/email-queue.ts`
+- Never send emails synchronously in request handlers
+- Mask email addresses in logs: `****@domain.com`
 
-- Keep this file lean and focused on agent needs
-- Update when technology stack changes
-- Review quarterly for outdated rules
-- Remove rules that become obvious over time
+### 4. Payment Architecture (Recent Change)
+- **Source of truth**: `Order.total` → `PaymentCollection.amount` → Stripe
+- **PaymentCollection required** — all orders must have one
+- **No metadata fallback** — `metadata.payment_status` is deprecated
+- **Currency units**: Medusa = dollars, Stripe = cents (conversion automatic)
 
-Last Updated: 2026-01-04
+### 5. Inventory Patterns (Recent Change)
+- Use `InventoryDecrementService` for atomic updates
+- Use `updateInventoryLevelsStep` from Medusa (has compensation)
+- **No raw SQL** for inventory operations
+- **No arbitrary location fallback** — fail loudly if location unmapped
+- Check `allow_backorder` flag before permitting negative stock
+
+### 6. Workflow Locking (Recent Change)
+- Use `acquireLockStep`/`releaseLockStep` from `@medusajs/core-flows`
+- Lock key = PaymentIntent ID (prevents duplicate webhook processing)
+- Config: 30s timeout, 120s TTL
+
+---
+
+## CLI Commands (Preferred)
+
+Use CLI commands when available. MCP servers are a secondary option.
+
+| Task | Command |
+|------|---------|
+| Deploy storefront | `pnpm deploy:storefront` |
+| Deploy backend | `pnpm deploy:api` |
+| Run migrations | `cd apps/backend && npm run migrate` |
+| Seed database | `cd apps/backend && npm run seed` |
+| View logs | `railway logs` (requires Railway CLI) |
+| Cloudflare logs | `wrangler tail` (requires Wrangler CLI) |
+
+---
+
+## Key Documentation Links
+
+| Topic | Location |
+|-------|----------|
+| Full agent guidelines | [`AGENTS.md`](../AGENTS.md) |
+| Backend architecture | [`docs/architecture/backend.md`](architecture/backend.md) |
+| Storefront architecture | [`docs/architecture/storefront.md`](architecture/storefront.md) |
+| API reference | [`docs/reference/backend-api.md`](reference/backend-api.md) |
+| Testing strategy | [`docs/guides/testing-strategy.md`](guides/testing-strategy.md) |
+
+---
+
+## Recent Architectural Decisions
+
+These patterns were established in recent sprints. They may not be obvious from the codebase alone.
+
+1. **INV-01**: Workflow-level locking for concurrent inventory operations
+2. **INV-02**: Backorder support with `allow_backorder` flag and `inventory.backordered` event
+3. **PAY-01**: PaymentCollection as source of truth (no metadata fallback)
+4. **ORD-02**: Incremental authorization for order modifications during grace period
+
+See `docs/sprint/sprint-artifacts/` for detailed implementation notes.
+
+---
+
+*Last updated: 2026-01-04*
