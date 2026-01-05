@@ -95,9 +95,8 @@ export default async function orderPlacedHandler({
                 const paymentIntentId = paymentIntentIdFromPaymentCollection || paymentIntentIdFromMetadata
 
                 if (paymentIntentId) {
-                     // Resolve service from container instead of importing singleton
+                     // Resolve service from container for dependency injection
                      const modificationTokenService = container.resolve("modificationTokenService") as ModificationTokenService;
-
                      const token = modificationTokenService.generateToken(
                         order.id,
                         paymentIntentId,

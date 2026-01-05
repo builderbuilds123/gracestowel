@@ -149,7 +149,7 @@ describe("End-to-End Email Flow Integration", () => {
       // So we test the component integration: Queue -> Worker -> Resend.
 
       // Manually generate token to simulate what subscriber does
-      const token = modificationTokenService.generateToken(orderId, "pi_123");
+      const token = modificationTokenService.generateToken(orderId, "pi_123", new Date());
       const magicLink = `http://localhost:5173/order/status/${orderId}?token=${token}`;
 
       await enqueueEmail({

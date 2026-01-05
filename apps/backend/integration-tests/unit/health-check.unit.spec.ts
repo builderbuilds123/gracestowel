@@ -1,29 +1,36 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 /**
  * Unit Tests for Health Check Endpoint (Story 4.5)
  */
 
 // Mock ioredis with proper constructor
 const mockRedisInstance = {
-  connect: jest.fn().mockResolvedValue(undefined),
-  ping: jest.fn().mockResolvedValue('PONG'),
-  quit: jest.fn().mockResolvedValue(undefined),
-  disconnect: jest.fn(),
+  connect: vi.fn().mockResolvedValue(undefined),
+  ping: vi.fn().mockResolvedValue('PONG'),
+  quit: vi.fn().mockResolvedValue(undefined),
+  disconnect: vi.fn(),
 };
 
-jest.mock('ioredis', () => ({
-  Redis: jest.fn().mockImplementation(() => mockRedisInstance),
+// Use function() to enable 'new' operator
+const MockRedis = vi.fn(function() {
+  return mockRedisInstance;
+});
+
+vi.mock('ioredis', () => ({
+  default: MockRedis,
+  Redis: MockRedis,
 }));
 
 // Mock dependencies before imports
-jest.mock('../../src/utils/posthog', () => ({
-  getPostHog: jest.fn(),
+vi.mock('../../src/utils/posthog', () => ({
+  getPostHog: vi.fn(),
 }));
 
-jest.mock('../../src/utils/logger', () => ({
+vi.mock('../../src/utils/logger', () => ({
   logger: {
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   },
 }));
 
@@ -31,8 +38,8 @@ import { getPostHog } from '../../src/utils/posthog';
 import { logger } from '../../src/utils/logger';
 
 describe('Health Check Endpoint (Story 4.5)', () => {
-  let mockCapture: jest.Mock;
-  let mockQuery: jest.Mock;
+  let mockCapture: vi.Mock;
+  let mockQuery: vi.Mock;
   let mockReq: any;
   let mockRes: any;
 
@@ -41,24 +48,30 @@ describe('Health Check Endpoint (Story 4.5)', () => {
    * Reduces repetition across tests that need module isolation.
    */
   const loadGetHandler = async (customMocks?: {
-    loggerInfo?: jest.Mock;
+    loggerInfo?: vi.Mock;
   }) => {
-    jest.resetModules();
+    vi.resetModules();
     
-    // Re-mock ioredis
-    jest.mock('ioredis', () => ({
-      Redis: jest.fn().mockImplementation(() => mockRedisInstance),
+    // Re-mock ioredis with doMock which is not hoisted
+    // Use function() to enable 'new' operator
+    const MockRedisRe = vi.fn(function() {
+        return mockRedisInstance;
+    });
+
+    vi.doMock('ioredis', () => ({
+      default: MockRedisRe,
+      Redis: MockRedisRe,
     }));
     
-    // Re-mock dependencies
-    jest.mock('../../src/utils/posthog', () => ({
-      getPostHog: jest.fn(() => ({ capture: mockCapture })),
+    // Re-mock dependencies with doMock to use local variables
+    vi.doMock('../../src/utils/posthog', () => ({
+      getPostHog: vi.fn(() => ({ capture: mockCapture })),
     }));
-    jest.mock('../../src/utils/logger', () => ({
+    vi.doMock('../../src/utils/logger', () => ({
       logger: { 
-        info: customMocks?.loggerInfo ?? jest.fn(), 
-        warn: jest.fn(), 
-        error: jest.fn() 
+        info: customMocks?.loggerInfo ?? vi.fn(), 
+        warn: vi.fn(), 
+        error: vi.fn() 
       },
     }));
 
@@ -67,16 +80,16 @@ describe('Health Check Endpoint (Story 4.5)', () => {
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     
-    mockCapture = jest.fn();
-    (getPostHog as jest.Mock).mockReturnValue({ capture: mockCapture });
+    mockCapture = vi.fn();
+    (getPostHog as any).mockReturnValue({ capture: mockCapture });
     
-    mockQuery = jest.fn().mockResolvedValue({ data: [{ id: 'region_1' }] });
+    mockQuery = vi.fn().mockResolvedValue({ data: [{ id: 'region_1' }] });
     
     mockReq = {
       scope: {
-        resolve: jest.fn((name: string) => {
+        resolve: vi.fn((name: string) => {
           if (name === 'query') return { graph: mockQuery };
           return null;
         }),
@@ -84,8 +97,8 @@ describe('Health Check Endpoint (Story 4.5)', () => {
     };
     
     mockRes = {
-      status: jest.fn().mockReturnThis(),
-      json: jest.fn(),
+      status: vi.fn().mockReturnThis(),
+      json: vi.fn(),
     };
 
     // Set up Redis URL for tests
@@ -201,7 +214,7 @@ describe('Health Check Endpoint (Story 4.5)', () => {
     });
 
     it('should log health check results', async () => {
-      const mockLoggerInfo = jest.fn();
+      const mockLoggerInfo = vi.fn();
       const GET = await loadGetHandler({ loggerInfo: mockLoggerInfo });
       
       await GET(mockReq, mockRes);

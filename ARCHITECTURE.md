@@ -182,21 +182,23 @@ User enters address → AddressElement onChange
 ## Related Documentation
 
 ### Setup & Infrastructure
-- [Environment Setup](./docs/ENVIRONMENT_SETUP.md) - How to configure environment variables
-- [Railway Infrastructure](./docs/RAILWAY_INFRASTRUCTURE.md) - Database and hosting setup
-- [Development Workflow](./docs/DEV_WORKFLOW.md) - Local development guide
+- [Environment Setup](./docs/guides/environment-setup.md) - How to configure environment variables
+- [Railway Infrastructure](./docs/guides/railway-infrastructure.md) - Database and hosting setup
+- [Development Guide](./docs/guides/development.md) - Local development guide
 
 ### API & Backend
-- [Backend API Reference](./docs/BACKEND_API.md) - Medusa API endpoints documentation
-- [Storefront API Reference](./docs/STOREFRONT_API.md) - Cloudflare Workers API routes
+- [Backend API Reference](./docs/reference/backend-api.md) - Medusa API endpoints documentation
+- [Storefront API Reference](./docs/reference/storefront-api.md) - Cloudflare Workers API routes
 
 ### Frontend
-- [Storefront Components](./docs/STOREFRONT_COMPONENTS.md) - React component library
-- [Data Layer](./docs/DATA_LAYER.md) - Product data, cart state, and configuration
+- [Storefront Components](./docs/reference/storefront-components.md) - React component library
+- [Data Layer](./docs/architecture/data-layer.md) - Product data, cart state, and configuration
 
 ### Integrations
-- [Integrations Guide](./docs/INTEGRATIONS.md) - Stripe, Medusa, and Cloudflare integrations
+- [Integrations Guide](./docs/architecture/integrations.md) - Stripe, Medusa, and Cloudflare integrations
 
 ### Troubleshooting
-- [Medusa Auth Module Issue](./docs/MEDUSA_AUTH_MODULE_ISSUE.md) - Known v2.11 bug and workarounds
+- [Medusa Auth Module Issue](./docs/troubleshooting/medusa-auth-module.md) - Known v2.11 bug and workarounds
+- [Stripe Errors](./docs/troubleshooting/stripe-errors.md) - Stripe error troubleshooting
+- [Payment Debugging](./docs/troubleshooting/payment-debugging.md) - Payment flow debugging
 

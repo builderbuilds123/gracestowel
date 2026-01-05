@@ -11,9 +11,10 @@ import { initStripe, getStripe } from "../lib/stripe";
 import { CheckoutForm, type ShippingOption } from "../components/CheckoutForm";
 import { OrderSummary } from "../components/OrderSummary";
 import { parsePrice } from "../lib/price";
-import { generateTraceId } from "../lib/logger";
+import { generateTraceId, createLogger } from "../lib/logger";
 import { monitoredFetch } from "../utils/monitored-fetch";
 import { generateCartHash } from "../utils/cart-hash";
+import { useShippingPersistence } from "../hooks/useShippingPersistence";
 
 
 // Check if in development mode (consistent with codebase pattern)
@@ -53,6 +54,13 @@ export default function Checkout() {
   const [lastTraceId, setLastTraceId] = useState<string | null>(null);
   const [guestEmail, setGuestEmail] = useState<string | undefined>(undefined);
 
+  // Track initialization to prevent clientSecret changes
+  const isInitialized = useRef(false);
+  const sessionTraceId = useRef(generateTraceId());
+
+  // Caching mechanism for shipping rates
+  const shippingCache = useRef<Map<string, { options: ShippingOption[], cartId: string | undefined }>>(new Map());
+
   // Shipping & Cart state
   // Initialize cartId from sessionStorage if available (client-side only)
   const [cartId, setCartId] = useState<string | undefined>(() => {
@@ -68,12 +76,37 @@ export default function Checkout() {
   const [isCalculatingShipping, setIsCalculatingShipping] = useState(false);
   const [shippingAddress, setShippingAddress] = useState<any>(undefined);
 
-  // Track initialization to prevent clientSecret changes
-  const isInitialized = useRef(false);
-  const sessionTraceId = useRef(generateTraceId());
+  // SHP-01: Shipping persistence hook
+  const { 
+    isShippingPersisted, 
+    setIsShippingPersisted,
+    shippingPersistError, 
+    setShippingPersistError,
+    persistShippingOption 
+  } = useShippingPersistence(cartId, sessionTraceId.current);
 
-  // Caching mechanism for shipping rates
-  const shippingCache = useRef<Map<string, { options: ShippingOption[], cartId: string | undefined }>>(new Map());
+  /**
+   * SHP-01: Handle shipping selection validation and persistence
+   */
+  const handleShippingSelect = useCallback(async (option: ShippingOption) => {
+    // Update local state immediately for responsive UI
+    setSelectedShipping(option);
+    
+    // Delegate persistence to hook
+    await persistShippingOption(option);
+  }, [persistShippingOption]);
+
+  // Handle cart expiration logic which was previously inside the inline function
+  // We need to watch for specific error messages that indicate expiration
+  useEffect(() => {
+    if (shippingPersistError?.includes('expired')) {
+       setCartId(undefined);
+       if (typeof window !== 'undefined') {
+         sessionStorage.removeItem('medusa_cart_id');
+       }
+    }
+  }, [shippingPersistError]);
+
 
   // Persist cartId to sessionStorage
   useEffect(() => {
@@ -399,10 +432,16 @@ export default function Checkout() {
       setShippingOptions(shipping_options);
 
       if (shipping_options.length > 0) {
-        setSelectedShipping(prev => {
-          const found = shipping_options.find(o => o.id === prev?.id);
-          return found || shipping_options[0];
-        });
+        // SHP-01: Auto-select and persist shipping method
+        // Use existing selection if it's still valid, otherwise pick first option
+        const found = shipping_options.find(o => o.id === selectedShipping?.id);
+        const optionToSelect = found || shipping_options[0];
+        
+        // Only call handleShippingSelect if we're changing the selection
+        // or if this is the first selection (to ensure it gets persisted)
+        if (!selectedShipping || optionToSelect.id !== selectedShipping.id) {
+          handleShippingSelect(optionToSelect);
+        }
       }
 
       // Cache results
@@ -413,7 +452,7 @@ export default function Checkout() {
     } finally {
       setIsCalculatingShipping(false);
     }
-  }, [currency, cartId]);
+  }, [currency, cartId, selectedShipping, handleShippingSelect]);
 
   // Effect to trigger shipping fetch when items or address change
   // Uses direct setTimeout architecture for robust debouncing
@@ -533,6 +572,14 @@ export default function Checkout() {
           </div>
         )}
 
+        {/* SHP-01: Shipping Persistence Warning */}
+        {shippingPersistError && (
+          <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded mb-6">
+            <p className="font-medium">⚠️ Warning</p>
+            <p className="text-sm mt-1">{shippingPersistError}</p>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start">
           {/* Checkout Form */}
           <div className="lg:col-span-7 space-y-8">
@@ -546,8 +593,9 @@ export default function Checkout() {
                     onEmailChange={setGuestEmail}
                     shippingOptions={shippingOptions}
                     selectedShipping={selectedShipping}
-                    setSelectedShipping={setSelectedShipping}
+                    setSelectedShipping={handleShippingSelect}
                     isCalculatingShipping={isCalculatingShipping}
+                    isShippingPersisted={isShippingPersisted || !selectedShipping}
                     customerData={
                       isAuthenticated && customer
                         ? {

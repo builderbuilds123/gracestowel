@@ -3,6 +3,7 @@ import {
     updateLineItemQuantityWorkflow,
     LineItemNotFoundError,
     InvalidQuantityError,
+    NoQuantityChangeError,
 } from "../../../../../../workflows/update-line-item-quantity";
 import {
     InsufficientStockError,
@@ -17,18 +18,31 @@ import {
     PaymentIntentMissingError,
     OrderLockedError,
 } from "../../../../../../workflows/add-item-to-order";
+import { logger } from "../../../../../../utils/logger";
 
 /**
  * POST /store/orders/:id/line-items/update
  *
- * Update quantity of an existing line item.
+ * Update the quantity of an existing line item within the 1-hour modification window.
+ * Handles incremental authorization if increasing quantity, refund if decreasing.
  *
  * Headers:
- * - x-modification-token: JWT token (required)
+ * - x-modification-token: JWT token from order creation (REQUIRED - must be in header, not body)
+ * - x-publishable-api-key: Medusa publishable key (required)
  *
  * Body:
  * - item_id: string (required)
- * - quantity: number (required, >= 0)
+ * - quantity: number (required, non-negative integer)
+ *
+ * Error Codes:
+ * - 400 TOKEN_REQUIRED: Missing x-modification-token header
+ * - 401 TOKEN_EXPIRED: Token has expired
+ * - 401 TOKEN_INVALID: Malformed or invalid token
+ * - 403 TOKEN_MISMATCH: Token order_id doesn't match route parameter
+ * - 404 LINE_ITEM_NOT_FOUND: Item ID not found in order
+ * - 409 insufficient_stock: Requested quantity exceeds available stock
+ * - 422 invalid_state: Order or payment in invalid state for modification
+ * - 402 card_declined: Payment authorization failed
  */
 
 interface UpdateItemBody {
@@ -76,14 +90,12 @@ export async function POST(
     res: MedusaResponse
 ): Promise<void> {
     const { id } = req.params;
-    const modificationToken = req.headers["x-modification-token"] as string;
-    const bodyToken = (req.body as any)?.token as string;
-    const token = modificationToken || bodyToken;
+    const token = req.headers["x-modification-token"] as string;
 
     if (!token) {
         res.status(400).json({
             code: "TOKEN_REQUIRED",
-            message: "x-modification-token header is required",
+            message: "x-modification-token header is required. Token must be sent in header, not request body.",
         });
         return;
     }
@@ -99,7 +111,16 @@ export async function POST(
     }
 
     const { item_id, quantity } = parseResult.data!;
+    
+    // Require x-request-id for idempotency (fallback to UUID only for backward compatibility)
     const requestId = (req.headers["x-request-id"] as string) || crypto.randomUUID();
+    if (!req.headers["x-request-id"]) {
+        logger.warn("order-line-items-update", "Missing x-request-id header - using random UUID (not idempotent)", {
+            orderId: id,
+            itemId: item_id,
+            requestId, // Include generated requestId for traceability
+        });
+    }
 
     try {
         const result = await updateLineItemQuantityWorkflow(req.scope).run({
@@ -160,8 +181,18 @@ export async function POST(
             return;
         }
         if (error instanceof InvalidQuantityError) {
-             res.status(422).json({ code: error.code, message: error.message });
-             return;
+            res.status(422).json({ code: error.code, message: error.message });
+            return;
+        }
+        
+        // 200 OK - No change (not an error, but handled here for consistency)
+        if (error instanceof NoQuantityChangeError) {
+            res.status(200).json({
+                order_id: id,
+                message: "Quantity unchanged - no update needed",
+                item_id: item_id,
+            });
+            return;
         }
         if (error instanceof PaymentIntentMissingError) {
             res.status(422).json({ code: error.code, message: error.message });
@@ -196,15 +227,28 @@ export async function POST(
 
         // 500 Critical
         if (error instanceof AuthMismatchError) {
-             console.error("CRITICAL: AuthMismatch during update items", error);
-             res.status(500).json({
+            logger.critical("order-line-items-update", "AUTH_MISMATCH_OVERSOLD - Critical payment mismatch", {
+                alert: "CRITICAL",
+                issue: "AUTH_MISMATCH_OVERSOLD",
+                orderId: id,
+                itemId: item_id,
+                quantity,
+                requestId,
+            }, error instanceof Error ? error : new Error(String(error)));
+            res.status(500).json({
                 code: "AUTH_MISMATCH_OVERSOLD",
                 message: "A critical error occurred. Please contact support.",
             });
             return;
         }
 
-        console.error("[update-items] Error updating item quantity:", error);
+        // Generic error handler
+        logger.error("order-line-items-update", "Error updating item quantity", {
+            orderId: id,
+            itemId: item_id,
+            quantity,
+            requestId,
+        }, error instanceof Error ? error : new Error(String(error)));
         res.status(500).json({
             code: "UPDATE_FAILED",
             message: "An error occurred while updating the item.",

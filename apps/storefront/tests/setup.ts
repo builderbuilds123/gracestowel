@@ -8,8 +8,8 @@ import "vitest-axe/extend-expect";
 import { cleanup } from "@testing-library/react";
 import { afterEach, beforeEach } from "vitest";
 
-// Mock localStorage for tests
-const localStorageMock = (() => {
+// Factory function to create storage mocks (avoids code duplication)
+const createStorageMock = () => {
   let store: Record<string, string> = {};
 
   return {
@@ -31,11 +31,23 @@ const localStorageMock = (() => {
       return keys[index] || null;
     },
   };
-})();
+};
+
+// Mock localStorage for tests
+const localStorageMock = createStorageMock();
+
+// Mock sessionStorage for tests
+const sessionStorageMock = createStorageMock();
 
 // Set up localStorage mock globally
 Object.defineProperty(window, "localStorage", {
   value: localStorageMock,
+  writable: true,
+});
+
+// Set up sessionStorage mock globally
+Object.defineProperty(window, "sessionStorage", {
+  value: sessionStorageMock,
   writable: true,
 });
 
@@ -49,4 +61,5 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   localStorageMock.clear();
+  sessionStorageMock.clear();
 });

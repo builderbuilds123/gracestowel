@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
 /**
  * Unit tests for the Cancel Order API Route
  * Verifies token extraction from header and error handling
@@ -8,10 +9,10 @@ import { modificationTokenService } from "../../src/services/modification-token"
 import * as workflowExports from "../../src/workflows/cancel-order-with-refund";
 
 // Mock dependencies
-jest.mock("../../src/services/modification-token");
-jest.mock("../../src/workflows/cancel-order-with-refund", () => ({
-    cancelOrderWithRefundWorkflow: jest.fn().mockReturnValue({
-        run: jest.fn().mockResolvedValue({
+vi.mock("../../src/services/modification-token");
+vi.mock("../../src/workflows/cancel-order-with-refund", () => ({
+    cancelOrderWithRefundWorkflow: vi.fn().mockReturnValue({
+        run: vi.fn().mockResolvedValue({
             result: {
                 order_id: "ord_123",
                 status: "canceled",
@@ -28,15 +29,15 @@ jest.mock("../../src/workflows/cancel-order-with-refund", () => ({
 describe("Cancel Order API Route", () => {
     let req: Partial<MedusaRequest>;
     let res: Partial<MedusaResponse>;
-    let jsonMock: jest.Mock;
-    let statusMock: jest.Mock;
+    let jsonMock: vi.Mock;
+    let statusMock: vi.Mock;
 
-    let queryGraphMock: jest.Mock;
+    let queryGraphMock: vi.Mock;
 
     beforeEach(() => {
-        jsonMock = jest.fn();
-        statusMock = jest.fn().mockReturnValue({ json: jsonMock });
-        queryGraphMock = jest.fn().mockResolvedValue({
+        jsonMock = vi.fn();
+        statusMock = vi.fn().mockReturnValue({ json: jsonMock });
+        queryGraphMock = vi.fn().mockResolvedValue({
             data: [{ id: "ord_123", status: "pending", metadata: {} }]
         });
         
@@ -48,18 +49,18 @@ describe("Cancel Order API Route", () => {
             body: { reason: "Changed mind" },
             headers: {},
             scope: {
-                resolve: jest.fn().mockReturnValue({
+                resolve: vi.fn().mockReturnValue({
                     graph: queryGraphMock
                 })
             }
         };
-        jest.clearAllMocks();
+        vi.clearAllMocks();
     });
 
     it("should extract token from x-modification-token header", async () => {
         req.headers = { "x-modification-token": "valid_token" };
         
-        (modificationTokenService.validateToken as jest.Mock).mockReturnValue({
+        (modificationTokenService.validateToken as any).mockReturnValue({
             valid: true,
             payload: { order_id: "ord_123" },
         });
@@ -85,7 +86,7 @@ describe("Cancel Order API Route", () => {
         req.headers = { "x-modification-token": "valid_token" };
         req.body = { reason: "Too expensive", token: "ignored_body_token" };
         
-        (modificationTokenService.validateToken as jest.Mock).mockReturnValue({
+        (modificationTokenService.validateToken as any).mockReturnValue({
             valid: true,
             payload: { order_id: "ord_123" },
         });

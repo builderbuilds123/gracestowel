@@ -14,6 +14,18 @@ export { PaymentCaptureJobData, JobActiveError } from "../types/queue-types";
 // Queue name for payment capture
 export const PAYMENT_CAPTURE_QUEUE = "payment-capture";
 
+/**
+ * Calculate the payment capture delay based on buffer configuration.
+ * Exported for unit testing without module resets.
+ *
+ * @param bufferSeconds - Buffer time before grace period ends
+ * @param graceHours - Total grace period in hours (default: 1)
+ * @returns Delay in milliseconds
+ */
+export function calculateCaptureDelayMs(bufferSeconds: number, graceHours: number = 1): number {
+    return (graceHours * 60 * 60 - bufferSeconds) * 1000;
+}
+
 // Story 6.3: Capture buffer - start capture 30s before grace period ends (59:30)
 // This prevents race conditions where edits arrive just as capture starts
 export const CAPTURE_BUFFER_SECONDS = parseInt(
@@ -24,7 +36,7 @@ export const CAPTURE_BUFFER_SECONDS = parseInt(
 // Delay for payment capture - configurable via env, defaults to 59:30 (3570000ms)
 // Story 6.3: Uses 30s buffer before full hour to prevent edit/capture race
 export const PAYMENT_CAPTURE_DELAY_MS = parseInt(
-    process.env.PAYMENT_CAPTURE_DELAY_MS || String((60 * 60 - CAPTURE_BUFFER_SECONDS) * 1000),
+    process.env.PAYMENT_CAPTURE_DELAY_MS || String(calculateCaptureDelayMs(CAPTURE_BUFFER_SECONDS)),
     10
 );
 

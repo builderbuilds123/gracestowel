@@ -45,35 +45,25 @@ export default defineConfig({
   /* Configure projects for major browsers */
   projects: [
     {
-      name: "storefront-chromium",
-      testDir: "./tests/storefront",
+      name: "chromium",
       use: { ...devices["Desktop Chrome"] },
     },
     {
-      name: "storefront-firefox",
-      testDir: "./tests/storefront",
+      name: "firefox",
       use: { ...devices["Desktop Firefox"] },
     },
     {
-      name: "storefront-webkit",
-      testDir: "./tests/storefront",
+      name: "webkit",
       use: { ...devices["Desktop Safari"] },
     },
     /* Test against mobile viewports */
     {
-      name: "storefront-mobile-chrome",
-      testDir: "./tests/storefront",
+      name: "Mobile Chrome",
       use: { ...devices["Pixel 5"] },
     },
     {
-      name: "storefront-mobile-safari",
-      testDir: "./tests/storefront",
+      name: "Mobile Safari",
       use: { ...devices["iPhone 12"] },
-    },
-    {
-      name: "backend-api",
-      testDir: "./tests/backend",
-      use: { ...devices["Desktop Chrome"] },
     },
     /* Resilience tests project */
     {
@@ -103,3 +93,4 @@ export default defineConfig({
     timeout: 15 * 1000,
   },
 });
+

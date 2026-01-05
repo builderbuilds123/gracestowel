@@ -1,5 +1,6 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { modificationTokenService } from "../../../../../services/modification-token";
+import { logger } from "../../../../../utils/logger";
 import { 
     cancelOrderWithRefundWorkflow,
     LateCancelError,
@@ -11,13 +12,27 @@ import {
 
 /**
  * POST /store/orders/:id/cancel
- * 
+ *
  * Cancel an order within the 1-hour modification window.
  * Handles payment void/refund and inventory restocking.
- * 
+ *
+ * Headers:
+ * - x-modification-token: JWT token from order creation (REQUIRED - must be in header, not body)
+ * - x-publishable-api-key: Medusa publishable key (required)
+ *
  * Body:
- * - token: The modification JWT token (required)
- * - reason: Optional cancellation reason
+ * - reason: Optional cancellation reason (string)
+ *
+ * Error Codes:
+ * - 400 TOKEN_REQUIRED: Missing x-modification-token header
+ * - 401 TOKEN_EXPIRED: Token has expired
+ * - 401 TOKEN_INVALID: Malformed or invalid token
+ * - 403 TOKEN_MISMATCH: Token order_id doesn't match route parameter
+ * - 404 ORDER_NOT_FOUND: Order does not exist
+ * - 400 ALREADY_CANCELED: Order is already canceled (idempotent 200)
+ * - 409 late_cancel: Payment already captured, cannot cancel
+ * - 422 partial_capture: Payment partially captured, manual refund required
+ * - 503 service_unavailable: Queue service unavailable, retry later
  */
 export async function POST(
     req: MedusaRequest,
@@ -25,12 +40,12 @@ export async function POST(
 ): Promise<void> {
     const { id } = req.params;
     const token = req.headers["x-modification-token"] as string;
-    const { reason } = req.body as { reason?: string };
+    const { reason } = (req.body ?? {}) as { reason?: string };
 
     if (!token) {
         res.status(400).json({
-            error: "Modification token is required",
             code: "TOKEN_REQUIRED",
+            message: "x-modification-token header is required. Token must be sent in header, not request body.",
         });
         return;
     }
@@ -40,12 +55,11 @@ export async function POST(
 
     if (!validation.valid) {
         res.status(401).json({
-            error: validation.error,
             code: validation.expired ? "TOKEN_EXPIRED" : "TOKEN_INVALID",
-            expired: validation.expired,
-            message: validation.expired 
+            message: validation.expired
                 ? "The 1-hour modification window has expired. Please contact support for assistance."
                 : "Invalid modification token",
+            expired: validation.expired,
         });
         return;
     }
@@ -53,8 +67,8 @@ export async function POST(
     // Verify the token is for this order
     if (validation.payload?.order_id !== id) {
         res.status(403).json({
-            error: "Token does not match this order",
             code: "TOKEN_MISMATCH",
+            message: "Token does not match this order",
         });
         return;
     }
@@ -63,7 +77,6 @@ export async function POST(
     const remainingTime = modificationTokenService.getRemainingTime(token);
     if (remainingTime <= 0) {
         res.status(400).json({
-            error: "Modification window has expired",
             code: "WINDOW_EXPIRED",
             message: "The 1-hour modification window has expired. Please contact support for assistance.",
         });
@@ -80,8 +93,8 @@ export async function POST(
 
     if (!orders.length) {
         res.status(404).json({
-            error: "Order not found",
             code: "ORDER_NOT_FOUND",
+            message: "Order not found",
         });
         return;
     }
@@ -89,8 +102,8 @@ export async function POST(
     const order = orders[0];
     if (order.status === "canceled") {
         res.status(400).json({
-            error: "Order is already canceled",
             code: "ALREADY_CANCELED",
+            message: "Order is already canceled",
         });
         return;
     }
@@ -164,12 +177,10 @@ export async function POST(
             return;
         }
 
-        console.error("Error canceling order:", error);
+        logger.error("order-cancel", "Error canceling order", { orderId: id }, error instanceof Error ? error : new Error(String(error)));
         res.status(500).json({
-            error: "Failed to cancel order",
             code: "CANCELLATION_FAILED",
             message: "An error occurred while processing the cancellation. Please try again or contact support.",
         });
     }
 }
-

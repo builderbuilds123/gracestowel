@@ -1,8 +1,8 @@
-import { APIRequestContext } from "@playwright/test";
+import { APIRequestContext } from '@playwright/test';
 
 /**
- * Custom error class for API errors with status code exposed as property
- * Sanitizes error messages to prevent leaking sensitive data in logs
+ * Pure function for API requests
+ * Framework-agnostic, accepts all dependencies explicitly
  */
 export class ApiError extends Error {
   public readonly status: number;
@@ -22,10 +22,6 @@ export class ApiError extends Error {
   }
 }
 
-/**
- * Pure function for API requests
- * Framework-agnostic, accepts all dependencies explicitly
- */
 type ApiRequestMethod = "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
 
 export type ApiRequestParams = {

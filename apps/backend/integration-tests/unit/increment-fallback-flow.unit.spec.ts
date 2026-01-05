@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 /**
  * Unit tests for Story 6.4: Increment Fallback Flow
  * 
@@ -13,10 +14,10 @@
 
 
 // Mock Stripe client
-const mockStripeUpdate = jest.fn();
-const mockStripeRetrieve = jest.fn();
-jest.mock("../../src/utils/stripe", () => ({
-    getStripeClient: jest.fn().mockReturnValue({
+const mockStripeUpdate = vi.fn();
+const mockStripeRetrieve = vi.fn();
+vi.mock("../../src/utils/stripe", () => ({
+    getStripeClient: vi.fn().mockReturnValue({
         paymentIntents: {
             update: mockStripeUpdate,
             retrieve: mockStripeRetrieve,
@@ -28,51 +29,51 @@ describe("Story 6.4: Increment Fallback Flow", () => {
     const originalEnv = process.env;
 
     beforeEach(() => {
-        jest.clearAllMocks();
+        vi.clearAllMocks();
         process.env = { ...originalEnv };
         process.env.STRIPE_SECRET_KEY = "sk_test_xxx";
 
-        jest.spyOn(console, "log").mockImplementation(() => {});
-        jest.spyOn(console, "warn").mockImplementation(() => {});
-        jest.spyOn(console, "error").mockImplementation(() => {});
+        vi.spyOn(console, "log").mockImplementation(() => {});
+        vi.spyOn(console, "warn").mockImplementation(() => {});
+        vi.spyOn(console, "error").mockImplementation(() => {});
     });
 
     afterEach(() => {
         process.env = originalEnv;
-        jest.restoreAllMocks();
+        vi.restoreAllMocks();
     });
 
     describe("Task 1: Error Handling - Decline Code Mapping (AC 1-4)", () => {
-        it("should map insufficient_funds to user-friendly message", () => {
-            const { mapDeclineCodeToUserMessage } = require("../../src/workflows/add-item-to-order");
+        it("should map insufficient_funds to user-friendly message", async () => {
+            const { mapDeclineCodeToUserMessage } = await import("../../src/workflows/add-item-to-order");
             
             const message = mapDeclineCodeToUserMessage("insufficient_funds");
             expect(message).toBe("Insufficient funds.");
         });
 
-        it("should map card_declined to user-friendly message", () => {
-            const { mapDeclineCodeToUserMessage } = require("../../src/workflows/add-item-to-order");
+        it("should map card_declined to user-friendly message", async () => {
+            const { mapDeclineCodeToUserMessage } = await import("../../src/workflows/add-item-to-order");
             
             const message = mapDeclineCodeToUserMessage("card_declined");
             expect(message).toBe("Your card was declined.");
         });
 
-        it("should map expired_card to user-friendly message", () => {
-            const { mapDeclineCodeToUserMessage } = require("../../src/workflows/add-item-to-order");
+        it("should map expired_card to user-friendly message", async () => {
+            const { mapDeclineCodeToUserMessage } = await import("../../src/workflows/add-item-to-order");
             
             const message = mapDeclineCodeToUserMessage("expired_card");
             expect(message).toBe("Your card has expired.");
         });
 
-        it("should map generic_decline to user-friendly message", () => {
-            const { mapDeclineCodeToUserMessage } = require("../../src/workflows/add-item-to-order");
+        it("should map generic_decline to user-friendly message", async () => {
+            const { mapDeclineCodeToUserMessage } = await import("../../src/workflows/add-item-to-order");
             
             const message = mapDeclineCodeToUserMessage("generic_decline");
             expect(message).toBe("Your card was declined.");
         });
 
-        it("should map lost_card/stolen_card to safe message", () => {
-            const { mapDeclineCodeToUserMessage } = require("../../src/workflows/add-item-to-order");
+        it("should map lost_card/stolen_card to safe message", async () => {
+            const { mapDeclineCodeToUserMessage } = await import("../../src/workflows/add-item-to-order");
             
             // Should NOT reveal card is lost/stolen for security
             const lostMessage = mapDeclineCodeToUserMessage("lost_card");
@@ -82,22 +83,22 @@ describe("Story 6.4: Increment Fallback Flow", () => {
             expect(stolenMessage).toBe("Your card was declined. Please try another.");
         });
 
-        it("should map incorrect_cvc to user-friendly message", () => {
-            const { mapDeclineCodeToUserMessage } = require("../../src/workflows/add-item-to-order");
+        it("should map incorrect_cvc to user-friendly message", async () => {
+            const { mapDeclineCodeToUserMessage } = await import("../../src/workflows/add-item-to-order");
             
             const message = mapDeclineCodeToUserMessage("incorrect_cvc");
             expect(message).toBe("Your card's security code is incorrect.");
         });
 
-        it("should map processing_error to user-friendly message", () => {
-            const { mapDeclineCodeToUserMessage } = require("../../src/workflows/add-item-to-order");
+        it("should map processing_error to user-friendly message", async () => {
+            const { mapDeclineCodeToUserMessage } = await import("../../src/workflows/add-item-to-order");
             
             const message = mapDeclineCodeToUserMessage("processing_error");
             expect(message).toBe("An error occurred while processing your card.");
         });
 
-        it("should return generic message for unknown decline codes", () => {
-            const { mapDeclineCodeToUserMessage } = require("../../src/workflows/add-item-to-order");
+        it("should return generic message for unknown decline codes", async () => {
+            const { mapDeclineCodeToUserMessage } = await import("../../src/workflows/add-item-to-order");
             
             const message = mapDeclineCodeToUserMessage("unknown_code_xyz");
             expect(message).toBe("Your card was declined.");
@@ -105,8 +106,8 @@ describe("Story 6.4: Increment Fallback Flow", () => {
     });
 
     describe("Task 1: CardDeclinedError Properties (AC 4, 5)", () => {
-        it("should include userMessage property with friendly text", () => {
-            const { CardDeclinedError } = require("../../src/workflows/add-item-to-order");
+        it("should include userMessage property with friendly text", async () => {
+            const { CardDeclinedError } = await import("../../src/workflows/add-item-to-order");
             
             const error = new CardDeclinedError(
                 "Your card has insufficient funds.",
@@ -119,8 +120,8 @@ describe("Story 6.4: Increment Fallback Flow", () => {
             expect(error.stripeCode).toBe("card_error");
         });
 
-        it("should have retryable property based on decline code", () => {
-            const { CardDeclinedError } = require("../../src/workflows/add-item-to-order");
+        it("should have retryable property based on decline code", async () => {
+            const { CardDeclinedError } = await import("../../src/workflows/add-item-to-order");
             
             // Insufficient funds is retryable (user can add funds)
             const insufficientError = new CardDeclinedError("msg", "card_error", "insufficient_funds");
@@ -134,13 +135,7 @@ describe("Story 6.4: Increment Fallback Flow", () => {
 
     describe("Task 2: Atomic Cleanup / Rollback (AC 6)", () => {
         it("should throw CardDeclinedError which halts workflow before DB update", async () => {
-            // The workflow structure ensures atomic rollback:
-            // 1. validatePreconditionsStep
-            // 2. calculateTotalsStep  
-            // 3. incrementStripeAuthStep <- throws CardDeclinedError on Stripe decline
-            // 4. updateOrderValuesStep <- never reached if step 3 throws
-            
-            const { CardDeclinedError } = require("../../src/workflows/add-item-to-order");
+            const { CardDeclinedError } = await import("../../src/workflows/add-item-to-order");
             
             // Verify CardDeclinedError is a proper Error that will halt workflow execution
             const error = new CardDeclinedError("Declined", "card_error", "insufficient_funds");
@@ -154,25 +149,25 @@ describe("Story 6.4: Increment Fallback Flow", () => {
         it("should convert StripeCardError to CardDeclinedError in incrementStripeAuthStep", async () => {
             // This test verifies the error conversion logic that ensures
             // Stripe declines are properly caught and converted
-            const Stripe = require("stripe");
-            const { CardDeclinedError } = require("../../src/workflows/add-item-to-order");
+            const Stripe = await import("stripe");
+            const { CardDeclinedError } = await import("../../src/workflows/add-item-to-order");
             
             // Simulate what happens in incrementStripeAuthStep catch block
-            const stripeError = new Stripe.errors.StripeCardError({
+            const stripeError = new Stripe.default.errors.StripeCardError({
                 message: "Your card has insufficient funds.",
                 code: "card_declined",
                 decline_code: "insufficient_funds",
-            });
+            } as any);
             
             // The handler converts StripeCardError to CardDeclinedError
             let convertedError: any;
             try {
                 // Simulate the catch block logic
-                if (stripeError instanceof Stripe.errors.StripeCardError) {
+                if (stripeError instanceof Stripe.default.errors.StripeCardError) {
                     throw new CardDeclinedError(
                         stripeError.message || "Card was declined",
                         stripeError.code || "card_declined",
-                        stripeError.decline_code
+                        stripeError.decline_code as string
                     );
                 }
             } catch (e) {
@@ -187,8 +182,8 @@ describe("Story 6.4: Increment Fallback Flow", () => {
     });
 
     describe("API Route Error Response Contract (AC 5, 7)", () => {
-        it("should return 402 Payment Required for card declined", () => {
-            const { CardDeclinedError } = require("../../src/workflows/add-item-to-order");
+        it("should return 402 Payment Required for card declined", async () => {
+            const { CardDeclinedError } = await import("../../src/workflows/add-item-to-order");
             
             const error = new CardDeclinedError("Declined", "card_error", "insufficient_funds");
             
@@ -197,8 +192,8 @@ describe("Story 6.4: Increment Fallback Flow", () => {
             expect(error.declineCode).toBe("insufficient_funds");
         });
 
-        it("should include type field for frontend error handling", () => {
-            const { CardDeclinedError } = require("../../src/workflows/add-item-to-order");
+        it("should include type field for frontend error handling", async () => {
+            const { CardDeclinedError } = await import("../../src/workflows/add-item-to-order");
             
             const error = new CardDeclinedError("Declined", "card_error", "insufficient_funds");
             
@@ -209,8 +204,8 @@ describe("Story 6.4: Increment Fallback Flow", () => {
     });
 
     describe("Security: Error Sanitization (Integration & Security Patterns)", () => {
-        it("should NOT expose raw Stripe error details in userMessage", () => {
-            const { CardDeclinedError } = require("../../src/workflows/add-item-to-order");
+        it("should NOT expose raw Stripe error details in userMessage", async () => {
+            const { CardDeclinedError } = await import("../../src/workflows/add-item-to-order");
             
             // Raw Stripe message might contain sensitive info
             const rawStripeMessage = "Your card number is incorrect. Card: 4242...1234";
@@ -223,8 +218,8 @@ describe("Story 6.4: Increment Fallback Flow", () => {
     });
 
     describe("API Route 402 Response Contract (AC 5, 6, 7 - Integration)", () => {
-        it("should return correct 402 payload structure from CardDeclinedError", () => {
-            const { CardDeclinedError } = require("../../src/workflows/add-item-to-order");
+        it("should return correct 402 payload structure from CardDeclinedError", async () => {
+            const { CardDeclinedError } = await import("../../src/workflows/add-item-to-order");
             
             // Simulate what the API route does when catching CardDeclinedError
             const error = new CardDeclinedError("Insufficient funds", "card_error", "insufficient_funds");
@@ -248,8 +243,8 @@ describe("Story 6.4: Increment Fallback Flow", () => {
             });
         });
 
-        it("should return non-retryable for expired_card decline", () => {
-            const { CardDeclinedError } = require("../../src/workflows/add-item-to-order");
+        it("should return non-retryable for expired_card decline", async () => {
+            const { CardDeclinedError } = await import("../../src/workflows/add-item-to-order");
             
             const error = new CardDeclinedError("Card expired", "card_error", "expired_card");
             
@@ -270,18 +265,8 @@ describe("Story 6.4: Increment Fallback Flow", () => {
             });
         });
 
-        it("should verify workflow step order ensures atomic rollback (AC 6)", () => {
-            // This test documents and verifies the workflow structure
-            // The workflow is defined with steps in this order:
-            // 1. validatePreconditionsStep - validates order/token/payment state
-            // 2. calculateTotalsStep - calculates new totals (no DB mutation)
-            // 3. incrementStripeAuthStep - calls Stripe (throws CardDeclinedError on decline)
-            // 4. updateOrderValuesStep - updates DB (ONLY reached if step 3 succeeds)
-            //
-            // Because incrementStripeAuthStep throws BEFORE updateOrderValuesStep,
-            // no DB mutation occurs on Stripe decline - this is atomic by design.
-            
-            const { CardDeclinedError } = require("../../src/workflows/add-item-to-order");
+        it("should verify workflow step order ensures atomic rollback (AC 6)", async () => {
+            const { CardDeclinedError } = await import("../../src/workflows/add-item-to-order");
             
             // Verify the error is thrown with correct properties
             const error = new CardDeclinedError("Declined", "card_error", "insufficient_funds");

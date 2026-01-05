@@ -1,11 +1,13 @@
-import { useEffect, useState, lazy, Suspense, useRef } from "react";
-import { Link, useSearchParams, useNavigate, useLoaderData } from "react-router";
-import type { LoaderFunctionArgs } from "react-router";
+import { useEffect, useLayoutEffect, useState, lazy, Suspense, useRef } from "react";
+import { Link, useNavigate, useLoaderData, redirect } from "react-router";
+import type { LoaderFunctionArgs, MetaFunction } from "react-router";
 import { CheckCircle2, Package, Truck, MapPin, XCircle } from "lucide-react";
 import { useCart } from "../context/CartContext";
 import { posts } from "../data/blogPosts";
 import { getStripe, initStripe } from "../lib/stripe";
 import { monitoredFetch } from "../utils/monitored-fetch";
+import { createLogger } from "../lib/logger";
+import { migrateStorageItem } from "../lib/storage-migration";
 
 // Lazy load Map component to avoid SSR issues with Leaflet
 const Map = lazy(() => import("../components/Map.client"));
@@ -23,31 +25,100 @@ interface OrderApiResponse {
     };
 }
 
+const CHECKOUT_PARAMS_COOKIE = "checkout_params";
+
+type PaymentParams = {
+    paymentIntentId: string | null;
+    paymentIntentClientSecret: string | null;
+    redirectStatus: string | null;
+};
+
 interface LoaderData {
     stripePublishableKey: string;
     medusaBackendUrl: string;
     medusaPublishableKey: string;
+    initialParams: PaymentParams | null;
 }
 
-export async function loader({ context }: LoaderFunctionArgs): Promise<LoaderData> {
+const serializeParamsCookie = (params: PaymentParams): string =>
+    `${CHECKOUT_PARAMS_COOKIE}=${encodeURIComponent(JSON.stringify(params))}; Max-Age=600; Path=/; SameSite=Strict; Secure; HttpOnly`;
+
+const clearParamsCookie = (): string =>
+    `${CHECKOUT_PARAMS_COOKIE}=; Max-Age=0; Path=/; SameSite=Strict; Secure; HttpOnly`;
+
+const parseParamsFromCookie = (cookieHeader: string | null): PaymentParams | null => {
+    if (!cookieHeader) return null;
+    const cookie = cookieHeader
+        .split(";")
+        .map((c) => c.trim())
+        .find((c) => c.startsWith(`${CHECKOUT_PARAMS_COOKIE}=`));
+    if (!cookie) return null;
+    try {
+        const value = decodeURIComponent(cookie.split("=", 2)[1] ?? "");
+        return JSON.parse(value) as PaymentParams;
+    } catch {
+        return null;
+    }
+};
+
+export async function loader({ request, context }: LoaderFunctionArgs) {
     const env = context.cloudflare.env as {
         STRIPE_PUBLISHABLE_KEY: string;
         MEDUSA_BACKEND_URL: string;
         MEDUSA_PUBLISHABLE_KEY: string;
     };
-    return {
-        stripePublishableKey: env.STRIPE_PUBLISHABLE_KEY,
-        medusaBackendUrl: env.MEDUSA_BACKEND_URL,
-        medusaPublishableKey: env.MEDUSA_PUBLISHABLE_KEY,
+
+    const url = new URL(request.url);
+    const paramsFromUrl: PaymentParams = {
+        paymentIntentId: url.searchParams.get("payment_intent"),
+        paymentIntentClientSecret: url.searchParams.get("payment_intent_client_secret"),
+        redirectStatus: url.searchParams.get("redirect_status"),
     };
+
+    // If sensitive params are present in the URL, strip them via redirect while persisting in a short-lived cookie.
+    if (paramsFromUrl.paymentIntentClientSecret) {
+        const headers = new Headers();
+        headers.set("Set-Cookie", serializeParamsCookie(paramsFromUrl));
+        return redirect(`${url.origin}${url.pathname}`, { headers });
+    }
+
+    const paramsFromCookie = parseParamsFromCookie(request.headers.get("cookie"));
+    const headers = new Headers();
+
+    // Clear cookie once consumed to avoid lingering secrets.
+    if (paramsFromCookie) {
+        headers.set("Set-Cookie", clearParamsCookie());
+    }
+
+    return Response.json(
+        {
+            stripePublishableKey: env.STRIPE_PUBLISHABLE_KEY,
+            medusaBackendUrl: env.MEDUSA_BACKEND_URL,
+            medusaPublishableKey: env.MEDUSA_PUBLISHABLE_KEY,
+            initialParams: paramsFromCookie,
+        },
+        { headers }
+    );
 }
 
+/**
+ * SEC-04: Referrer Policy Meta Tag
+ * 
+ * Prevents payment_intent_client_secret from leaking via Referer header
+ * when making requests to third-party services (e.g., Nominatim geocoding).
+ */
+export const meta: MetaFunction = () => [
+    { name: "referrer", content: "strict-origin-when-cross-origin" },
+];
+
 export default function CheckoutSuccess() {
-    const { stripePublishableKey, medusaBackendUrl, medusaPublishableKey } = useLoaderData<LoaderData>();
-    const [searchParams] = useSearchParams();
+    const { stripePublishableKey, medusaBackendUrl, medusaPublishableKey, initialParams } = useLoaderData<LoaderData>();
     const navigate = useNavigate();
     const { clearCart, items } = useCart();
     const [paymentStatus, setPaymentStatus] = useState<'loading' | 'success' | 'error' | 'canceled'>('loading');
+
+    // Create logger once at component top for log correlation across component lifecycle
+    const logger = createLogger();
 
     // Initialize Stripe on mount (required for retrievePaymentIntent)
     useEffect(() => {
@@ -65,10 +136,42 @@ export default function CheckoutSuccess() {
     // Ref to track processed payment intent to prevent double-firing
     const processedRef = useRef<string | null>(null);
 
+    const initialParamsRef = useRef<PaymentParams | null>(initialParams);
+    const [urlSanitized, setUrlSanitized] = useState<boolean>(() => !initialParamsRef.current);
+
+    useLayoutEffect(() => {
+        if (typeof window === "undefined") return;
+        // If params were provided via cookie, ensure URL is clean before rendering the page.
+        if (initialParamsRef.current && window.history?.replaceState) {
+            window.history.replaceState({}, "", window.location.pathname);
+        }
+        setUrlSanitized(true);
+    }, []);
+
+    // MED-1 FIX: Cleanup checkout data when component unmounts (user navigates away)
     useEffect(() => {
-        const paymentIntentId = searchParams.get('payment_intent');
-        const paymentIntentClientSecret = searchParams.get('payment_intent_client_secret');
-        const redirectStatus = searchParams.get('redirect_status');
+        return () => {
+            // SEC-05 AC2: Clean up checkout data on unmount (navigation away from success page)
+            try {
+                sessionStorage.removeItem('lastOrder');
+                sessionStorage.removeItem('orderId');
+                // MED-3 FIX: Also clean up cart ID to prevent lingering session data on navigate-away
+                sessionStorage.removeItem('medusa_cart_id');
+            } catch (error) {
+                // Non-critical: storage cleanup failures don't affect navigation
+                // Errors can occur in private browsing mode or when storage is disabled
+                logger.warn("Failed to cleanup sessionStorage on unmount", {
+                    error: error instanceof Error ? error.message : String(error),
+                });
+            }
+        };
+    }, []);
+
+    useEffect(() => {
+        if (!urlSanitized) return;
+        const paymentIntentId = initialParamsRef.current?.paymentIntentId;
+        const paymentIntentClientSecret = initialParamsRef.current?.paymentIntentClientSecret;
+        const redirectStatus = initialParamsRef.current?.redirectStatus;
 
         // Prevent double processing
         if (processedRef.current === paymentIntentId) {
@@ -76,14 +179,8 @@ export default function CheckoutSuccess() {
         }
 
         const fetchPaymentDetails = async () => {
-            console.log("Checkout Success Params:", {
-                redirectStatus,
-                paymentIntentId,
-            });
-            const paymentIntentClientSecret = new URLSearchParams(window.location.search).get(
-                "payment_intent_client_secret"
-            );
-
+            // SECURITY: Don't log sensitive payment data (paymentIntentId, clientSecret)
+            // Debug logs removed to prevent sensitive data exposure
             if (!paymentIntentClientSecret) {
                 setPaymentStatus("error");
                 setMessage("No payment intent found");
@@ -102,13 +199,16 @@ export default function CheckoutSuccess() {
                 processedRef.current = paymentIntentId; // Mark as processed
 
                 try {
-                    console.log("Retrieving payment intent...");
+                    // SECURITY: Don't log client secret or payment intent object
                     const { paymentIntent, error } = await stripe.retrievePaymentIntent(paymentIntentClientSecret);
-                    console.log("Payment Intent retrieved:", paymentIntent);
-                    console.log("Error retrieved:", error);
 
                     if (error) {
-                        console.error("Stripe retrieval error:", error);
+                        // Use existing logger for errors (without sensitive data)
+                        const errorObj = error instanceof Error ? error : new Error(error.message || String(error));
+                        logger.error("Stripe retrieval error", errorObj, {
+                            redirectStatus,
+                            // Don't include paymentIntentId or clientSecret
+                        });
                         setMessage(`Stripe Error: ${error.message}`);
                         setPaymentStatus('error');
                         return;
@@ -119,8 +219,11 @@ export default function CheckoutSuccess() {
                     const validStatuses = ['succeeded', 'requires_capture'];
                     if (paymentIntent && validStatuses.includes(paymentIntent.status)) {
                         // Handle Order Details Logic (Persistence)
-                        // Always try to recover from localStorage first since we save it before redirect
-                        const savedOrder = localStorage.getItem('lastOrder');
+                        // SEC-05: Recover from sessionStorage (clears on tab close)
+                        // MED-2 FIX: Migrate from localStorage if data exists there
+                        const savedOrder = migrateStorageItem('lastOrder', logger);
+                        const savedOrderId = migrateStorageItem('orderId', logger);
+
                         let orderData = null;
 
                         if (savedOrder) {
@@ -174,7 +277,7 @@ export default function CheckoutSuccess() {
                         if (paymentIntent.shipping) {
                             const address = paymentIntent.shipping.address;
                             const addressString = `${address?.line1}, ${address?.city}, ${address?.state} ${address?.postal_code}, ${address?.country} `;
-                            console.log("Geocoding address (background):", addressString);
+                            // SECURITY: Don't log addresses (PII) - removed debug log
 
                             // Do not await this
                             monitoredFetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addressString)}`, {
@@ -186,7 +289,10 @@ export default function CheckoutSuccess() {
                                     const coords: [number, number] = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
                                     setMapCoordinates(coords);
                                 }
-                            }).catch(err => console.error("Geocoding error:", err));
+                            }).catch(() => {
+                                // SECURITY: Don't log geocoding errors (may contain address PII)
+                                // Silently fail - geocoding is non-critical
+                            });
                         }
 
                         // Fetch order from API to get modification token
@@ -213,23 +319,28 @@ export default function CheckoutSuccess() {
                                     const data = await response.json() as OrderApiResponse;
                                     setOrderId(data.order.id);
 
-                                    // Store in localStorage for persistence
-                                    localStorage.setItem('orderId', data.order.id);
+                                    // SEC-05: Store in sessionStorage for ephemeral access (clears on tab close)
+                                    try {
+                                        sessionStorage.setItem('orderId', data.order.id);
+                                    } catch (error) {
+                                        // Non-critical: storage failures don't affect order processing
+                                        // Errors can occur in private browsing mode or when storage is disabled
+                                        logger.warn("Failed to store orderId in sessionStorage", {
+                                            error: error instanceof Error ? error.message : String(error),
+                                        });
+                                    }
 
-                                    console.log("Order fetched:", {
-                                        orderId: data.order.id,
-                                        status: data.order.status,
-                                    });
+                                    // SECURITY: Don't log order IDs - removed debug log
                                 } else if (response.status === 404 && retries < maxRetries) {
                                     // Order not yet created, retry
                                     retries++;
-                                    console.log(`Order not found, retrying (${retries}/${maxRetries})...`);
+                                    // SECURITY: Don't log retry attempts (may expose order/payment context)
                                     setTimeout(fetchOrderWithToken, retryDelay);
                                 } else {
-                                    console.error("Failed to fetch order:", await response.text());
+                                    logger.error("Failed to fetch order", new Error(`HTTP ${response.status}`));
                                 }
                             } catch (err) {
-                                console.error("Error fetching order:", err);
+                                logger.error("Error fetching order", err instanceof Error ? err : new Error(String(err)));
                                 if (retries < maxRetries) {
                                     retries++;
                                     setTimeout(fetchOrderWithToken, retryDelay);
@@ -238,10 +349,18 @@ export default function CheckoutSuccess() {
                         };
 
                         // CHK-01: Call Medusa cart completion API
-                        const cartIdFromSession = sessionStorage.getItem('medusa_cart_id');
+                        let cartIdFromSession: string | null = null;
+                        try {
+                            cartIdFromSession = sessionStorage.getItem('medusa_cart_id');
+                        } catch (error) {
+                            // Non-critical: storage access failures don't block cart completion
+                            logger.warn("Failed to read medusa_cart_id from sessionStorage", {
+                                error: error instanceof Error ? error.message : String(error),
+                            });
+                        }
                         if (cartIdFromSession) {
                             try {
-                                console.log(`Attempting to complete Medusa cart ${cartIdFromSession}...`);
+                                // SECURITY: Don't log cart IDs or completion data
                                 const completeResponse = await monitoredFetch(`/api/carts/${cartIdFromSession}/complete`, {
                                     method: "POST",
                                     headers: {
@@ -250,21 +369,16 @@ export default function CheckoutSuccess() {
                                     label: "complete-medusa-cart",
                                 });
 
-                                if (completeResponse.ok) {
-                                    const completionData = await completeResponse.json();
-                                    console.log("Medusa cart completion successful:", completionData);
-                                    // Optionally use the returned orderId from completionData if needed
-                                } else {
-                                    const errorData = await completeResponse.json();
-                                    console.error("Medusa cart completion failed:", errorData);
+                                if (!completeResponse.ok) {
+                                    logger.error("Medusa cart completion failed", new Error("Cart completion failed"), {
+                                        status: completeResponse.status,
+                                    });
                                     // Non-critical failure: log and proceed, webhook should eventually create order
                                 }
                             } catch (err) {
-                                console.error("Error calling cart completion API:", err);
+                                logger.error("Error calling cart completion API", err instanceof Error ? err : new Error(String(err)));
                                 // Non-critical failure: log and proceed
                             }
-                        } else {
-                            console.warn("No Medusa cart ID found in session to complete.");
                         }
 
                         // Start fetching order
@@ -273,26 +387,50 @@ export default function CheckoutSuccess() {
                         // Clear cart after a delay to ensure UI updates
                         setTimeout(() => {
                             clearCart();
+                            // SEC-05 AC2: Explicit cleanup of checkout data
+                            // Defense-in-depth: clear order data after successful checkout
+                            // (sessionStorage also clears on tab close, this is extra protection)
+                            try {
+                                sessionStorage.removeItem('lastOrder');
+                                sessionStorage.removeItem('orderId');
+                                // MED-3 FIX: Also clean up cart ID to prevent lingering session data
+                                sessionStorage.removeItem('medusa_cart_id');
+                            } catch (error) {
+                                // Non-critical: storage cleanup failures don't affect order processing
+                                // Errors can occur in private browsing mode or when storage is disabled
+                                logger.warn("Failed to cleanup sessionStorage", {
+                                    error: error instanceof Error ? error.message : String(error),
+                                });
+                            }
                         }, 500);
                     } else {
-                        console.error("Payment status not valid:", paymentIntent?.status);
+                        logger.error("Payment status not valid", new Error(`Invalid status: ${paymentIntent?.status}`), {
+                            status: paymentIntent?.status,
+                            // Don't include paymentIntentId
+                        });
                         setMessage(`Payment status: ${paymentIntent?.status}`);
                         setPaymentStatus('error');
                     }
                 } catch (error: any) {
-                    console.error("Error fetching payment details:", error);
-                    setMessage(`Error: ${error.message || JSON.stringify(error)}`);
+                    logger.error("Error fetching payment details", error instanceof Error ? error : new Error(String(error)), {
+                        redirectStatus,
+                        // Don't include paymentIntentId or clientSecret
+                    });
+                    setMessage(`Error: ${error.message || "Payment processing failed"}`);
                     setPaymentStatus('error');
                 }
             } else {
-                console.error("Missing required params or redirect status not succeeded");
+                logger.error("Missing required params or redirect status not succeeded", new Error("Invalid payment params"), {
+                    redirectStatus,
+                    // Don't include paymentIntentId
+                });
                 setPaymentStatus('error');
             }
         };
 
         fetchPaymentDetails();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [searchParams]);
+    }, [urlSanitized]);
 
     if (paymentStatus === 'loading') {
         return (
@@ -304,6 +442,9 @@ export default function CheckoutSuccess() {
             </div>
         );
     }
+
+    const debugRedirectStatus = initialParamsRef.current?.redirectStatus ?? "";
+    const debugPaymentIntentId = initialParamsRef.current?.paymentIntentId ?? "";
 
     if (paymentStatus === 'error') {
         return (
@@ -321,8 +462,8 @@ export default function CheckoutSuccess() {
                     {/* Debug Info */}
                     <div className="bg-gray-100 p-4 rounded text-left text-xs font-mono text-gray-600 mb-6 overflow-auto max-h-40">
                         <p><strong>Debug Info:</strong></p>
-                        <p>Status: {searchParams.get('redirect_status')}</p>
-                        <p>Intent ID: {searchParams.get('payment_intent')}</p>
+                        <p>Status: {debugRedirectStatus}</p>
+                        <p>Intent ID: {debugPaymentIntentId}</p>
                         {message && <p className="text-red-600 mt-2">{message}</p>}
                     </div>
                     <Link

@@ -25,11 +25,10 @@ export class UserFactory {
 
       if (created.customer?.id) {
         this.createdUserIds.push(created.customer.id);
-        return { ...user, id: created.customer.id };
       }
     } catch (error) {
       // If API seeding fails, still return user data for UI tests
-      console.warn("User seeding skipped; using generated data.");
+      console.warn('Could not seed user via API, using factory data only:', error);
     }
 
     return user;
@@ -46,7 +45,7 @@ export class UserFactory {
         });
       } catch (error) {
         // Ignore cleanup errors (user may not exist or endpoint may differ)
-        console.warn(`Could not cleanup user ${userId}.`);
+        console.warn(`Could not cleanup user ${userId}:`, error);
       }
     }
     this.createdUserIds = [];

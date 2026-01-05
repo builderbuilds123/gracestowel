@@ -29,7 +29,27 @@ Grace's Towel is a modern e-commerce platform built as a monorepo. It separates 
 | **Backend** | Node.js | >=24 | Runtime |
 | | Medusa | v2.12 | E-commerce Framework |
 | | PostgreSQL | - | Primary Database |
-| | Redis | - | Caching & Events |
+| | Redis | - | Caching, Events & Locking |
+| | BullMQ | - | Job Queue (Email, etc.) |
 | **Integrations**| Stripe | - | Payments |
 | | Resend | - | Email Notifications |
 | | PostHog | - | Analytics |
+
+## Key Architectural Patterns
+
+### Workflow-Level Locking
+Critical workflows use Medusa's `acquireLockStep`/`releaseLockStep` to prevent race conditions:
+- Order creation from Stripe webhooks (lock key: PaymentIntent ID)
+- Prevents duplicate orders from concurrent webhook deliveries
+
+### Atomic Inventory Management
+- `InventoryDecrementService` handles all inventory operations
+- Uses `updateInventoryLevelsStep` for atomic updates with automatic rollback
+- Supports backorders via `allow_backorder` flag on `inventory_level`
+- Strict location mapping (no arbitrary fallbacks)
+
+### Payment Module Integration
+- All orders have linked `PaymentCollection` records (required, no fallback)
+- `Order.total` is source of truth, synced to PaymentCollection and Stripe
+- `OrderTransaction` records created for all financial movements
+- Currency conversion handled by Medusa's Stripe provider (major ↔ minor units)

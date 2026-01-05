@@ -1,3 +1,4 @@
+import { describe, expect, it, vi } from "vitest";
 import { maskEmail, maskEmailsInText } from "../../src/utils/email-masking"
 
 describe("maskEmail", () => {

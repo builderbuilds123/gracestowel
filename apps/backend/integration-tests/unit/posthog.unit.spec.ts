@@ -1,32 +1,30 @@
-/**
- * Unit tests for PostHog utility
- * Story 2.1: Implement Server-Side Event Tracking for Key Order Events
- * 
- * Tests AC1: PostHog SDK configured on backend
- */
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Must mock before imports
-const mockPostHogInstance = {
-  capture: jest.fn(),
-  shutdown: jest.fn().mockResolvedValue(undefined),
-}
+const { MockPostHog, mockPostHogInstance } = vi.hoisted(() => {
+  const instance = {
+    capture: vi.fn(),
+    shutdown: vi.fn().mockResolvedValue(undefined),
+  };
+  // Mock constructor behavior
+  const MockClass = vi.fn(function() { return instance; });
+  return { MockPostHog: MockClass, mockPostHogInstance: instance };
+});
 
-const MockPostHog = jest.fn(() => mockPostHogInstance)
-
-jest.mock('posthog-node', () => ({
+vi.mock('posthog-node', () => ({
   PostHog: MockPostHog,
 }))
 
 describe('PostHog Utility (Story 2.1 - AC1)', () => {
-  // Store original env
   const originalEnv = process.env
 
   beforeEach(() => {
-    jest.clearAllMocks()
-    // Reset module state between tests
-    jest.resetModules()
-    // Reset env
+    vi.clearAllMocks()
+    vi.resetModules()
     process.env = { ...originalEnv }
+    // Ensure no lingering env vars interfere
+    delete process.env.VITE_POSTHOG_API_KEY
+    delete process.env.VITE_POSTHOG_HOST
   })
 
   afterAll(() => {
@@ -38,7 +36,6 @@ describe('PostHog Utility (Story 2.1 - AC1)', () => {
       process.env.POSTHOG_API_KEY = 'phc_test_key_123'
       process.env.POSTHOG_HOST = 'https://custom.posthog.com'
 
-      // Re-require to get fresh module
       const { initPostHog } = await import('../../src/utils/posthog')
       
       const client = initPostHog()
@@ -69,7 +66,7 @@ describe('PostHog Utility (Story 2.1 - AC1)', () => {
     it('should return null and warn when API key not configured', async () => {
       delete process.env.POSTHOG_API_KEY
 
-      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation()
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation()
       
       const { initPostHog } = await import('../../src/utils/posthog')
       

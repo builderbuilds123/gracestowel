@@ -1,29 +1,32 @@
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { getEmailQueue, enqueueEmail, initEmailQueue } from "../../src/lib/email-queue"
 
 // Mock BullMQ
-jest.mock("bullmq", () => {
+vi.mock("bullmq", () => {
   return {
-    Queue: jest.fn().mockImplementation(() => ({
-      add: jest.fn().mockResolvedValue({ id: "mock-job-id" }),
-    })),
+    Queue: vi.fn(function() {
+      return {
+        add: vi.fn().mockResolvedValue({ id: "mock-job-id" }),
+      };
+    }),
   }
 })
 
 // Mock Redis connection
-jest.mock("../../src/lib/redis", () => ({
-  getRedisConnection: jest.fn().mockReturnValue({ host: "localhost", port: 6379 }),
+vi.mock("../../src/lib/redis", () => ({
+  getRedisConnection: vi.fn().mockReturnValue({ host: "localhost", port: 6379 }),
 }))
 
 // Mock email masking
-jest.mock("../../src/utils/email-masking", () => ({
-  maskEmail: jest.fn((email) => email),
+vi.mock("../../src/utils/email-masking", () => ({
+  maskEmail: vi.fn((email) => email),
 }))
 
 describe("Email Queue Service", () => {
   const mockContainer = {
-    resolve: jest.fn().mockReturnValue({
-      info: jest.fn(),
-      error: jest.fn(),
+    resolve: vi.fn().mockReturnValue({
+      info: vi.fn(),
+      error: vi.fn(),
     }),
   }
 
@@ -33,9 +36,9 @@ describe("Email Queue Service", () => {
   })
 
   beforeEach(() => {
-    jest.clearAllMocks()
+    vi.clearAllMocks()
     // Note: Queue constructor mock counts accumulate if not reset, but we can't easily reset module-level singleton here
-    // without using jest.isolateModules() for every test, which is overkill.
+    // without using vi.isolateModules() for every test, which is overkill.
     // We will verify behavior on the queue instance methods instead.
   })
 
@@ -85,7 +88,7 @@ describe("Email Queue Service", () => {
   it("handles errors gracefully (Story 1.3 requirement implemented early)", async () => {
     const queue = getEmailQueue()
     // Force fail next add
-    ;(queue.add as jest.Mock).mockRejectedValueOnce(new Error("Redis offline"))
+    ;(queue.add as any).mockRejectedValueOnce(new Error("Redis offline"))
 
     const payload = {
         orderId: "ord_fail",

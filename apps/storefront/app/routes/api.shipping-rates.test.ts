@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import type { ActionFunctionArgs } from "react-router";
 import { action } from "./api.shipping-rates";
 
 // Define mock functions
@@ -43,6 +44,13 @@ describe("API Shipping Rates", () => {
     };
   });
 
+  const buildArgs = (request: Request): ActionFunctionArgs => ({
+    request,
+    params: {},
+    context,
+    unstable_pattern: "",
+  });
+
   it("should use existing cart if cartId provided", async () => {
     const request = new Request("http://localhost", {
       method: "POST",
@@ -61,7 +69,7 @@ describe("API Shipping Rates", () => {
       { id: "opt_1", name: "Std", amount: 1000 }
     ]);
 
-    const response: any = await action({ request, params: {}, context });
+    const response: any = await action(buildArgs(request));
     expect(response.shippingOptions).toHaveLength(1);
     expect(response.cartId).toBe("cart_123");
     expect(mockGetCart).toHaveBeenCalledWith("cart_123");
@@ -86,12 +94,13 @@ describe("API Shipping Rates", () => {
     mockSyncCartItems.mockResolvedValue({});
     mockGetShippingOptions.mockResolvedValue([]);
 
-    const response: any = await action({ request, params: {}, context });
+    const response: any = await action(buildArgs(request));
     expect(response.cartId).toBe("cart_new");
     expect(mockGetOrCreateCart).toHaveBeenCalledWith("reg_1", "USD");
   });
 
   it("should return error response if service fails (no fallback)", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const request = new Request("http://localhost", {
       method: "POST",
       body: JSON.stringify({
@@ -112,13 +121,14 @@ describe("API Shipping Rates", () => {
     // Make cart creation also fail to trigger the error path
     mockGetOrCreateCart.mockRejectedValue(new Error("Cart creation failed"));
 
-    const response = await action({ request, params: {}, context });
+    const response = await action(buildArgs(request));
 
     // Should return error response (status 500)
     expect(response).toHaveProperty("data");
     const responseData = (response as any).data;
     expect(responseData.message).toBe("Unable to calculate shipping rates. Please try again.");
     expect(responseData.error).toBe("Cart creation failed");
+    errorSpy.mockRestore();
   });
 
   it("should return 400 when cartItems is missing", async () => {
@@ -130,7 +140,7 @@ describe("API Shipping Rates", () => {
       }),
     });
 
-    const response = await action({ request, params: {}, context });
+    const response = await action(buildArgs(request));
     expect(response).toHaveProperty("data");
     const responseData = (response as any).data;
     expect(responseData.message).toBe("cartItems array is required");
@@ -145,7 +155,7 @@ describe("API Shipping Rates", () => {
       }),
     });
 
-    const response = await action({ request, params: {}, context });
+    const response = await action(buildArgs(request));
     expect(response).toHaveProperty("data");
     const responseData = (response as any).data;
     expect(responseData.message).toBe("cartItems array is required");
@@ -153,7 +163,7 @@ describe("API Shipping Rates", () => {
 
   it("should return 405 for non-POST requests", async () => {
     const request = new Request("http://localhost", { method: "GET" });
-    const response = await action({ request, params: {}, context });
+    const response = await action(buildArgs(request));
     expect(response).toHaveProperty("data");
     const responseData = (response as any).data;
     expect(responseData.message).toBe("Method not allowed");

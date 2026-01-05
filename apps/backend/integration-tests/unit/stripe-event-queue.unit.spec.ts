@@ -1,46 +1,66 @@
-/**
- * Unit tests for Stripe Event Queue
- * Story 6.1: Webhook Validation & Retry
- * 
- * Tests:
- * - AC 5-6: Event queueing and retry on failure
- * - AC 7: Queue configuration (attempts: 5, exponential backoff)
- * - AC 8: Redis-based idempotency deduplication
- */
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => {
+    return {
+        // Redis
+        mockRedisExists: vi.fn(),
+        mockRedisSet: vi.fn(),
+        mockRedisGet: vi.fn(),
+        mockRedisDel: vi.fn(),
+        mockRedisQuit: vi.fn(),
+        // BullMQ
+        mockQueueAdd: vi.fn(),
+        mockQueueClose: vi.fn(),
+        mockWorkerOn: vi.fn(),
+        mockWorkerClose: vi.fn(),
+    };
+});
 
 import { Job } from "bullmq";
 
-// Mock ioredis before importing the module
-const mockRedisExists = jest.fn();
-const mockRedisSet = jest.fn();
-const mockRedisGet = jest.fn();
-const mockRedisDel = jest.fn();
-const mockRedisQuit = jest.fn();
-
-jest.mock("ioredis", () => {
-    // Mock the default export which is the Redis class
-    return jest.fn().mockImplementation(() => ({
-        exists: mockRedisExists,
-        set: mockRedisSet,
-        get: mockRedisGet,
-        del: mockRedisDel,
-        quit: mockRedisQuit,
-    }));
+vi.mock("ioredis", () => {
+    return {
+        default: class RedisMock {
+            constructor() {
+                return {
+                    exists: mocks.mockRedisExists,
+                    set: mocks.mockRedisSet,
+                    get: mocks.mockRedisGet,
+                    del: mocks.mockRedisDel,
+                    quit: mocks.mockRedisQuit,
+                };
+            }
+        },
+        Redis: class RedisMock {
+            constructor() {
+                return {
+                    exists: mocks.mockRedisExists,
+                    set: mocks.mockRedisSet,
+                    get: mocks.mockRedisGet,
+                    del: mocks.mockRedisDel,
+                    quit: mocks.mockRedisQuit,
+                };
+            }
+        }
+    };
 });
 
-// Mock bullmq
-const mockQueueAdd = jest.fn();
-const mockQueueClose = jest.fn();
-jest.mock("bullmq", () => ({
-    Queue: jest.fn().mockImplementation(() => ({
-        add: mockQueueAdd,
-        close: mockQueueClose,
-    })),
-    Worker: jest.fn().mockImplementation(() => ({
-        on: jest.fn(),
-        close: jest.fn(),
-    })),
-}));
+vi.mock("bullmq", () => {
+    return {
+        Queue: vi.fn(function() {
+            return {
+                add: mocks.mockQueueAdd,
+                close: mocks.mockQueueClose,
+            };
+        }),
+        Worker: vi.fn(function() {
+            return {
+                on: mocks.mockWorkerOn,
+                close: mocks.mockWorkerClose,
+            };
+        })
+    };
+});
 
 // Import after mocks are set up
 import {
@@ -59,25 +79,28 @@ describe("Stripe Event Queue - Story 6.1", () => {
     const originalEnv = process.env;
 
     beforeEach(() => {
-        jest.clearAllMocks();
-        mockRedisExists.mockReset();
-        mockRedisSet.mockReset();
-        mockRedisGet.mockReset();
-        mockRedisDel.mockReset();
-        mockRedisQuit.mockReset();
-        mockQueueAdd.mockReset();
-        mockQueueClose.mockReset();
+        vi.clearAllMocks();
+        mocks.mockRedisExists.mockReset();
+        mocks.mockRedisSet.mockReset();
+        mocks.mockRedisGet.mockReset();
+        mocks.mockRedisDel.mockReset();
+        mocks.mockRedisQuit.mockReset();
+        mocks.mockQueueAdd.mockReset();
+        mocks.mockQueueClose.mockReset();
+        mocks.mockWorkerOn.mockReset();
+        mocks.mockWorkerClose.mockReset();
 
         resetStripeEventQueue();
         process.env = { ...originalEnv };
         process.env.REDIS_URL = "redis://localhost:6379";
 
-        jest.spyOn(console, "log").mockImplementation(() => {});
-        jest.spyOn(console, "error").mockImplementation(() => {});
+        vi.spyOn(console, "log").mockImplementation(() => {});
+        vi.spyOn(console, "error").mockImplementation(() => {});
+        vi.spyOn(console, "warn").mockImplementation(() => {});
     });
 
     afterEach(() => {
-        jest.restoreAllMocks();
+        vi.restoreAllMocks();
     });
 
     afterAll(() => {
@@ -86,29 +109,29 @@ describe("Stripe Event Queue - Story 6.1", () => {
 
     describe("Redis-based Idempotency (AC 8)", () => {
         it("should return false for unprocessed events", async () => {
-            mockRedisGet.mockResolvedValue(null);
+            mocks.mockRedisGet.mockResolvedValue(null);
 
             const result = await isEventProcessed("evt_new_123");
 
             expect(result).toBe(false);
-            expect(mockRedisGet).toHaveBeenCalledWith("stripe:processed:evt_new_123");
+            expect(mocks.mockRedisGet).toHaveBeenCalledWith("stripe:processed:evt_new_123");
         });
 
         it("should return true for already processed events", async () => {
-            mockRedisGet.mockResolvedValue("processed");
+            mocks.mockRedisGet.mockResolvedValue("processed");
 
             const result = await isEventProcessed("evt_processed_123");
 
             expect(result).toBe(true);
-            expect(mockRedisGet).toHaveBeenCalledWith("stripe:processed:evt_processed_123");
+            expect(mocks.mockRedisGet).toHaveBeenCalledWith("stripe:processed:evt_processed_123");
         });
 
         it("should mark event as processed with 24h TTL", async () => {
-            mockRedisSet.mockResolvedValue("OK");
+            mocks.mockRedisSet.mockResolvedValue("OK");
 
             await markEventProcessed("evt_mark_123");
 
-            expect(mockRedisSet).toHaveBeenCalledWith(
+            expect(mocks.mockRedisSet).toHaveBeenCalledWith(
                 "stripe:processed:evt_mark_123",
                 "processed",
                 "EX",
@@ -117,7 +140,7 @@ describe("Stripe Event Queue - Story 6.1", () => {
         });
 
         it("should fail-open if Redis is unavailable (allow processing)", async () => {
-            mockRedisGet.mockRejectedValue(new Error("Redis connection failed"));
+            mocks.mockRedisGet.mockRejectedValue(new Error("Redis connection failed"));
 
             const result = await isEventProcessed("evt_redis_down");
 
@@ -127,7 +150,7 @@ describe("Stripe Event Queue - Story 6.1", () => {
         });
 
         it("should not throw if marking fails (graceful degradation)", async () => {
-            mockRedisSet.mockRejectedValue(new Error("Redis write failed"));
+            mocks.mockRedisSet.mockRejectedValue(new Error("Redis write failed"));
 
             // Should not throw (handled in implementation)
             await expect(markEventProcessed("evt_mark_fail")).resolves.not.toThrow();
@@ -137,9 +160,9 @@ describe("Stripe Event Queue - Story 6.1", () => {
 
     describe("Event Queueing (AC 5-7)", () => {
         it("should queue event with correct job data", async () => {
-            mockRedisGet.mockResolvedValue(null);
-            mockRedisSet.mockResolvedValue("OK"); // Mock successful lock acquisition
-            mockQueueAdd.mockResolvedValue({ id: "evt_123" });
+            mocks.mockRedisGet.mockResolvedValue(null);
+            mocks.mockRedisSet.mockResolvedValue("OK"); // Mock successful lock acquisition
+            mocks.mockQueueAdd.mockResolvedValue({ id: "evt_123" });
 
             const event: Stripe.Event = {
                 id: "evt_123",
@@ -149,7 +172,7 @@ describe("Stripe Event Queue - Story 6.1", () => {
 
             const job = await queueStripeEvent(event);
 
-            expect(mockQueueAdd).toHaveBeenCalledWith(
+            expect(mocks.mockQueueAdd).toHaveBeenCalledWith(
                 "event-evt_123",
                 expect.objectContaining({
                     eventId: "evt_123",
@@ -165,7 +188,7 @@ describe("Stripe Event Queue - Story 6.1", () => {
         });
 
         it("should skip queueing for already processed events", async () => {
-            mockRedisGet.mockResolvedValue("processed");
+            mocks.mockRedisGet.mockResolvedValue("processed");
 
             const event: Stripe.Event = {
                 id: "evt_duplicate",
@@ -176,13 +199,13 @@ describe("Stripe Event Queue - Story 6.1", () => {
             const job = await queueStripeEvent(event);
 
             expect(job).toBeNull();
-            expect(mockQueueAdd).not.toHaveBeenCalled();
+            expect(mocks.mockQueueAdd).not.toHaveBeenCalled();
         });
 
         it("should use event.id as job ID for BullMQ deduplication", async () => {
-            mockRedisGet.mockResolvedValue(null);
-            mockRedisSet.mockResolvedValue("OK"); // Mock successful lock
-            mockQueueAdd.mockResolvedValue({ id: "evt_dedup_123" });
+            mocks.mockRedisGet.mockResolvedValue(null);
+            mocks.mockRedisSet.mockResolvedValue("OK"); // Mock successful lock
+            mocks.mockQueueAdd.mockResolvedValue({ id: "evt_dedup_123" });
 
             const event: Stripe.Event = {
                 id: "evt_dedup_123",
@@ -192,7 +215,7 @@ describe("Stripe Event Queue - Story 6.1", () => {
 
             await queueStripeEvent(event);
 
-            expect(mockQueueAdd).toHaveBeenCalledWith(
+            expect(mocks.mockQueueAdd).toHaveBeenCalledWith(
                 expect.any(String),
                 expect.any(Object),
                 expect.objectContaining({ jobId: "evt_dedup_123" })
@@ -200,9 +223,9 @@ describe("Stripe Event Queue - Story 6.1", () => {
         });
 
         it("should release processing lock if enqueue fails", async () => {
-            mockRedisGet.mockResolvedValue(null);
-            mockRedisSet.mockResolvedValue("OK");
-            mockQueueAdd.mockRejectedValue(new Error("Queue down"));
+            mocks.mockRedisGet.mockResolvedValue(null);
+            mocks.mockRedisSet.mockResolvedValue("OK");
+            mocks.mockQueueAdd.mockRejectedValue(new Error("Queue down"));
 
             const event: Stripe.Event = {
                 id: "evt_enqueue_fail",
@@ -211,18 +234,19 @@ describe("Stripe Event Queue - Story 6.1", () => {
             } as any;
 
             // releaseProcessingLock() checks GET then DEL when value is "processing"
-            mockRedisGet.mockResolvedValueOnce(null); // acquireProcessingLock: not processed
-            mockRedisGet.mockResolvedValueOnce("processing"); // releaseProcessingLock: still processing
-            mockRedisDel.mockResolvedValue(1);
+            mocks.mockRedisGet.mockResolvedValueOnce(null); // acquireProcessingLock: not processed
+            mocks.mockRedisGet.mockResolvedValueOnce("processing"); // releaseProcessingLock: still processing
+            mocks.mockRedisDel.mockResolvedValue(1);
 
             await expect(queueStripeEvent(event)).rejects.toThrow("Queue down");
-            expect(mockRedisDel).toHaveBeenCalledWith("stripe:processed:evt_enqueue_fail");
+            expect(mocks.mockRedisDel).toHaveBeenCalledWith("stripe:processed:evt_enqueue_fail");
         });
     });
 
     describe("Queue Configuration (AC 7)", () => {
-        it("should create queue with correct retry configuration", () => {
-            const { Queue } = require("bullmq");
+        it("should create queue with correct retry configuration", async () => {
+            // Re-import to trigger mock
+            const { Queue } = await import("bullmq");
             
             getStripeEventQueue();
 
@@ -240,8 +264,8 @@ describe("Stripe Event Queue - Story 6.1", () => {
             );
         });
 
-        it("should configure job retention for DLQ analysis", () => {
-            const { Queue } = require("bullmq");
+        it("should configure job retention for DLQ analysis", async () => {
+            const { Queue } = await import("bullmq");
             
             resetStripeEventQueue();
             getStripeEventQueue();
@@ -261,11 +285,11 @@ describe("Stripe Event Queue - Story 6.1", () => {
 
     describe("Event Processing (AC 5-6)", () => {
         it("should mark event as processed after successful handling", async () => {
-            mockRedisSet.mockResolvedValue("OK");
+            mocks.mockRedisSet.mockResolvedValue("OK");
 
             await markEventProcessed("evt_success");
 
-            expect(mockRedisSet).toHaveBeenCalledWith(
+            expect(mocks.mockRedisSet).toHaveBeenCalledWith(
                 "stripe:processed:evt_success",
                 "processed",
                 "EX",
@@ -274,13 +298,13 @@ describe("Stripe Event Queue - Story 6.1", () => {
         });
 
         it("should use shorter TTL for processing lock than for processed marker", async () => {
-            mockRedisGet.mockResolvedValue(null); // Not already processed
-            mockRedisSet.mockResolvedValue("OK");
+            mocks.mockRedisGet.mockResolvedValue(null); // Not already processed
+            mocks.mockRedisSet.mockResolvedValue("OK");
             
             await acquireProcessingLock("evt_lock_test");
             
             // Verify set was called with NX flag and shorter TTL (10 min = 600s)
-            expect(mockRedisSet).toHaveBeenCalledWith(
+            expect(mocks.mockRedisSet).toHaveBeenCalledWith(
                 "stripe:processed:evt_lock_test",
                 "processing",
                 "EX",
@@ -290,82 +314,105 @@ describe("Stripe Event Queue - Story 6.1", () => {
         });
 
         it("should not acquire lock if event already processed", async () => {
-            mockRedisGet.mockResolvedValue("processed");
+            mocks.mockRedisGet.mockResolvedValue("processed");
             
             const result = await acquireProcessingLock("evt_already_done");
             
             expect(result).toBe(false);
-            expect(mockRedisSet).not.toHaveBeenCalled();
+            expect(mocks.mockRedisSet).not.toHaveBeenCalled();
         });
     });
 
     describe("Lock Release on Failure", () => {
         it("should release lock when event permanently fails", async () => {
-            mockRedisGet.mockResolvedValue("processing");
-            mockRedisDel.mockResolvedValue(1);
+            mocks.mockRedisGet.mockResolvedValue("processing");
+            mocks.mockRedisDel.mockResolvedValue(1);
             
             await releaseProcessingLock("evt_failed");
 
-            expect(mockRedisDel).toHaveBeenCalledWith("stripe:processed:evt_failed");
+            expect(mocks.mockRedisDel).toHaveBeenCalledWith("stripe:processed:evt_failed");
         });
 
         it("should not release lock if event was successfully processed", async () => {
-            mockRedisGet.mockResolvedValue("processed");
+            mocks.mockRedisGet.mockResolvedValue("processed");
             
             await releaseProcessingLock("evt_success");
 
-            expect(mockRedisDel).not.toHaveBeenCalled();
+            expect(mocks.mockRedisDel).not.toHaveBeenCalled();
         });
     });
 
     describe("Retry Exhaustion / DLQ Behavior (AC 5-7)", () => {
-        let capturedFailedHandler: ((job: any, err: Error) => Promise<void>) | null = null;
+        let capturedFailedHandler: ((job: any, err: any) => Promise<void>) | null = null;
         
-        beforeEach(() => {
-            jest.resetModules();
+        beforeEach(async () => {
+            vi.resetModules();
             
-            // Spy on console methods for this describe block
-            jest.spyOn(console, "log").mockImplementation(() => {});
-            jest.spyOn(console, "error").mockImplementation(() => {});
-            jest.spyOn(console, "warn").mockImplementation(() => {});
+            vi.spyOn(console, "log").mockImplementation(() => {});
+            vi.spyOn(console, "error").mockImplementation(() => {});
+            vi.spyOn(console, "warn").mockImplementation(() => {});
             
-            // Mock Worker to capture the 'failed' event handler
-            const mockWorkerOn = jest.fn().mockImplementation((event: string, handler: any) => {
+            const nestedMockWorkerOn = vi.fn().mockImplementation((event: string, handler: any) => {
                 if (event === "failed") {
                     capturedFailedHandler = handler;
                 }
             });
             
-            jest.doMock("bullmq", () => ({
-                Queue: jest.fn().mockImplementation(() => ({
-                    add: mockQueueAdd,
-                    close: mockQueueClose,
-                })),
-                Worker: jest.fn().mockImplementation(() => ({
-                    on: mockWorkerOn,
-                    close: jest.fn(),
-                })),
+            // Nested mock must also reference hoisted mocks or provide new ones
+            vi.doMock("bullmq", () => ({
+                Queue: class QueueMock {
+                    constructor() {
+                        return { add: mocks.mockQueueAdd, close: mocks.mockQueueClose };
+                    }
+                },
+                Worker: class WorkerMock {
+                    constructor() {
+                        return { on: nestedMockWorkerOn, close: mocks.mockWorkerClose };
+                    }
+                },
             }));
+
+             vi.doMock("ioredis", () => {
+                return {
+                    default: class RedisMock {
+                        constructor() {
+                            return {
+                                exists: mocks.mockRedisExists,
+                                set: mocks.mockRedisSet,
+                                get: mocks.mockRedisGet,
+                                del: mocks.mockRedisDel,
+                                quit: mocks.mockRedisQuit,
+                            };
+                        }
+                    },
+                    Redis: class RedisMock {
+                        constructor() {
+                             return {
+                                exists: mocks.mockRedisExists,
+                                set: mocks.mockRedisSet,
+                                get: mocks.mockRedisGet,
+                                del: mocks.mockRedisDel,
+                                quit: mocks.mockRedisQuit,
+                            };
+                        }
+                    }
+                };
+            });
         });
         
         it("should log CRITICAL error and release lock when job exhausts all retries", async () => {
-            // Re-import to get fresh module with our mock
-            const { startStripeEventWorker } = require("../../src/workers/stripe-event-worker");
+            const { startStripeEventWorker } = await import("../../src/workers/stripe-event-worker");
             
-            // Setup mocks for lock release
-            mockRedisGet.mockResolvedValue("processing");
-            mockRedisDel.mockResolvedValue(1);
+            mocks.mockRedisGet.mockResolvedValue("processing");
+            mocks.mockRedisDel.mockResolvedValue(1);
             
-            const mockContainer = { resolve: jest.fn() };
-            const mockHandler = jest.fn();
+            const mockContainer = { resolve: vi.fn() } as any;
+            const mockHandler = vi.fn();
             
-            // Start worker to register event handlers
             startStripeEventWorker(mockContainer, mockHandler);
             
-            // Verify we captured the failed handler
             expect(capturedFailedHandler).not.toBeNull();
             
-            // Create a mock job that has exhausted all retries
             const exhaustedJob = {
                 id: "job_evt_exhausted",
                 attemptsMade: 5,
@@ -378,38 +425,33 @@ describe("Stripe Event Queue - Story 6.1", () => {
             
             const testError = new Error("Permanent failure after 5 attempts");
             
-            // Invoke the failed handler directly
             await capturedFailedHandler!(exhaustedJob, testError);
             
-            // Verify CRITICAL DLQ log was emitted
             expect(console.error).toHaveBeenCalledWith(
                 expect.stringContaining("[CRITICAL][DLQ]"),
                 expect.any(Error)
             );
             
-            // Verify METRIC log was emitted
             expect(console.log).toHaveBeenCalledWith(
                 expect.stringContaining("[METRIC] webhook_processing_failure_rate")
             );
             
-            // Verify lock was released to allow Stripe re-delivery
-            expect(mockRedisDel).toHaveBeenCalledWith("stripe:processed:evt_exhausted_123");
+            expect(mocks.mockRedisDel).toHaveBeenCalledWith("stripe:processed:evt_exhausted_123");
         });
         
         it("should only warn and not release lock for intermediate failures", async () => {
-            const { startStripeEventWorker } = require("../../src/workers/stripe-event-worker");
+            const { startStripeEventWorker } = await import("../../src/workers/stripe-event-worker");
             
-            const mockContainer = { resolve: jest.fn() };
-            const mockHandler = jest.fn();
+            const mockContainer = { resolve: vi.fn() } as any;
+            const mockHandler = vi.fn();
             
             startStripeEventWorker(mockContainer, mockHandler);
             
             expect(capturedFailedHandler).not.toBeNull();
             
-            // Create a mock job that still has retries remaining
             const retryableJob = {
                 id: "job_evt_retryable",
-                attemptsMade: 2, // Only 2 attempts made, max is 5
+                attemptsMade: 2,
                 opts: { attempts: 5 },
                 data: {
                     eventId: "evt_retryable_123",
@@ -421,20 +463,17 @@ describe("Stripe Event Queue - Story 6.1", () => {
             
             await capturedFailedHandler!(retryableJob, testError);
             
-            // Should NOT log CRITICAL
             expect(console.error).not.toHaveBeenCalledWith(
                 expect.stringContaining("[CRITICAL][DLQ]"),
                 expect.anything()
             );
             
-            // Should log warning instead
             expect(console.warn).toHaveBeenCalledWith(
                 expect.stringContaining("will retry"),
                 expect.any(Error)
             );
             
-            // Should NOT release lock (allow BullMQ to retry)
-            expect(mockRedisDel).not.toHaveBeenCalled();
+            expect(mocks.mockRedisDel).not.toHaveBeenCalled();
         });
     });
 });
