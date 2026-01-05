@@ -37,14 +37,22 @@ export default async function inventoryBackorderedSubscriber({
     const logger = container.resolve("logger")
 
     // Validate event data structure
-    if (!data || !data.order_id) {
-        logger.error("[Subscriber][inventory.backordered] Invalid event data: missing order_id")
+    if (!data || !data.order_id || !Array.isArray(data.items) || data.items.length === 0) {
+        logger.error(`[Subscriber][inventory.backordered] Invalid or empty event data: ${JSON.stringify(data)}`)
         return
     }
 
-    if (!Array.isArray(data.items) || data.items.length === 0) {
-        logger.warn(`[Subscriber][inventory.backordered] No items in backorder event for order ${data.order_id}`)
-        return
+    const validItems = data.items.filter(item => 
+        item.inventory_item_id && item.location_id && typeof item.new_stock === 'number'
+    );
+
+    if (validItems.length !== data.items.length) {
+        logger.warn(`[Subscriber][inventory.backordered] Some items in event for order ${data.order_id} were invalid. Total: ${data.items.length}, Invalid: ${data.items.length - validItems.length}`);
+    }
+
+    if (validItems.length === 0) {
+        logger.warn(`[Subscriber][inventory.backordered] No valid items in backorder event for order ${data.order_id}`);
+        return;
     }
 
     logger.info(`[Subscriber] Handling inventory.backordered for order ${data.order_id} (${data.items.length} items)`)
