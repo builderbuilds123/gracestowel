@@ -129,6 +129,9 @@ test.describe("Backend API workflows (admin)", () => {
   test("rejects invalid payloads with 4xx and retries idempotently", async ({
     apiRequest,
   }) => {
+    // Import ApiError for proper error type checking
+    const { ApiError } = await import("../../support/helpers/api-request");
+
     let statusCode = 0;
     try {
       await apiRequest({
@@ -136,19 +139,19 @@ test.describe("Backend API workflows (admin)", () => {
         url: "/admin/products",
         data: { title: "" },
       });
-    } catch (error: any) {
-      // Extract status code from error object for proper validation
-      if (error && typeof error === "object") {
-        if ("status" in error && typeof error.status === "number") {
-          statusCode = error.status;
-        } else if ("statusCode" in error && typeof error.statusCode === "number") {
-          statusCode = error.statusCode;
-        } else {
-          // If error was thrown but no status code found, default to client error
-          statusCode = 400;
+    } catch (error: unknown) {
+      // Use instanceof check for proper status code extraction
+      if (error instanceof ApiError) {
+        statusCode = error.status;
+      } else if (error instanceof Error) {
+        // Fallback: parse status from error message if ApiError not used
+        const match = error.message.match(/API request failed: (\d+)/);
+        if (match) {
+          statusCode = parseInt(match[1], 10);
         }
       }
     }
+    // Ensure we actually got a 4xx client error
     expect(statusCode).toBeGreaterThanOrEqual(400);
     expect(statusCode).toBeLessThan(500);
 

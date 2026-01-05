@@ -1,6 +1,23 @@
 import { APIRequestContext } from "@playwright/test";
 
 /**
+ * Custom error class for API errors with status code exposed as property
+ */
+export class ApiError extends Error {
+  public readonly status: number;
+  public readonly statusText: string;
+  public readonly responseBody: string;
+
+  constructor(status: number, statusText: string, responseBody: string) {
+    super(`API request failed: ${status} ${statusText} :: ${responseBody.slice(0, 200)}`);
+    this.name = "ApiError";
+    this.status = status;
+    this.statusText = statusText;
+    this.responseBody = responseBody;
+  }
+}
+
+/**
  * Pure function for API requests
  * Framework-agnostic, accepts all dependencies explicitly
  */
@@ -50,9 +67,7 @@ export async function apiRequest<T = unknown>({
 
   if (!response.ok()) {
     const errorText = await response.text();
-    throw new Error(
-      `API request failed: ${response.status()} ${response.statusText()} :: ${errorText.slice(0, 200)}`,
-    );
+    throw new ApiError(response.status(), response.statusText(), errorText);
   }
 
   return response.json();

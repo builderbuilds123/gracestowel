@@ -16,6 +16,7 @@ export type Product = {
 };
 
 export const createProduct = (overrides: Partial<Product> = {}): Product => ({
+  id: faker.string.uuid(), // Generate ID for API payloads that need product_id
   title: faker.commerce.productName(),
   description: faker.commerce.productDescription(),
   handle: faker.helpers.slugify(faker.commerce.productName()).toLowerCase(),
