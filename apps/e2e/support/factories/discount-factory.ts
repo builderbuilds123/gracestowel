@@ -16,17 +16,20 @@ export type Discount = {
   rule: DiscountRule;
 };
 
-export const createDiscount = (overrides: Partial<Discount> = {}): Discount => ({
-  code: faker.string.alphanumeric({ length: 8 }).toUpperCase(),
-  is_dynamic: false,
-  is_disabled: false,
-  starts_at: new Date(),
-  ends_at: null,
-  rule: {
-    type: "percentage",
-    value: 10,
-    allocation: "total",
-    ...overrides.rule,
-  },
-  ...overrides,
-});
+export const createDiscount = (overrides: Partial<Discount> = {}): Discount => {
+  const { rule, ...rest } = overrides;
+  return {
+    code: faker.string.alphanumeric({ length: 8 }).toUpperCase(),
+    is_dynamic: false,
+    is_disabled: false,
+    starts_at: new Date(),
+    ends_at: null,
+    rule: {
+      type: "percentage",
+      value: 10,
+      allocation: "total",
+      ...rule,
+    },
+    ...rest,
+  };
+};
