@@ -53,11 +53,20 @@ RUN pnpm --filter @gracestowel/backend deploy --prod --legacy /deploy
 FROM builder AS test
 WORKDIR /repo/apps/backend
 
+# Install postgres client and netcat for health checks
+RUN apk add --no-cache postgresql-client netcat-openbsd
+
+# Ensure we use the node_modules from builder stage for all commands
+# The builder stage has all dependencies properly installed
 ENV NODE_ENV=production
 ENV PORT=8080
+# Set NODE_PATH to help with module resolution in pnpm workspaces
+ENV NODE_PATH=/repo/node_modules:/repo/apps/backend/node_modules
 
 EXPOSE 8080
-CMD ["sh", "-c", "echo 'Running database migrations...'; pnpm run migrate; echo 'Seeding test data...'; pnpm run seed; echo 'Starting server...'; pnpm run start"]
+# Wait for DB, run migrations, seed, and start server
+# Use pnpm exec to run medusa commands with proper module resolution
+CMD ["sh", "-c", "echo 'Waiting for database to be ready...'; until pg_isready -h postgres -U medusa_test -d medusa_test 2>/dev/null || nc -z postgres 5432 2>/dev/null; do echo 'Waiting for postgres...'; sleep 2; done; echo 'Database is ready'; echo 'Running database migrations...'; cd /repo/apps/backend && pnpm exec medusa db:migrate; echo 'Seeding test data...'; pnpm exec medusa exec ./src/scripts/seed.ts || echo 'Seed completed or skipped'; echo 'Starting server...'; pnpm exec medusa start --host 0.0.0.0 --port 8080"]
 
 # Production image
 FROM base AS runner
