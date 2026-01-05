@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Grace Stowel backend is built on **Medusa v2**, a headless commerce engine. This document covers:
+The Grace's Towel backend is built on **Medusa v2**, a headless commerce engine. This document covers:
 
 1. Custom API routes
 2. Medusa's built-in Store/Admin APIs
@@ -237,4 +237,3 @@ Medusa uses standard HTTP status codes:
 | 401 | Unauthorized |
 | 404 | Not Found |
 | 500 | Internal Server Error |
-

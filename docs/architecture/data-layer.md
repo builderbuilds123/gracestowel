@@ -2,7 +2,7 @@
 
 ## Overview
 
-Grace Stowel uses a hybrid data approach:
+Grace's Towel uses a hybrid data approach:
 - **Static Data**: Product catalog defined in TypeScript files
 - **Dynamic Data**: Medusa API for real-time product management
 - **Client State**: React Context for cart and locale
@@ -121,35 +121,18 @@ getPriceAmount(product, "usd"); // 35
 
 ```typescript
 const SITE_CONFIG = {
-  // Brand
-  name: "Grace Stowel",
+  name: "Grace's Towel",
   tagline: "Premium Turkish Cotton Towels",
-
-  // Contact
   email: "hello@gracestowel.com",
   phone: "+1 (555) 123-4567",
-
-  // Social Media
   social: {
     instagram: "https://instagram.com/gracestowel",
     facebook: "https://facebook.com/gracestowel",
     twitter: "https://twitter.com/gracestowel"
   },
-
-  // Business Logic
-  freeGiftThreshold: 35,      // Cart value for free gift
-  freeShippingThreshold: 99,  // Cart value for free shipping
+  freeGiftThreshold: 35,
+  freeShippingThreshold: 99,
 };
-```
-
-### Usage
-
-```typescript
-import { SITE_CONFIG } from '../config/site';
-
-// Access values
-const brandName = SITE_CONFIG.name;
-const freeShippingAt = SITE_CONFIG.freeShippingThreshold;
 ```
 
 ---
@@ -165,8 +148,8 @@ const freeShippingAt = SITE_CONFIG.freeShippingThreshold;
 interface CartItem {
   id: number;
   title: string;
-  price: string;           // Formatted price
-  originalPrice?: string;  // For sale items
+  price: string;
+  originalPrice?: string;
   image: string;
   quantity: number;
   color?: string;
@@ -196,7 +179,7 @@ interface CartContextType {
 
 ### Persistence
 
-Cart data is persisted to `localStorage` under the key `grace-stowel-cart`.
+Cart data is persisted to `sessionStorage` (migrated from localStorage for security).
 
 ### Free Gift Logic
 
@@ -206,25 +189,3 @@ When cart total ≥ $35:
 
 When cart total < $35:
 - Automatically removes the free gift
-
----
-
-## Data Migration Strategy
-
-### Current State
-- Static product data in TypeScript files
-- Medusa API available but not primary source
-
-### Future State
-- Medusa as single source of truth
-- Static data as fallback only
-- Real-time inventory tracking
-- Order management via Medusa
-
-### Migration Steps
-1. Seed Medusa with current product data
-2. Update components to use `useMedusaProducts`
-3. Add inventory tracking
-4. Implement order creation via Medusa
-5. Remove static product data
-

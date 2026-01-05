@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Grace Stowel storefront is a React Router v7 application deployed on Cloudflare Workers. This document covers all custom components, contexts, hooks, and utilities.
+The Grace's Towel storefront is a React Router v7 application deployed on Cloudflare Workers. This document covers all custom components, contexts, hooks, and utilities.
 
 ## Directory Structure
 
@@ -69,27 +69,6 @@ Main checkout form integrating Stripe Elements.
 - Shipping method selection
 - Express checkout (Apple Pay, Google Pay)
 
-**Exports**:
-```typescript
-interface ShippingOption {
-  id: string;
-  displayName: string;
-  amount: number;
-  originalAmount?: number;
-  isFree?: boolean;
-  deliveryEstimate?: string;
-}
-
-interface CheckoutFormProps {
-  items: CartItem[];
-  cartTotal: number;
-  onAddressChange?: (event) => void;
-  shippingOptions: ShippingOption[];
-  selectedShipping: ShippingOption | null;
-  setSelectedShipping: (option: ShippingOption) => void;
-}
-```
-
 #### OrderSummary (`OrderSummary.tsx`)
 Order summary sidebar showing cart items, subtotal, shipping, and total.
 
@@ -99,16 +78,6 @@ Order summary sidebar showing cart items, subtotal, shipping, and total.
 
 #### EmbroideryCustomizer (`EmbroideryCustomizer.tsx`)
 UI for customizing products with embroidered text or drawings.
-
----
-
-### Utility Components
-
-#### Dropdown (`Dropdown.tsx`)
-Reusable dropdown/select component.
-
-#### Map.client.tsx (`Map.client.tsx`)
-Leaflet map component (client-side only).
 
 ---
 
@@ -142,9 +111,9 @@ interface CartItem {
 interface CartContextType {
   items: CartItem[];
   isOpen: boolean;
-  addToCart: (item: Omit<CartItem, 'quantity'> & { quantity?: number }) => void;
-  removeFromCart: (id: number, color?: string) => void;
-  updateQuantity: (id: number, quantity: number) => void;
+  addToCart: (item) => void;
+  removeFromCart: (id, color?) => void;
+  updateQuantity: (id, quantity) => void;
   toggleCart: () => void;
   clearCart: () => void;
   cartTotal: number;
@@ -170,16 +139,6 @@ function MyComponent() {
 
 Currency and locale management.
 
-**Usage**:
-```tsx
-import { useLocale } from '../context/LocaleContext';
-
-function MyComponent() {
-  const { currency } = useLocale();
-  // currency = "USD"
-}
-```
-
 ---
 
 ## Hooks
@@ -193,25 +152,16 @@ Fetches products from the Medusa Store API.
 import { useMedusaProducts, useMedusaProduct } from '../hooks/useMedusaProducts';
 
 // Fetch all products
-function ProductList() {
-  const { products, isLoading, error, refetch } = useMedusaProducts();
-  // ...
-}
+const { products, isLoading, error, refetch } = useMedusaProducts();
 
 // Fetch single product by handle
-function ProductDetail({ handle }) {
-  const { product, isLoading, error } = useMedusaProduct(handle);
-  // ...
-}
+const { product, isLoading, error } = useMedusaProduct(handle);
 ```
 
 **Helpers**:
 ```typescript
-// Format price from Medusa product
 getFormattedPrice(product, "usd") // "$25.00"
-
-// Get numeric price
-getPriceAmount(product, "usd") // 25
+getPriceAmount(product, "usd")    // 25
 ```
 
 ---
@@ -224,7 +174,6 @@ Stripe.js singleton loader.
 
 ```typescript
 import { getStripe } from '../lib/stripe';
-
 const stripe = await getStripe();
 ```
 
@@ -234,9 +183,7 @@ Server-side PostgreSQL client for Cloudflare Workers.
 
 ```typescript
 import { getDbClient } from '../lib/db.server';
-
 const client = await getDbClient(context);
-// Use client for direct database queries
 ```
 
 ---
@@ -245,14 +192,10 @@ const client = await getDbClient(context);
 
 ### Site Config (`config/site.ts`)
 
-Centralized site configuration.
-
 ```typescript
 import { SITE_CONFIG } from '../config/site';
 
-SITE_CONFIG.name              // "Grace Stowel"
+SITE_CONFIG.name              // "Grace's Towel"
 SITE_CONFIG.freeGiftThreshold // 35
 SITE_CONFIG.freeShippingThreshold // 99
-SITE_CONFIG.social.instagram  // URL
 ```
-
