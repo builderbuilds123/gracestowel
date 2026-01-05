@@ -2,7 +2,6 @@ import { faker } from "@faker-js/faker";
 import type { Product } from "./product-factory";
 
 export type CartLineItem = {
-  product_id?: string;
   variant_id?: string;
   quantity: number;
   title?: string;
@@ -36,8 +35,6 @@ export const toLineItemPayload = (
   product: Product,
   quantity = 1,
 ): CartLineItem => ({
-  product_id: product.id,
+  variant_id: (product as any).variant_id || (product as any).variants?.[0]?.id || `variant_${product.id}`,
   quantity,
-  title: product.title,
-  unit_price: product.price,
 });

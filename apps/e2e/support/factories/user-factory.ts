@@ -8,22 +8,18 @@ export type User = {
   id?: string;
   email: string;
   password?: string;
-  firstName?: string;
-  lastName?: string;
+  first_name?: string;
+  last_name?: string;
   phone?: string;
-  role?: 'customer' | 'admin';
 };
 
 export const createUser = (overrides: Partial<User> = {}): User => ({
-  id: faker.string.uuid(),
   email: faker.internet.email(),
-  password: faker.internet.password({ length: 12 }),
-  firstName: faker.person.firstName(),
-  lastName: faker.person.lastName(),
+  first_name: faker.person.firstName(),
+  last_name: faker.person.lastName(),
   phone: faker.phone.number(),
-  role: 'customer',
   ...overrides,
 });
 
 export const createAdminUser = (overrides: Partial<User> = {}): User =>
-  createUser({ role: 'admin', ...overrides });
+  createUser(overrides);

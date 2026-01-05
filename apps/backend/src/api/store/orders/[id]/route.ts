@@ -15,7 +15,7 @@ export async function GET(
     res: MedusaResponse
 ): Promise<void> {
     const { id } = req.params;
-    const token = req.query.token as string;
+    const token = (req.query.token as string) || (req.headers["x-modification-token"] as string);
 
     if (!token) {
         res.status(400).json({

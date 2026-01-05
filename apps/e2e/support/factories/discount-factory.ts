@@ -1,35 +1,44 @@
 import { faker } from "@faker-js/faker";
 
-export type DiscountRule = {
+/**
+ * Promotion factory for Medusa v2
+ */
+export type PromotionRule = {
+  operator: "eq" | "ne" | "gt" | "lt" | "gte" | "lte" | "in";
+  attribute: string;
+  values: string | string[];
+};
+
+export type ApplicationMethod = {
   type: "percentage" | "fixed";
+  target_type: "order" | "item" | "shipping";
   value: number;
-  allocation?: "total" | "item";
+  currency_code?: string;
+  allocation?: "total" | "across";
 };
 
 export type Discount = {
   id?: string;
   code: string;
-  is_dynamic?: boolean;
-  is_disabled?: boolean;
-  starts_at?: Date;
-  ends_at?: Date | null;
-  rule: DiscountRule;
+  type: "standard" | "buyget";
+  status?: string;
+  is_automatic?: boolean;
+  application_method: ApplicationMethod;
+  rules?: PromotionRule[];
 };
 
 export const createDiscount = (overrides: Partial<Discount> = {}): Discount => {
-  const { rule, ...rest } = overrides;
   return {
     code: faker.string.alphanumeric({ length: 8 }).toUpperCase(),
-    is_dynamic: false,
-    is_disabled: false,
-    starts_at: new Date(),
-    ends_at: null,
-    rule: {
+    type: "standard",
+    status: "active",
+    is_automatic: false,
+    application_method: {
       type: "percentage",
+      target_type: "order",
       value: 10,
-      allocation: "total",
-      ...rule,
+      ...overrides.application_method,
     },
-    ...rest,
+    ...overrides,
   };
 };

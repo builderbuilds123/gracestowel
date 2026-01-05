@@ -9,20 +9,42 @@ export type Product = {
   title: string;
   description?: string;
   handle?: string;
-  price?: number;
-  stock?: number;
-  category?: string;
-  images?: string[];
+  status?: string;
+  images?: { url: string }[];
+  options?: { title: string; values: string[] }[];
+  variants?: Array<{
+    id?: string;
+    title: string;
+    sku?: string;
+    options: Record<string, string>;
+    prices: { amount: number; currency_code: string }[];
+    manage_inventory: boolean;
+    allow_backorder?: boolean;
+  }>;
+  variant_id?: string;
 };
 
 export const createProduct = (overrides: Partial<Product> = {}): Product => ({
-  id: faker.string.uuid(), // Generate ID for API payloads that need product_id
   title: faker.commerce.productName(),
   description: faker.commerce.productDescription(),
   handle: faker.helpers.slugify(faker.commerce.productName()).toLowerCase(),
-  price: parseFloat(faker.commerce.price({ min: 10, max: 1000 })),
-  stock: faker.number.int({ min: 0, max: 100 }),
-  category: faker.commerce.department(),
-  images: [faker.image.url()],
+  status: 'published',
+  images: [{ url: faker.image.url() }],
+  options: [
+    { title: 'Size', values: ['Default'] }
+  ],
+  variants: [
+    {
+      title: 'Default',
+      sku: faker.string.alphanumeric(10),
+      options: { 'Size': 'Default' },
+      prices: [
+        { amount: 2500, currency_code: 'usd' },
+        { amount: 3500, currency_code: 'cad' }
+      ],
+      allow_backorder: true,
+      manage_inventory: false,
+    }
+  ],
   ...overrides,
 });

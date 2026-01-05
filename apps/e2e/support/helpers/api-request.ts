@@ -28,7 +28,7 @@ export class ApiError extends Error {
  */
 type ApiRequestMethod = "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
 
-type ApiRequestParams = {
+export type ApiRequestParams = {
   request: APIRequestContext;
   method: ApiRequestMethod;
   url: string;
@@ -61,7 +61,7 @@ export async function apiRequest<T = unknown>({
   // Security: Only attach Authorization header to internal API URLs
   // Prevent token leakage to external URLs
   const isExternalUrl = url.startsWith("http") && !requestUrl.href.startsWith(baseUrl);
-  const authorization = !isExternalUrl ? (authToken || process.env.ADMIN_TOKEN) : undefined;
+  const authorization = !isExternalUrl ? (process.env.ADMIN_TOKEN || authToken || process.env.MEDUSA_PUBLISHABLE_KEY) : undefined;
 
   const response = await request.fetch(requestUrl.toString(), {
     method,
@@ -71,11 +71,12 @@ export async function apiRequest<T = unknown>({
       ...(authorization ? { Authorization: `Bearer ${authorization}` } : {}),
       ...headers,
     },
-    data: data ? JSON.stringify(data) : undefined,
+    data,
   });
 
   if (!response.ok()) {
     const errorText = await response.text();
+    console.error(`API Error ${response.status()} at ${url}:`, errorText);
     throw new ApiError(response.status(), response.statusText(), errorText);
   }
 

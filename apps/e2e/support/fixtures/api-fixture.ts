@@ -1,17 +1,17 @@
 import { test as base } from '@playwright/test';
-import { apiRequest } from '../helpers/api-request';
+import { apiRequest, ApiRequestParams } from '../helpers/api-request';
 
 /**
  * API Request Fixture
  * Provides typed API request helper to tests
  */
 type ApiFixture = {
-  apiRequest: typeof apiRequest;
+  apiRequest: <T = unknown>(params: Omit<ApiRequestParams, 'request'>) => Promise<T>;
 };
 
 export const test = base.extend<ApiFixture>({
   apiRequest: async ({ request }, use) => {
-    await use((params) => apiRequest({ request, ...params }));
+    await use(<T = unknown>(params: Omit<ApiRequestParams, 'request'>) => apiRequest<T>({ request, ...params }));
   },
 });
 

@@ -2,52 +2,57 @@ import { APIRequestContext } from "@playwright/test";
 import { apiRequest } from "../helpers/api-request";
 import { createDiscount, Discount } from "./discount-factory";
 
+/**
+ * DiscountFactory using Medusa v2 Promotions API
+ */
 export class DiscountFactory {
-  private readonly createdDiscountIds: string[] = [];
+  private readonly createdPromotionIds: string[] = [];
 
   constructor(private readonly request: APIRequestContext) {}
 
   async createDiscount(overrides: Partial<Discount> = {}): Promise<Discount> {
-    const discount = createDiscount(overrides);
+    const promotion = createDiscount(overrides);
 
     try {
-      const created = await apiRequest<{ discount?: { id: string } }>({
+      const created = await apiRequest<{ promotion?: { id: string } }>({
         request: this.request,
         method: "POST",
-        url: "/admin/discounts",
+        url: "/admin/promotions",
         data: {
-          code: discount.code,
-          is_dynamic: discount.is_dynamic,
-          is_disabled: discount.is_disabled,
-          starts_at: discount.starts_at,
-          ends_at: discount.ends_at,
-          rule: discount.rule,
+          code: promotion.code,
+          type: promotion.type,
+          status: promotion.status,
+          is_automatic: promotion.is_automatic,
+          application_method: promotion.application_method,
+          // Only send rules if they exist to avoid strict validation issues
+          ...(promotion.rules ? { rules: promotion.rules } : {}),
         },
       });
 
-      if (created.discount?.id) {
-        this.createdDiscountIds.push(created.discount.id);
-        return { ...discount, id: created.discount.id };
+      if (created.promotion?.id) {
+        this.createdPromotionIds.push(created.promotion.id);
+        return { ...promotion, id: created.promotion.id };
       }
-    } catch (error) {
-      console.warn("Discount seeding skipped; using generated data.");
+    } catch (error: any) {
+      console.error("Promotion seeding failed:", JSON.stringify(error.body || error.message, null, 2));
+      console.warn("Promotion seeding skipped; using generated data.");
     }
 
-    return discount;
+    return promotion;
   }
 
   async cleanup(): Promise<void> {
-    for (const discountId of this.createdDiscountIds) {
+    for (const promotionId of this.createdPromotionIds) {
       try {
         await apiRequest({
           request: this.request,
           method: "DELETE",
-          url: `/admin/discounts/${discountId}`,
+          url: `/admin/promotions/${promotionId}`,
         });
       } catch (error) {
-        console.warn(`Discount cleanup skipped for ${discountId}.`);
+        console.warn(`Promotion cleanup skipped for ${promotionId}.`);
       }
     }
-    this.createdDiscountIds.length = 0;
+    this.createdPromotionIds.length = 0;
   }
 }

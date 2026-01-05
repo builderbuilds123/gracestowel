@@ -11,21 +11,38 @@ export class PaymentFactory {
     overrides: Partial<PaymentIntent> = {},
   ): Promise<PaymentIntent> {
     const intent = createPaymentIntent(overrides);
+    const cartId = (overrides as any).cart_id;
+
+    if (!cartId) {
+      console.warn("Payment intent creation requires cart_id in Medusa v2.");
+      return intent;
+    }
 
     try {
-      const created = await apiRequest<{ payment_intent?: { id: string } }>({
+      // 1. Create Payment Collection
+      const pcResponse = await apiRequest<{ payment_collection: { id: string } }>({
         request: this.request,
         method: "POST",
-        url: "/admin/payment-intents",
-        data: intent,
+        url: "/store/payment-collections",
+        data: { cart_id: cartId },
+      });
+      const pcId = pcResponse.payment_collection.id;
+
+      // 2. Create Payment Session
+      const psResponse = await apiRequest<any>({
+        request: this.request,
+        method: "POST",
+        url: `/store/payment-collections/${pcId}/payment-sessions`,
+        data: { provider_id: "pp_system_default" },
       });
 
-      if (created.payment_intent?.id) {
-        this.createdPaymentIntentIds.push(created.payment_intent.id);
-        return { ...intent, id: created.payment_intent.id };
+      const sessionId = psResponse.payment_collection?.payment_sessions?.[0]?.id || psResponse.id;
+      if (sessionId) {
+        this.createdPaymentIntentIds.push(pcId); // Use PC ID for cleanup if needed
+        return { ...intent, id: sessionId, cart_id: cartId };
       }
     } catch (error) {
-      console.warn("Payment intent seeding skipped; using generated data.");
+      console.error("Payment seeding failed:", error);
     }
 
     return intent;

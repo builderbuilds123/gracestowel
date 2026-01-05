@@ -8,27 +8,54 @@ export class ShippingFactory {
   constructor(private readonly request: APIRequestContext) {}
 
   async createShippingOption(
-    overrides: Partial<ShippingOption> = {},
+    overrides: Partial<ShippingOption> & { region_id?: string } = {},
   ): Promise<ShippingOption> {
     const shippingOption = createShippingOption(overrides);
+    const regionId = overrides.region_id;
 
-    try {
-      const created = await apiRequest<{ shipping_option?: { id: string } }>({
-        request: this.request,
-        method: "POST",
-        url: "/admin/shipping-options",
-        data: shippingOption,
-      });
+    const response = await apiRequest<{ shipping_option: { id: string } }>({
+      request: this.request,
+      method: "POST",
+      url: "/admin/shipping-options",
+      data: {
+        name: shippingOption.name,
+        price_type: shippingOption.price_type || "flat",
+        type: {
+          label: "Standard",
+          description: "Standard shipping",
+          code: "standard-" + Math.random().toString(36).substring(7),
+        },
+        prices: [
+          {
+            amount: shippingOption.amount || 1000,
+            ...(regionId ? { region_id: regionId } : { currency_code: "usd" }),
+          },
+          // Add a fallback price if regionId is provided
+          ...(regionId ? [
+            {
+              amount: shippingOption.amount || 1200,
+              currency_code: "usd",
+            }
+          ] : [
+            {
+              amount: shippingOption.amount || 1200,
+              currency_code: "cad",
+            }
+          ]),
+        ],
+        service_zone_id: (shippingOption as any).service_zone_id || "serzo_01KCQ89AQX5KAJSGY0GATGAS4C",
+        shipping_profile_id: (shippingOption as any).shipping_profile_id || "sp_01KCQ8965R066RVNKFRA5Z42D6",
+        provider_id: (shippingOption as any).provider_id || "manual_manual",
+      },
+    });
 
-      if (created.shipping_option?.id) {
-        this.createdShippingOptionIds.push(created.shipping_option.id);
-        return { ...shippingOption, id: created.shipping_option.id };
-      }
-    } catch (error) {
-      console.warn("Shipping option seeding skipped; using generated data.");
+    const created = response.shipping_option;
+    if (!created?.id) {
+      throw new Error(`Failed to create shipping option: ${JSON.stringify(response)}`);
     }
 
-    return shippingOption;
+    this.createdShippingOptionIds.push(created.id);
+    return { ...shippingOption, id: created.id };
   }
 
   async cleanup(): Promise<void> {

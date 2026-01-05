@@ -57,15 +57,14 @@ module.exports = defineConfig({
               download_file_duration: 60 * 60, // 1 hour
               endpoint: process.env.S3_ENDPOINT,
             },
-          }] : []),
-          {
+          }] : [{
             resolve: "@medusajs/file-local",
             id: "local",
             options: {
               upload_dir: "static",
               backend_url: process.env.MEDUSA_BACKEND_URL || "http://localhost:9000"
             }
-          },
+          }]),
         ],
       },
     },
