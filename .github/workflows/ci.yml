@@ -217,7 +217,7 @@ jobs:
           echo "Postgres is ready"
 
           echo "Waiting for backend..."
-          timeout 180 bash -c 'until docker compose -f docker-compose.test.yml exec -T backend curl -sf http://localhost:9000/health; do sleep 5; done'
+          timeout 180 bash -c 'until docker compose -f docker-compose.test.yml exec -T backend curl -sf http://localhost:8080/health; do sleep 5; done'
           echo "Backend is ready"
 
       - name: Get publishable API key from seeded database
