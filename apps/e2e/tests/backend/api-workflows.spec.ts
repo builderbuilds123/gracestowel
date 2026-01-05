@@ -1,7 +1,11 @@
 import { expect, test } from "../../support/fixtures";
 
+// Fail fast if ADMIN_TOKEN is not configured - these tests require admin access
+if (!process.env.ADMIN_TOKEN) {
+  throw new Error("ADMIN_TOKEN environment variable is required for backend API tests");
+}
+
 test.describe("Backend API workflows (admin)", () => {
-  test.skip(!process.env.ADMIN_TOKEN, "Requires ADMIN_TOKEN for admin endpoints");
 
   test("products catalog CRUD with publish/unpublish and pricing updates", async ({
     apiRequest,
@@ -132,10 +136,21 @@ test.describe("Backend API workflows (admin)", () => {
         url: "/admin/products",
         data: { title: "" },
       });
-    } catch (error) {
-      statusCode = 400;
+    } catch (error: any) {
+      // Extract status code from error object for proper validation
+      if (error && typeof error === "object") {
+        if ("status" in error && typeof error.status === "number") {
+          statusCode = error.status;
+        } else if ("statusCode" in error && typeof error.statusCode === "number") {
+          statusCode = error.statusCode;
+        } else {
+          // If error was thrown but no status code found, default to client error
+          statusCode = 400;
+        }
+      }
     }
     expect(statusCode).toBeGreaterThanOrEqual(400);
+    expect(statusCode).toBeLessThan(500);
 
     const webhook = await apiRequest<{ success: boolean }>({
       method: "POST",

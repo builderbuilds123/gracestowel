@@ -16,8 +16,9 @@ export class OrderFactory {
         method: "POST",
         url: "/admin/orders",
         data: {
-          ...order,
           email: order.user.email,
+          shipping_address: order.shippingAddress,
+          status: order.status,
           items: order.items.map((item) => ({
             title: item.product.title,
             quantity: item.quantity,

@@ -124,7 +124,7 @@ test.describe("Storefront cart + checkout flows", () => {
   test("guest checkout displays address, shipping, tax, and payment steps", async ({
     page,
   }) => {
-    test.setTimeout(120_000);
+    test.setTimeout(60_000);
     const productResponse = page.waitForResponse(
       (response) =>
         response.url().includes(`/store/products/${PRODUCT_HANDLE}`) &&
