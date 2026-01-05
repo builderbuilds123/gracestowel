@@ -26,6 +26,7 @@ const LOCK_CONFIG = {
     TTL_SECONDS: 120,
 } as const;
 
+
 /**
  * Input for the create-order-from-stripe workflow
  */
@@ -242,20 +243,15 @@ import InventoryDecrementService, {
 const prepareInventoryAdjustmentsStep = createStep(
     "prepare-inventory-adjustments",
     async (input: AtomicInventoryInput, { container }) => {
-        // Address PR feedback: Delegate logic to a dedicated service
-        // Medusa v2 automatically discovers and registers services in src/services
-        let inventoryDecrementService: InventoryDecrementService;
-        try {
-            inventoryDecrementService = container.resolve("inventoryDecrementService");
-        } catch (e) {
-            // Fallback for different naming conventions or if manual instantiation is needed
-            // although registration is the standard V2 way.
-            const logger = container.resolve("logger");
-            const query = container.resolve("query");
-            inventoryDecrementService = new InventoryDecrementService({ logger, query });
-        }
-        
-        const adjustments = await inventoryDecrementService.atomicDecrementInventory(input);
+        const service =
+            typeof container.hasRegistration === "function" && container.hasRegistration("inventoryDecrementService")
+                ? (container.resolve("inventoryDecrementService") as InventoryDecrementService)
+                : new InventoryDecrementService({
+                      logger: container.resolve("logger"),
+                      query: container.resolve("query"),
+                      pg_connection: container.resolve("pg_connection"),
+                  });
+        const adjustments = await service.atomicDecrementInventory(input);
         return new StepResponse(adjustments);
     }
 );
@@ -514,7 +510,7 @@ export const createOrderFromStripeWorkflow = createWorkflow(
             data.inventoryAdjustments && data.inventoryAdjustments.length > 0
         );
 
-        // Step 4b: Emit inventory.backordered event for items that went negative (AC4)
+        // Step 4b: Emit inventory.backordered event for items that went negative (AC3)
         const backorderedItems = transform({ inventoryAdjustments }, (data) =>
             (data.inventoryAdjustments || []).filter(
                 (adj: InventoryAdjustment) => adj.stocked_quantity < 0
@@ -525,10 +521,13 @@ export const createOrderFromStripeWorkflow = createWorkflow(
             data: {
                 order_id: data.order?.id,
                 items: data.backorderedItems.map((adj: InventoryAdjustment) => ({
+                    variant_id: adj.variant_id,
                     inventory_item_id: adj.inventory_item_id,
                     location_id: adj.location_id,
-                    stocked_quantity: adj.stocked_quantity,
+                    delta: adj.previous_stocked_quantity - adj.stocked_quantity, // AC3: quantity decremented
+                    new_stock: adj.stocked_quantity, // AC3: resulting stock level
                     previous_stocked_quantity: adj.previous_stocked_quantity,
+                    available_quantity: adj.available_quantity,
                 })),
             },
         }));
