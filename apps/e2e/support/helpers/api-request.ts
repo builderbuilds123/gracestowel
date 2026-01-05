@@ -2,6 +2,7 @@ import { APIRequestContext } from "@playwright/test";
 
 /**
  * Custom error class for API errors with status code exposed as property
+ * Sanitizes error messages to prevent leaking sensitive data in logs
  */
 export class ApiError extends Error {
   public readonly status: number;
@@ -9,10 +10,14 @@ export class ApiError extends Error {
   public readonly responseBody: string;
 
   constructor(status: number, statusText: string, responseBody: string) {
-    super(`API request failed: ${status} ${statusText} :: ${responseBody.slice(0, 200)}`);
+    // Sanitize error message: only include status info, not full response body
+    // Full response body is available via responseBody property for debugging if needed
+    const sanitizedMessage = `API request failed: ${status} ${statusText}`;
+    super(sanitizedMessage);
     this.name = "ApiError";
     this.status = status;
     this.statusText = statusText;
+    // Store full response body for programmatic access, but don't expose in message
     this.responseBody = responseBody;
   }
 }
@@ -53,12 +58,16 @@ export async function apiRequest<T = unknown>({
     }
   });
 
-  const authorization = authToken || process.env.ADMIN_TOKEN;
+  // Security: Only attach Authorization header to internal API URLs
+  // Prevent token leakage to external URLs
+  const isExternalUrl = url.startsWith("http") && !requestUrl.href.startsWith(baseUrl);
+  const authorization = !isExternalUrl ? (authToken || process.env.ADMIN_TOKEN) : undefined;
 
   const response = await request.fetch(requestUrl.toString(), {
     method,
     headers: {
       "Content-Type": "application/json",
+      "x-publishable-api-key": process.env.MEDUSA_PUBLISHABLE_KEY || "",
       ...(authorization ? { Authorization: `Bearer ${authorization}` } : {}),
       ...headers,
     },

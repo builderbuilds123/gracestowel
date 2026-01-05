@@ -125,7 +125,16 @@ test.describe("Backend API workflows (admin)", () => {
     // Import ApiError for proper error type checking
     const { ApiError } = await import("../../support/helpers/api-request");
 
-    let statusCode = 0;
+    // Use expect().rejects pattern for robust error assertion
+    await expect(
+      apiRequest({
+        method: "POST",
+        url: "/admin/products",
+        data: { title: "" },
+      }),
+    ).rejects.toThrow(ApiError);
+
+    // Verify the error has a 4xx status code
     try {
       await apiRequest({
         method: "POST",
@@ -133,14 +142,11 @@ test.describe("Backend API workflows (admin)", () => {
         data: { title: "" },
       });
     } catch (error: unknown) {
-      // Use instanceof check for proper status code extraction
       if (error instanceof ApiError) {
-        statusCode = error.status;
+        expect(error.status).toBeGreaterThanOrEqual(400);
+        expect(error.status).toBeLessThan(500);
       }
     }
-    // Ensure we actually got a 4xx client error
-    expect(statusCode).toBeGreaterThanOrEqual(400);
-    expect(statusCode).toBeLessThan(500);
 
     const webhook = await apiRequest<{ success: boolean }>({
       method: "POST",
