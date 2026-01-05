@@ -26,7 +26,6 @@ const LOCK_CONFIG = {
     TTL_SECONDS: 120,
 } as const;
 
-let inventoryDecrementService: InventoryDecrementService | null = null;
 
 /**
  * Input for the create-order-from-stripe workflow
@@ -244,24 +243,14 @@ import InventoryDecrementService, {
 const prepareInventoryAdjustmentsStep = createStep(
     "prepare-inventory-adjustments",
     async (input: AtomicInventoryInput, { container }) => {
-        // Address PR feedback: Delegate logic to a dedicated service
-        if (!inventoryDecrementService) {
-            // Prefer DI container resolution when registered
-            if (typeof container.hasRegistration === "function" && container.hasRegistration("inventoryDecrementService")) {
-                inventoryDecrementService = container.resolve("inventoryDecrementService");
-            } else {
-                // Fallback to manual instantiation for tests/legacy contexts
-                // although registration is the standard V2 way.
-                const logger = container.resolve("logger");
-                const query = container.resolve("query");
-                const pg_connection = container.resolve("pg_connection");
-                inventoryDecrementService = new InventoryDecrementService({ logger, query, pg_connection });
-            }
-        }
-        const service = inventoryDecrementService;
-        if (!service) {
-            throw new Error("InventoryDecrementService not initialized");
-        }
+        const service =
+            typeof container.hasRegistration === "function" && container.hasRegistration("inventoryDecrementService")
+                ? (container.resolve("inventoryDecrementService") as InventoryDecrementService)
+                : new InventoryDecrementService({
+                      logger: container.resolve("logger"),
+                      query: container.resolve("query"),
+                      pg_connection: container.resolve("pg_connection"),
+                  });
         const adjustments = await service.atomicDecrementInventory(input);
         return new StepResponse(adjustments);
     }

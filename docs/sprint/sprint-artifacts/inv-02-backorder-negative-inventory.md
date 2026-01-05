@@ -55,6 +55,10 @@
 
 ### Design Decision: `allow_backorder` Storage (Inheritance Precedence)
 
+#### Database Changes
+- **Migration:** Created `src/migrations/Migration20260104_AddAllowBackorder.ts` to add `allow_backorder` (boolean, default false) to `inventory_level`.
+- **Reason:** Standardizes schema changes and avoids manual SQL, addressing PR review feedback.
+
 **Decision:** Store `allow_backorder` at **inventory_level only** (not at inventory_item).
 
 **Rationale:**
@@ -411,3 +415,32 @@ Test Files  1 passed (1)
 | AC5 | ✅ | All 3 test cases covered (a, b, c) |
 | AC6 | ✅ | Location selection respects preferred/channel mapping, fails if unmapped |
 | AC7 | ✅ | Test explicitly verifies availability checks run BEFORE decrement |
+
+---
+
+## Implementation Review Log (Post-PR #119 Feedback)
+
+### Pull Request #120 (Follow-up)
+*Supersedes #119 (merged prematurely)*
+
+**Reviewers:** Qodo, Gemini Code Assist
+**Date:** 2026-01-04
+**Status:** ✅ FEEDBACK ADDRESSED
+
+**Feedback & Resolutions:**
+
+1.  **Issue:** `pg_connection` variable naming violated TypeScript conventions (snake_case vs camelCase).
+    *   **Resolution:** Renamed to `pgConnection` in `InventoryDecrementService`.
+2.  **Issue:** Potential N+1 query when fetching `allow_backorder` flag inside the loop.
+    *   **Resolution:** Implemented batched fetching of `allow_backorder` flags for all target inventory levels *before* iterating through items in `atomicDecrementInventory`.
+3.  **Issue:** Module-level state (`inventoryDecrementService` variable) in `create-order-from-stripe.ts` could cause concurrency issues.
+    *   **Resolution:** Refactored `prepareInventoryAdjustmentsStep` to instantiate or resolve the service locally within the step execution, removing the singleton.
+4.  **Issue:** Lack of input validation for `item.quantity`.
+    *   **Resolution:** Added strict validation checks ensuring proper integer and positive values in both `InventoryDecrementService` and `inventoryBackorderedSubscriber`.
+5.  **Issue:** `inventory.backordered` subscriber lacked deep validation of event data.
+    *   **Resolution:** Added `validItems` filtering, detailed logging for invalid items, and removed potentially sensitive internal error objects from logs.
+
+**Test Results:**
+*   **Total Tests:** 11 passing (7 items in `InventoryDecrementService`, 4 items in `clampAvailability`).
+*   **Verification:** All tests passed after refactoring.
+

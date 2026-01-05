@@ -43,13 +43,12 @@ type InjectedDependencies = {
 export class InventoryDecrementService {
     private logger: Logger;
     private query: any;
-
-    private pg_connection: any;
+    private pgConnection: any;
 
     constructor({ logger, query, pg_connection }: InjectedDependencies) {
         this.logger = logger;
         this.query = query;
-        this.pg_connection = pg_connection;
+        this.pgConnection = pg_connection;
     }
 
     async getSalesChannelLocationIds(salesChannelId?: string | null): Promise<string[]> {
@@ -93,56 +92,95 @@ export class InventoryDecrementService {
         );
         const adjustments: InventoryAdjustment[] = [];
 
+        // 1. Pre-validation and ID collection
+        const variantIds = new Set<string>();
         for (const item of input.cartItems) {
             if (!item.variant_id) {
-                throw new Error(`Missing variant_id for cart item. Cannot process inventory decrement.`);
+                throw new Error(`Missing variant_id for cart item.`);
             }
-
             if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
                 throw new Error(`Invalid quantity for variant ${item.variant_id}: ${item.quantity}`);
             }
+            variantIds.add(item.variant_id);
+        }
 
-            const { data: variants } = await this.query.graph({
-                entity: "product_variant",
-                fields: ["inventory_items.inventory_item_id"],
-                filters: { id: item.variant_id },
-            });
+        // 2. Batch fetch variants mapping to inventory items
+        const { data: variants } = await this.query.graph({
+            entity: "product_variant",
+            fields: ["id", "inventory_items.inventory_item_id"],
+            filters: { id: Array.from(variantIds) },
+        });
 
-            const inventoryItemId = variants[0]?.inventory_items?.[0]?.inventory_item_id;
+        const variantMap = new Map<string, string>(); // variant_id -> inventory_item_id
+        for (const v of variants) {
+            const invItemId = v.inventory_items?.[0]?.inventory_item_id;
+            if (invItemId) {
+                variantMap.set(v.id, invItemId);
+            }
+        }
 
+        // 3. Batch fetch all relevant inventory levels
+        const inventoryItemIds = Array.from(variantMap.values());
+        if (inventoryItemIds.length === 0) {
+             // If no inventory items found for any variant, fail early or let loop handle it
+        }
+
+        const { data: allLevels } = await this.query.graph({
+            entity: "inventory_level",
+            fields: ["id", "location_id", "stocked_quantity", "inventory_item_id"],
+            filters: { inventory_item_id: inventoryItemIds },
+        });
+
+        // Map: inventory_item_id -> levels[]
+        const levelsByItem = new Map<string, any[]>();
+        const allLevelIds: string[] = [];
+        
+        for (const lvl of allLevels) {
+            const list = levelsByItem.get(lvl.inventory_item_id) || [];
+            list.push(lvl);
+            levelsByItem.set(lvl.inventory_item_id, list);
+            allLevelIds.push(lvl.id);
+        }
+
+        // 4. Batch fetch 'allow_backorder' flags for ALL resolved levels
+        // This avoids N+1 queries inside the loop
+        let allowBackorderMap = new Map<string, boolean>(); // level_id -> boolean
+        if (allLevelIds.length > 0) {
+            const levelDetails = await this.pgConnection("inventory_level")
+                .whereIn("id", allLevelIds)
+                .select("id", "allow_backorder");
+            
+            for (const details of levelDetails) {
+                 allowBackorderMap.set(details.id, details?.allow_backorder ?? false);
+            }
+        }
+
+        // 5. Process decrements
+        for (const item of input.cartItems) {
+            const inventoryItemId = variantMap.get(item.variant_id);
             if (!inventoryItemId) {
                 throw new InsufficientStockError(item.variant_id, 0, item.quantity);
             }
 
-            const { data: inventoryLevels } = await this.query.graph({
-                entity: "inventory_level",
-                fields: ["id", "location_id", "stocked_quantity"],
-                filters: { inventory_item_id: inventoryItemId },
-            });
-
-            if (!inventoryLevels.length) {
+            const levels = levelsByItem.get(inventoryItemId) || [];
+            if (levels.length === 0) {
                 throw new InsufficientStockError(item.variant_id, 0, item.quantity);
             }
 
-            const level = this.resolveTargetLevel(inventoryLevels, preferred, channelLocations);
+            const level = this.resolveTargetLevel(levels, preferred, channelLocations);
 
             if (!level?.location_id) {
                 this.logger.error(`[Inventory] No valid fulfillment location found for variant ${item.variant_id}. Preferred: [${Array.from(preferred)}], Channel: [${Array.from(channelLocations)}]`);
                 throw new Error(`No valid fulfillment location found for variant ${item.variant_id} (AC3 Violation)`);
             }
 
-            // Fetch allow_backorder flag manually since it's a custom column on a core table
-            // Medusa's query engine might not see it without model extensions
-            const [levelDetails] = await this.pg_connection("inventory_level")
-                .where({ id: level.id })
-                .select("allow_backorder");
-
-            const allowBackorder = levelDetails?.allow_backorder ?? false;
+            // Use pre-fetched flag
+            const allowBackorder = allowBackorderMap.get(level.id) ?? false;
 
             const previousStock = level.stocked_quantity ?? 0;
             const newStock = previousStock - item.quantity;
 
-            // AC2 & AC7: Enforce stock check if backorders are NOT allowed (stocked only per architecture)
+            // AC2 & AC7: Enforce stock check if backorders are NOT allowed
             if (!allowBackorder && newStock < 0) {
                 this.logger.warn(
                     `[Inventory] Insufficient stock for ${item.variant_id} at ${level.location_id}: requested ${item.quantity}, available ${previousStock}`
