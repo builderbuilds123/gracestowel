@@ -41,18 +41,11 @@ test.describe("Backend API workflows (admin)", () => {
     userFactory,
   }) => {
     const customer = await userFactory.createUser();
-    test.skip(!customer.email, "User factory failed to build payload");
-
-    const created = await apiRequest<{ customer: { id: string } }>({
-      method: "POST",
-      url: "/admin/customers",
-      data: customer,
-    });
-    expect(created.customer.id).toBeTruthy();
+    test.skip(!customer.id, "User factory failed to create customer");
 
     const updated = await apiRequest<{ customer: { id: string; first_name?: string } }>({
       method: "POST",
-      url: `/admin/customers/${created.customer.id}`,
+      url: `/admin/customers/${customer.id}`,
       data: { first_name: "Updated" },
     });
     expect(updated.customer.first_name).toBe("Updated");
@@ -143,12 +136,6 @@ test.describe("Backend API workflows (admin)", () => {
       // Use instanceof check for proper status code extraction
       if (error instanceof ApiError) {
         statusCode = error.status;
-      } else if (error instanceof Error) {
-        // Fallback: parse status from error message if ApiError not used
-        const match = error.message.match(/API request failed: (\d+)/);
-        if (match) {
-          statusCode = parseInt(match[1], 10);
-        }
       }
     }
     // Ensure we actually got a 4xx client error

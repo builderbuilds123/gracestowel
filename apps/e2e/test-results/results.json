@@ -2,7 +2,7 @@
   "config": {
     "configFile": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/playwright.config.ts",
     "rootDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/tests",
-    "forbidOnly": true,
+    "forbidOnly": false,
     "fullyParallel": true,
     "globalSetup": null,
     "globalTeardown": null,
@@ -18,7 +18,14 @@
       [
         "html",
         {
+          "outputFolder": "test-results/html",
           "open": "never"
+        }
+      ],
+      [
+        "junit",
+        {
+          "outputFile": "test-results/junit.xml"
         }
       ],
       [
@@ -28,91 +35,119 @@
         }
       ],
       [
-        "github",
+        "list",
         null
       ]
     ],
     "reportSlowTests": {
       "max": 5,
-      "threshold": 15000
+      "threshold": 300000
     },
     "quiet": false,
     "projects": [
       {
         "outputDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results",
         "repeatEach": 1,
-        "retries": 2,
-        "metadata": {},
-        "id": "chromium",
-        "name": "chromium",
-        "testDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/tests",
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "storefront-chromium",
+        "name": "storefront-chromium",
+        "testDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/tests/storefront",
         "testIgnore": [],
         "testMatch": [
           "**/*.@(spec|test).?(c|m)[jt]s?(x)"
         ],
-        "timeout": 30000
+        "timeout": 60000
       },
       {
         "outputDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results",
         "repeatEach": 1,
-        "retries": 2,
-        "metadata": {},
-        "id": "firefox",
-        "name": "firefox",
-        "testDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/tests",
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "storefront-firefox",
+        "name": "storefront-firefox",
+        "testDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/tests/storefront",
         "testIgnore": [],
         "testMatch": [
           "**/*.@(spec|test).?(c|m)[jt]s?(x)"
         ],
-        "timeout": 30000
+        "timeout": 60000
       },
       {
         "outputDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results",
         "repeatEach": 1,
-        "retries": 2,
-        "metadata": {},
-        "id": "webkit",
-        "name": "webkit",
-        "testDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/tests",
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "storefront-webkit",
+        "name": "storefront-webkit",
+        "testDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/tests/storefront",
         "testIgnore": [],
         "testMatch": [
           "**/*.@(spec|test).?(c|m)[jt]s?(x)"
         ],
-        "timeout": 30000
+        "timeout": 60000
       },
       {
         "outputDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results",
         "repeatEach": 1,
-        "retries": 2,
-        "metadata": {},
-        "id": "Mobile Chrome",
-        "name": "Mobile Chrome",
-        "testDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/tests",
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "storefront-mobile-chrome",
+        "name": "storefront-mobile-chrome",
+        "testDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/tests/storefront",
         "testIgnore": [],
         "testMatch": [
           "**/*.@(spec|test).?(c|m)[jt]s?(x)"
         ],
-        "timeout": 30000
+        "timeout": 60000
       },
       {
         "outputDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results",
         "repeatEach": 1,
-        "retries": 2,
-        "metadata": {},
-        "id": "Mobile Safari",
-        "name": "Mobile Safari",
-        "testDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/tests",
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "storefront-mobile-safari",
+        "name": "storefront-mobile-safari",
+        "testDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/tests/storefront",
         "testIgnore": [],
         "testMatch": [
           "**/*.@(spec|test).?(c|m)[jt]s?(x)"
         ],
-        "timeout": 30000
+        "timeout": 60000
       },
       {
         "outputDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results",
         "repeatEach": 1,
-        "retries": 2,
-        "metadata": {},
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "backend-api",
+        "name": "backend-api",
+        "testDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/tests/backend",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 60000
+      },
+      {
+        "outputDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
         "id": "resilience",
         "name": "resilience",
         "testDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/resilience",
@@ -120,422 +155,355 @@
         "testMatch": [
           "**/*.@(spec|test).?(c|m)[jt]s?(x)"
         ],
-        "timeout": 30000
+        "timeout": 60000
       }
     ],
     "shard": null,
+    "tags": [],
     "updateSnapshots": "missing",
-    "version": "1.49.0",
+    "updateSourceMethod": "patch",
+    "version": "1.57.0",
     "workers": 1,
-    "webServer": null
+    "webServer": {
+      "command": "cd ../.. && MEDUSA_PUBLISHABLE_KEY=undefined CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE='undefined' npm run dev --workspace=apps/storefront",
+      "url": "https://localhost:5173",
+      "reuseExistingServer": true,
+      "ignoreHTTPSErrors": true,
+      "timeout": 120000
+    }
   },
   "suites": [
     {
-      "title": "grace-period.spec.ts",
-      "file": "grace-period.spec.ts",
+      "title": "backend/api-workflows.spec.ts",
+      "file": "backend/api-workflows.spec.ts",
       "column": 0,
       "line": 0,
       "specs": [],
       "suites": [
         {
-          "title": "AC1: Timer Visibility & Expiration",
-          "file": "grace-period.spec.ts",
-          "line": 25,
+          "title": "Backend API workflows (admin)",
+          "file": "backend/api-workflows.spec.ts",
+          "line": 8,
           "column": 6,
           "specs": [
             {
-              "title": "should display timer element with role='timer' during grace period",
-              "ok": true,
+              "title": "products catalog CRUD with publish/unpublish and pricing updates",
+              "ok": false,
               "tags": [],
               "tests": [
                 {
-                  "timeout": 30000,
-                  "annotations": [
-                    {
-                      "type": "skip",
-                      "description": "Requires TEST_MODIFICATION_TOKEN env var"
-                    }
-                  ],
-                  "expectedStatus": "skipped",
-                  "projectId": "chromium",
-                  "projectName": "chromium",
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "backend-api",
+                  "projectName": "backend-api",
                   "results": [
                     {
                       "workerIndex": 0,
-                      "status": "skipped",
-                      "duration": 229,
-                      "errors": [],
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 38,
+                      "error": {
+                        "message": "ApiError: API request failed: 401 Unauthorized :: {\"message\":\"Unauthorized\"}",
+                        "stack": "ApiError: API request failed: 401 Unauthorized :: {\"message\":\"Unauthorized\"}\n    at apiRequest (/Users/leonliang/Github Repo/gracestowel/apps/e2e/support/helpers/api-request.ts:70:11)\n    at /Users/leonliang/Github Repo/gracestowel/apps/e2e/tests/backend/api-workflows.spec.ts:17:23",
+                        "location": {
+                          "file": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/support/helpers/api-request.ts",
+                          "column": 11,
+                          "line": 70
+                        },
+                        "snippet": "\u001b[90m   at \u001b[39m../support/helpers/api-request.ts:70\n\n\u001b[0m \u001b[90m 68 |\u001b[39m   \u001b[36mif\u001b[39m (\u001b[33m!\u001b[39mresponse\u001b[33m.\u001b[39mok()) {\n \u001b[90m 69 |\u001b[39m     \u001b[36mconst\u001b[39m errorText \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m response\u001b[33m.\u001b[39mtext()\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 70 |\u001b[39m     \u001b[36mthrow\u001b[39m \u001b[36mnew\u001b[39m \u001b[33mApiError\u001b[39m(response\u001b[33m.\u001b[39mstatus()\u001b[33m,\u001b[39m response\u001b[33m.\u001b[39mstatusText()\u001b[33m,\u001b[39m errorText)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m           \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 71 |\u001b[39m   }\n \u001b[90m 72 |\u001b[39m\n \u001b[90m 73 |\u001b[39m   \u001b[36mreturn\u001b[39m response\u001b[33m.\u001b[39mjson()\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/support/helpers/api-request.ts",
+                            "column": 11,
+                            "line": 70
+                          },
+                          "message": "ApiError: API request failed: 401 Unauthorized :: {\"message\":\"Unauthorized\"}\n\n\u001b[90m   at \u001b[39m../support/helpers/api-request.ts:70\n\n\u001b[0m \u001b[90m 68 |\u001b[39m   \u001b[36mif\u001b[39m (\u001b[33m!\u001b[39mresponse\u001b[33m.\u001b[39mok()) {\n \u001b[90m 69 |\u001b[39m     \u001b[36mconst\u001b[39m errorText \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m response\u001b[33m.\u001b[39mtext()\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 70 |\u001b[39m     \u001b[36mthrow\u001b[39m \u001b[36mnew\u001b[39m \u001b[33mApiError\u001b[39m(response\u001b[33m.\u001b[39mstatus()\u001b[33m,\u001b[39m response\u001b[33m.\u001b[39mstatusText()\u001b[33m,\u001b[39m errorText)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m           \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 71 |\u001b[39m   }\n \u001b[90m 72 |\u001b[39m\n \u001b[90m 73 |\u001b[39m   \u001b[36mreturn\u001b[39m response\u001b[33m.\u001b[39mjson()\u001b[33m;\u001b[39m\u001b[0m\n\u001b[2m    at apiRequest (/Users/leonliang/Github Repo/gracestowel/apps/e2e/support/helpers/api-request.ts:70:11)\u001b[22m\n\u001b[2m    at /Users/leonliang/Github Repo/gracestowel/apps/e2e/tests/backend/api-workflows.spec.ts:17:23\u001b[22m"
+                        }
+                      ],
                       "stdout": [],
-                      "stderr": [],
+                      "stderr": [
+                        {
+                          "text": "Product seeding skipped; using generated data.\n"
+                        }
+                      ],
                       "retry": 0,
-                      "startTime": "2025-12-10T07:37:59.607Z",
-                      "attachments": []
+                      "startTime": "2026-01-05T06:16:44.943Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results/api-workflows-Backend-API--fd383-publish-and-pricing-updates-backend-api/trace.zip"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/support/helpers/api-request.ts",
+                        "column": 11,
+                        "line": 70
+                      }
                     }
                   ],
-                  "status": "skipped"
+                  "status": "unexpected"
                 }
               ],
-              "id": "cfa8594a2ce329853a65-bbfcc8357c0b5c9e8283",
-              "file": "grace-period.spec.ts",
-              "line": 27,
-              "column": 9
+              "id": "ccf25a36e93e76d4a45a-61ded7e2b05a3f77dfcc",
+              "file": "backend/api-workflows.spec.ts",
+              "line": 10,
+              "column": 7
             },
             {
-              "title": "should display edit/cancel options during active grace period",
-              "ok": true,
+              "title": "customers issue tokens and manage addresses",
+              "ok": false,
               "tags": [],
               "tests": [
                 {
-                  "timeout": 30000,
-                  "annotations": [
-                    {
-                      "type": "skip",
-                      "description": "Requires TEST_MODIFICATION_TOKEN env var"
-                    }
-                  ],
-                  "expectedStatus": "skipped",
-                  "projectId": "chromium",
-                  "projectName": "chromium",
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "backend-api",
+                  "projectName": "backend-api",
                   "results": [
                     {
-                      "workerIndex": 0,
-                      "status": "skipped",
-                      "duration": 70,
-                      "errors": [],
+                      "workerIndex": 1,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 36,
+                      "error": {
+                        "message": "ApiError: API request failed: 401 Unauthorized :: {\"message\":\"Unauthorized\"}",
+                        "stack": "ApiError: API request failed: 401 Unauthorized :: {\"message\":\"Unauthorized\"}\n    at apiRequest (/Users/leonliang/Github Repo/gracestowel/apps/e2e/support/helpers/api-request.ts:70:11)\n    at /Users/leonliang/Github Repo/gracestowel/apps/e2e/tests/backend/api-workflows.spec.ts:46:21",
+                        "location": {
+                          "file": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/support/helpers/api-request.ts",
+                          "column": 11,
+                          "line": 70
+                        },
+                        "snippet": "\u001b[90m   at \u001b[39m../support/helpers/api-request.ts:70\n\n\u001b[0m \u001b[90m 68 |\u001b[39m   \u001b[36mif\u001b[39m (\u001b[33m!\u001b[39mresponse\u001b[33m.\u001b[39mok()) {\n \u001b[90m 69 |\u001b[39m     \u001b[36mconst\u001b[39m errorText \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m response\u001b[33m.\u001b[39mtext()\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 70 |\u001b[39m     \u001b[36mthrow\u001b[39m \u001b[36mnew\u001b[39m \u001b[33mApiError\u001b[39m(response\u001b[33m.\u001b[39mstatus()\u001b[33m,\u001b[39m response\u001b[33m.\u001b[39mstatusText()\u001b[33m,\u001b[39m errorText)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m           \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 71 |\u001b[39m   }\n \u001b[90m 72 |\u001b[39m\n \u001b[90m 73 |\u001b[39m   \u001b[36mreturn\u001b[39m response\u001b[33m.\u001b[39mjson()\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/support/helpers/api-request.ts",
+                            "column": 11,
+                            "line": 70
+                          },
+                          "message": "ApiError: API request failed: 401 Unauthorized :: {\"message\":\"Unauthorized\"}\n\n\u001b[90m   at \u001b[39m../support/helpers/api-request.ts:70\n\n\u001b[0m \u001b[90m 68 |\u001b[39m   \u001b[36mif\u001b[39m (\u001b[33m!\u001b[39mresponse\u001b[33m.\u001b[39mok()) {\n \u001b[90m 69 |\u001b[39m     \u001b[36mconst\u001b[39m errorText \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m response\u001b[33m.\u001b[39mtext()\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 70 |\u001b[39m     \u001b[36mthrow\u001b[39m \u001b[36mnew\u001b[39m \u001b[33mApiError\u001b[39m(response\u001b[33m.\u001b[39mstatus()\u001b[33m,\u001b[39m response\u001b[33m.\u001b[39mstatusText()\u001b[33m,\u001b[39m errorText)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m           \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 71 |\u001b[39m   }\n \u001b[90m 72 |\u001b[39m\n \u001b[90m 73 |\u001b[39m   \u001b[36mreturn\u001b[39m response\u001b[33m.\u001b[39mjson()\u001b[33m;\u001b[39m\u001b[0m\n\u001b[2m    at apiRequest (/Users/leonliang/Github Repo/gracestowel/apps/e2e/support/helpers/api-request.ts:70:11)\u001b[22m\n\u001b[2m    at /Users/leonliang/Github Repo/gracestowel/apps/e2e/tests/backend/api-workflows.spec.ts:46:21\u001b[22m"
+                        }
+                      ],
                       "stdout": [],
-                      "stderr": [],
+                      "stderr": [
+                        {
+                          "text": "User seeding skipped; using generated data.\n"
+                        }
+                      ],
                       "retry": 0,
-                      "startTime": "2025-12-10T07:38:00.065Z",
-                      "attachments": []
+                      "startTime": "2026-01-05T06:16:45.362Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results/api-workflows-Backend-API--c8265-tokens-and-manage-addresses-backend-api/trace.zip"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/support/helpers/api-request.ts",
+                        "column": 11,
+                        "line": 70
+                      }
                     }
                   ],
-                  "status": "skipped"
+                  "status": "unexpected"
                 }
               ],
-              "id": "cfa8594a2ce329853a65-44ccaa59d9613fcc69df",
-              "file": "grace-period.spec.ts",
-              "line": 41,
-              "column": 9
+              "id": "ccf25a36e93e76d4a45a-52efda107cd686901930",
+              "file": "backend/api-workflows.spec.ts",
+              "line": 39,
+              "column": 7
             },
             {
-              "title": "should hide edit options when grace period expires (short TTL)",
+              "title": "carts and orders apply discounts, shipping, tax, and payment intents",
               "ok": true,
               "tags": [],
               "tests": [
                 {
-                  "timeout": 30000,
+                  "timeout": 60000,
                   "annotations": [
                     {
                       "type": "skip",
-                      "description": "Requires TEST_MODIFICATION_TOKEN env var"
+                      "description": "Cart or product APIs unavailable",
+                      "location": {
+                        "file": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/tests/backend/api-workflows.spec.ts",
+                        "line": 71,
+                        "column": 10
+                      }
                     }
                   ],
                   "expectedStatus": "skipped",
-                  "projectId": "chromium",
-                  "projectName": "chromium",
+                  "projectId": "backend-api",
+                  "projectName": "backend-api",
                   "results": [
                     {
-                      "workerIndex": 0,
+                      "workerIndex": 2,
+                      "parallelIndex": 0,
                       "status": "skipped",
-                      "duration": 66,
+                      "duration": 31,
                       "errors": [],
                       "stdout": [],
-                      "stderr": [],
+                      "stderr": [
+                        {
+                          "text": "Product seeding skipped; using generated data.\n"
+                        },
+                        {
+                          "text": "Cart seeding skipped; using generated data.\n"
+                        }
+                      ],
                       "retry": 0,
-                      "startTime": "2025-12-10T07:38:00.137Z",
+                      "startTime": "2026-01-05T06:16:45.792Z",
+                      "annotations": [
+                        {
+                          "type": "skip",
+                          "description": "Cart or product APIs unavailable",
+                          "location": {
+                            "file": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/tests/backend/api-workflows.spec.ts",
+                            "line": 71,
+                            "column": 10
+                          }
+                        }
+                      ],
                       "attachments": []
                     }
                   ],
                   "status": "skipped"
                 }
               ],
-              "id": "cfa8594a2ce329853a65-c4a8dc650e2cbac3ac94",
-              "file": "grace-period.spec.ts",
-              "line": 53,
-              "column": 9
-            }
-          ]
-        },
-        {
-          "title": "AC2 & AC3: Magic Link & Cookie Persistence",
-          "file": "grace-period.spec.ts",
-          "line": 79,
-          "column": 6,
-          "specs": [
-            {
-              "title": "should show 'Link Expired' page for expired token",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [
-                    {
-                      "type": "skip",
-                      "description": "Requires MEDUSA_BACKEND_URL env var (backend must be running)"
-                    }
-                  ],
-                  "expectedStatus": "skipped",
-                  "projectId": "chromium",
-                  "projectName": "chromium",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "status": "skipped",
-                      "duration": 64,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2025-12-10T07:38:00.206Z",
-                      "attachments": []
-                    }
-                  ],
-                  "status": "skipped"
-                }
-              ],
-              "id": "cfa8594a2ce329853a65-8e886773d1be745d6a5e",
-              "file": "grace-period.spec.ts",
-              "line": 81,
-              "column": 9
+              "id": "ccf25a36e93e76d4a45a-d2067b65907cadcde141",
+              "file": "backend/api-workflows.spec.ts",
+              "line": 61,
+              "column": 7
             },
             {
-              "title": "should set guest_order cookie with correct attributes",
+              "title": "grace period tokens gate cancellation and edit windows",
               "ok": true,
               "tags": [],
               "tests": [
                 {
-                  "timeout": 30000,
+                  "timeout": 60000,
                   "annotations": [
                     {
                       "type": "skip",
-                      "description": "Requires TEST_MODIFICATION_TOKEN env var"
+                      "description": "Order creation endpoint unavailable",
+                      "location": {
+                        "file": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/tests/backend/api-workflows.spec.ts",
+                        "line": 113,
+                        "column": 10
+                      }
                     }
                   ],
                   "expectedStatus": "skipped",
-                  "projectId": "chromium",
-                  "projectName": "chromium",
+                  "projectId": "backend-api",
+                  "projectName": "backend-api",
                   "results": [
                     {
-                      "workerIndex": 0,
+                      "workerIndex": 2,
+                      "parallelIndex": 0,
                       "status": "skipped",
-                      "duration": 66,
+                      "duration": 7,
                       "errors": [],
                       "stdout": [],
-                      "stderr": [],
+                      "stderr": [
+                        {
+                          "text": "Order seeding skipped; using generated data.\n"
+                        }
+                      ],
                       "retry": 0,
-                      "startTime": "2025-12-10T07:38:00.271Z",
+                      "startTime": "2026-01-05T06:16:45.832Z",
+                      "annotations": [
+                        {
+                          "type": "skip",
+                          "description": "Order creation endpoint unavailable",
+                          "location": {
+                            "file": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/tests/backend/api-workflows.spec.ts",
+                            "line": 113,
+                            "column": 10
+                          }
+                        }
+                      ],
                       "attachments": []
                     }
                   ],
                   "status": "skipped"
                 }
               ],
-              "id": "cfa8594a2ce329853a65-ee8b0fcd556f59bdd47d",
-              "file": "grace-period.spec.ts",
-              "line": 98,
-              "column": 9
+              "id": "ccf25a36e93e76d4a45a-2ef3c7da54398e579543",
+              "file": "backend/api-workflows.spec.ts",
+              "line": 108,
+              "column": 7
             },
             {
-              "title": "should persist session via cookie (no token in URL on reload)",
-              "ok": true,
+              "title": "rejects invalid payloads with 4xx and retries idempotently",
+              "ok": false,
               "tags": [],
               "tests": [
                 {
-                  "timeout": 30000,
-                  "annotations": [
-                    {
-                      "type": "skip",
-                      "description": "Requires TEST_MODIFICATION_TOKEN env var"
-                    }
-                  ],
-                  "expectedStatus": "skipped",
-                  "projectId": "chromium",
-                  "projectName": "chromium",
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "backend-api",
+                  "projectName": "backend-api",
                   "results": [
                     {
-                      "workerIndex": 0,
-                      "status": "skipped",
-                      "duration": 65,
-                      "errors": [],
+                      "workerIndex": 2,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 14,
+                      "error": {
+                        "message": "ApiError: API request failed: 401 Unauthorized :: {\"message\":\"Unauthorized\"}",
+                        "stack": "ApiError: API request failed: 401 Unauthorized :: {\"message\":\"Unauthorized\"}\n    at apiRequest (/Users/leonliang/Github Repo/gracestowel/apps/e2e/support/helpers/api-request.ts:70:11)\n    at /Users/leonliang/Github Repo/gracestowel/apps/e2e/tests/backend/api-workflows.spec.ts:145:21",
+                        "location": {
+                          "file": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/support/helpers/api-request.ts",
+                          "column": 11,
+                          "line": 70
+                        },
+                        "snippet": "\u001b[90m   at \u001b[39m../support/helpers/api-request.ts:70\n\n\u001b[0m \u001b[90m 68 |\u001b[39m   \u001b[36mif\u001b[39m (\u001b[33m!\u001b[39mresponse\u001b[33m.\u001b[39mok()) {\n \u001b[90m 69 |\u001b[39m     \u001b[36mconst\u001b[39m errorText \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m response\u001b[33m.\u001b[39mtext()\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 70 |\u001b[39m     \u001b[36mthrow\u001b[39m \u001b[36mnew\u001b[39m \u001b[33mApiError\u001b[39m(response\u001b[33m.\u001b[39mstatus()\u001b[33m,\u001b[39m response\u001b[33m.\u001b[39mstatusText()\u001b[33m,\u001b[39m errorText)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m           \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 71 |\u001b[39m   }\n \u001b[90m 72 |\u001b[39m\n \u001b[90m 73 |\u001b[39m   \u001b[36mreturn\u001b[39m response\u001b[33m.\u001b[39mjson()\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/support/helpers/api-request.ts",
+                            "column": 11,
+                            "line": 70
+                          },
+                          "message": "ApiError: API request failed: 401 Unauthorized :: {\"message\":\"Unauthorized\"}\n\n\u001b[90m   at \u001b[39m../support/helpers/api-request.ts:70\n\n\u001b[0m \u001b[90m 68 |\u001b[39m   \u001b[36mif\u001b[39m (\u001b[33m!\u001b[39mresponse\u001b[33m.\u001b[39mok()) {\n \u001b[90m 69 |\u001b[39m     \u001b[36mconst\u001b[39m errorText \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m response\u001b[33m.\u001b[39mtext()\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 70 |\u001b[39m     \u001b[36mthrow\u001b[39m \u001b[36mnew\u001b[39m \u001b[33mApiError\u001b[39m(response\u001b[33m.\u001b[39mstatus()\u001b[33m,\u001b[39m response\u001b[33m.\u001b[39mstatusText()\u001b[33m,\u001b[39m errorText)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m           \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 71 |\u001b[39m   }\n \u001b[90m 72 |\u001b[39m\n \u001b[90m 73 |\u001b[39m   \u001b[36mreturn\u001b[39m response\u001b[33m.\u001b[39mjson()\u001b[33m;\u001b[39m\u001b[0m\n\u001b[2m    at apiRequest (/Users/leonliang/Github Repo/gracestowel/apps/e2e/support/helpers/api-request.ts:70:11)\u001b[22m\n\u001b[2m    at /Users/leonliang/Github Repo/gracestowel/apps/e2e/tests/backend/api-workflows.spec.ts:145:21\u001b[22m"
+                        }
+                      ],
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2025-12-10T07:38:00.339Z",
-                      "attachments": []
+                      "startTime": "2026-01-05T06:16:45.844Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results/api-workflows-Backend-API--babf1-xx-and-retries-idempotently-backend-api/trace.zip"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/support/helpers/api-request.ts",
+                        "column": 11,
+                        "line": 70
+                      }
                     }
                   ],
-                  "status": "skipped"
+                  "status": "unexpected"
                 }
               ],
-              "id": "cfa8594a2ce329853a65-7c3ea29eb79896dc5798",
-              "file": "grace-period.spec.ts",
-              "line": 119,
-              "column": 9
-            },
-            {
-              "title": "should have cookie path scoped to specific order",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [
-                    {
-                      "type": "skip",
-                      "description": "Requires TEST_MODIFICATION_TOKEN env var"
-                    }
-                  ],
-                  "expectedStatus": "skipped",
-                  "projectId": "chromium",
-                  "projectName": "chromium",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "status": "skipped",
-                      "duration": 63,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2025-12-10T07:38:00.406Z",
-                      "attachments": []
-                    }
-                  ],
-                  "status": "skipped"
-                }
-              ],
-              "id": "cfa8594a2ce329853a65-dc57816c92ef390b3875",
-              "file": "grace-period.spec.ts",
-              "line": 137,
-              "column": 9
-            }
-          ]
-        },
-        {
-          "title": "AC4 & AC6: Order Cancellation",
-          "file": "grace-period.spec.ts",
-          "line": 152,
-          "column": 6,
-          "specs": [
-            {
-              "title": "should allow cancelling order during grace period",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [
-                    {
-                      "type": "skip",
-                      "description": "Requires TEST_MODIFICATION_TOKEN env var"
-                    }
-                  ],
-                  "expectedStatus": "skipped",
-                  "projectId": "chromium",
-                  "projectName": "chromium",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "status": "skipped",
-                      "duration": 66,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2025-12-10T07:38:00.471Z",
-                      "attachments": []
-                    }
-                  ],
-                  "status": "skipped"
-                }
-              ],
-              "id": "cfa8594a2ce329853a65-d3415a8300a2e39cf3bc",
-              "file": "grace-period.spec.ts",
-              "line": 154,
-              "column": 9
-            },
-            {
-              "title": "should hide cancel button after grace period expires",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [
-                    {
-                      "type": "skip",
-                      "description": "Requires TEST_MODIFICATION_TOKEN env var"
-                    }
-                  ],
-                  "expectedStatus": "skipped",
-                  "projectId": "chromium",
-                  "projectName": "chromium",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "status": "skipped",
-                      "duration": 65,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2025-12-10T07:38:00.539Z",
-                      "attachments": []
-                    }
-                  ],
-                  "status": "skipped"
-                }
-              ],
-              "id": "cfa8594a2ce329853a65-02a4e54541797d49dd15",
-              "file": "grace-period.spec.ts",
-              "line": 180,
-              "column": 9
-            }
-          ]
-        },
-        {
-          "title": "AC5: Backend Capture Workflow (Smoke Test)",
-          "file": "grace-period.spec.ts",
-          "line": 197,
-          "column": 6,
-          "specs": [
-            {
-              "title": "should complete order capture after grace period",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [
-                    {
-                      "type": "skip",
-                      "description": "Requires TEST_MODIFICATION_TOKEN env var"
-                    }
-                  ],
-                  "expectedStatus": "skipped",
-                  "projectId": "chromium",
-                  "projectName": "chromium",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "status": "skipped",
-                      "duration": 65,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2025-12-10T07:38:00.606Z",
-                      "attachments": []
-                    }
-                  ],
-                  "status": "skipped"
-                }
-              ],
-              "id": "cfa8594a2ce329853a65-e9440998ce1ec8a6c0d7",
-              "file": "grace-period.spec.ts",
-              "line": 199,
-              "column": 9
+              "id": "ccf25a36e93e76d4a45a-b750e767d9e67dcd1291",
+              "file": "backend/api-workflows.spec.ts",
+              "line": 122,
+              "column": 7
             }
           ]
         }
@@ -544,11 +512,11 @@
   ],
   "errors": [],
   "stats": {
-    "startTime": "2025-12-10T07:37:59.362Z",
-    "duration": 1334.2649999999999,
+    "startTime": "2026-01-05T06:16:44.146Z",
+    "duration": 1734.0880000000002,
     "expected": 0,
-    "skipped": 10,
-    "unexpected": 0,
+    "skipped": 2,
+    "unexpected": 3,
     "flaky": 0
   }
 }

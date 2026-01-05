@@ -25,6 +25,7 @@ export class UserFactory {
 
       if (created.customer?.id) {
         this.createdUserIds.push(created.customer.id);
+        return { ...user, id: created.customer.id };
       }
     } catch (error) {
       // If API seeding fails, still return user data for UI tests
