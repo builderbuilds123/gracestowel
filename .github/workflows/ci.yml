@@ -251,8 +251,8 @@ jobs:
             docker compose -f docker-compose.test.yml exec -T postgres psql -U medusa_test -d medusa_test -c "SELECT id, type, title, created_at FROM api_key;"
             exit 1
           fi
-          echo "MEDUSA_PUBLISHABLE_KEY=pk_${API_KEY}" >> $GITHUB_OUTPUT
-          echo "Retrieved API key: pk_${API_KEY:0:10}..."
+          echo "MEDUSA_PUBLISHABLE_KEY=${API_KEY}" >> $GITHUB_OUTPUT
+          echo "Retrieved API key: ${API_KEY:0:15}..."
 
       - name: Start storefront with API key
         env:
