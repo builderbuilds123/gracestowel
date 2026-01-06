@@ -49,8 +49,8 @@ services:
     environment:
       DATABASE_URL: postgresql://medusa_test:medusa_test@postgres:5432/medusa_test
       REDIS_URL: redis://redis:6379
-      JWT_SECRET: test-secret
-      COOKIE_SECRET: test-secret
+      JWT_SECRET: test-secret-must-be-at-least-32-characters-long-for-security
+      COOKIE_SECRET: test-cookie-secret-must-be-32-chars-minimum-too
       STORE_CORS: http://localhost:5174,https://localhost:5174
       ADMIN_CORS: http://localhost:7002
       AUTH_CORS: http://localhost:5174,https://localhost:5174
