@@ -61,6 +61,7 @@ export default async function seedDemoData({ container }: ExecArgs) {
   const fulfillmentModuleService = container.resolve(Modules.FULFILLMENT);
   const salesChannelModuleService = container.resolve(Modules.SALES_CHANNEL);
   const storeModuleService = container.resolve(Modules.STORE);
+  const regionModuleService = container.resolve(Modules.REGION);
 
   // Grace Stowel ships to US, Canada, and select European countries
   const countries = ["us", "ca", "gb", "de", "dk", "se", "fr", "es", "it"];
@@ -113,34 +114,63 @@ export default async function seedDemoData({ container }: ExecArgs) {
       },
     },
   });
+  
   logger.info("Seeding region data...");
-  const { result: regionResult } = await createRegionsWorkflow(container).run({
-    input: {
-      regions: [
-        {
-          name: "Canada",
-          currency_code: "cad",
-          countries: ["CA"],
-          payment_providers: ["pp_system_default"],
-        },
-        {
-          name: "United States",
-          currency_code: "usd",
-          countries: ["US"],
-          payment_providers: ["pp_system_default"],
-        },
-        {
-          name: "Europe",
-          currency_code: "eur",
-          countries: ["GB", "DE", "DK", "SE", "FR", "ES", "IT"],
-          payment_providers: ["pp_system_default"],
-        },
-      ],
+  // Check if regions already exist to make seed idempotent
+  const existingRegions = await regionModuleService.listRegions({});
+  const existingRegionNames = new Set(existingRegions.map((r) => r.name));
+  
+  const regionsToCreate = [
+    {
+      name: "Canada",
+      currency_code: "cad",
+      countries: ["CA"],
+      payment_providers: ["pp_system_default"],
     },
-  });
-  const regionCA = regionResult[0];
-  const regionUS = regionResult[1];
-  const regionEU = regionResult[2];
+    {
+      name: "United States",
+      currency_code: "usd",
+      countries: ["US"],
+      payment_providers: ["pp_system_default"],
+    },
+    {
+      name: "Europe",
+      currency_code: "eur",
+      countries: ["GB", "DE", "DK", "SE", "FR", "ES", "IT"],
+      payment_providers: ["pp_system_default"],
+    },
+  ].filter((region) => !existingRegionNames.has(region.name));
+
+  let regionCA, regionUS, regionEU;
+  
+  if (regionsToCreate.length > 0) {
+    const { result: regionResult } = await createRegionsWorkflow(container).run({
+      input: {
+        regions: regionsToCreate,
+      },
+    });
+    
+    // Map created regions to variables
+    for (const region of regionResult) {
+      if (region.name === "Canada") regionCA = region;
+      else if (region.name === "United States") regionUS = region;
+      else if (region.name === "Europe") regionEU = region;
+    }
+    
+    // If some regions already existed, fetch them
+    if (!regionCA || !regionUS || !regionEU) {
+      const allRegions = await regionModuleService.listRegions({});
+      regionCA = allRegions.find((r) => r.name === "Canada");
+      regionUS = allRegions.find((r) => r.name === "United States");
+      regionEU = allRegions.find((r) => r.name === "Europe");
+    }
+  } else {
+    // All regions already exist, fetch them
+    regionCA = existingRegions.find((r) => r.name === "Canada");
+    regionUS = existingRegions.find((r) => r.name === "United States");
+    regionEU = existingRegions.find((r) => r.name === "Europe");
+  }
+  
   logger.info("Finished seeding regions.");
 
   logger.info("Seeding tax regions...");
