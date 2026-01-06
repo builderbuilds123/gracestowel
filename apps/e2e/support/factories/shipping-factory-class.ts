@@ -4,14 +4,65 @@ import { createShippingOption, ShippingOption } from "./shipping-factory";
 
 export class ShippingFactory {
   private readonly createdShippingOptionIds: string[] = [];
+  private cachedServiceZoneId: string | null = null;
+  private cachedShippingProfileId: string | null = null;
 
   constructor(private readonly request: APIRequestContext) {}
+
+  /**
+   * Fetches the first available service zone ID from the backend.
+   * Service zones are created during seed and are required for shipping options.
+   */
+  private async getServiceZoneId(): Promise<string> {
+    if (this.cachedServiceZoneId) return this.cachedServiceZoneId;
+
+    // First get fulfillment sets which contain service zones
+    const fulfillmentSets = await apiRequest<{ fulfillment_sets: { id: string; service_zones?: { id: string }[] }[] }>({
+      request: this.request,
+      method: "GET",
+      url: "/admin/fulfillment-sets",
+    });
+
+    const serviceZone = fulfillmentSets.fulfillment_sets?.[0]?.service_zones?.[0];
+    if (!serviceZone?.id) {
+      throw new Error("No service zone found. Ensure the backend is seeded with fulfillment data.");
+    }
+
+    this.cachedServiceZoneId = serviceZone.id;
+    return serviceZone.id;
+  }
+
+  /**
+   * Fetches the default shipping profile ID from the backend.
+   * Shipping profiles are created during seed and are required for shipping options.
+   */
+  private async getShippingProfileId(): Promise<string> {
+    if (this.cachedShippingProfileId) return this.cachedShippingProfileId;
+
+    const profiles = await apiRequest<{ shipping_profiles: { id: string; type: string }[] }>({
+      request: this.request,
+      method: "GET",
+      url: "/admin/shipping-profiles",
+    });
+
+    const defaultProfile = profiles.shipping_profiles?.find(p => p.type === "default") || profiles.shipping_profiles?.[0];
+    if (!defaultProfile?.id) {
+      throw new Error("No shipping profile found. Ensure the backend is seeded with fulfillment data.");
+    }
+
+    this.cachedShippingProfileId = defaultProfile.id;
+    return defaultProfile.id;
+  }
 
   async createShippingOption(
     overrides: Partial<ShippingOption> & { region_id?: string } = {},
   ): Promise<ShippingOption> {
     const shippingOption = createShippingOption(overrides);
     const regionId = overrides.region_id;
+
+    // Fetch real IDs from the backend if not provided
+    const serviceZoneId = (shippingOption as any).service_zone_id || await this.getServiceZoneId();
+    const shippingProfileId = (shippingOption as any).shipping_profile_id || await this.getShippingProfileId();
 
     const response = await apiRequest<{ shipping_option: { id: string } }>({
       request: this.request,
@@ -43,8 +94,8 @@ export class ShippingFactory {
             }
           ]),
         ],
-        service_zone_id: (shippingOption as any).service_zone_id || "serzo_01KCQ89AQX5KAJSGY0GATGAS4C",
-        shipping_profile_id: (shippingOption as any).shipping_profile_id || "sp_01KCQ8965R066RVNKFRA5Z42D6",
+        service_zone_id: serviceZoneId,
+        shipping_profile_id: shippingProfileId,
         provider_id: (shippingOption as any).provider_id || "manual_manual",
       },
     });
@@ -73,3 +124,4 @@ export class ShippingFactory {
     this.createdShippingOptionIds.length = 0;
   }
 }
+
