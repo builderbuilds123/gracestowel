@@ -109,12 +109,10 @@ services:
       - ./apps/e2e:/app
       - ./apps/e2e/test-results:/app/test-results
       - ./apps/e2e/playwright-report:/app/playwright-report
-      # Mount pnpm lockfile and workspace config for consistent dependency resolution
-      - ./pnpm-lock.yaml:/app/../../pnpm-lock.yaml:ro
-      - ./pnpm-workspace.yaml:/app/../../pnpm-workspace.yaml:ro
-      - ./package.json:/app/../../package.json:ro
     working_dir: /app
-    command: sh -c "corepack enable && corepack prepare pnpm@9.15.2 --activate && pnpm install --frozen-lockfile && pnpm exec playwright test --project=chromium --reporter=html"
+    # Use pnpm for consistency with project (pnpm@9.15.2 per package.json packageManager)
+    # Corepack enables pnpm support in Node.js
+    command: sh -c "corepack enable && corepack prepare pnpm@9.15.2 --activate && pnpm install && pnpm exec playwright test --project=chromium --reporter=html"
 
 networks:
   default:
