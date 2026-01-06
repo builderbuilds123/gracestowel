@@ -15,13 +15,14 @@ export class ProductFactory {
     const product = createProduct(overrides);
 
     try {
+      const { id, ...payload } = product;
       // Attempt to create via API
-      console.log("Creating product with payload:", JSON.stringify(product, null, 2));
+      console.log("Creating product with payload:", JSON.stringify(payload, null, 2));
       const created = await apiRequest<{ product: Product }>({
         request: this.request,
         method: 'POST',
         url: '/admin/products',
-        data: product,
+        data: payload,
       });
 
       if (created.product?.id) {

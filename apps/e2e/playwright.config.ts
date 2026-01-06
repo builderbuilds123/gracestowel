@@ -1,4 +1,7 @@
-import "dotenv/config";
+import path from "path";
+import dotenv from "dotenv";
+
+dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 import { defineConfig, devices } from "@playwright/test";
 
 /**
@@ -78,7 +81,7 @@ export default defineConfig({
   webServer: process.env.CI
     ? undefined
     : {
-        command: `cd ../.. && MEDUSA_PUBLISHABLE_KEY=${process.env.MEDUSA_PUBLISHABLE_KEY} CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE='${process.env.CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE}' pnpm --filter=apps-storefront dev`,
+        command: `cd ../.. && MEDUSA_PUBLISHABLE_KEY=${process.env.MEDUSA_PUBLISHABLE_KEY} CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE='${process.env.CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE || "postgresql://postgres:postgres@localhost:5432/medusa"}' pnpm --filter=apps-storefront dev`,
         url: "https://localhost:5173",
         reuseExistingServer: true,
         ignoreHTTPSErrors: true,
