@@ -63,6 +63,7 @@ export default async function seedDemoData({ container }: ExecArgs) {
   const storeModuleService = container.resolve(Modules.STORE);
   const regionModuleService = container.resolve(Modules.REGION);
   const taxModuleService = container.resolve(Modules.TAX);
+  const stockLocationModuleService = container.resolve(Modules.STOCK_LOCATION);
 
   // Grace Stowel ships to US, Canada, and select European countries
   const countries = ["us", "ca", "gb", "de", "dk", "se", "fr", "es", "it"];
@@ -196,23 +197,38 @@ export default async function seedDemoData({ container }: ExecArgs) {
   logger.info("Finished seeding tax regions.");
 
   logger.info("Seeding stock location data...");
-  const { result: stockLocationResult } = await createStockLocationsWorkflow(
-    container
-  ).run({
-    input: {
-      locations: [
-        {
-          name: "Grace Stowel Warehouse",
-          address: {
-            city: "Los Angeles",
-            country_code: "US",
-            address_1: "",
-          },
-        },
-      ],
-    },
+
+  // Check if stock location already exists to make seed idempotent
+  const existingStockLocations = await stockLocationModuleService.listStockLocations({
+    name: "Grace Stowel Warehouse",
   });
-  const stockLocation = stockLocationResult[0];
+
+  let stockLocation;
+  let stockLocationCreated = false;
+  if (existingStockLocations.length > 0) {
+    stockLocation = existingStockLocations[0];
+    logger.info("Using existing stock location: Grace Stowel Warehouse");
+  } else {
+    const { result: stockLocationResult } = await createStockLocationsWorkflow(
+      container
+    ).run({
+      input: {
+        locations: [
+          {
+            name: "Grace Stowel Warehouse",
+            address: {
+              city: "Los Angeles",
+              country_code: "US",
+              address_1: "",
+            },
+          },
+        ],
+      },
+    });
+    stockLocation = stockLocationResult[0];
+    stockLocationCreated = true;
+    logger.info("Created stock location: Grace Stowel Warehouse");
+  }
 
   await updateStoresWorkflow(container).run({
     input: {
@@ -223,14 +239,17 @@ export default async function seedDemoData({ container }: ExecArgs) {
     },
   });
 
-  await link.create({
-    [Modules.STOCK_LOCATION]: {
-      stock_location_id: stockLocation.id,
-    },
-    [Modules.FULFILLMENT]: {
-      fulfillment_provider_id: "manual_manual",
-    },
-  });
+  // Only create link if stock location was just created (link would already exist otherwise)
+  if (stockLocationCreated) {
+    await link.create({
+      [Modules.STOCK_LOCATION]: {
+        stock_location_id: stockLocation.id,
+      },
+      [Modules.FULFILLMENT]: {
+        fulfillment_provider_id: "manual_manual",
+      },
+    });
+  }
 
   logger.info("Seeding fulfillment data...");
   const shippingProfiles = await fulfillmentModuleService.listShippingProfiles({
@@ -261,8 +280,9 @@ export default async function seedDemoData({ container }: ExecArgs) {
   const existingFulfillmentSets = await fulfillmentModuleService.listFulfillmentSets({
     name: "Grace Stowel Global Delivery",
   });
-  
+
   let fulfillmentSet;
+  let fulfillmentSetCreated = false;
   if (existingFulfillmentSets.length > 0) {
     fulfillmentSet = existingFulfillmentSets[0];
     logger.info("Using existing fulfillment set: Grace Stowel Global Delivery");
@@ -319,17 +339,21 @@ export default async function seedDemoData({ container }: ExecArgs) {
         },
       ],
     });
+    fulfillmentSetCreated = true;
     logger.info("Created fulfillment set: Grace Stowel Global Delivery");
   }
 
-  await link.create({
-    [Modules.STOCK_LOCATION]: {
-      stock_location_id: stockLocation.id,
-    },
-    [Modules.FULFILLMENT]: {
-      fulfillment_set_id: fulfillmentSet.id,
-    },
-  });
+  // Only create link if fulfillment set was just created (link would already exist otherwise)
+  if (fulfillmentSetCreated) {
+    await link.create({
+      [Modules.STOCK_LOCATION]: {
+        stock_location_id: stockLocation.id,
+      },
+      [Modules.FULFILLMENT]: {
+        fulfillment_set_id: fulfillmentSet.id,
+      },
+    });
+  }
 
   // Create shipping options for North America zone
   await createShippingOptionsWorkflow(container).run({
