@@ -65,8 +65,6 @@ test.describe("Navigation", () => {
     // Click on first product
     const firstProduct = page.locator('a[href^="/products/"]').first();
     await expect(firstProduct).toBeVisible();
-    
-    const productHref = await firstProduct.getAttribute("href");
     await firstProduct.click();
 
     // Verify URL contains the product path
@@ -106,7 +104,7 @@ test.describe("Navigation", () => {
 
     // Find and click logo/home link
     const homeLink = page.locator('a[href="/"]').first();
-    if (await homeLink.isVisible().catch(() => false)) {
+    if (await homeLink.isVisible()) {
       await homeLink.click();
       await expect(page).toHaveURL("/");
       await expect(page.getByRole("heading", { name: /Best Sellers/i })).toBeVisible();

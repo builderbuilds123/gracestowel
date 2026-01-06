@@ -301,8 +301,11 @@ test.describe("Cart Persistence", () => {
     // Wait for cart drawer to appear and show item
     await expect(page.getByRole("heading", { name: /towel rack/i })).toBeVisible();
 
-    // Wait for cart state to be saved (small delay for localStorage)
-    await page.waitForTimeout(1000);
+    // Wait for cart state to be saved by polling sessionStorage
+    await expect(async () => {
+      const cartId = await page.evaluate(() => window.sessionStorage.getItem('medusa_cart_id'));
+      expect(cartId).not.toBeNull();
+    }).toPass({ timeout: 5000 });
 
     // Reload page
     await page.reload();

@@ -68,8 +68,13 @@ test.describe("API Error Handling", () => {
     // Try to add to cart
     await page.getByRole("button", { name: /hang it up|add to cart/i }).click();
 
-    // Wait for potential error handling
-    await page.waitForTimeout(1000);
+    // Wait for error handling - look for error message or alert
+    // The app should either show an error message or remain interactive
+    const errorAlert = page.getByRole('alert');
+    const hasErrorAlert = await errorAlert.isVisible().catch(() => false);
+    if (hasErrorAlert) {
+      await expect(errorAlert).toBeVisible();
+    }
 
     // Page should not crash - verify it's still interactive
     await expect(page.getByRole("button", { name: /hang it up|add to cart/i })).toBeVisible();
@@ -88,9 +93,7 @@ test.describe("Form Validation", () => {
     if (await submitButton.isVisible().catch(() => false)) {
       await submitButton.click();
 
-      // Should show validation errors
-      // Wait a moment for validation to trigger
-      await page.waitForTimeout(500);
+      // Should show validation errors - wait for validation to trigger
       
       // Check for validation messages (HTML5 validation or custom)
       const hasValidation = await page.locator(":invalid").count() > 0;
@@ -112,12 +115,13 @@ test.describe("Form Validation", () => {
       await emailInput.fill("invalid-email");
       await emailInput.blur();
 
-      // Wait for validation
-      await page.waitForTimeout(500);
-
-      // Check for validation state
-      const isInvalid = await emailInput.evaluate((el: HTMLInputElement) => !el.validity.valid).catch(() => false);
-      expect(typeof isInvalid).toBe("boolean"); // Just verify we can check validity
+      // Check for validation state with type safety
+      const isInvalid = await emailInput
+        .evaluate((el) => (el instanceof HTMLInputElement ? !el.validity.valid : false))
+        .catch(() => false);
+      
+      // Assert that invalid email is properly flagged as invalid
+      expect(isInvalid).toBe(true);
     }
   });
 });
