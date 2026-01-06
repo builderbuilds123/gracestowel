@@ -95,7 +95,7 @@ services:
 
   # Playwright Test Runner
   playwright:
-    image: mcr.microsoft.com/playwright:v1.49.0-jammy
+    image: mcr.microsoft.com/playwright:v1.57.0-jammy
     container_name: gracestowel-playwright
     depends_on:
       storefront:
