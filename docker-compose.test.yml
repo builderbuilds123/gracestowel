@@ -112,7 +112,8 @@ services:
     working_dir: /app
     # Use pnpm for consistency with project (pnpm@9.15.2 per package.json packageManager)
     # Corepack enables pnpm support in Node.js
-    command: sh -c "corepack enable && corepack prepare pnpm@9.15.2 --activate && pnpm install && pnpm exec playwright test --project=chromium --reporter=html"
+    # Install dependencies and verify Playwright is available before running tests
+    command: sh -c "corepack enable && corepack prepare pnpm@9.15.2 --activate && pnpm install && test -f node_modules/@playwright/test/cli.js || (echo 'ERROR: Playwright CLI not found' && exit 1) && pnpm exec playwright test --project=chromium --reporter=html"
 
 networks:
   default:

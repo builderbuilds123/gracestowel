@@ -257,58 +257,70 @@ export default async function seedDemoData({ container }: ExecArgs) {
     throw new Error("Failed to create or find default shipping profile");
   }
 
-  const fulfillmentSet = await fulfillmentModuleService.createFulfillmentSets({
+  // Check if fulfillment set already exists to make seed idempotent
+  const existingFulfillmentSets = await fulfillmentModuleService.listFulfillmentSets({
     name: "Grace Stowel Global Delivery",
-    type: "shipping",
-    service_zones: [
-      {
-        name: "North America",
-        geo_zones: [
-          {
-            country_code: "us",
-            type: "country",
-          },
-          {
-            country_code: "ca",
-            type: "country",
-          },
-        ],
-      },
-      {
-        name: "Europe",
-        geo_zones: [
-          {
-            country_code: "gb",
-            type: "country",
-          },
-          {
-            country_code: "de",
-            type: "country",
-          },
-          {
-            country_code: "dk",
-            type: "country",
-          },
-          {
-            country_code: "se",
-            type: "country",
-          },
-          {
-            country_code: "fr",
-            type: "country",
-          },
-          {
-            country_code: "es",
-            type: "country",
-          },
-          {
-            country_code: "it",
-            type: "country",
-          },
-        ],
-      },
-    ],
   });
+  
+  let fulfillmentSet;
+  if (existingFulfillmentSets.length > 0) {
+    fulfillmentSet = existingFulfillmentSets[0];
+    logger.info("Using existing fulfillment set: Grace Stowel Global Delivery");
+  } else {
+    fulfillmentSet = await fulfillmentModuleService.createFulfillmentSets({
+      name: "Grace Stowel Global Delivery",
+      type: "shipping",
+      service_zones: [
+        {
+          name: "North America",
+          geo_zones: [
+            {
+              country_code: "us",
+              type: "country",
+            },
+            {
+              country_code: "ca",
+              type: "country",
+            },
+          ],
+        },
+        {
+          name: "Europe",
+          geo_zones: [
+            {
+              country_code: "gb",
+              type: "country",
+            },
+            {
+              country_code: "de",
+              type: "country",
+            },
+            {
+              country_code: "dk",
+              type: "country",
+            },
+            {
+              country_code: "se",
+              type: "country",
+            },
+            {
+              country_code: "fr",
+              type: "country",
+            },
+            {
+              country_code: "es",
+              type: "country",
+            },
+            {
+              country_code: "it",
+              type: "country",
+            },
+          ],
+        },
+      ],
+    });
+    logger.info("Created fulfillment set: Grace Stowel Global Delivery");
+  }
 
   await link.create({
     [Modules.STOCK_LOCATION]: {
