@@ -112,9 +112,9 @@ services:
       - ./apps/e2e/test-results:/app/test-results
       - ./apps/e2e/playwright-report:/app/playwright-report
     working_dir: /app
-    # Use npm instead of pnpm since we're installing standalone (no workspace lockfile)
-    # npm will read package.json and install dependencies correctly
-    command: ["sh", "-c", "npm install && test -f node_modules/@playwright/test/cli.js || (echo 'ERROR: Playwright CLI not found' && exit 1) && npx playwright test --project=chromium --reporter=html"]
+    # Use pnpm for consistency with project (enable via corepack)
+    # Install dependencies and run tests
+    command: ["sh", "-c", "corepack enable && corepack prepare pnpm@9.15.2 --activate && pnpm install && pnpm exec playwright test --project=chromium --reporter=html"]
 
 networks:
   default:
