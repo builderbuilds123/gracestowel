@@ -233,14 +233,24 @@ jobs:
           timeout 60 bash -c 'until docker compose -f docker-compose.test.yml exec -T postgres pg_isready -U medusa_test; do sleep 2; done'
           echo "Postgres is ready"
 
-          echo "Waiting for backend..."
+          echo "Waiting for backend health check..."
           timeout 180 bash -c 'until docker compose -f docker-compose.test.yml exec -T backend curl -sf http://localhost:8080/health; do sleep 5; done'
-          echo "Backend is ready"
+          echo "Backend health check passed"
+
+          echo "Waiting for seed to complete (checking for publishable API key)..."
+          timeout 120 bash -c 'until docker compose -f docker-compose.test.yml exec -T postgres psql -U medusa_test -d medusa_test -t -c "SELECT token FROM api_key WHERE type = '\''publishable'\'' LIMIT 1;" | grep -q "[a-zA-Z0-9]"; do echo "API key not found yet, waiting..."; sleep 5; done'
+          echo "Seed completed - API key found"
 
       - name: Get publishable API key from seeded database
         id: get-api-key
         run: |
           API_KEY=$(docker compose -f docker-compose.test.yml exec -T postgres psql -U medusa_test -d medusa_test -t -c "SELECT token FROM api_key WHERE type = 'publishable' LIMIT 1;" | tr -d '[:space:]')
+          if [ -z "$API_KEY" ]; then
+            echo "ERROR: No publishable API key found in database!"
+            echo "Checking api_key table contents..."
+            docker compose -f docker-compose.test.yml exec -T postgres psql -U medusa_test -d medusa_test -c "SELECT id, type, title, created_at FROM api_key;"
+            exit 1
+          fi
           echo "MEDUSA_PUBLISHABLE_KEY=pk_${API_KEY}" >> $GITHUB_OUTPUT
           echo "Retrieved API key: pk_${API_KEY:0:10}..."
 
@@ -282,7 +292,7 @@ jobs:
         env:
           MEDUSA_PUBLISHABLE_KEY: ${{ steps.get-api-key.outputs.MEDUSA_PUBLISHABLE_KEY }}
           ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
-        run: docker compose -f docker-compose.test.yml run --rm -e MEDUSA_PUBLISHABLE_KEY -e ADMIN_TOKEN playwright npx playwright test --project=chromium
+        run: docker compose -f docker-compose.test.yml run --rm -e MEDUSA_PUBLISHABLE_KEY -e ADMIN_TOKEN playwright sh -c "npm install && npx playwright test --project=chromium"
 
       - name: Upload Playwright report
         uses: actions/upload-artifact@v6

@@ -57,7 +57,9 @@ ENV NODE_ENV=production
 ENV PORT=8080
 
 EXPOSE 8080
-CMD ["sh", "-c", "echo 'Running database migrations...'; pnpm run migrate; echo 'Seeding test data...'; pnpm run seed; echo 'Starting server...'; pnpm run start"]
+# Run migrations and seed, then start - continue even if seed has non-critical errors
+# The seed is idempotent so it's safe to retry
+CMD ["sh", "-c", "set -e; echo 'Running database migrations...'; pnpm run migrate; echo 'Seeding test data...'; pnpm run seed || echo 'Seed completed with warnings (may be idempotent)'; echo 'Starting server...'; exec pnpm run start"]
 
 # Production image
 FROM base AS runner
