@@ -218,7 +218,7 @@ jobs:
           echo "Postgres is ready"
 
           echo "Waiting for backend..."
-          timeout 180 bash -c 'until docker compose -f docker-compose.test.yml exec -T backend curl -sf http://localhost:9000/health; do sleep 5; done'
+          timeout 180 bash -c 'until docker compose -f docker-compose.test.yml exec -T backend curl -sf http://localhost:8080/health; do sleep 5; done'
           echo "Backend is ready"
 
       - name: Get publishable API key from seeded database
@@ -258,7 +258,7 @@ jobs:
         id: generate-token
         run: |
           cd apps/e2e
-          TOKEN=$(node -e 'const jwt = require("jsonwebtoken"); const secret = "test-secret"; console.log(jwt.sign({ actor_id: "user_01KCQDPJ68BR9E69GS8A99RR9C", actor_type: "user", scope: "admin", iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + (3600 * 24 * 7) }, secret, { algorithm: "HS256" }));')
+          TOKEN=$(node -e 'const jwt = require("jsonwebtoken"); const secret = "test-secret-must-be-at-least-32-characters-long-for-security"; console.log(jwt.sign({ actor_id: "user_01KCQDPJ68BR9E69GS8A99RR9C", actor_type: "user", scope: "admin", iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + (3600 * 24 * 7) }, secret, { algorithm: "HS256" }));')
           echo "ADMIN_TOKEN=$TOKEN" >> $GITHUB_ENV
           echo "Generated Admin Token"
 
