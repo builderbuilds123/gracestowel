@@ -97,7 +97,6 @@ test.describe("Storefront cart + checkout flows", () => {
   test("signed-in checkout reuses session when credentials provided", async ({
     page,
     apiRequest,
-    request,
   }) => {
     const email = process.env.E2E_USER_EMAIL;
     const password = process.env.E2E_USER_PASSWORD;
@@ -105,7 +104,6 @@ test.describe("Storefront cart + checkout flows", () => {
 
     // Create session token via API to avoid UI login flake
     const session = await apiRequest<{ token: string }>({
-      request,
       method: "POST",
       url: "/store/auth",
       data: { email, password },
