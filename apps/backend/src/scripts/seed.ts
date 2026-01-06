@@ -62,6 +62,7 @@ export default async function seedDemoData({ container }: ExecArgs) {
   const salesChannelModuleService = container.resolve(Modules.SALES_CHANNEL);
   const storeModuleService = container.resolve(Modules.STORE);
   const regionModuleService = container.resolve(Modules.REGION);
+  const taxModuleService = container.resolve(Modules.TAX);
 
   // Grace Stowel ships to US, Canada, and select European countries
   const countries = ["us", "ca", "gb", "de", "dk", "se", "fr", "es", "it"];
@@ -174,12 +175,24 @@ export default async function seedDemoData({ container }: ExecArgs) {
   logger.info("Finished seeding regions.");
 
   logger.info("Seeding tax regions...");
-  await createTaxRegionsWorkflow(container).run({
-    input: countries.map((country_code) => ({
+  // Check if tax regions already exist to make seed idempotent
+  const existingTaxRegions = await taxModuleService.listTaxRegions({});
+  const existingTaxRegionCountries = new Set(
+    existingTaxRegions.map((tr) => tr.country_code?.toLowerCase())
+  );
+  
+  const taxRegionsToCreate = countries
+    .map((country_code) => ({
       country_code,
       provider_id: "tp_system",
-    })),
-  });
+    }))
+    .filter((tr) => !existingTaxRegionCountries.has(tr.country_code.toLowerCase()));
+  
+  if (taxRegionsToCreate.length > 0) {
+    await createTaxRegionsWorkflow(container).run({
+      input: taxRegionsToCreate,
+    });
+  }
   logger.info("Finished seeding tax regions.");
 
   logger.info("Seeding stock location data...");

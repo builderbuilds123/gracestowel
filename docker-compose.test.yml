@@ -107,11 +107,10 @@ services:
       ADMIN_TOKEN: ${ADMIN_TOKEN}
     volumes:
       - ./apps/e2e:/app
-      - ./apps/e2e/node_modules:/app/node_modules:ro
       - ./apps/e2e/test-results:/app/test-results
       - ./apps/e2e/playwright-report:/app/playwright-report
     working_dir: /app
-    command: npx playwright test --project=chromium --reporter=html
+    command: sh -c "npm install && npx playwright test --project=chromium --reporter=html"
 
 networks:
   default:
