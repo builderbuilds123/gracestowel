@@ -96,7 +96,8 @@ test.describe("Form Validation", () => {
       const hasValidation = await page.locator(":invalid").count() > 0;
       const hasErrorText = await page.getByText(/required|invalid|please|enter/i).isVisible().catch(() => false);
       
-      expect(hasValidation || hasErrorText || true).toBe(true); // Graceful - form may not have submit button visible
+      // At least one validation indicator should be present
+      expect(hasValidation || hasErrorText).toBe(true);
     }
   });
 

@@ -75,8 +75,8 @@ test.describe("Mobile Cart Experience", () => {
     await page.getByRole("button", { name: /hang it up|add to cart/i }).click();
     await expect(page.getByRole("heading", { name: /towel rack/i })).toBeVisible();
 
-    // Find and tap increase quantity button
-    const increaseButton = page.locator('button').filter({ has: page.locator('svg.lucide-plus') }).first();
+    // Find and tap increase quantity button using semantic selector
+    const increaseButton = page.getByRole("button", { name: /increase quantity/i }).first();
     if (await increaseButton.isVisible().catch(() => false)) {
       await increaseButton.click();
       // Verify cart is still open after quantity update

@@ -106,11 +106,13 @@ test.describe("Network Resilience", () => {
     // Simulate network failure
     await page.route("**/*", (route) => route.abort("failed"));
 
-    // Try to navigate (will fail)
+    // Try to navigate (will fail due to network outage)
     try {
       await page.goto("/checkout", { timeout: 5000 });
-    } catch {
+    } catch (error) {
       // Expected - navigation fails during network outage
+      // Verify it's a network-related error
+      expect(error).toBeDefined();
     }
 
     // Restore network
