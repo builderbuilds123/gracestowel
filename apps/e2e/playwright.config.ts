@@ -18,8 +18,8 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   /* Retry on CI only */
   retries: process.env.CI ? 2 : 0,
-  /* Use single worker to avoid overwhelming the dev server */
-  workers: 1,
+  /* Use multiple workers in CI for faster execution, single worker locally to avoid overwhelming dev server */
+  workers: process.env.CI ? 4 : 1,
   /* Reporter to use */
   reporter: [
     ["html", { outputFolder: "playwright-report", open: "never" }],

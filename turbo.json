@@ -12,6 +12,14 @@
       "outputs": ["coverage/**"],
       "env": ["NODE_ENV", "RESEND_API_KEY", "TEST_TYPE"]
     },
+    "test:e2e": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*"],
+      "outputs": ["test-results/**", "playwright-report/**"],
+      "env": ["CI", "STOREFRONT_URL", "MEDUSA_PUBLISHABLE_KEY", "ADMIN_TOKEN"],
+      "cache": false,
+      "persistent": false
+    },
     "lint": {
       "dependsOn": [],
       "inputs": ["$TURBO_DEFAULT$"],
