@@ -32,10 +32,13 @@ export const createOrderItem = (overrides: Partial<OrderItem> = {}): OrderItem =
   const product = overrides.product || createProduct();
   const quantity = overrides.quantity || faker.number.int({ min: 1, max: 5 });
 
+  // Get price from variants (Medusa v2 structure)
+  const variantPrice = product.variants?.[0]?.prices?.[0]?.amount ?? 2500;
+  
   return {
     product,
     quantity,
-    price: product.price! * quantity,
+    price: variantPrice * quantity,
     ...overrides,
   };
 };

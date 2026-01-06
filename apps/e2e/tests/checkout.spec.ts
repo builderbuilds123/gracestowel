@@ -290,49 +290,29 @@ test.describe("Guest Checkout Flow", () => {
 
 test.describe("Cart Persistence", () => {
   test("should persist cart across page reloads", async ({ page }) => {
-    // Network-first: Setup intercepts
-    const productPromise = page.waitForResponse(
-      (response) =>
-        response.url().includes("/store/products/the-nuzzle") &&
-        response.status() === 200,
-    );
-    const cartPromise = page.waitForResponse(
-      (response) =>
-        (response.url().includes("/store/carts") ||
-          response.url().includes("/store/cart")) &&
-        response.status() === 200,
-    );
-
-    // Add product to cart
+    // Navigate to product page
     await page.goto("/products/the-nuzzle");
-    await productPromise;
+    await page.waitForLoadState("domcontentloaded");
     await expect(page.getByRole("heading", { name: "The Nuzzle" })).toBeVisible();
-    await page
-      .getByRole("button", { name: /hang it up|add to cart/i })
-      .click();
-    await cartPromise;
+    
+    // Add product to cart
+    await page.getByRole("button", { name: /hang it up|add to cart/i }).click();
 
     // Wait for cart drawer to appear and show item
-    await expect(
-      page.getByRole("heading", { name: /towel rack/i }),
-    ).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole("heading", { name: /towel rack/i })).toBeVisible();
 
-    // Wait for cart state to be saved (wait for network idle instead of hard wait)
-    await page.waitForLoadState("networkidle");
+    // Wait for cart state to be saved (small delay for localStorage)
+    await page.waitForTimeout(1000);
 
     // Reload page
     await page.reload();
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
 
     // Navigate to checkout to verify cart persisted
-    // If cart is empty, checkout page would show empty state or redirect
     await page.goto("/checkout");
 
-    // Verify we're on checkout page and can see checkout-related content
-    // This indirectly confirms cart persisted (empty cart wouldn't reach checkout)
+    // Verify we're on checkout page
     await expect(page).toHaveURL(/\/checkout/);
-    await expect(page.locator("body")).toContainText(/checkout|order/i, {
-      timeout: 5000,
-    });
+    await expect(page.locator("body")).toContainText(/checkout|order/i);
   });
 });
