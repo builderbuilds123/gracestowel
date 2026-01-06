@@ -95,13 +95,14 @@ services:
 
   # Playwright Test Runner
   playwright:
-    image: mcr.microsoft.com/playwright:v1.49.0-jammy
+    image: mcr.microsoft.com/playwright:v1.57.0-jammy
     container_name: gracestowel-playwright
     depends_on:
       storefront:
         condition: service_healthy
     environment:
       STOREFRONT_URL: http://storefront:5173
+      API_URL: http://backend:8080
       CI: "true"
       MEDUSA_PUBLISHABLE_KEY: ${MEDUSA_PUBLISHABLE_KEY}
       ADMIN_TOKEN: ${ADMIN_TOKEN}

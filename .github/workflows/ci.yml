@@ -292,7 +292,7 @@ jobs:
         env:
           MEDUSA_PUBLISHABLE_KEY: ${{ steps.get-api-key.outputs.MEDUSA_PUBLISHABLE_KEY }}
           ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
-        run: docker compose -f docker-compose.test.yml run --rm -e MEDUSA_PUBLISHABLE_KEY -e ADMIN_TOKEN playwright sh -c "corepack enable && corepack prepare pnpm@9.15.2 --activate && pnpm install && pnpm exec playwright test --project=chromium"
+        run: docker compose -f docker-compose.test.yml run --rm -e MEDUSA_PUBLISHABLE_KEY -e ADMIN_TOKEN -e API_URL=http://backend:8080 playwright sh -c "corepack enable && corepack prepare pnpm@9.15.2 --activate && pnpm install && pnpm exec playwright test --project=chromium"
 
       - name: Upload Playwright report
         uses: actions/upload-artifact@v6
