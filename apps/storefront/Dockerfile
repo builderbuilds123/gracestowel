@@ -60,6 +60,9 @@ COPY --from=builder /repo/apps/storefront/dist ./dist
 COPY --from=builder /repo/apps/storefront/package.json ./package.json
 COPY --from=builder /repo/apps/storefront/public ./public
 
+# Install wrangler globally for test:server command since devDeps may not be available
+RUN pnpm add -g wrangler@4
+
 RUN ln -s /app/node_modules /app/dist/server/node_modules
 
 EXPOSE 5173
