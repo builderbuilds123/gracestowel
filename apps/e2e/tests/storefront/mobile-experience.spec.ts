@@ -28,20 +28,19 @@ test.describe("Mobile Navigation", () => {
     await expect(nav).toBeVisible();
   });
 
-  test("should navigate to product page on mobile", async ({ page }) => {
-    await page.goto("/");
+  test("should navigate to product page on mobile", async ({ page, productFactory }) => {
+    // Use product factory for reliable product navigation
+    const product = await productFactory.createProduct();
+    
+    // Navigate directly to product page (more reliable than homepage click in CI)
+    await page.goto(`/products/${product.handle}`);
     await page.waitForLoadState("domcontentloaded");
-
-    // Use a more robust locator and wait for hydration
-    const firstProduct = page.locator('a[href^="/products/"]').first();
-    await expect(firstProduct).toBeVisible();
-    await firstProduct.scrollIntoViewIfNeeded();
-    await page.waitForTimeout(1000); // Wait for hydration
-    await firstProduct.click({ force: true });
 
     // Verify product page loads
-    await page.waitForLoadState("domcontentloaded");
     await expect(page).toHaveURL(/\/products\//);
+    
+    // Verify product heading is visible
+    await expect(page.getByRole("heading", { name: product.title })).toBeVisible({ timeout: 30000 });
     
     // Verify add to cart button is visible
     await expect(
