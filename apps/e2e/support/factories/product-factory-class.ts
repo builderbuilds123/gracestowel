@@ -13,9 +13,6 @@ export class ProductFactory {
 
   /**
    * Get an existing seeded product for testing.
-   * 
-   * This fetches published products from the store API (not admin)
-   * to ensure we get products that are available for purchase.
    */
   async createProduct(overrides: Partial<Product> = {}): Promise<Product> {
     // STRATEGY: Try admin API for published products (this gives us more info like sales channels)
@@ -27,14 +24,20 @@ export class ProductFactory {
       });
 
       if (adminProducts.products?.length > 0) {
-        // Log all available handles for debugging
-        console.log(`Available admin products handles: ${adminProducts.products.map(p => p.handle).join(', ')}`);
+        // Filter out products that have no variants or no sales channels (Medusa V2 requirement for storefront)
+        const validProducts = adminProducts.products.filter(p => 
+          (p.variants?.length > 0) && (p.sales_channels?.length > 0)
+        );
 
-        // Prefer "The Nuzzle" product
-        const nuzzle = adminProducts.products.find(p => 
+        if (validProducts.length === 0) {
+          console.warn('No products found with both variants AND sales channels among admin products!');
+        }
+
+        // Prefer "The Nuzzle" product if it's among valid ones
+        const nuzzle = validProducts.find(p => 
           p.handle === 'the-nuzzle' || p.title?.includes('Nuzzle')
         );
-        const product = nuzzle || adminProducts.products[0];
+        const product = nuzzle || validProducts[0] || adminProducts.products[0];
         
         console.log(`Using admin product: ${product.title} (${product.id})`);
         
@@ -75,23 +78,17 @@ export class ProductFactory {
 
       if (storeProducts.products?.length > 0) {
         // Log all available handles for debugging
-        console.log(`Available products handles: ${storeProducts.products.map(p => p.handle).join(', ')}`);
+        console.log(`Available store products handles: ${storeProducts.products.map(p => p.handle).join(', ')}`);
 
-        // Prefer "The Nuzzle" product since tests reference it
+        // Prefer "The Nuzzle" product
         const nuzzle = storeProducts.products.find(p => 
           p.handle === 'the-nuzzle' || p.title?.includes('Nuzzle')
         );
         const product = nuzzle || storeProducts.products[0];
         
-        console.log(`Using seeded product: ${product.title} (${product.id}, handle: ${product.handle})`);
+        console.log(`Using store product: ${product.title} (${product.id}, handle: ${product.handle})`);
         
-        // Get the first variant with all its details
         const variant = product.variants?.find((v: any) => v.inventory_quantity !== 0) || product.variants?.[0];
-        if (!variant) {
-          console.warn(`Product ${product.id} has no variants!`);
-        } else {
-          console.log(`Using variant: ${variant.title} (${variant.id})`);
-        }
         
         return {
           id: product.id,
@@ -113,6 +110,6 @@ export class ProductFactory {
   }
 
   async cleanup(): Promise<void> {
-    // No cleanup needed - we don't create products
+    // No cleanup needed
   }
 }

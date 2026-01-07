@@ -25,6 +25,7 @@ test.describe("Storefront cart + checkout flows", () => {
 
     // Find the Plus button (used for increase quantity) - it's a button with a Plus icon
     const increaseButton = page.locator('button').filter({ has: page.locator('svg.lucide-plus') }).first();
+    await increaseButton.scrollIntoViewIfNeeded();
     await expect(increaseButton).toBeVisible();
     await increaseButton.click({ force: true });
 

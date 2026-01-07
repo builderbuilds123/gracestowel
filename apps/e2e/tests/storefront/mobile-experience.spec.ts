@@ -79,6 +79,7 @@ test.describe("Mobile Cart Experience", () => {
     // Find and tap increase quantity button using semantic selector
     const increaseButton = page.getByRole("button", { name: /increase quantity/i }).first();
     if (await increaseButton.isVisible()) {
+      await increaseButton.scrollIntoViewIfNeeded();
       await increaseButton.click({ force: true });
       // Verify cart is still open after quantity update
       await expect(page.getByRole("heading", { name: /towel rack|cart/i })).toBeVisible();
