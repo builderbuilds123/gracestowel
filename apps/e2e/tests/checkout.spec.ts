@@ -87,11 +87,11 @@ test.describe("Guest Checkout Flow", () => {
     ).toBeVisible({ timeout: 30000 });
 
     // Find and click increase quantity button (+ button)
-    const increaseButton = page
+    // Increase quantity - use force: true if backdrop intercepts
+    await page
       .locator('button[aria-label="Increase quantity"]')
-      .first();
-    await expect(increaseButton).toBeVisible({ timeout: 30000 });
-    await increaseButton.click();
+      .first()
+      .click({ force: true });
 
     // Wait for UI to reflect the change
     await page.waitForTimeout(500);

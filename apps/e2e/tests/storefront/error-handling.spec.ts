@@ -28,9 +28,10 @@ test.describe("404 Error Handling", () => {
 });
 
 test.describe("API Error Handling", () => {
-  test("should handle API failure gracefully on product page", async ({ page }) => {
+  test("should handle API failure gracefully on product page", async ({ page, productFactory }) => {
+    const product = await productFactory.createProduct();
     // Intercept product API with error
-    await page.route("**/store/products/the-nuzzle**", (route) => {
+    await page.route(`**/store/products/${product.handle}**`, (route) => {
       route.fulfill({
         status: 500,
         contentType: "application/json",
@@ -38,23 +39,22 @@ test.describe("API Error Handling", () => {
       });
     });
 
-    await page.goto("/products/the-nuzzle");
+    await page.goto(`/products/${product.handle}`);
     await page.waitForLoadState("domcontentloaded");
 
     // Page should show error state or fallback
-    // The exact behavior depends on error boundary implementation
     const hasErrorMessage = await page.getByText(/error|something went wrong|try again|not found/i).isVisible().catch(() => false);
     const hasContent = await page.locator("body").isVisible();
     
-    // Either error is shown or page renders (with cached data)
     expect(hasErrorMessage || hasContent).toBe(true);
   });
 
-  test("should handle cart API failure gracefully", async ({ page }) => {
+  test("should handle cart API failure gracefully", async ({ page, productFactory }) => {
+    const product = await productFactory.createProduct();
     // First load product page normally
-    await page.goto("/products/the-nuzzle");
+    await page.goto(`/products/${product.handle}`);
     await page.waitForLoadState("domcontentloaded");
-    await expect(page.getByRole("heading", { name: /Nuzzle/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: product.title })).toBeVisible();
 
     // Then intercept cart API with error
     await page.route("**/store/carts**", (route) => {
@@ -141,16 +141,17 @@ test.describe("Session Recovery", () => {
     await expect(page.getByRole("heading", { name: /Best Sellers/i })).toBeVisible();
   });
 
-  test("should handle browser back navigation", async ({ page }) => {
+  test("should handle browser back navigation", async ({ page, productFactory }) => {
+    const product = await productFactory.createProduct();
     // Navigate to homepage
     await page.goto("/");
     await page.waitForLoadState("domcontentloaded");
     await expect(page.getByRole("heading", { name: /Best Sellers/i })).toBeVisible();
 
     // Navigate to product
-    await page.goto("/products/the-nuzzle");
+    await page.goto(`/products/${product.handle}`);
     await page.waitForLoadState("domcontentloaded");
-    await expect(page.getByRole("heading", { name: /Nuzzle/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: product.title })).toBeVisible();
 
     // Go back
     await page.goBack();
