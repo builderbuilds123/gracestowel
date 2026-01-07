@@ -160,10 +160,10 @@ test.describe("Backend API workflows (admin)", () => {
       },
     });
 
-    // 6. Add Shipping Method - use V2 endpoint /store/shipping-options/:cart_id
+    // 6. Add Shipping Method - use V2 endpoint /store/shipping-options?cart_id=:id
     const cartShippingOptions = await apiRequest<{ shipping_options: { id: string; name: string }[] }>({
       method: "GET",
-      url: `/store/shipping-options/${cart.id}`,
+      url: `/store/shipping-options?cart_id=${cart.id}`,
       headers: {
         "x-publishable-api-key": process.env.MEDUSA_PUBLISHABLE_KEY!,
       },
