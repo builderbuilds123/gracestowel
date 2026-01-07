@@ -167,6 +167,8 @@ export default function Collection({ loaderData }: Route.ComponentProps) {
                                         price={product.price}
                                         image={product.image}
                                         description={product.description}
+                                        variantId={product.variantId}
+                                        sku={product.sku}
                                     />
                                 ))}
                             </div>

@@ -2,7 +2,7 @@
   "config": {
     "configFile": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/playwright.config.ts",
     "rootDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/tests",
-    "forbidOnly": true,
+    "forbidOnly": false,
     "fullyParallel": true,
     "globalSetup": null,
     "globalTeardown": null,
@@ -18,7 +18,14 @@
       [
         "html",
         {
+          "outputFolder": "playwright-report",
           "open": "never"
+        }
+      ],
+      [
+        "junit",
+        {
+          "outputFile": "test-results/junit.xml"
         }
       ],
       [
@@ -28,21 +35,23 @@
         }
       ],
       [
-        "github",
+        "list",
         null
       ]
     ],
     "reportSlowTests": {
       "max": 5,
-      "threshold": 15000
+      "threshold": 300000
     },
     "quiet": false,
     "projects": [
       {
         "outputDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results",
         "repeatEach": 1,
-        "retries": 2,
-        "metadata": {},
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
         "id": "chromium",
         "name": "chromium",
         "testDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/tests",
@@ -50,13 +59,15 @@
         "testMatch": [
           "**/*.@(spec|test).?(c|m)[jt]s?(x)"
         ],
-        "timeout": 30000
+        "timeout": 60000
       },
       {
         "outputDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results",
         "repeatEach": 1,
-        "retries": 2,
-        "metadata": {},
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
         "id": "firefox",
         "name": "firefox",
         "testDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/tests",
@@ -64,13 +75,15 @@
         "testMatch": [
           "**/*.@(spec|test).?(c|m)[jt]s?(x)"
         ],
-        "timeout": 30000
+        "timeout": 60000
       },
       {
         "outputDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results",
         "repeatEach": 1,
-        "retries": 2,
-        "metadata": {},
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
         "id": "webkit",
         "name": "webkit",
         "testDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/tests",
@@ -78,13 +91,15 @@
         "testMatch": [
           "**/*.@(spec|test).?(c|m)[jt]s?(x)"
         ],
-        "timeout": 30000
+        "timeout": 60000
       },
       {
         "outputDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results",
         "repeatEach": 1,
-        "retries": 2,
-        "metadata": {},
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
         "id": "Mobile Chrome",
         "name": "Mobile Chrome",
         "testDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/tests",
@@ -92,13 +107,15 @@
         "testMatch": [
           "**/*.@(spec|test).?(c|m)[jt]s?(x)"
         ],
-        "timeout": 30000
+        "timeout": 60000
       },
       {
         "outputDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results",
         "repeatEach": 1,
-        "retries": 2,
-        "metadata": {},
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
         "id": "Mobile Safari",
         "name": "Mobile Safari",
         "testDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/tests",
@@ -106,13 +123,15 @@
         "testMatch": [
           "**/*.@(spec|test).?(c|m)[jt]s?(x)"
         ],
-        "timeout": 30000
+        "timeout": 60000
       },
       {
         "outputDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results",
         "repeatEach": 1,
-        "retries": 2,
-        "metadata": {},
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
         "id": "resilience",
         "name": "resilience",
         "testDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/resilience",
@@ -120,422 +139,450 @@
         "testMatch": [
           "**/*.@(spec|test).?(c|m)[jt]s?(x)"
         ],
-        "timeout": 30000
+        "timeout": 60000
       }
     ],
     "shard": null,
+    "tags": [],
     "updateSnapshots": "missing",
-    "version": "1.49.0",
+    "updateSourceMethod": "patch",
+    "version": "1.57.0",
     "workers": 1,
-    "webServer": null
+    "webServer": {
+      "command": "cd ../.. && MEDUSA_PUBLISHABLE_KEY=undefined CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE='postgresql://postgres:postgres@localhost:5432/medusa' pnpm --filter=apps-storefront dev",
+      "url": "https://localhost:5173",
+      "reuseExistingServer": true,
+      "ignoreHTTPSErrors": true,
+      "timeout": 120000
+    }
   },
   "suites": [
     {
-      "title": "grace-period.spec.ts",
-      "file": "grace-period.spec.ts",
+      "title": "storefront/homepage-navigation.spec.ts",
+      "file": "storefront/homepage-navigation.spec.ts",
       "column": 0,
       "line": 0,
       "specs": [],
       "suites": [
         {
-          "title": "AC1: Timer Visibility & Expiration",
-          "file": "grace-period.spec.ts",
-          "line": 25,
+          "title": "Homepage",
+          "file": "storefront/homepage-navigation.spec.ts",
+          "line": 15,
           "column": 6,
           "specs": [
             {
-              "title": "should display timer element with role='timer' during grace period",
-              "ok": true,
+              "title": "should load homepage with all critical elements",
+              "ok": false,
               "tags": [],
               "tests": [
                 {
-                  "timeout": 30000,
-                  "annotations": [
-                    {
-                      "type": "skip",
-                      "description": "Requires TEST_MODIFICATION_TOKEN env var"
-                    }
-                  ],
-                  "expectedStatus": "skipped",
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
                   "projectId": "chromium",
                   "projectName": "chromium",
                   "results": [
                     {
                       "workerIndex": 0,
-                      "status": "skipped",
-                      "duration": 229,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 0,
+                      "error": {
+                        "message": "ApiError: API request failed: 401 Unauthorized",
+                        "stack": "ApiError: API request failed: 401 Unauthorized\n    at apiRequest (/Users/leonliang/Github Repo/gracestowel/apps/e2e/support/helpers/api-request.ts:88:11)\n    at ensureTheNuzzleExists (/Users/leonliang/Github Repo/gracestowel/apps/e2e/support/helpers/seed-helpers.ts:134:27)\n    at /Users/leonliang/Github Repo/gracestowel/apps/e2e/tests/storefront/homepage-navigation.spec.ts:6:3",
+                        "location": {
+                          "file": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/support/helpers/api-request.ts",
+                          "column": 11,
+                          "line": 88
+                        },
+                        "snippet": "\u001b[90m   at \u001b[39m../support/helpers/api-request.ts:88\n\n\u001b[0m \u001b[90m 86 |\u001b[39m     \u001b[36mconst\u001b[39m errorText \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m response\u001b[33m.\u001b[39mtext()\u001b[33m;\u001b[39m\n \u001b[90m 87 |\u001b[39m     console\u001b[33m.\u001b[39merror(\u001b[32m`API Error ${response.status()} at ${url}:`\u001b[39m\u001b[33m,\u001b[39m errorText)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 88 |\u001b[39m     \u001b[36mthrow\u001b[39m \u001b[36mnew\u001b[39m \u001b[33mApiError\u001b[39m(response\u001b[33m.\u001b[39mstatus()\u001b[33m,\u001b[39m response\u001b[33m.\u001b[39mstatusText()\u001b[33m,\u001b[39m errorText)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m           \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 89 |\u001b[39m   }\n \u001b[90m 90 |\u001b[39m\n \u001b[90m 91 |\u001b[39m   \u001b[36mreturn\u001b[39m response\u001b[33m.\u001b[39mjson()\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/support/helpers/api-request.ts",
+                            "column": 11,
+                            "line": 88
+                          },
+                          "message": "ApiError: API request failed: 401 Unauthorized\n\n\u001b[90m   at \u001b[39m../support/helpers/api-request.ts:88\n\n\u001b[0m \u001b[90m 86 |\u001b[39m     \u001b[36mconst\u001b[39m errorText \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m response\u001b[33m.\u001b[39mtext()\u001b[33m;\u001b[39m\n \u001b[90m 87 |\u001b[39m     console\u001b[33m.\u001b[39merror(\u001b[32m`API Error ${response.status()} at ${url}:`\u001b[39m\u001b[33m,\u001b[39m errorText)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 88 |\u001b[39m     \u001b[36mthrow\u001b[39m \u001b[36mnew\u001b[39m \u001b[33mApiError\u001b[39m(response\u001b[33m.\u001b[39mstatus()\u001b[33m,\u001b[39m response\u001b[33m.\u001b[39mstatusText()\u001b[33m,\u001b[39m errorText)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m           \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 89 |\u001b[39m   }\n \u001b[90m 90 |\u001b[39m\n \u001b[90m 91 |\u001b[39m   \u001b[36mreturn\u001b[39m response\u001b[33m.\u001b[39mjson()\u001b[33m;\u001b[39m\u001b[0m\n\u001b[2m    at apiRequest (/Users/leonliang/Github Repo/gracestowel/apps/e2e/support/helpers/api-request.ts:88:11)\u001b[22m\n\u001b[2m    at ensureTheNuzzleExists (/Users/leonliang/Github Repo/gracestowel/apps/e2e/support/helpers/seed-helpers.ts:134:27)\u001b[22m\n\u001b[2m    at /Users/leonliang/Github Repo/gracestowel/apps/e2e/tests/storefront/homepage-navigation.spec.ts:6:3\u001b[22m"
+                        }
+                      ],
+                      "stdout": [
+                        {
+                          "text": "[Self-Heal] Checking ADMIN_TOKEN presence: false\n"
+                        },
+                        {
+                          "text": "[Self-Heal] Product check failed, assuming missing.\n"
+                        },
+                        {
+                          "text": "[Self-Heal] \"The Nuzzle\" is looking missing. Creating it...\n"
+                        }
+                      ],
+                      "stderr": [
+                        {
+                          "text": "API Error 401 at /admin/products?handle=the-nuzzle&limit=1&fields=+sales_channels: {\"message\":\"Unauthorized\"}\n"
+                        },
+                        {
+                          "text": "API Error 401 at /admin/products: {\"message\":\"Unauthorized\"}\n"
+                        },
+                        {
+                          "text": "[Self-Heal] Failed to create \"The Nuzzle\": ApiError: API request failed: 401 Unauthorized\n    at apiRequest \u001b[90m(/Users/leonliang/Github Repo/gracestowel/apps/e2e/\u001b[39msupport/helpers/api-request.ts:88:11\u001b[90m)\u001b[39m\n    at ensureTheNuzzleExists \u001b[90m(/Users/leonliang/Github Repo/gracestowel/apps/e2e/\u001b[39msupport/helpers/seed-helpers.ts:134:27\u001b[90m)\u001b[39m\n    at \u001b[90m/Users/leonliang/Github Repo/gracestowel/apps/e2e/\u001b[39mtests/storefront/homepage-navigation.spec.ts:6:3\n    at /Users/leonliang/Github Repo/gracestowel/node_modules/\u001b[4m.pnpm\u001b[24m/playwright@1.57.0/node_modules/\u001b[4mplaywright\u001b[24m/lib/worker/testInfo.js:311:11\n    at TimeoutManager.withRunnable (/Users/leonliang/Github Repo/gracestowel/node_modules/\u001b[4m.pnpm\u001b[24m/playwright@1.57.0/node_modules/\u001b[4mplaywright\u001b[24m/lib/worker/timeoutManager.js:67:14)\n    at TestInfoImpl._runWithTimeout (/Users/leonliang/Github Repo/gracestowel/node_modules/\u001b[4m.pnpm\u001b[24m/playwright@1.57.0/node_modules/\u001b[4mplaywright\u001b[24m/lib/worker/testInfo.js:309:7)\n    at FixtureRunner.resolveParametersAndRunFunction (/Users/leonliang/Github Repo/gracestowel/node_modules/\u001b[4m.pnpm\u001b[24m/playwright@1.57.0/node_modules/\u001b[4mplaywright\u001b[24m/lib/worker/fixtureRunner.js:228:5)\n    at /Users/leonliang/Github Repo/gracestowel/node_modules/\u001b[4m.pnpm\u001b[24m/playwright@1.57.0/node_modules/\u001b[4mplaywright\u001b[24m/lib/worker/workerMain.js:441:13\n    at TestInfoImpl._runAsStep (/Users/leonliang/Github Repo/gracestowel/node_modules/\u001b[4m.pnpm\u001b[24m/playwright@1.57.0/node_modules/\u001b[4mplaywright\u001b[24m/lib/worker/testInfo.js:300:7)\n    at WorkerMain._runAllHooksForSuite (/Users/leonliang/Github Repo/gracestowel/node_modules/\u001b[4m.pnpm\u001b[24m/playwright@1.57.0/node_modules/\u001b[4mplaywright\u001b[24m/lib/worker/workerMain.js:436:9)\n    at WorkerMain._runBeforeAllHooksForSuite (/Users/leonliang/Github Repo/gracestowel/node_modules/\u001b[4m.pnpm\u001b[24m/playwright@1.57.0/node_modules/\u001b[4mplaywright\u001b[24m/lib/worker/workerMain.js:430:5)\n    at /Users/leonliang/Github Repo/gracestowel/node_modules/\u001b[4m.pnpm\u001b[24m/playwright@1.57.0/node_modules/\u001b[4mplaywright\u001b[24m/lib/worker/workerMain.js:312:11\n    at TestInfoImpl._runAsStep (/Users/leonliang/Github Repo/gracestowel/node_modules/\u001b[4m.pnpm\u001b[24m/playwright@1.57.0/node_modules/\u001b[4mplaywright\u001b[24m/lib/worker/testInfo.js:300:7)\n    at /Users/leonliang/Github Repo/gracestowel/node_modules/\u001b[4m.pnpm\u001b[24m/playwright@1.57.0/node_modules/\u001b[4mplaywright\u001b[24m/lib/worker/workerMain.js:310:7\n    at WorkerMain._runTest (/Users/leonliang/Github Repo/gracestowel/node_modules/\u001b[4m.pnpm\u001b[24m/playwright@1.57.0/node_modules/\u001b[4mplaywright\u001b[24m/lib/worker/workerMain.js:295:5)\n    at WorkerMain.runTestGroup (/Users/leonliang/Github Repo/gracestowel/node_modules/\u001b[4m.pnpm\u001b[24m/playwright@1.57.0/node_modules/\u001b[4mplaywright\u001b[24m/lib/worker/workerMain.js:199:11)\n    at process.<anonymous> (/Users/leonliang/Github Repo/gracestowel/node_modules/\u001b[4m.pnpm\u001b[24m/playwright@1.57.0/node_modules/\u001b[4mplaywright\u001b[24m/lib/common/process.js:65:22) {\n  status: \u001b[33m401\u001b[39m,\n  statusText: \u001b[32m'Unauthorized'\u001b[39m,\n  responseBody: \u001b[32m'{\"message\":\"Unauthorized\"}'\u001b[39m\n}\n"
+                        }
+                      ],
                       "retry": 0,
-                      "startTime": "2025-12-10T07:37:59.607Z",
-                      "attachments": []
+                      "startTime": "2026-01-07T08:06:02.594Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results/storefront-homepage-naviga-68c66--with-all-critical-elements-chromium/trace.zip"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/support/helpers/api-request.ts",
+                        "column": 11,
+                        "line": 88
+                      }
                     }
                   ],
-                  "status": "skipped"
+                  "status": "unexpected"
                 }
               ],
-              "id": "cfa8594a2ce329853a65-bbfcc8357c0b5c9e8283",
-              "file": "grace-period.spec.ts",
-              "line": 27,
-              "column": 9
+              "id": "884743e3f7dc97ed0588-f867743162d2f7ec02c2",
+              "file": "storefront/homepage-navigation.spec.ts",
+              "line": 16,
+              "column": 7
             },
             {
-              "title": "should display edit/cancel options during active grace period",
+              "title": "should have accessible navigation",
               "ok": true,
               "tags": [],
               "tests": [
                 {
-                  "timeout": 30000,
-                  "annotations": [
-                    {
-                      "type": "skip",
-                      "description": "Requires TEST_MODIFICATION_TOKEN env var"
-                    }
-                  ],
-                  "expectedStatus": "skipped",
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
                   "projectId": "chromium",
                   "projectName": "chromium",
                   "results": [
                     {
-                      "workerIndex": 0,
+                      "workerIndex": -1,
+                      "parallelIndex": -1,
                       "status": "skipped",
-                      "duration": 70,
+                      "duration": 0,
                       "errors": [],
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2025-12-10T07:38:00.065Z",
+                      "startTime": "2026-01-07T08:06:02.731Z",
+                      "annotations": [],
                       "attachments": []
                     }
                   ],
                   "status": "skipped"
                 }
               ],
-              "id": "cfa8594a2ce329853a65-44ccaa59d9613fcc69df",
-              "file": "grace-period.spec.ts",
-              "line": 41,
-              "column": 9
+              "id": "884743e3f7dc97ed0588-21c6474c340b20213a3e",
+              "file": "storefront/homepage-navigation.spec.ts",
+              "line": 35,
+              "column": 7
             },
             {
-              "title": "should hide edit options when grace period expires (short TTL)",
+              "title": "should display product cards with images and prices",
               "ok": true,
               "tags": [],
               "tests": [
                 {
-                  "timeout": 30000,
-                  "annotations": [
-                    {
-                      "type": "skip",
-                      "description": "Requires TEST_MODIFICATION_TOKEN env var"
-                    }
-                  ],
-                  "expectedStatus": "skipped",
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
                   "projectId": "chromium",
                   "projectName": "chromium",
                   "results": [
                     {
-                      "workerIndex": 0,
+                      "workerIndex": -1,
+                      "parallelIndex": -1,
                       "status": "skipped",
-                      "duration": 66,
+                      "duration": 0,
                       "errors": [],
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2025-12-10T07:38:00.137Z",
+                      "startTime": "2026-01-07T08:06:02.737Z",
+                      "annotations": [],
                       "attachments": []
                     }
                   ],
                   "status": "skipped"
                 }
               ],
-              "id": "cfa8594a2ce329853a65-c4a8dc650e2cbac3ac94",
-              "file": "grace-period.spec.ts",
-              "line": 53,
-              "column": 9
+              "id": "884743e3f7dc97ed0588-47b49d58762ac8c63b47",
+              "file": "storefront/homepage-navigation.spec.ts",
+              "line": 50,
+              "column": 7
             }
           ]
         },
         {
-          "title": "AC2 & AC3: Magic Link & Cookie Persistence",
-          "file": "grace-period.spec.ts",
-          "line": 79,
+          "title": "Navigation",
+          "file": "storefront/homepage-navigation.spec.ts",
+          "line": 67,
           "column": 6,
           "specs": [
             {
-              "title": "should show 'Link Expired' page for expired token",
+              "title": "should navigate from homepage to product page",
               "ok": true,
               "tags": [],
               "tests": [
                 {
-                  "timeout": 30000,
-                  "annotations": [
-                    {
-                      "type": "skip",
-                      "description": "Requires MEDUSA_BACKEND_URL env var (backend must be running)"
-                    }
-                  ],
-                  "expectedStatus": "skipped",
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
                   "projectId": "chromium",
                   "projectName": "chromium",
                   "results": [
                     {
-                      "workerIndex": 0,
+                      "workerIndex": -1,
+                      "parallelIndex": -1,
                       "status": "skipped",
-                      "duration": 64,
+                      "duration": 0,
                       "errors": [],
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2025-12-10T07:38:00.206Z",
+                      "startTime": "2026-01-07T08:06:02.743Z",
+                      "annotations": [],
                       "attachments": []
                     }
                   ],
                   "status": "skipped"
                 }
               ],
-              "id": "cfa8594a2ce329853a65-8e886773d1be745d6a5e",
-              "file": "grace-period.spec.ts",
-              "line": 81,
-              "column": 9
+              "id": "884743e3f7dc97ed0588-ab161a13666a4792ae97",
+              "file": "storefront/homepage-navigation.spec.ts",
+              "line": 68,
+              "column": 7
             },
             {
-              "title": "should set guest_order cookie with correct attributes",
+              "title": "should navigate to checkout page",
               "ok": true,
               "tags": [],
               "tests": [
                 {
-                  "timeout": 30000,
-                  "annotations": [
-                    {
-                      "type": "skip",
-                      "description": "Requires TEST_MODIFICATION_TOKEN env var"
-                    }
-                  ],
-                  "expectedStatus": "skipped",
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
                   "projectId": "chromium",
                   "projectName": "chromium",
                   "results": [
                     {
-                      "workerIndex": 0,
+                      "workerIndex": -1,
+                      "parallelIndex": -1,
                       "status": "skipped",
-                      "duration": 66,
+                      "duration": 0,
                       "errors": [],
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2025-12-10T07:38:00.271Z",
+                      "startTime": "2026-01-07T08:06:02.749Z",
+                      "annotations": [],
                       "attachments": []
                     }
                   ],
                   "status": "skipped"
                 }
               ],
-              "id": "cfa8594a2ce329853a65-ee8b0fcd556f59bdd47d",
-              "file": "grace-period.spec.ts",
-              "line": 98,
-              "column": 9
+              "id": "884743e3f7dc97ed0588-73cf1bd9cbe977530b7d",
+              "file": "storefront/homepage-navigation.spec.ts",
+              "line": 93,
+              "column": 7
             },
             {
-              "title": "should persist session via cookie (no token in URL on reload)",
+              "title": "should handle direct product URL navigation",
               "ok": true,
               "tags": [],
               "tests": [
                 {
-                  "timeout": 30000,
-                  "annotations": [
-                    {
-                      "type": "skip",
-                      "description": "Requires TEST_MODIFICATION_TOKEN env var"
-                    }
-                  ],
-                  "expectedStatus": "skipped",
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
                   "projectId": "chromium",
                   "projectName": "chromium",
                   "results": [
                     {
-                      "workerIndex": 0,
+                      "workerIndex": -1,
+                      "parallelIndex": -1,
                       "status": "skipped",
-                      "duration": 65,
+                      "duration": 0,
                       "errors": [],
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2025-12-10T07:38:00.339Z",
+                      "startTime": "2026-01-07T08:06:02.754Z",
+                      "annotations": [],
                       "attachments": []
                     }
                   ],
                   "status": "skipped"
                 }
               ],
-              "id": "cfa8594a2ce329853a65-7c3ea29eb79896dc5798",
-              "file": "grace-period.spec.ts",
-              "line": 119,
-              "column": 9
+              "id": "884743e3f7dc97ed0588-3da1cfa94a785409e817",
+              "file": "storefront/homepage-navigation.spec.ts",
+              "line": 101,
+              "column": 7
             },
             {
-              "title": "should have cookie path scoped to specific order",
+              "title": "should return to homepage via logo/brand link",
               "ok": true,
               "tags": [],
               "tests": [
                 {
-                  "timeout": 30000,
-                  "annotations": [
-                    {
-                      "type": "skip",
-                      "description": "Requires TEST_MODIFICATION_TOKEN env var"
-                    }
-                  ],
-                  "expectedStatus": "skipped",
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
                   "projectId": "chromium",
                   "projectName": "chromium",
                   "results": [
                     {
-                      "workerIndex": 0,
+                      "workerIndex": -1,
+                      "parallelIndex": -1,
                       "status": "skipped",
-                      "duration": 63,
+                      "duration": 0,
                       "errors": [],
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2025-12-10T07:38:00.406Z",
+                      "startTime": "2026-01-07T08:06:02.760Z",
+                      "annotations": [],
                       "attachments": []
                     }
                   ],
                   "status": "skipped"
                 }
               ],
-              "id": "cfa8594a2ce329853a65-dc57816c92ef390b3875",
-              "file": "grace-period.spec.ts",
-              "line": 137,
-              "column": 9
+              "id": "884743e3f7dc97ed0588-b96593e0a41b09a5c845",
+              "file": "storefront/homepage-navigation.spec.ts",
+              "line": 115,
+              "column": 7
             }
           ]
         },
         {
-          "title": "AC4 & AC6: Order Cancellation",
-          "file": "grace-period.spec.ts",
-          "line": 152,
+          "title": "Cart Access",
+          "file": "storefront/homepage-navigation.spec.ts",
+          "line": 131,
           "column": 6,
           "specs": [
             {
-              "title": "should allow cancelling order during grace period",
+              "title": "should open empty cart from homepage",
               "ok": true,
               "tags": [],
               "tests": [
                 {
-                  "timeout": 30000,
-                  "annotations": [
-                    {
-                      "type": "skip",
-                      "description": "Requires TEST_MODIFICATION_TOKEN env var"
-                    }
-                  ],
-                  "expectedStatus": "skipped",
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
                   "projectId": "chromium",
                   "projectName": "chromium",
                   "results": [
                     {
-                      "workerIndex": 0,
+                      "workerIndex": -1,
+                      "parallelIndex": -1,
                       "status": "skipped",
-                      "duration": 66,
+                      "duration": 0,
                       "errors": [],
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2025-12-10T07:38:00.471Z",
+                      "startTime": "2026-01-07T08:06:02.765Z",
+                      "annotations": [],
                       "attachments": []
                     }
                   ],
                   "status": "skipped"
                 }
               ],
-              "id": "cfa8594a2ce329853a65-d3415a8300a2e39cf3bc",
-              "file": "grace-period.spec.ts",
-              "line": 154,
-              "column": 9
+              "id": "884743e3f7dc97ed0588-70bdbc79e96fb05d2ed4",
+              "file": "storefront/homepage-navigation.spec.ts",
+              "line": 132,
+              "column": 7
             },
             {
-              "title": "should hide cancel button after grace period expires",
+              "title": "should show cart with items after adding product",
               "ok": true,
               "tags": [],
               "tests": [
                 {
-                  "timeout": 30000,
-                  "annotations": [
-                    {
-                      "type": "skip",
-                      "description": "Requires TEST_MODIFICATION_TOKEN env var"
-                    }
-                  ],
-                  "expectedStatus": "skipped",
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
                   "projectId": "chromium",
                   "projectName": "chromium",
                   "results": [
                     {
-                      "workerIndex": 0,
+                      "workerIndex": -1,
+                      "parallelIndex": -1,
                       "status": "skipped",
-                      "duration": 65,
+                      "duration": 0,
                       "errors": [],
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2025-12-10T07:38:00.539Z",
+                      "startTime": "2026-01-07T08:06:02.770Z",
+                      "annotations": [],
                       "attachments": []
                     }
                   ],
                   "status": "skipped"
                 }
               ],
-              "id": "cfa8594a2ce329853a65-02a4e54541797d49dd15",
-              "file": "grace-period.spec.ts",
-              "line": 180,
-              "column": 9
+              "id": "884743e3f7dc97ed0588-2f445e7a33a4d37b85b7",
+              "file": "storefront/homepage-navigation.spec.ts",
+              "line": 152,
+              "column": 7
             }
           ]
         },
         {
-          "title": "AC5: Backend Capture Workflow (Smoke Test)",
-          "file": "grace-period.spec.ts",
-          "line": 197,
+          "title": "Footer and Links",
+          "file": "storefront/homepage-navigation.spec.ts",
+          "line": 168,
           "column": 6,
           "specs": [
             {
-              "title": "should complete order capture after grace period",
+              "title": "should have visible footer on homepage",
               "ok": true,
               "tags": [],
               "tests": [
                 {
-                  "timeout": 30000,
-                  "annotations": [
-                    {
-                      "type": "skip",
-                      "description": "Requires TEST_MODIFICATION_TOKEN env var"
-                    }
-                  ],
-                  "expectedStatus": "skipped",
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
                   "projectId": "chromium",
                   "projectName": "chromium",
                   "results": [
                     {
-                      "workerIndex": 0,
+                      "workerIndex": -1,
+                      "parallelIndex": -1,
                       "status": "skipped",
-                      "duration": 65,
+                      "duration": 0,
                       "errors": [],
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2025-12-10T07:38:00.606Z",
+                      "startTime": "2026-01-07T08:06:02.777Z",
+                      "annotations": [],
                       "attachments": []
                     }
                   ],
                   "status": "skipped"
                 }
               ],
-              "id": "cfa8594a2ce329853a65-e9440998ce1ec8a6c0d7",
-              "file": "grace-period.spec.ts",
-              "line": 199,
-              "column": 9
+              "id": "884743e3f7dc97ed0588-bdcab0cdf83956a667dd",
+              "file": "storefront/homepage-navigation.spec.ts",
+              "line": 169,
+              "column": 7
             }
           ]
         }
@@ -544,11 +591,11 @@
   ],
   "errors": [],
   "stats": {
-    "startTime": "2025-12-10T07:37:59.362Z",
-    "duration": 1334.2649999999999,
+    "startTime": "2026-01-07T08:06:01.194Z",
+    "duration": 1614.2579999999998,
     "expected": 0,
-    "skipped": 10,
-    "unexpected": 0,
+    "skipped": 9,
+    "unexpected": 1,
     "flaky": 0
   }
 }

@@ -82,6 +82,54 @@ See nested AGENTS.md files for app-specific patterns:
 | Migrate | `cd apps/backend && npm run migrate` |
 | Deploy storefront | `pnpm deploy:storefront` |
 | Deploy backend | `pnpm deploy:api` |
+| Ralph Orchestrator | `./scripts/ralph run` |
+
+---
+
+## Ralph Orchestrator
+
+**Ralph Orchestrator** is installed as a git submodule in `tools/ralph-orchestrator/`. It enables autonomous AI agent orchestration for complex, multi-iteration tasks.
+
+### Quick Usage
+
+```bash
+# Run with inline prompt
+./scripts/ralph run -p "Refactor auth module to Medusa v2 patterns"
+
+# Run with prompt file
+echo "# Task: Your task" > PROMPT.md
+./scripts/ralph run -a claude --max-iterations 50
+```
+
+### When to Use Ralph
+
+**Use Ralph for:**
+- Complex refactoring tasks requiring multiple iterations
+- Test generation for large codebases
+- Documentation generation
+- Tasks with clear completion criteria
+
+**Use direct agent execution for:**
+- Simple one-shot tasks
+- Real-time interactive tasks
+- Tasks requiring immediate feedback
+
+### AI Agent Integration Pattern
+
+AI agents can delegate complex tasks to ralph:
+
+```python
+# 1. Agent creates detailed prompt
+prompt = create_task_prompt(task_description)
+
+# 2. Delegate to ralph
+subprocess.run(["./scripts/ralph", "run", "-a", "claude", "--max-iterations", "50"])
+
+# 3. Review results
+review_changes()
+```
+
+**See:** [`docs/guides/ralph-orchestrator.md`](docs/guides/ralph-orchestrator.md) for complete guide.
 
 ---
 

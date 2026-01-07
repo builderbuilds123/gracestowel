@@ -101,6 +101,8 @@ export default function Home() {
       price: "$18.00",
       image: "/washcloth-nuzzle.jpg",
       handle: "the-nuzzle",
+      variantId: undefined,
+      sku: undefined,
     },
     {
       id: 2,
@@ -109,6 +111,8 @@ export default function Home() {
       price: "$25.00",
       image: "/hand-towel-cradle.jpg",
       handle: "the-cradle",
+      variantId: undefined,
+      sku: undefined,
     },
     {
       id: 3,
@@ -117,6 +121,8 @@ export default function Home() {
       price: "$35.00",
       image: "/bath-towel-bearhug.jpg",
       handle: "the-bearhug",
+      variantId: undefined,
+      sku: undefined,
     },
   ];
 
@@ -245,6 +251,8 @@ export default function Home() {
               price={product.price}
               image={product.image}
               handle={product.handle}
+              variantId={product.variantId}
+              sku={product.sku}
             />
           ))}
         </div>

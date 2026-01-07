@@ -11,10 +11,10 @@ import { initStripe, getStripe } from "../lib/stripe";
 import { CheckoutForm, type ShippingOption } from "../components/CheckoutForm";
 import { OrderSummary } from "../components/OrderSummary";
 import { parsePrice } from "../lib/price";
-import { generateTraceId, createLogger } from "../lib/logger";
-import { monitoredFetch } from "../utils/monitored-fetch";
+import { generateTraceId } from "../lib/logger";
 import { generateCartHash } from "../utils/cart-hash";
 import { useShippingPersistence } from "../hooks/useShippingPersistence";
+import { monitoredFetch } from "../utils/monitored-fetch";
 
 
 // Check if in development mode (consistent with codebase pattern)
@@ -54,7 +54,7 @@ export default function Checkout() {
   const [lastTraceId, setLastTraceId] = useState<string | null>(null);
   const [guestEmail, setGuestEmail] = useState<string | undefined>(undefined);
 
-  // Track initialization to prevent clientSecret changes
+  // Track initialization to prevent clientSecret changes after first set
   const isInitialized = useRef(false);
   const sessionTraceId = useRef(generateTraceId());
 
@@ -156,10 +156,12 @@ export default function Checkout() {
     }
   }, [cartTotal, items, currency]);
 
-  // Single effect for PaymentIntent management (create once, update on changes)
-  // Debounced to prevent API thrashing on rapid cart updates
+  // PaymentIntent management: Create once when shipping is selected, update on changes
+  // CRITICAL: Wait for selectedShipping to prevent racing CREATE calls with different metadata
   useEffect(() => {
     if (cartTotal <= 0) return;
+    if (!selectedShipping) return; // Wait for shipping selection before creating PI
+    if (!cartId) return; // Wait for cart to be created
 
     const controller = new AbortController();
 
@@ -167,16 +169,10 @@ export default function Checkout() {
       try {
         setPaymentError(null);
 
-        // CRITICAL: Validate cartId exists before proceeding
-        if (!cartId) {
-          setPaymentError("Cart ID is missing. Please refresh and try again.");
-          return;
-        }
-
         const requestData = {
           amount: cartTotal,
           currency: currency.toLowerCase(),
-          shipping: selectedShipping?.amount ?? 0,
+          shipping: selectedShipping.amount ?? 0,
           customerId: isAuthenticated ? customer?.id : undefined,
           customerEmail: isAuthenticated ? customer?.email : (guestEmail || undefined),
           cartItems: items.map((item) => ({
@@ -188,18 +184,16 @@ export default function Checkout() {
             quantity: item.quantity,
             color: item.color,
           })),
-          paymentIntentId: paymentIntentId, // Reuse if exists
-          cartId: cartId, // ADDED: Pass cartId to the API (SEC-01)
+          paymentIntentId: paymentIntentId,
+          cartId: cartId,
         };
 
-        // Log request details for debugging (only in development)
         if (isDevelopment) {
           console.log("[Checkout] Payment intent request:", {
             operation: paymentIntentId ? "update" : "create",
             amount: requestData.amount,
             currency: requestData.currency,
             shipping: requestData.shipping,
-            total: requestData.amount + requestData.shipping,
             itemCount: requestData.cartItems.length,
             paymentIntentId,
             traceId: sessionTraceId.current,
@@ -225,21 +219,12 @@ export default function Checkout() {
             traceId?: string;
           };
           
-          // Build error message - prefer debugInfo when available as it's more specific
-          // If both exist, use debugInfo since it contains actionable details from Stripe
           const errorMessage = error.debugInfo || error.message || "Payment initialization failed";
-          
           setPaymentError(errorMessage);
           setLastTraceId(error.traceId || null);
           
-          // Log detailed error for debugging (only in development)
           if (isDevelopment) {
-            console.error("[Checkout] Payment initialization error:", {
-              message: error.message,
-              debugInfo: error.debugInfo,
-              stripeErrorCode: error.stripeErrorCode,
-              traceId: error.traceId,
-            });
+            console.error("[Checkout] Payment initialization error:", error);
           }
           return;
         }
@@ -250,51 +235,34 @@ export default function Checkout() {
           traceId?: string;
         };
 
-        // Log successful response (only in development)
         if (isDevelopment) {
           console.log("[Checkout] Payment intent response:", {
             operation: paymentIntentId ? "updated" : "created",
             paymentIntentId: data.paymentIntentId,
             hasClientSecret: !!data.clientSecret,
-            traceId: data.traceId,
             isFirstInitialization: !isInitialized.current,
           });
         }
 
-        // CRITICAL: Only set clientSecret on FIRST call
-        // Changing it breaks Stripe Elements
+        // CRITICAL: Only set clientSecret on FIRST call - changing it breaks Stripe Elements
         if (!isInitialized.current) {
           setClientSecret(data.clientSecret);
           isInitialized.current = true;
-          if (isDevelopment) {
-            console.log("[Checkout] Client secret set for first time");
-          }
         }
 
-        // Always update the paymentIntentId
         setPaymentIntentId(data.paymentIntentId);
         if (data.traceId) setLastTraceId(data.traceId);
       } catch (error) {
         if ((error as Error).name !== "AbortError") {
           if (isDevelopment) {
-            console.error("[Checkout] PaymentIntent error:", {
-              error,
-              errorMessage: (error as Error).message,
-              errorName: (error as Error).name,
-              cartTotal,
-              currency,
-              itemCount: items.length,
-              paymentIntentId,
-              traceId: sessionTraceId.current,
-            });
+            console.error("[Checkout] PaymentIntent error:", error);
           }
           setPaymentError("Failed to initialize payment");
         }
       }
     };
 
-    // Debounce: wait 300ms after last change before calling API
-    // This prevents API thrashing on rapid cart/shipping updates
+    // Debounce to prevent API thrashing
     const debounceTimer = setTimeout(managePaymentIntent, 300);
 
     return () => {
@@ -479,7 +447,9 @@ export default function Checkout() {
     setShippingAddress(addressValue);
   };
 
-  const options = {
+  // Stripe Elements options - use clientSecret when available for full functionality
+  // including developer autofill tools
+  const options = clientSecret ? {
     clientSecret,
     appearance: {
       theme: "stripe" as const,
@@ -530,7 +500,7 @@ export default function Checkout() {
           "https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400;0,500;0,700;1,400&display=swap",
       },
     ],
-  };
+  } : null;
 
   if (cartTotal <= 0) {
     return (
@@ -583,8 +553,8 @@ export default function Checkout() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start">
           {/* Checkout Form */}
           <div className="lg:col-span-7 space-y-8">
-            {clientSecret && (
-              <Elements options={options} stripe={getStripe()}>
+            {clientSecret && options ? (
+              <Elements options={options} stripe={getStripe()} key={clientSecret}>
                 <div className="bg-white p-6 lg:p-8 rounded-lg shadow-sm border border-card-earthy/20">
                   <CheckoutForm
                     items={items}
@@ -620,6 +590,19 @@ export default function Checkout() {
                   />
                 </div>
               </Elements>
+            ) : (
+              <div className="bg-white p-6 lg:p-8 rounded-lg shadow-sm border border-card-earthy/20">
+                <div className="animate-pulse space-y-4">
+                  <div className="h-4 bg-gray-200 rounded w-1/4"></div>
+                  <div className="h-10 bg-gray-200 rounded"></div>
+                  <div className="h-4 bg-gray-200 rounded w-1/4 mt-6"></div>
+                  <div className="h-10 bg-gray-200 rounded"></div>
+                  <div className="h-10 bg-gray-200 rounded"></div>
+                  <div className="h-4 bg-gray-200 rounded w-1/4 mt-6"></div>
+                  <div className="h-10 bg-gray-200 rounded"></div>
+                </div>
+                <p className="text-sm text-gray-500 mt-4 text-center">Loading payment form...</p>
+              </div>
             )}
           </div>
 

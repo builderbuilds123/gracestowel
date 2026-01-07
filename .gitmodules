@@ -1,0 +1,3 @@
+[submodule "tools/ralph-orchestrator"]
+	path = tools/ralph-orchestrator
+	url = https://github.com/mikeyobrien/ralph-orchestrator.git

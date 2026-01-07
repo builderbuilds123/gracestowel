@@ -223,20 +223,23 @@ export class MedusaCartService {
             cart_id: cartId,
         });
 
-        return (shipping_options || []).map((opt: any) => {
-            // Medusa v2: Use calculated_price for tiered/rule-based pricing
-            const calculatedPrice = opt.calculated_price;
-            const amount = calculatedPrice?.calculated_amount ?? opt.amount ?? 0;
-            
-            return {
-                id: opt.id,
-                name: opt.name,
-                amount,
-                price_type: opt.price_type,
-                provider_id: opt.provider_id,
-                is_return: opt.is_return,
-            };
-        });
+        return (shipping_options || [])
+            // Filter out return shipping options - only show forward shipping
+            .filter((opt: any) => !opt.is_return)
+            .map((opt: any) => {
+                // Medusa v2: Use calculated_price for tiered/rule-based pricing
+                const calculatedPrice = opt.calculated_price;
+                const amount = calculatedPrice?.calculated_amount ?? opt.amount ?? 0;
+                
+                return {
+                    id: opt.id,
+                    name: opt.name,
+                    amount,
+                    price_type: opt.price_type,
+                    provider_id: opt.provider_id,
+                    is_return: opt.is_return,
+                };
+            });
         } catch (error) {
         console.error("Error fetching shipping options:", error);
         throw error;

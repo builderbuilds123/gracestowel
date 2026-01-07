@@ -28,6 +28,18 @@ function normalizeCartCountryCodesMiddleware(
     next();
 }
 
+function moveTokenToHeaderMiddleware(
+    req: MedusaRequest,
+    res: MedusaResponse,
+    next: MedusaNextFunction
+) {
+    if (req.query.token) {
+        req.headers["x-modification-token"] = req.query.token as string;
+        delete req.query.token;
+    }
+    next();
+}
+
 /**
  * Global Error Handler Middleware (Story 4.4)
  *
@@ -55,9 +67,13 @@ function errorHandlerMiddleware(
     // Capture to PostHog (async, don't await)
     captureBackendError(error as Error, context);
 
-    // Let Medusa handle the response
-    // Pass to next error handler (Medusa's default)
-    next(error);
+    // Return JSON error response for debugging
+    const status = (error as any).status || (error as any).statusCode || 500;
+    res.status(status).json({
+        message: error.message,
+        code: (error as any).code || 'INTERNAL_ERROR',
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
 }
 
 /**
@@ -98,6 +114,10 @@ export default defineMiddlewares({
         {
             matcher: "/store/carts*",
             middlewares: [normalizeCartCountryCodesMiddleware],
+        },
+        {
+            matcher: "/store/orders/:id*",
+            middlewares: [moveTokenToHeaderMiddleware],
         },
         {
             // Global middleware to register subscribers on first request

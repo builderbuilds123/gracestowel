@@ -57,6 +57,16 @@
       }
       // Hyperdrive is injected by CI from HYPERDRIVE_ID secret
       // Secrets are set via: wrangler secret put <NAME> --env production
+    },
+    
+    // CI/Local testing environment
+    "ci": {
+      "name": "gracestowelstorefront-ci",
+      "vars": {
+        "ENVIRONMENT": "development",
+        "MEDUSA_BACKEND_URL": "http://backend:8080",
+        "MEDUSA_PUBLISHABLE_KEY": "placeholder"
+      }
     }
   }
 }

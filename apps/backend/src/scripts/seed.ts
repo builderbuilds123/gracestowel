@@ -61,6 +61,9 @@ export default async function seedDemoData({ container }: ExecArgs) {
   const fulfillmentModuleService = container.resolve(Modules.FULFILLMENT);
   const salesChannelModuleService = container.resolve(Modules.SALES_CHANNEL);
   const storeModuleService = container.resolve(Modules.STORE);
+  const regionModuleService = container.resolve(Modules.REGION);
+  const taxModuleService = container.resolve(Modules.TAX);
+  const stockLocationModuleService = container.resolve(Modules.STOCK_LOCATION);
 
   // Grace Stowel ships to US, Canada, and select European countries
   const countries = ["us", "ca", "gb", "de", "dk", "se", "fr", "es", "it"];
@@ -113,63 +116,134 @@ export default async function seedDemoData({ container }: ExecArgs) {
       },
     },
   });
+  
   logger.info("Seeding region data...");
-  const { result: regionResult } = await createRegionsWorkflow(container).run({
-    input: {
-      regions: [
-        {
-          name: "Canada",
-          currency_code: "cad",
-          countries: ["CA"],
-          payment_providers: ["pp_system_default"],
-        },
-        {
-          name: "United States",
-          currency_code: "usd",
-          countries: ["US"],
-          payment_providers: ["pp_system_default"],
-        },
-        {
-          name: "Europe",
-          currency_code: "eur",
-          countries: ["GB", "DE", "DK", "SE", "FR", "ES", "IT"],
-          payment_providers: ["pp_system_default"],
-        },
-      ],
+  // Check if regions already exist to make seed idempotent
+  const existingRegions = await regionModuleService.listRegions({});
+  const existingRegionNames = new Set(existingRegions.map((r) => r.name));
+  
+  const regionsToCreate = [
+    {
+      name: "Canada",
+      currency_code: "cad",
+      countries: ["CA"],
+      payment_providers: ["pp_system_default"],
     },
-  });
-  const regionCA = regionResult[0];
-  const regionUS = regionResult[1];
-  const regionEU = regionResult[2];
+    {
+      name: "United States",
+      currency_code: "usd",
+      countries: ["US"],
+      payment_providers: ["pp_system_default"],
+    },
+    {
+      name: "Europe",
+      currency_code: "eur",
+      countries: ["GB", "DE", "DK", "SE", "FR", "ES", "IT"],
+      payment_providers: ["pp_system_default"],
+    },
+  ].filter((region) => !existingRegionNames.has(region.name));
+
+  let regionCA, regionUS, regionEU;
+  
+  if (regionsToCreate.length > 0) {
+    const { result: regionResult } = await createRegionsWorkflow(container).run({
+      input: {
+        regions: regionsToCreate,
+      },
+    });
+    
+    // Map created regions to variables
+    for (const region of regionResult) {
+      if (region.name === "Canada") regionCA = region;
+      else if (region.name === "United States") regionUS = region;
+      else if (region.name === "Europe") regionEU = region;
+    }
+    
+    // If some regions already existed, fetch them
+    if (!regionCA || !regionUS || !regionEU) {
+      const allRegions = await regionModuleService.listRegions({});
+      regionCA = allRegions.find((r) => r.name === "Canada");
+      regionUS = allRegions.find((r) => r.name === "United States");
+      regionEU = allRegions.find((r) => r.name === "Europe");
+    }
+  } else {
+    // All regions already exist, fetch them
+    regionCA = existingRegions.find((r) => r.name === "Canada");
+    regionUS = existingRegions.find((r) => r.name === "United States");
+    regionEU = existingRegions.find((r) => r.name === "Europe");
+  }
+  
   logger.info("Finished seeding regions.");
+  
+  if (regionUS || regionCA || regionEU) {
+    // FIXME: The direct Remote Link 'region' <-> 'sales_channel' is not defined in Medusa V2 standard links.
+    // We cannot use link.create({ [Modules.REGION]: ..., [Modules.SALES_CHANNEL]: ... }) without a definition.
+    // Ideally we'd use a workflow, but none exists for this specific link in default exports.
+    // Proceeding without link; E2E tests may fail with 500s if context is invalid.
+    
+    // const links: any[] = [];
+    // if (regionUS) links.push({ [Modules.REGION]: { id: regionUS.id }, [Modules.SALES_CHANNEL]: { id: defaultSalesChannel[0].id } });
+    // if (regionCA) links.push({ [Modules.REGION]: { id: regionCA.id }, [Modules.SALES_CHANNEL]: { id: defaultSalesChannel[0].id } });
+    // if (regionEU) links.push({ [Modules.REGION]: { id: regionEU.id }, [Modules.SALES_CHANNEL]: { id: defaultSalesChannel[0].id } });
+    
+    // await link.create(links);
+    logger.warn("Skipping Region <-> Sales Channel linking due to missing link definition. This may cause 500 errors in E2E.");
+  }
 
   logger.info("Seeding tax regions...");
-  await createTaxRegionsWorkflow(container).run({
-    input: countries.map((country_code) => ({
+  // Check if tax regions already exist to make seed idempotent
+  const existingTaxRegions = await taxModuleService.listTaxRegions({});
+  const existingTaxRegionCountries = new Set(
+    existingTaxRegions.map((tr) => tr.country_code?.toLowerCase())
+  );
+  
+  const taxRegionsToCreate = countries
+    .map((country_code) => ({
       country_code,
       provider_id: "tp_system",
-    })),
-  });
+    }))
+    .filter((tr) => !existingTaxRegionCountries.has(tr.country_code.toLowerCase()));
+  
+  if (taxRegionsToCreate.length > 0) {
+    await createTaxRegionsWorkflow(container).run({
+      input: taxRegionsToCreate,
+    });
+  }
   logger.info("Finished seeding tax regions.");
 
   logger.info("Seeding stock location data...");
-  const { result: stockLocationResult } = await createStockLocationsWorkflow(
-    container
-  ).run({
-    input: {
-      locations: [
-        {
-          name: "Grace Stowel Warehouse",
-          address: {
-            city: "Los Angeles",
-            country_code: "US",
-            address_1: "",
-          },
-        },
-      ],
-    },
+
+  // Check if stock location already exists to make seed idempotent
+  const existingStockLocations = await stockLocationModuleService.listStockLocations({
+    name: "Grace Stowel Warehouse",
   });
-  const stockLocation = stockLocationResult[0];
+
+  let stockLocation;
+  let stockLocationCreated = false;
+  if (existingStockLocations.length > 0) {
+    stockLocation = existingStockLocations[0];
+    logger.info("Using existing stock location: Grace Stowel Warehouse");
+  } else {
+    const { result: stockLocationResult } = await createStockLocationsWorkflow(
+      container
+    ).run({
+      input: {
+        locations: [
+          {
+            name: "Grace Stowel Warehouse",
+            address: {
+              city: "Los Angeles",
+              country_code: "US",
+              address_1: "",
+            },
+          },
+        ],
+      },
+    });
+    stockLocation = stockLocationResult[0];
+    stockLocationCreated = true;
+    logger.info("Created stock location: Grace Stowel Warehouse");
+  }
 
   await updateStoresWorkflow(container).run({
     input: {
@@ -180,14 +254,17 @@ export default async function seedDemoData({ container }: ExecArgs) {
     },
   });
 
-  await link.create({
-    [Modules.STOCK_LOCATION]: {
-      stock_location_id: stockLocation.id,
-    },
-    [Modules.FULFILLMENT]: {
-      fulfillment_provider_id: "manual_manual",
-    },
-  });
+  // Only create link if stock location was just created (link would already exist otherwise)
+  if (stockLocationCreated) {
+    await link.create({
+      [Modules.STOCK_LOCATION]: {
+        stock_location_id: stockLocation.id,
+      },
+      [Modules.FULFILLMENT]: {
+        fulfillment_provider_id: "manual_manual",
+      },
+    });
+  }
 
   logger.info("Seeding fulfillment data...");
   const shippingProfiles = await fulfillmentModuleService.listShippingProfiles({
@@ -214,67 +291,84 @@ export default async function seedDemoData({ container }: ExecArgs) {
     throw new Error("Failed to create or find default shipping profile");
   }
 
-  const fulfillmentSet = await fulfillmentModuleService.createFulfillmentSets({
+  // Check if fulfillment set already exists to make seed idempotent
+  const existingFulfillmentSets = await fulfillmentModuleService.listFulfillmentSets({
     name: "Grace Stowel Global Delivery",
-    type: "shipping",
-    service_zones: [
-      {
-        name: "North America",
-        geo_zones: [
-          {
-            country_code: "us",
-            type: "country",
-          },
-          {
-            country_code: "ca",
-            type: "country",
-          },
-        ],
-      },
-      {
-        name: "Europe",
-        geo_zones: [
-          {
-            country_code: "gb",
-            type: "country",
-          },
-          {
-            country_code: "de",
-            type: "country",
-          },
-          {
-            country_code: "dk",
-            type: "country",
-          },
-          {
-            country_code: "se",
-            type: "country",
-          },
-          {
-            country_code: "fr",
-            type: "country",
-          },
-          {
-            country_code: "es",
-            type: "country",
-          },
-          {
-            country_code: "it",
-            type: "country",
-          },
-        ],
-      },
-    ],
   });
 
-  await link.create({
-    [Modules.STOCK_LOCATION]: {
-      stock_location_id: stockLocation.id,
-    },
-    [Modules.FULFILLMENT]: {
-      fulfillment_set_id: fulfillmentSet.id,
-    },
-  });
+  let fulfillmentSet;
+  let fulfillmentSetCreated = false;
+  if (existingFulfillmentSets.length > 0) {
+    fulfillmentSet = existingFulfillmentSets[0];
+    logger.info("Using existing fulfillment set: Grace Stowel Global Delivery");
+  } else {
+    fulfillmentSet = await fulfillmentModuleService.createFulfillmentSets({
+      name: "Grace Stowel Global Delivery",
+      type: "shipping",
+      service_zones: [
+        {
+          name: "North America",
+          geo_zones: [
+            {
+              country_code: "us",
+              type: "country",
+            },
+            {
+              country_code: "ca",
+              type: "country",
+            },
+          ],
+        },
+        {
+          name: "Europe",
+          geo_zones: [
+            {
+              country_code: "gb",
+              type: "country",
+            },
+            {
+              country_code: "de",
+              type: "country",
+            },
+            {
+              country_code: "dk",
+              type: "country",
+            },
+            {
+              country_code: "se",
+              type: "country",
+            },
+            {
+              country_code: "fr",
+              type: "country",
+            },
+            {
+              country_code: "es",
+              type: "country",
+            },
+            {
+              country_code: "it",
+              type: "country",
+            },
+          ],
+        },
+      ],
+    });
+    fulfillmentSetCreated = true;
+    logger.info("Created fulfillment set: Grace Stowel Global Delivery");
+  }
+
+  // Only create link if fulfillment set was just created (link would already exist otherwise)
+  if (fulfillmentSetCreated) {
+    await link.create({
+      [Modules.STOCK_LOCATION]: {
+        stock_location_id: stockLocation.id,
+      },
+      [Modules.FULFILLMENT]: {
+        fulfillment_set_id: fulfillmentSet.id,
+      },
+    });
+  }
 
   // Create shipping options for North America zone
   await createShippingOptionsWorkflow(container).run({

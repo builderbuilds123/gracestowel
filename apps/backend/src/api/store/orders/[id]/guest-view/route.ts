@@ -88,7 +88,7 @@ export async function GET(
                 "shipping_address.*", 
                 "metadata",
             ],
-            filters: { id },
+            filters: { id: id },
         });
 
         if (!orders.length) {
@@ -165,10 +165,11 @@ export async function GET(
             },
         });
     } catch (error) {
-        console.error("Error fetching guest order:", error);
+        console.error("Error fetching guest order for ID:", id, "Error:", error instanceof Error ? error.message : error);
         res.status(500).json({
             error: "Failed to fetch order",
             code: "INTERNAL_ERROR",
+            message: error instanceof Error ? error.message : "An unexpected error occurred"
         });
     }
 }

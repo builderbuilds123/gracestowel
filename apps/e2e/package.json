@@ -5,6 +5,7 @@
   "description": "End-to-end tests for Grace Stowel e-commerce platform",
   "scripts": {
     "test": "playwright test",
+    "test:e2e": "playwright test --project=chromium",
     "test:ui": "playwright test --ui",
     "test:headed": "playwright test --headed",
     "test:debug": "playwright test --debug",
@@ -18,6 +19,7 @@
     "@playwright/test": "1.57.0",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.10.0",
+    "dotenv": "^17.2.3",
     "jsonwebtoken": "^9.0.3"
   }
 }

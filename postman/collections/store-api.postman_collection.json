@@ -5,6 +5,49 @@
     "description": "Medusa Store API endpoints for storefront operations including products, carts, checkout, regions, and collections. These are public-facing endpoints used by the Grace Stowel storefront.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Load tv4 library for JSON schema validation",
+          "if (typeof tv4 === 'undefined') {",
+          "    pm.sendRequest({",
+          "        url: 'https://cdn.jsdelivr.net/npm/tv4@1.2.7/tv4.min.js',",
+          "        method: 'GET'",
+          "    }, function (err, res) {",
+          "        if (!err) {",
+          "            eval(res.text());",
+          "            pm.globals.set('tv4', tv4);",
+          "        } else {",
+          "            console.error('Failed to load tv4 library:', err);",
+          "        }",
+          "    });",
+          "} else {",
+          "    pm.globals.set('tv4', tv4);",
+          "}",
+          "",
+          "// Validate required environment variables",
+          "if (!pm.environment.get('base_url') && !pm.collectionVariables.get('base_url')) {",
+          "    console.warn('Warning: base_url not set in environment or collection variables');",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Ensure tv4 is available for tests",
+          "if (typeof tv4 === 'undefined' && pm.globals.get('tv4')) {",
+          "    tv4 = pm.globals.get('tv4');",
+          "}"
+        ]
+      }
+    }
+  ],
   "item": [
     {
       "name": "Products",
@@ -95,6 +138,28 @@
                   "    pm.expect(response.count).to.be.at.least(0);",
                   "    pm.expect(response.offset).to.be.at.least(0);",
                   "    pm.expect(response.limit).to.be.at.least(1);",
+                  "});",
+                  "",
+                  "// Error Response Schema - Contract Test",
+                  "const errorResponseSchema = {",
+                  "    type: 'object',",
+                  "    required: ['type', 'message'],",
+                  "    properties: {",
+                  "        type: { type: 'string' },",
+                  "        message: { type: 'string' },",
+                  "        code: { type: ['string', 'null'] }",
+                  "    }",
+                  "};",
+                  "",
+                  "pm.test('Contract Test: Error responses match schema (if applicable)', function () {",
+                  "    if (pm.response.code >= 400) {",
+                  "        const response = pm.response.json();",
+                  "        if (typeof tv4 !== 'undefined') {",
+                  "            pm.expect(tv4.validate(response, errorResponseSchema)).to.be.true;",
+                  "        } else {",
+                  "            pm.expect(response).to.have.property('message');",
+                  "        }",
+                  "    }",
                   "});"
                 ]
               }
@@ -152,6 +217,108 @@
         {
           "name": "Get Product by Handle",
           "id": "da7a3471-5987-449f-ab92-ef68de86e06c",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// JSON Schema for Product by Handle Response - Contract Test",
+                  "const productByHandleSchema = {",
+                  "    type: 'object',",
+                  "    required: ['products', 'count', 'offset', 'limit'],",
+                  "    properties: {",
+                  "        products: {",
+                  "            type: 'array',",
+                  "            items: {",
+                  "                type: 'object',",
+                  "                required: ['id', 'title', 'handle'],",
+                  "                properties: {",
+                  "                    id: { type: 'string' },",
+                  "                    title: { type: 'string' },",
+                  "                    handle: { type: 'string' },",
+                  "                    description: { type: ['string', 'null'] },",
+                  "                    thumbnail: { type: ['string', 'null'] },",
+                  "                    images: {",
+                  "                        type: 'array',",
+                  "                        items: {",
+                  "                            type: 'object',",
+                  "                            properties: {",
+                  "                                id: { type: 'string' },",
+                  "                                url: { type: 'string' }",
+                  "                            }",
+                  "                        }",
+                  "                    },",
+                  "                    variants: {",
+                  "                        type: 'array',",
+                  "                        items: {",
+                  "                            type: 'object',",
+                  "                            required: ['id'],",
+                  "                            properties: {",
+                  "                                id: { type: 'string' },",
+                  "                                title: { type: ['string', 'null'] },",
+                  "                                sku: { type: ['string', 'null'] },",
+                  "                                inventory_quantity: { type: 'number' },",
+                  "                                prices: {",
+                  "                                    type: 'array',",
+                  "                                    items: {",
+                  "                                        type: 'object',",
+                  "                                        properties: {",
+                  "                                            amount: { type: 'number' },",
+                  "                                            currency_code: { type: 'string' }",
+                  "                                        }",
+                  "                                    }",
+                  "                                }",
+                  "                            }",
+                  "                        }",
+                  "                    },",
+                  "                    options: {",
+                  "                        type: 'array',",
+                  "                        items: {",
+                  "                            type: 'object',",
+                  "                            properties: {",
+                  "                                id: { type: 'string' },",
+                  "                                title: { type: 'string' },",
+                  "                                values: {",
+                  "                                    type: 'array',",
+                  "                                    items: { type: 'string' }",
+                  "                                }",
+                  "                            }",
+                  "                        }",
+                  "                    }",
+                  "                }",
+                  "            }",
+                  "        },",
+                  "        count: { type: 'number' },",
+                  "        offset: { type: 'number' },",
+                  "        limit: { type: 'number' }",
+                  "    }",
+                  "};",
+                  "",
+                  "pm.test('Response status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Product by handle response matches schema', function () {",
+                  "    const response = pm.response.json();",
+                  "    if (typeof tv4 !== 'undefined') {",
+                  "        pm.expect(tv4.validate(response, productByHandleSchema)).to.be.true;",
+                  "        if (!tv4.validate(response, productByHandleSchema)) {",
+                  "            console.log('Schema validation error:', tv4.error);",
+                  "        }",
+                  "    } else {",
+                  "        pm.expect(response).to.have.property('products');",
+                  "        pm.expect(response.products).to.be.an('array');",
+                  "        if (response.products.length > 0) {",
+                  "            pm.expect(response.products[0]).to.have.property('id');",
+                  "            pm.expect(response.products[0]).to.have.property('title');",
+                  "        }",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [
@@ -228,8 +395,49 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Cart created successfully', function () {",
+                  "// JSON Schema for Create Cart Response - Contract Test",
+                  "const createCartSchema = {",
+                  "    type: 'object',",
+                  "    required: ['cart'],",
+                  "    properties: {",
+                  "        cart: {",
+                  "            type: 'object',",
+                  "            required: ['id'],",
+                  "            properties: {",
+                  "                id: { type: 'string' },",
+                  "                region_id: { type: ['string', 'null'] },",
+                  "                items: {",
+                  "                    type: 'array',",
+                  "                    items: {",
+                  "                        type: 'object'",
+                  "                    }",
+                  "                },",
+                  "                subtotal: { type: 'number' },",
+                  "                tax_total: { type: ['number', 'null'] },",
+                  "                shipping_total: { type: ['number', 'null'] },",
+                  "                total: { type: 'number' },",
+                  "                created_at: { type: 'string' },",
+                  "                updated_at: { type: 'string' }",
+                  "            }",
+                  "        }",
+                  "    }",
+                  "};",
+                  "",
+                  "pm.test('Response status is 200', function () {",
                   "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Create cart response matches schema', function () {",
+                  "    const response = pm.response.json();",
+                  "    if (typeof tv4 !== 'undefined') {",
+                  "        pm.expect(tv4.validate(response, createCartSchema)).to.be.true;",
+                  "        if (!tv4.validate(response, createCartSchema)) {",
+                  "            console.log('Schema validation error:', tv4.error);",
+                  "        }",
+                  "    } else {",
+                  "        pm.expect(response).to.have.property('cart');",
+                  "        pm.expect(response.cart).to.have.property('id');",
+                  "    }",
                   "});",
                   "",
                   "pm.test('Store cart_id in collection variables', function () {",
@@ -462,12 +670,57 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Line item added successfully', function () {",
+                  "// JSON Schema for Add Line Item Response - Contract Test",
+                  "const addLineItemSchema = {",
+                  "    type: 'object',",
+                  "    required: ['cart'],",
+                  "    properties: {",
+                  "        cart: {",
+                  "            type: 'object',",
+                  "            required: ['id', 'items'],",
+                  "            properties: {",
+                  "                id: { type: 'string' },",
+                  "                items: {",
+                  "                    type: 'array',",
+                  "                    items: {",
+                  "                        type: 'object',",
+                  "                        required: ['id', 'quantity'],",
+                  "                        properties: {",
+                  "                            id: { type: 'string' },",
+                  "                            variant_id: { type: ['string', 'null'] },",
+                  "                            quantity: { type: 'number' },",
+                  "                            unit_price: { type: 'number' },",
+                  "                            subtotal: { type: 'number' }",
+                  "                        }",
+                  "                    }",
+                  "                },",
+                  "                subtotal: { type: 'number' },",
+                  "                total: { type: 'number' }",
+                  "            }",
+                  "        }",
+                  "    }",
+                  "};",
+                  "",
+                  "pm.test('Response status is 200', function () {",
                   "    pm.response.to.have.status(200);",
                   "});",
                   "",
-                  "pm.test('Cart contains the added item', function () {",
+                  "pm.test('Contract Test: Add line item response matches schema', function () {",
                   "    const response = pm.response.json();",
+                  "    if (typeof tv4 !== 'undefined') {",
+                  "        pm.expect(tv4.validate(response, addLineItemSchema)).to.be.true;",
+                  "        if (!tv4.validate(response, addLineItemSchema)) {",
+                  "            console.log('Schema validation error:', tv4.error);",
+                  "        }",
+                  "    } else {",
+                  "        pm.expect(response).to.have.property('cart');",
+                  "        pm.expect(response.cart).to.have.property('items');",
+                  "    }",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Cart contains the added item', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.cart.items).to.be.an('array');",
                   "    pm.expect(response.cart.items.length).to.be.greaterThan(0);",
                   "});"
                 ]
@@ -989,6 +1242,90 @@
         {
           "name": "List Regions",
           "id": "d66d99d3-143a-4a0f-808e-30c7bbaa0d7d",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// JSON Schema for Regions List Response - Contract Test",
+                  "const regionsListSchema = {",
+                  "    type: 'object',",
+                  "    required: ['regions'],",
+                  "    properties: {",
+                  "        regions: {",
+                  "            type: 'array',",
+                  "            items: {",
+                  "                type: 'object',",
+                  "                required: ['id', 'name', 'currency_code'],",
+                  "                properties: {",
+                  "                    id: { type: 'string' },",
+                  "                    name: { type: 'string' },",
+                  "                    currency_code: { type: 'string' },",
+                  "                    tax_rate: { type: 'number' },",
+                  "                    tax_code: { type: ['string', 'null'] },",
+                  "                    countries: {",
+                  "                        type: 'array',",
+                  "                        items: {",
+                  "                            type: 'object',",
+                  "                            properties: {",
+                  "                                id: { type: 'number' },",
+                  "                                iso_2: { type: 'string' },",
+                  "                                iso_3: { type: 'string' },",
+                  "                                name: { type: 'string' },",
+                  "                                display_name: { type: 'string' }",
+                  "                            }",
+                  "                        }",
+                  "                    },",
+                  "                    payment_providers: {",
+                  "                        type: 'array',",
+                  "                        items: {",
+                  "                            type: 'object',",
+                  "                            properties: {",
+                  "                                id: { type: 'string' },",
+                  "                                is_installed: { type: 'boolean' }",
+                  "                            }",
+                  "                        }",
+                  "                    },",
+                  "                    fulfillment_providers: {",
+                  "                        type: 'array',",
+                  "                        items: {",
+                  "                            type: 'object',",
+                  "                            properties: {",
+                  "                                id: { type: 'string' },",
+                  "                                is_installed: { type: 'boolean' }",
+                  "                            }",
+                  "                        }",
+                  "                    }",
+                  "                }",
+                  "            }",
+                  "        },",
+                  "        count: { type: 'number' },",
+                  "        offset: { type: 'number' },",
+                  "        limit: { type: 'number' }",
+                  "    }",
+                  "};",
+                  "",
+                  "pm.test('Response status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Regions list response matches schema', function () {",
+                  "    const response = pm.response.json();",
+                  "    if (typeof tv4 !== 'undefined') {",
+                  "        pm.expect(tv4.validate(response, regionsListSchema)).to.be.true;",
+                  "        if (!tv4.validate(response, regionsListSchema)) {",
+                  "            console.log('Schema validation error:', tv4.error);",
+                  "        }",
+                  "    } else {",
+                  "        pm.expect(response).to.have.property('regions');",
+                  "        pm.expect(response.regions).to.be.an('array');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [
@@ -1047,6 +1384,57 @@
         {
           "name": "List Collections",
           "id": "ca7d18ff-4101-44d8-b979-297119cf129f",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// JSON Schema for Collections List Response - Contract Test",
+                  "const collectionsListSchema = {",
+                  "    type: 'object',",
+                  "    required: ['collections'],",
+                  "    properties: {",
+                  "        collections: {",
+                  "            type: 'array',",
+                  "            items: {",
+                  "                type: 'object',",
+                  "                required: ['id', 'title', 'handle'],",
+                  "                properties: {",
+                  "                    id: { type: 'string' },",
+                  "                    title: { type: 'string' },",
+                  "                    handle: { type: 'string' },",
+                  "                    created_at: { type: 'string' },",
+                  "                    updated_at: { type: 'string' }",
+                  "                }",
+                  "            }",
+                  "        },",
+                  "        count: { type: 'number' },",
+                  "        offset: { type: 'number' },",
+                  "        limit: { type: 'number' }",
+                  "    }",
+                  "};",
+                  "",
+                  "pm.test('Response status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Collections list response matches schema', function () {",
+                  "    const response = pm.response.json();",
+                  "    if (typeof tv4 !== 'undefined') {",
+                  "        pm.expect(tv4.validate(response, collectionsListSchema)).to.be.true;",
+                  "        if (!tv4.validate(response, collectionsListSchema)) {",
+                  "            console.log('Schema validation error:', tv4.error);",
+                  "        }",
+                  "    } else {",
+                  "        pm.expect(response).to.have.property('collections');",
+                  "        pm.expect(response.collections).to.be.an('array');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [
@@ -1098,6 +1486,746 @@
       ],
       "id": "b256074c-0903-456b-81e0-f839d4e90b3e",
       "description": "Product collection endpoints for browsing curated product groups"
+    },
+    {
+      "name": "Reviews",
+      "item": [
+        {
+          "name": "Get Product Reviews",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// JSON Schema for Product Reviews Response - Contract Test",
+                  "const productReviewsSchema = {",
+                  "    type: 'object',",
+                  "    required: ['reviews', 'stats', 'pagination'],",
+                  "    properties: {",
+                  "        reviews: {",
+                  "            type: 'array',",
+                  "            items: {",
+                  "                type: 'object',",
+                  "                required: ['id', 'rating', 'customer_name'],",
+                  "                properties: {",
+                  "                    id: { type: 'string' },",
+                  "                    customer_name: { type: 'string' },",
+                  "                    rating: {",
+                  "                        type: 'number',",
+                  "                        minimum: 1,",
+                  "                        maximum: 5",
+                  "                    },",
+                  "                    title: { type: ['string', 'null'] },",
+                  "                    content: { type: ['string', 'null'] },",
+                  "                    verified_purchase: { type: 'boolean' },",
+                  "                    helpful_count: { type: 'number' },",
+                  "                    created_at: { type: 'string' }",
+                  "                }",
+                  "            }",
+                  "        },",
+                  "        stats: {",
+                  "            type: 'object',",
+                  "            required: ['average', 'count'],",
+                  "            properties: {",
+                  "                average: { type: 'number' },",
+                  "                count: { type: 'number' },",
+                  "                distribution: {",
+                  "                    type: 'object',",
+                  "                    properties: {",
+                  "                        1: { type: 'number' },",
+                  "                        2: { type: 'number' },",
+                  "                        3: { type: 'number' },",
+                  "                        4: { type: 'number' },",
+                  "                        5: { type: 'number' }",
+                  "                    }",
+                  "                }",
+                  "            }",
+                  "        },",
+                  "        pagination: {",
+                  "            type: 'object',",
+                  "            required: ['total', 'limit', 'offset', 'has_more'],",
+                  "            properties: {",
+                  "                total: { type: 'number' },",
+                  "                limit: { type: 'number' },",
+                  "                offset: { type: 'number' },",
+                  "                has_more: { type: 'boolean' }",
+                  "            }",
+                  "        }",
+                  "    }",
+                  "};",
+                  "",
+                  "pm.test('Response status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Product reviews response matches schema', function () {",
+                  "    const response = pm.response.json();",
+                  "    if (typeof tv4 !== 'undefined') {",
+                  "        pm.expect(tv4.validate(response, productReviewsSchema)).to.be.true;",
+                  "        if (!tv4.validate(response, productReviewsSchema)) {",
+                  "            console.log('Schema validation error:', tv4.error);",
+                  "        }",
+                  "    } else {",
+                  "        pm.expect(response).to.have.property('reviews');",
+                  "        pm.expect(response).to.have.property('stats');",
+                  "        pm.expect(response).to.have.property('pagination');",
+                  "    }",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Review ratings are valid (1-5)', function () {",
+                  "    const response = pm.response.json();",
+                  "    response.reviews.forEach(function(review) {",
+                  "        pm.expect(review.rating).to.be.at.least(1);",
+                  "        pm.expect(review.rating).to.be.at.most(5);",
+                  "    });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "id": "review-get-product-reviews",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/store/products/{{product_id}}/reviews?limit=10&offset=0&sort=newest",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "store",
+                "products",
+                "{{product_id}}",
+                "reviews"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "Number of reviews per page (max 50)"
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Pagination offset"
+                },
+                {
+                  "key": "sort",
+                  "value": "newest",
+                  "description": "Sort order: newest, oldest, highest, lowest, helpful"
+                }
+              ]
+            },
+            "description": "Get reviews for a specific product with pagination and sorting options"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Product Review",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Response status is 200 or 400', function () {",
+                  "    pm.expect([200, 400, 401, 403]).to.include(pm.response.code);",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Create review response structure', function () {",
+                  "    if (pm.response.code === 200) {",
+                  "        const response = pm.response.json();",
+                  "        pm.expect(response).to.have.property('review');",
+                  "        pm.expect(response.review).to.have.property('id');",
+                  "        pm.expect(response.review).to.have.property('rating');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "id": "review-create",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rating\": 5,\n  \"title\": \"Great product!\",\n  \"content\": \"I love this towel. Very high quality.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/store/products/{{product_id}}/reviews",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "store",
+                "products",
+                "{{product_id}}",
+                "reviews"
+              ]
+            },
+            "description": "Create a new review for a product. Customer must be authenticated and have purchased the product."
+          },
+          "response": []
+        },
+        {
+          "name": "Mark Review as Helpful",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Response status is 200 or 400', function () {",
+                  "    pm.expect([200, 400, 404]).to.include(pm.response.code);",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Mark helpful response structure', function () {",
+                  "    if (pm.response.code === 200) {",
+                  "        const response = pm.response.json();",
+                  "        pm.expect(response).to.have.property('helpful_count');",
+                  "        pm.expect(response).to.have.property('user_voted');",
+                  "        pm.expect(response.user_voted).to.be.true;",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "id": "review-mark-helpful",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/store/reviews/{{review_id}}/helpful",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "store",
+                "reviews",
+                "{{review_id}}",
+                "helpful"
+              ]
+            },
+            "description": "Mark a review as helpful. Prevents duplicate votes (tracked by customer_id or IP address)."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Review Helpful Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Response status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Get helpful status response structure', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.have.property('helpful_count');",
+                  "    pm.expect(response).to.have.property('user_voted');",
+                  "    pm.expect(response.helpful_count).to.be.a('number');",
+                  "    pm.expect(response.user_voted).to.be.a('boolean');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "id": "review-get-helpful-status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/store/reviews/{{review_id}}/helpful",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "store",
+                "reviews",
+                "{{review_id}}",
+                "helpful"
+              ]
+            },
+            "description": "Check if current user has voted on this review and get helpful count."
+          },
+          "response": []
+        }
+      ],
+      "id": "reviews-section",
+      "description": "Product review endpoints for viewing and creating reviews"
+    },
+    {
+      "name": "Orders",
+      "item": [
+        {
+          "name": "Get Order by ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// JSON Schema for Get Order Response - Contract Test",
+                  "const getOrderSchema = {",
+                  "    type: 'object',",
+                  "    required: ['order', 'modification'],",
+                  "    properties: {",
+                  "        order: {",
+                  "            type: 'object',",
+                  "            required: ['id', 'email', 'status', 'currency_code', 'total'],",
+                  "            properties: {",
+                  "                id: { type: 'string' },",
+                  "                email: { type: 'string' },",
+                  "                status: { type: 'string' },",
+                  "                currency_code: { type: 'string' },",
+                  "                total: { type: 'number' },",
+                  "                subtotal: { type: 'number' },",
+                  "                tax_total: { type: ['number', 'null'] },",
+                  "                shipping_total: { type: ['number', 'null'] },",
+                  "                created_at: { type: 'string' },",
+                  "                items: {",
+                  "                    type: 'array',",
+                  "                    items: {",
+                  "                        type: 'object',",
+                  "                        required: ['id', 'quantity'],",
+                  "                        properties: {",
+                  "                            id: { type: 'string' },",
+                  "                            title: { type: 'string' },",
+                  "                            variant_title: { type: ['string', 'null'] },",
+                  "                            quantity: { type: 'number' },",
+                  "                            unit_price: { type: 'number' },",
+                  "                            thumbnail: { type: ['string', 'null'] }",
+                  "                        }",
+                  "                    }",
+                  "                },",
+                  "                shipping_address: { type: ['object', 'null'] },",
+                  "                payment_intent_id: { type: ['string', 'null'] }",
+                  "            }",
+                  "        },",
+                  "        modification: {",
+                  "            type: 'object',",
+                  "            required: ['can_modify', 'remaining_seconds', 'expires_at'],",
+                  "            properties: {",
+                  "                can_modify: { type: 'boolean' },",
+                  "                remaining_seconds: { type: 'number' },",
+                  "                expires_at: { type: 'string' }",
+                  "            }",
+                  "        }",
+                  "    }",
+                  "};",
+                  "",
+                  "pm.test('Response status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Get order response matches schema', function () {",
+                  "    const response = pm.response.json();",
+                  "    if (typeof tv4 !== 'undefined') {",
+                  "        pm.expect(tv4.validate(response, getOrderSchema)).to.be.true;",
+                  "        if (!tv4.validate(response, getOrderSchema)) {",
+                  "            console.log('Schema validation error:', tv4.error);",
+                  "        }",
+                  "    } else {",
+                  "        pm.expect(response).to.have.property('order');",
+                  "        pm.expect(response.order).to.have.property('id');",
+                  "    }",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Error response for missing token', function () {",
+                  "    if (pm.response.code === 400) {",
+                  "        const response = pm.response.json();",
+                  "        pm.expect(response).to.have.property('error');",
+                  "        pm.expect(response).to.have.property('code');",
+                  "        pm.expect(response.code).to.equal('TOKEN_REQUIRED');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "id": "order-get-by-id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-modification-token",
+                "value": "{{modification_token}}",
+                "type": "text",
+                "description": "Modification JWT token"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/store/orders/{{order_id}}?token={{modification_token}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "store",
+                "orders",
+                "{{order_id}}"
+              ],
+              "query": [
+                {
+                  "key": "token",
+                  "value": "{{modification_token}}",
+                  "description": "Modification JWT token (alternative to header)"
+                }
+              ]
+            },
+            "description": "Get order details with modification token. Token is required either as query parameter or x-modification-token header."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Order by Payment Intent",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// JSON Schema for Get Order by Payment Intent Response - Contract Test",
+                  "const getOrderByPaymentIntentSchema = {",
+                  "    type: 'object',",
+                  "    required: ['order'],",
+                  "    properties: {",
+                  "        order: {",
+                  "            type: 'object',",
+                  "            required: ['id', 'status'],",
+                  "            properties: {",
+                  "                id: { type: 'string' },",
+                  "                status: { type: 'string' }",
+                  "            }",
+                  "        }",
+                  "    }",
+                  "};",
+                  "",
+                  "pm.test('Response status is 200 or 404', function () {",
+                  "    pm.expect([200, 404]).to.include(pm.response.code);",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Order by payment intent response matches schema', function () {",
+                  "    if (pm.response.code === 200) {",
+                  "        const response = pm.response.json();",
+                  "        if (typeof tv4 !== 'undefined') {",
+                  "            pm.expect(tv4.validate(response, getOrderByPaymentIntentSchema)).to.be.true;",
+                  "        } else {",
+                  "            pm.expect(response).to.have.property('order');",
+                  "            pm.expect(response.order).to.have.property('id');",
+                  "        }",
+                  "    }",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: 404 response structure', function () {",
+                  "    if (pm.response.code === 404) {",
+                  "        const response = pm.response.json();",
+                  "        pm.expect(response).to.have.property('error');",
+                  "        pm.expect(response).to.have.property('code');",
+                  "        pm.expect(response.code).to.equal('ORDER_NOT_FOUND');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "id": "order-get-by-payment-intent",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/store/orders/by-payment-intent?payment_intent_id={{payment_intent_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "store",
+                "orders",
+                "by-payment-intent"
+              ],
+              "query": [
+                {
+                  "key": "payment_intent_id",
+                  "value": "{{payment_intent_id}}",
+                  "description": "Stripe PaymentIntent ID (starts with pi_)"
+                }
+              ]
+            },
+            "description": "Get order by Stripe PaymentIntent ID. Returns minimal order data (id and status only) for security."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Order Guest View",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// JSON Schema for Guest Order View Response - Contract Test",
+                  "const guestOrderViewSchema = {",
+                  "    type: 'object',",
+                  "    required: ['order', 'modification_window'],",
+                  "    properties: {",
+                  "        order: {",
+                  "            type: 'object',",
+                  "            required: ['id', 'display_id', 'status', 'currency_code', 'total'],",
+                  "            properties: {",
+                  "                id: { type: 'string' },",
+                  "                display_id: { type: 'number' },",
+                  "                email: { type: 'string' },",
+                  "                status: { type: 'string' },",
+                  "                currency_code: { type: 'string' },",
+                  "                total: { type: 'number' },",
+                  "                subtotal: { type: 'number' },",
+                  "                tax_total: { type: ['number', 'null'] },",
+                  "                shipping_total: { type: ['number', 'null'] },",
+                  "                created_at: { type: 'string' },",
+                  "                items: {",
+                  "                    type: 'array',",
+                  "                    items: {",
+                  "                        type: 'object'",
+                  "                    }",
+                  "                },",
+                  "                shipping_address: { type: ['object', 'null'] }",
+                  "            }",
+                  "        },",
+                  "        modification_window: {",
+                  "            type: 'object',",
+                  "            required: ['status', 'remaining_seconds', 'expires_at', 'server_time'],",
+                  "            properties: {",
+                  "                status: {",
+                  "                    type: 'string',",
+                  "                    enum: ['active', 'expired']",
+                  "                },",
+                  "                remaining_seconds: { type: 'number' },",
+                  "                expires_at: { type: 'string' },",
+                  "                server_time: { type: 'string' }",
+                  "            }",
+                  "        }",
+                  "    }",
+                  "};",
+                  "",
+                  "pm.test('Response status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Guest order view response matches schema', function () {",
+                  "    const response = pm.response.json();",
+                  "    if (typeof tv4 !== 'undefined') {",
+                  "        pm.expect(tv4.validate(response, guestOrderViewSchema)).to.be.true;",
+                  "        if (!tv4.validate(response, guestOrderViewSchema)) {",
+                  "            console.log('Schema validation error:', tv4.error);",
+                  "        }",
+                  "    } else {",
+                  "        pm.expect(response).to.have.property('order');",
+                  "        pm.expect(response).to.have.property('modification_window');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "id": "order-guest-view",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/store/orders/{{order_id}}/guest-view",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "store",
+                "orders",
+                "{{order_id}}",
+                "guest-view"
+              ]
+            },
+            "description": "Get order details for guest view (no authentication required). Email is masked for privacy."
+          },
+          "response": []
+        },
+        {
+          "name": "Cancel Order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Response status is 200 or 400', function () {",
+                  "    pm.expect([200, 400, 401, 403]).to.include(pm.response.code);",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Cancel order response structure', function () {",
+                  "    if (pm.response.code === 200) {",
+                  "        const response = pm.response.json();",
+                  "        pm.expect(response).to.have.property('order');",
+                  "        pm.expect(response.order).to.have.property('status');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "id": "order-cancel",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-modification-token",
+                "value": "{{modification_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Customer requested cancellation\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/store/orders/{{order_id}}/cancel",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "store",
+                "orders",
+                "{{order_id}}",
+                "cancel"
+              ]
+            },
+            "description": "Cancel an order. Requires valid modification token."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Order Address",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Response status is 200 or 400', function () {",
+                  "    pm.expect([200, 400, 401, 403]).to.include(pm.response.code);",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Update address response structure', function () {",
+                  "    if (pm.response.code === 200) {",
+                  "        const response = pm.response.json();",
+                  "        pm.expect(response).to.have.property('order');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "id": "order-update-address",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-modification-token",
+                "value": "{{modification_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"shipping_address\": {\n    \"first_name\": \"Jane\",\n    \"last_name\": \"Doe\",\n    \"address_1\": \"456 New St\",\n    \"city\": \"Los Angeles\",\n    \"province\": \"CA\",\n    \"postal_code\": \"90001\",\n    \"country_code\": \"us\",\n    \"phone\": \"555-5678\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/store/orders/{{order_id}}/address",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "store",
+                "orders",
+                "{{order_id}}",
+                "address"
+              ]
+            },
+            "description": "Update shipping address for an order. Requires valid modification token."
+          },
+          "response": []
+        }
+      ],
+      "id": "orders-section",
+      "description": "Order management endpoints for viewing and modifying orders"
     }
   ],
   "variable": [

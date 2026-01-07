@@ -60,9 +60,17 @@ COPY --from=builder /repo/apps/storefront/dist ./dist
 COPY --from=builder /repo/apps/storefront/package.json ./package.json
 COPY --from=builder /repo/apps/storefront/public ./public
 
+# Install wrangler in node_modules so pnpm script can find it
+RUN pnpm add wrangler@4
+
 RUN ln -s /app/node_modules /app/dist/server/node_modules
 
+# Copy script to generate .dev.vars from environment variables
+COPY apps/storefront/scripts/generate-dev-vars.sh /app/generate-dev-vars.sh
+RUN chmod +x /app/generate-dev-vars.sh
+
 EXPOSE 5173
+ENTRYPOINT ["/app/generate-dev-vars.sh"]
 CMD ["pnpm", "run", "test:server"]
 
 # Production image

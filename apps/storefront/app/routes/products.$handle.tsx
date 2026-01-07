@@ -65,6 +65,12 @@ async function fetchReviews(productId: string, backendUrl: string, sort = "newes
 
 export async function loader({ params, context }: Route.LoaderArgs) {
     const { handle } = params;
+    
+    // Debug Logging for CI
+    const medusaPk = context?.cloudflare?.env?.MEDUSA_PUBLISHABLE_KEY;
+    console.log(`[DEBUG] Loader products.$handle: handle=${handle}`);
+    console.log(`[DEBUG] MEDUSA_BACKEND_URL: ${context?.cloudflare?.env?.MEDUSA_BACKEND_URL}`);
+    console.log(`[DEBUG] MEDUSA_PUBLISHABLE_KEY: ${medusaPk ? medusaPk.substring(0, 10) + '...' : 'UNDEFINED'}`);
 
     if (!handle) {
         throw new Response("Product not found", { status: 404 });

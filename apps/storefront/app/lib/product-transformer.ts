@@ -24,6 +24,8 @@ export interface ProductListItem {
     image: string;
     description: string;
     colors: string[];
+    variantId?: string;      // First variant ID for cart operations
+    sku?: string;            // First variant SKU for cart operations
 }
 
 /**
@@ -102,7 +104,8 @@ export function transformToListItem(
 ): ProductListItem {
     const priceData = getProductPrice(product, currency);
     const colors = extractColors(product);
-    
+    const firstVariant = product.variants?.[0];
+
     return {
         id: product.id,
         handle: product.handle,
@@ -112,6 +115,8 @@ export function transformToListItem(
         image: product.images?.[0]?.url || product.thumbnail || "/placeholder.jpg",
         description: product.description || "",
         colors,
+        variantId: firstVariant?.id,
+        sku: firstVariant?.sku || undefined,
     };
 }
 

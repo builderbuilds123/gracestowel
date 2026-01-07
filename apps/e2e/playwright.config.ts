@@ -1,3 +1,7 @@
+import path from "path";
+import dotenv from "dotenv";
+
+dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 import { defineConfig, devices } from "@playwright/test";
 
 /**
@@ -14,11 +18,11 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   /* Retry on CI only */
   retries: process.env.CI ? 2 : 0,
-  /* Use single worker to avoid overwhelming the dev server */
-  workers: 1,
+  /* Use multiple workers in CI for faster execution, single worker locally to avoid overwhelming dev server */
+  workers: process.env.CI ? 4 : 1,
   /* Reporter to use */
   reporter: [
-    ["html", { outputFolder: "test-results/html", open: "never" }],
+    ["html", { outputFolder: "playwright-report", open: "never" }],
     ["junit", { outputFile: "test-results/junit.xml" }],
     ["json", { outputFile: "test-results/results.json" }],
     process.env.CI ? ["github"] : ["list"],
@@ -77,7 +81,7 @@ export default defineConfig({
   webServer: process.env.CI
     ? undefined
     : {
-        command: `cd ../.. && MEDUSA_PUBLISHABLE_KEY=${process.env.MEDUSA_PUBLISHABLE_KEY} CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE='${process.env.CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE}' npm run dev --workspace=apps/storefront`,
+        command: `cd ../.. && MEDUSA_PUBLISHABLE_KEY=${process.env.MEDUSA_PUBLISHABLE_KEY} CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE='${process.env.CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE || "postgresql://postgres:postgres@localhost:5432/medusa"}' pnpm --filter=apps-storefront dev`,
         url: "https://localhost:5173",
         reuseExistingServer: true,
         ignoreHTTPSErrors: true,

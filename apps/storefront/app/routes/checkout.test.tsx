@@ -26,6 +26,7 @@ vi.mock('../lib/stripe', () => ({
 
 vi.mock('../lib/price', () => ({
     parsePrice: (p: any) => Number(p),
+    toCents: (amount: number) => Math.round(amount * 100),
 }));
 
 // Mock Children

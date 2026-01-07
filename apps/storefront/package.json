@@ -16,7 +16,7 @@
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
-    "test:server": "cd dist/server && wrangler dev --port 5173 --ip 0.0.0.0"
+    "test:server": "printf \"MEDUSA_PUBLISHABLE_KEY=%s\\nMEDUSA_BACKEND_URL=%s\\nJWT_SECRET=%s\" \"$MEDUSA_PUBLISHABLE_KEY\" \"$MEDUSA_BACKEND_URL\" \"$JWT_SECRET\" > dist/server/.dev.vars && cd dist/server && wrangler dev --env ci --port 5173 --ip 0.0.0.0"
   },
   "dependencies": {
     "@medusajs/js-sdk": "^2.12.3",
@@ -32,6 +32,7 @@
     "react-dom": "^19.1.1",
     "react-leaflet": "^5.0.0",
     "react-router": "^7.11.0",
+    "react-router-dom": "7.11.0",
     "stripe": "^20.0.0",
     "web-vitals": "^5.1.0"
   },

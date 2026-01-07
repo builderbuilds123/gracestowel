@@ -49,8 +49,8 @@ services:
     environment:
       DATABASE_URL: postgresql://medusa_test:medusa_test@postgres:5432/medusa_test
       REDIS_URL: redis://redis:6379
-      JWT_SECRET: test-secret
-      COOKIE_SECRET: test-secret
+      JWT_SECRET: test-secret-must-be-at-least-32-characters-long-for-security
+      COOKIE_SECRET: test-cookie-secret-must-be-32-chars-minimum-too
       STORE_CORS: http://localhost:5174,https://localhost:5174
       ADMIN_CORS: http://localhost:7002
       AUTH_CORS: http://localhost:5174,https://localhost:5174
@@ -79,6 +79,7 @@ services:
     environment:
       MEDUSA_BACKEND_URL: http://backend:8080
       MEDUSA_PUBLISHABLE_KEY: ${MEDUSA_PUBLISHABLE_KEY}
+      JWT_SECRET: test-secret-must-be-at-least-32-characters-long-for-security
       NODE_ENV: development
       CI: "true"
       CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE: postgresql://medusa_test:medusa_test@postgres:5432/medusa_test
@@ -86,7 +87,8 @@ services:
       - "5174:5173"
     command: pnpm run test:server
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:5173/ -o /dev/null || exit 1"]
+      test:
+        ["CMD-SHELL", "curl -sf http://localhost:5173/ -o /dev/null || exit 1"]
       interval: 5s
       timeout: 10s
       retries: 20
@@ -94,21 +96,28 @@ services:
 
   # Playwright Test Runner
   playwright:
-    image: mcr.microsoft.com/playwright:v1.49.0-jammy
+    image: mcr.microsoft.com/playwright:v1.57.0-jammy
     container_name: gracestowel-playwright
     depends_on:
       storefront:
         condition: service_healthy
     environment:
       STOREFRONT_URL: http://storefront:5173
+      API_URL: http://backend:8080
       CI: "true"
+      MEDUSA_PUBLISHABLE_KEY: ${MEDUSA_PUBLISHABLE_KEY}
+      JWT_SECRET: test-secret-must-be-at-least-32-characters-long-for-security
+      ADMIN_TOKEN: ${ADMIN_TOKEN}
     volumes:
       - ./apps/e2e:/app
-      - ./apps/e2e/node_modules:/app/node_modules:ro
+      # Use anonymous volume for node_modules to avoid shadowing by host mount
+      - /app/node_modules
       - ./apps/e2e/test-results:/app/test-results
       - ./apps/e2e/playwright-report:/app/playwright-report
     working_dir: /app
-    command: npx playwright test --project=chromium --reporter=html
+    # Use pnpm for consistency with project (enable via corepack)
+    # Install dependencies and run tests
+    command: ["sh", "-c", "corepack enable && corepack prepare pnpm@9.15.2 --activate && pnpm install && pnpm exec playwright test --project=chromium --reporter=html"]
 
 networks:
   default:
