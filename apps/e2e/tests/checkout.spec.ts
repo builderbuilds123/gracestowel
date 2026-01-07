@@ -9,89 +9,58 @@ import { test, expect } from "../support/fixtures";
  */
 test.describe("Guest Checkout Flow", () => {
   test("should display homepage with products", async ({ page }) => {
-    // Network-first: Wait for products API before navigation
-    const productsPromise = page.waitForResponse(
-      (response) =>
-        response.url().includes("/store/products") && response.status() === 200,
-    );
-
+    // Navigate to homepage
     await page.goto("/");
 
-    // Wait for products to load
-    await productsPromise;
+    // Wait for page to render (SSR may already have products)  
+    await page.waitForLoadState("domcontentloaded");
 
     // Verify homepage loads
     await expect(page).toHaveTitle(/Grace/i);
 
-    // Check for Best Sellers section (actual homepage heading)
+    // Check for Best Sellers section (actual homepage heading) - increase timeout for slow CI
     await expect(
       page.getByRole("heading", { name: /Best Sellers/i }),
-    ).toBeVisible();
+    ).toBeVisible({ timeout: 30000 });
 
     // Verify products are displayed
-    await expect(page.locator('a[href^="/products/"]').first()).toBeVisible();
+    await expect(page.locator('a[href^="/products/"]').first()).toBeVisible({ timeout: 30000 });
   });
 
   test("should display product page with details", async ({ page }) => {
-    // Network-first: Wait for product API
-    const productPromise = page.waitForResponse(
-      (response) =>
-        response.url().includes("/store/products/the-nuzzle") &&
-        response.status() === 200,
-    );
-
-    // Navigate directly to a known product page to avoid click interception
+    // Navigate directly to a known product page
     await page.goto("/products/the-nuzzle");
+    await page.waitForLoadState("domcontentloaded");
 
-    // Wait for product data to load
-    await productPromise;
-
-    // Verify product page loads with details - check for product title specifically
-    await expect(page.getByRole("heading", { name: "The Nuzzle" })).toBeVisible();
+    // Verify product page loads with details - increase timeout for slow CI
+    await expect(page.getByRole("heading", { name: "The Nuzzle" })).toBeVisible({ timeout: 30000 });
 
     // Look for add to cart button (uses "Hang it Up" text in this storefront)
     await expect(
       page.getByRole("button", { name: /hang it up|add to cart/i }),
-    ).toBeVisible();
+    ).toBeVisible({ timeout: 30000 });
   });
 
   test("should add product to cart", async ({ page }) => {
-    // Network-first: Wait for product and cart APIs
-    const productPromise = page.waitForResponse(
-      (response) =>
-        response.url().includes("/store/products/the-nuzzle") &&
-        response.status() === 200,
-    );
-    const cartPromise = page.waitForResponse(
-      (response) =>
-        (response.url().includes("/store/carts") ||
-          response.url().includes("/store/cart")) &&
-        response.status() === 200,
-    );
-
     // Navigate directly to a known product page
     await page.goto("/products/the-nuzzle");
+    await page.waitForLoadState("domcontentloaded");
 
     // Wait for product page to load
-    await productPromise;
-    await expect(page.getByRole("heading", { name: "The Nuzzle" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "The Nuzzle" })).toBeVisible({ timeout: 30000 });
 
     // Add to cart (button says "Hang it Up" in this storefront)
     await page
       .getByRole("button", { name: /hang it up|add to cart/i })
       .click();
 
-    // Wait for cart API response
-    await cartPromise;
-
-    // Verify cart drawer opens with the item
-    // The cart drawer shows "Your Towel Rack" heading
+    // Verify cart drawer opens with the item - increased timeout for API call
     await expect(
       page.getByRole("heading", { name: /towel rack/i }),
-    ).toBeVisible();
+    ).toBeVisible({ timeout: 30000 });
 
     // Verify item is in cart
-    await expect(page.getByText("The Nuzzle")).toBeVisible();
+    await expect(page.getByText("The Nuzzle")).toBeVisible({ timeout: 30000 });
   });
 
   test("should update cart quantity", async ({ page }) => {

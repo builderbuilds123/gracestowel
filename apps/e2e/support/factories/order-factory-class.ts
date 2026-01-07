@@ -16,15 +16,21 @@ export class OrderFactory {
     const product = await productFactory.createProduct();
     const variantId = product.variants?.[0]?.id || (product as any).variant_id;
 
-    // 1. Get a valid region
+    // 1. Get a valid region - prefer US region since seed data has shipping prices for it
     const regions = await apiRequest<{ regions: any[] }>({
       request: this.request,
       method: "GET",
       url: "/admin/regions",
     });
-    const region = regions.regions[0];
+    // Prefer US region, fall back to first available
+    const usRegion = regions.regions.find(
+      (r) => r.countries?.some((c: any) => c.iso_2 === "us")
+    );
+    const region = usRegion || regions.regions[0];
     const regionId = region.id;
-    const countryCode = region.countries?.[0]?.iso_2 || "us";
+    const countryCode = region.countries?.find((c: any) => c.iso_2 === "us")?.iso_2 
+      || region.countries?.[0]?.iso_2 
+      || "us";
 
     // 2. Create Cart with region
     const cartResponse = await apiRequest<{ cart: { id: string } }>({
