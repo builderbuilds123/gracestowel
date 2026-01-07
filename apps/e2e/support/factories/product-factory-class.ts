@@ -61,13 +61,18 @@ export class ProductFactory {
         );
 
         // EXTRA CREDIT: Filter products that are linked to one of OUR publishable key's sales channels
+        let compatibleProducts = [];
         if (linkedSalesChannelIds.length > 0) {
-          const compatibleProducts = validProducts.filter(p => 
-            p.sales_channels.some((sc: any) => linkedSalesChannelIds.includes(sc.id))
+          // Stricter filtering: must have at least one variant with price/inventory AND at least one sales channel
+          compatibleProducts = validProducts.filter(p => 
+            p.sales_channels && p.sales_channels.length > 0 &&
+            (linkedSalesChannelIds.length === 0 || p.sales_channels.some((sc: any) => linkedSalesChannelIds.includes(sc.id)))
           );
-          if (compatibleProducts.length > 0) {
+
+          if (compatibleProducts.length === 0 && validProducts.length > 0) {
+            console.warn(`[ProductFactory] No cross-compatible products found with PK. Using first valid product regardless of PK sales channel linkage.`);
+          } else if (compatibleProducts.length > 0) {
             console.log(`Found ${compatibleProducts.length} products compatible with the current publishable key`);
-            validProducts = compatibleProducts;
           } else {
             console.warn('No products found that match the current publishable key\'s sales channels!');
           }

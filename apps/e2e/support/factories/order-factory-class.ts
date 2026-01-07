@@ -35,9 +35,17 @@ export class OrderFactory {
     }
 
     // 3. Find a region linked to this sales channel
+    // In V2, a region is linked to 1 or more sales channels.
     const region = regionsResponse.regions.find(r => 
       r.sales_channels?.some((sc: any) => sc.id === salesChannelId)
     ) || regionsResponse.regions[0];
+
+    if (!region) {
+      throw new Error("No regions found in the system. Seed may have failed.");
+    }
+    
+    // Log for debugging
+    console.log(`[OrderFactory] Selected Region: ${region.name} (${region.id}) for Sales Channel: ${salesChannelId}`);
 
     const regionId = region.id;
     const countryCode = region.countries?.find((c: any) => c.iso_2 === "us")?.iso_2 
