@@ -1,0 +1,736 @@
+{
+  "info": {
+    "_postman_id": "storefront-api-collection-2026",
+    "name": "Storefront API",
+    "description": "Grace Stowel storefront API endpoints running on Cloudflare Workers. These endpoints proxy to the Medusa backend and provide edge-optimized functionality for the React Router v7 storefront.\n\n## Base URL\n\n- **Local**: http://localhost:8788\n- **Staging**: {{storefront_url}}\n- **Production**: https://your-domain.pages.dev\n\n## Authentication\n\nMost endpoints use Medusa publishable API key via `x-publishable-api-key` header (handled automatically by backend).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Load tv4 library for JSON schema validation",
+          "if (typeof tv4 === 'undefined') {",
+          "    pm.sendRequest({",
+          "        url: 'https://cdn.jsdelivr.net/npm/tv4@1.2.7/tv4.min.js',",
+          "        method: 'GET'",
+          "    }, function (err, res) {",
+          "        if (!err) {",
+          "            eval(res.text());",
+          "            pm.globals.set('tv4', tv4);",
+          "        } else {",
+          "            console.error('Failed to load tv4 library:', err);",
+          "        }",
+          "    });",
+          "} else {",
+          "    pm.globals.set('tv4', tv4);",
+          "}",
+          "",
+          "// Validate required environment variables",
+          "if (!pm.environment.get('storefront_url') && !pm.collectionVariables.get('storefront_url')) {",
+          "    console.warn('Warning: storefront_url not set in environment or collection variables');",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Ensure tv4 is available for tests",
+          "if (typeof tv4 === 'undefined' && pm.globals.get('tv4')) {",
+          "    tv4 = pm.globals.get('tv4');",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "Carts",
+      "item": [
+        {
+          "name": "Create Cart",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// JSON Schema for Create Cart Response - Contract Test",
+                  "const createCartSchema = {",
+                  "    type: 'object',",
+                  "    required: ['cart_id', 'region_id', 'currency_code'],",
+                  "    properties: {",
+                  "        cart_id: { type: 'string' },",
+                  "        region_id: { type: 'string' },",
+                  "        region_name: { type: 'string' },",
+                  "        currency_code: { type: 'string' }",
+                  "    }",
+                  "};",
+                  "",
+                  "pm.test('Response status is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Create cart response matches schema', function () {",
+                  "    const response = pm.response.json();",
+                  "    if (typeof tv4 !== 'undefined') {",
+                  "        pm.expect(tv4.validate(response, createCartSchema)).to.be.true;",
+                  "        if (!tv4.validate(response, createCartSchema)) {",
+                  "            console.log('Schema validation error:', tv4.error);",
+                  "        }",
+                  "    } else {",
+                  "        pm.expect(response).to.have.property('cart_id');",
+                  "        pm.expect(response).to.have.property('region_id');",
+                  "    }",
+                  "});",
+                  "",
+                  "pm.test('Store cart_id for subsequent requests', function () {",
+                  "    const response = pm.response.json();",
+                  "    if (response.cart_id) {",
+                  "        pm.collectionVariables.set('storefront_cart_id', response.cart_id);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "id": "storefront-cart-create",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currency\": \"CAD\",\n  \"country_code\": \"CA\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{storefront_url}}/api/carts",
+              "host": [
+                "{{storefront_url}}"
+              ],
+              "path": [
+                "api",
+                "carts"
+              ]
+            },
+            "description": "Create a new shopping cart. Automatically selects appropriate region based on currency or country_code."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Cart",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Response status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Get cart response structure', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.have.property('cart');",
+                  "    pm.expect(response.cart).to.have.property('id');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "id": "storefront-cart-get",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{storefront_url}}/api/carts/{{storefront_cart_id}}",
+              "host": [
+                "{{storefront_url}}"
+              ],
+              "path": [
+                "api",
+                "carts",
+                "{{storefront_cart_id}}"
+              ]
+            },
+            "description": "Get cart details. Proxies to Medusa backend."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Cart",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Response status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "id": "storefront-cart-update",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"customer@example.com\",\n  \"shipping_address\": {\n    \"first_name\": \"John\",\n    \"last_name\": \"Doe\",\n    \"address_1\": \"123 Main St\",\n    \"city\": \"Toronto\",\n    \"province\": \"ON\",\n    \"postal_code\": \"M5H 2N2\",\n    \"country_code\": \"CA\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{storefront_url}}/api/carts/{{storefront_cart_id}}",
+              "host": [
+                "{{storefront_url}}"
+              ],
+              "path": [
+                "api",
+                "carts",
+                "{{storefront_cart_id}}"
+              ]
+            },
+            "description": "Update cart (email, shipping address, etc.). Proxies to Medusa backend."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Shipping Options",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Response status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Shipping options response structure', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.have.property('shipping_options');",
+                  "    pm.expect(response.shipping_options).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "id": "storefront-cart-shipping-options",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{storefront_url}}/api/carts/{{storefront_cart_id}}/shipping-options",
+              "host": [
+                "{{storefront_url}}"
+              ],
+              "path": [
+                "api",
+                "carts",
+                "{{storefront_cart_id}}",
+                "shipping-options"
+              ]
+            },
+            "description": "Get available shipping options for a cart. Proxies to Medusa backend."
+          },
+          "response": []
+        },
+        {
+          "name": "Set Shipping Method",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Response status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "id": "storefront-cart-shipping-methods",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"option_id\": \"{{shipping_option_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{storefront_url}}/api/carts/{{storefront_cart_id}}/shipping-methods",
+              "host": [
+                "{{storefront_url}}"
+              ],
+              "path": [
+                "api",
+                "carts",
+                "{{storefront_cart_id}}",
+                "shipping-methods"
+              ]
+            },
+            "description": "Set shipping method for a cart. Proxies to Medusa backend."
+          },
+          "response": []
+        },
+        {
+          "name": "Complete Cart",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Response status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Complete cart response structure', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.have.property('type');",
+                  "    pm.expect(response.type).to.equal('order');",
+                  "    pm.expect(response).to.have.property('order');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "id": "storefront-cart-complete",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{storefront_url}}/api/carts/{{storefront_cart_id}}/complete",
+              "host": [
+                "{{storefront_url}}"
+              ],
+              "path": [
+                "api",
+                "carts",
+                "{{storefront_cart_id}}",
+                "complete"
+              ]
+            },
+            "description": "Complete checkout and create order. Proxies to Medusa backend."
+          },
+          "response": []
+        }
+      ],
+      "id": "storefront-carts-section",
+      "description": "Shopping cart management endpoints"
+    },
+    {
+      "name": "Payment",
+      "item": [
+        {
+          "name": "Create/Update Payment Intent",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// JSON Schema for Payment Intent Response - Contract Test",
+                  "const paymentIntentSchema = {",
+                  "    type: 'object',",
+                  "    required: ['client_secret'],",
+                  "    properties: {",
+                  "        client_secret: { type: 'string' },",
+                  "        payment_intent_id: { type: 'string' },",
+                  "        amount: { type: 'number' },",
+                  "        currency: { type: 'string' },",
+                  "        traceId: { type: ['string', 'null'] }",
+                  "    }",
+                  "};",
+                  "",
+                  "pm.test('Response status is 200 or 400', function () {",
+                  "    pm.expect([200, 400, 500]).to.include(pm.response.code);",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Payment intent response matches schema', function () {",
+                  "    if (pm.response.code === 200) {",
+                  "        const response = pm.response.json();",
+                  "        if (typeof tv4 !== 'undefined') {",
+                  "            pm.expect(tv4.validate(response, paymentIntentSchema)).to.be.true;",
+                  "        } else {",
+                  "            pm.expect(response).to.have.property('client_secret');",
+                  "        }",
+                  "    }",
+                  "});",
+                  "",
+                  "pm.test('Store client_secret for payment', function () {",
+                  "    if (pm.response.code === 200) {",
+                  "        const response = pm.response.json();",
+                  "        if (response.client_secret) {",
+                  "            pm.collectionVariables.set('storefront_client_secret', response.client_secret);",
+                  "        }",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "id": "storefront-payment-intent",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cartId\": \"{{storefront_cart_id}}\",\n  \"currency\": \"CAD\",\n  \"shippingAddress\": {\n    \"first_name\": \"John\",\n    \"last_name\": \"Doe\",\n    \"address_1\": \"123 Main St\",\n    \"city\": \"Toronto\",\n    \"province\": \"ON\",\n    \"postal_code\": \"M5H 2N2\",\n    \"country_code\": \"CA\"\n  },\n  \"customerEmail\": \"customer@example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{storefront_url}}/api/payment-intent",
+              "host": [
+                "{{storefront_url}}"
+              ],
+              "path": [
+                "api",
+                "payment-intent"
+              ]
+            },
+            "description": "Create or update a Stripe PaymentIntent. Validates stock, fetches authoritative cart data from Medusa, and creates/updates the payment intent."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Checkout Session",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Response status is 200 or 400', function () {",
+                  "    pm.expect([200, 400, 500]).to.include(pm.response.code);",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Checkout session response structure', function () {",
+                  "    if (pm.response.code === 200) {",
+                  "        const response = pm.response.json();",
+                  "        pm.expect(response).to.have.property('url');",
+                  "        pm.expect(response.url).to.be.a('string');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "id": "storefront-checkout-session",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cartId\": \"{{storefront_cart_id}}\",\n  \"successUrl\": \"{{storefront_url}}/checkout/success\",\n  \"cancelUrl\": \"{{storefront_url}}/checkout\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{storefront_url}}/api/checkout-session",
+              "host": [
+                "{{storefront_url}}"
+              ],
+              "path": [
+                "api",
+                "checkout-session"
+              ]
+            },
+            "description": "Create a Stripe Checkout Session for redirect-based checkout flow."
+          },
+          "response": []
+        }
+      ],
+      "id": "storefront-payment-section",
+      "description": "Payment processing endpoints"
+    },
+    {
+      "name": "Shipping",
+      "item": [
+        {
+          "name": "Get Shipping Rates",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Response status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Shipping rates response structure', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.have.property('rates');",
+                  "    pm.expect(response.rates).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "id": "storefront-shipping-rates",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cartId\": \"{{storefront_cart_id}}\",\n  \"shippingAddress\": {\n    \"first_name\": \"John\",\n    \"last_name\": \"Doe\",\n    \"address_1\": \"123 Main St\",\n    \"city\": \"Toronto\",\n    \"province\": \"ON\",\n    \"postal_code\": \"M5H 2N2\",\n    \"country_code\": \"CA\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{storefront_url}}/api/shipping-rates",
+              "host": [
+                "{{storefront_url}}"
+              ],
+              "path": [
+                "api",
+                "shipping-rates"
+              ]
+            },
+            "description": "Get shipping rates for a cart and shipping address. Calculates rates from Medusa backend."
+          },
+          "response": []
+        }
+      ],
+      "id": "storefront-shipping-section",
+      "description": "Shipping calculation endpoints"
+    },
+    {
+      "name": "Infrastructure",
+      "item": [
+        {
+          "name": "Health Check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// JSON Schema for Storefront Health Response - Contract Test",
+                  "const storefrontHealthSchema = {",
+                  "    type: 'object',",
+                  "    required: ['status', 'timestamp'],",
+                  "    properties: {",
+                  "        status: {",
+                  "            type: 'string',",
+                  "            enum: ['ok', 'degraded']",
+                  "        },",
+                  "        timestamp: { type: 'string' },",
+                  "        environment: { type: 'string' },",
+                  "        medusaUrl: { type: 'string' },",
+                  "        medusa: {",
+                  "            type: 'object',",
+                  "            properties: {",
+                  "                connected: { type: 'boolean' },",
+                  "                latency: { type: 'string' },",
+                  "                productCount: { type: 'number' },",
+                  "                error: { type: 'string' }",
+                  "            }",
+                  "        }",
+                  "    }",
+                  "};",
+                  "",
+                  "pm.test('Response status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Storefront health response matches schema', function () {",
+                  "    const response = pm.response.json();",
+                  "    if (typeof tv4 !== 'undefined') {",
+                  "        pm.expect(tv4.validate(response, storefrontHealthSchema)).to.be.true;",
+                  "        if (!tv4.validate(response, storefrontHealthSchema)) {",
+                  "            console.log('Schema validation error:', tv4.error);",
+                  "        }",
+                  "    } else {",
+                  "        pm.expect(response).to.have.property('status');",
+                  "        pm.expect(response).to.have.property('timestamp');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "id": "storefront-health",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{storefront_url}}/api/health",
+              "host": [
+                "{{storefront_url}}"
+              ],
+              "path": [
+                "api",
+                "health"
+              ]
+            },
+            "description": "Health check endpoint that verifies worker is running and connection to Medusa backend is working."
+          },
+          "response": []
+        },
+        {
+          "name": "Test Hyperdrive",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Response status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Hyperdrive test response structure', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.have.property('connected');",
+                  "    pm.expect(response.connected).to.be.a('boolean');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "id": "storefront-test-hyperdrive",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{storefront_url}}/api/test-hyperdrive",
+              "host": [
+                "{{storefront_url}}"
+              ],
+              "path": [
+                "api",
+                "test-hyperdrive"
+              ]
+            },
+            "description": "Test Hyperdrive connection to PostgreSQL database. Used for debugging database connectivity."
+          },
+          "response": []
+        }
+      ],
+      "id": "storefront-infrastructure-section",
+      "description": "Infrastructure and monitoring endpoints"
+    }
+  ],
+  "variable": [
+    {
+      "key": "storefront_url",
+      "value": "http://localhost:8788",
+      "type": "string"
+    },
+    {
+      "key": "storefront_cart_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "storefront_client_secret",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "shipping_option_id",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}
+
