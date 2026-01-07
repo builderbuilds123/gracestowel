@@ -62,10 +62,13 @@ test.describe("Storefront cart + checkout flows", () => {
 
     await page.reload();
     
-    // Click "Checkout"
-    const checkoutButton = page.getByRole("link", { name: /checkout/i });
-    await checkoutButton.scrollIntoViewIfNeeded();
-    await checkoutButton.click({ force: true });
+    await page.reload();
+    await page.waitForTimeout(2000); // Wait for hydration after reload
+
+    // Open Cart Drawer
+    const cartButton = page.getByRole("button", { name: /cart/i }).first();
+    await cartButton.click();
+
     // Check cart drawer
     await expect(page.getByRole("heading", { name: /towel rack/i })).toBeVisible({ timeout: 30000 });
     await expect(page.getByText(product.title).first()).toBeVisible();

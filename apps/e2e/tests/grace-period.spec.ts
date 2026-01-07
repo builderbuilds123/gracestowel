@@ -166,6 +166,9 @@ test.beforeEach(async () => {
           { algorithm: "HS256" }
       );
   }
+  
+  const secret = process.env.JWT_SECRET || "undefined";
+  console.log(`DEBUG: Validating JWT_SECRET in Test Runner: ${secret.substring(0, 4)}*** (Length: ${secret.length})`);
 });
 
 // Helper for dynamic token generation
@@ -265,7 +268,13 @@ test.describe("AC2 & AC3: Magic Link & Cookie Persistence", () => {
 
     // Order status page shows "Link Expired" heading (line 224 of order_.status.$id.tsx)
     const expiredHeading = page.getByRole("heading", { name: /Link Expired/i });
-    await expect(expiredHeading).toBeVisible({ timeout: 30000 });
+    try {
+      await expect(expiredHeading).toBeVisible({ timeout: 30000 });
+    } catch (e) {
+      console.log("DEBUG: Link Expired check failed. Page content dump:");
+      console.log(await page.content());
+      throw e;
+    }
 
     // Should also see "Request New Link" button
     await expect(

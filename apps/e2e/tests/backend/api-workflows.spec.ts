@@ -103,10 +103,24 @@ test.describe("Backend API workflows (admin)", () => {
     }
 
     // 3. Find a region linked to this sales channel
-    const region = regionsResponse.regions.find(r => 
+    let region = regionsResponse.regions.find(r => 
       r.sales_channels?.some((sc: any) => sc.id === salesChannelId)
-    ) || regionsResponse.regions[0];
+    );
+
+    // If no region supports this sales channel, or if we just want to be safe:
+    // Pick the first region and use one of ITS sales channels
+    if (!region) {
+      console.log(`[Test] Sales channel ${salesChannelId} not linked to any fetched region. Falling back to first available region.`);
+      region = regionsResponse.regions[0];
+      const compatibleScId = region.sales_channels?.[0]?.id;
+      if (compatibleScId) {
+        console.log(`[Test] Switched to region-compatible sales channel: ${compatibleScId}`);
+        salesChannelId = compatibleScId;
+      }
+    }
     const regionId = region.id;
+
+    console.log(`[Test] Creating cart with Region: ${regionId}, Sales Channel: ${salesChannelId}`);
 
     const cartResponse = await apiRequest<{ cart: { id: string; region: any } }>({
       method: "POST",

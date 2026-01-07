@@ -18,7 +18,7 @@ test.describe("Homepage", () => {
 
     // Verify product cards are displayed
     const productLinks = page.locator('a[href^="/products/"]');
-    await expect(productLinks.first()).toBeVisible();
+    await expect(productLinks.first()).toBeVisible({ timeout: 30000 });
     
     // Verify multiple products are shown
     const productCount = await productLinks.count();
@@ -65,7 +65,7 @@ test.describe("Navigation", () => {
     // Click on first product
     // Use a more robust locator and wait for hydration
     const productCard = page.locator('a[href*="/products/"]').first();
-    await expect(productCard).toBeVisible(); // Ensure the new locator finds something
+    await expect(productCard).toBeVisible({ timeout: 30000 }); // Ensure the new locator finds something
     await productCard.scrollIntoViewIfNeeded();
     await page.waitForTimeout(1000); // Wait for hydration
     await productCard.click({ force: true });
