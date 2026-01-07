@@ -16,21 +16,12 @@ export class OrderFactory {
     const product = await productFactory.createProduct();
     const variantId = product.variants?.[0]?.id || (product as any).variant_id;
 
-    // 1. Get a valid region - prefer US region since seed data has shipping prices for it
-    const regions = await apiRequest<{ regions: any[] }>({
+    // 1. Get regions with their linked sales channels
+    const regionsResponse = await apiRequest<{ regions: any[] }>({
       request: this.request,
       method: "GET",
-      url: "/admin/regions",
+      url: "/admin/regions?fields=+countries,+sales_channels",
     });
-    // Prefer US region, fall back to first available
-    const usRegion = regions.regions.find(
-      (r) => r.countries?.some((c: any) => c.iso_2 === "us")
-    );
-    const region = usRegion || regions.regions[0];
-    const regionId = region.id;
-    const countryCode = region.countries?.find((c: any) => c.iso_2 === "us")?.iso_2 
-      || region.countries?.[0]?.iso_2 
-      || "us";
 
     // 2. Get Sales Channel (Prefer one associated with the product)
     let salesChannelId = (product as any).sales_channel_id;
@@ -42,6 +33,16 @@ export class OrderFactory {
       });
       salesChannelId = salesChannelsInput.sales_channels?.[0]?.id;
     }
+
+    // 3. Find a region linked to this sales channel
+    const region = regionsResponse.regions.find(r => 
+      r.sales_channels?.some((sc: any) => sc.id === salesChannelId)
+    ) || regionsResponse.regions[0];
+
+    const regionId = region.id;
+    const countryCode = region.countries?.find((c: any) => c.iso_2 === "us")?.iso_2 
+      || region.countries?.[0]?.iso_2 
+      || "us";
 
     // 3. Create Cart with region and sales channel
     const cartResponse = await apiRequest<{ cart: { id: string } }>({

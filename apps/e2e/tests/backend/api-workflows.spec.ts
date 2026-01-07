@@ -86,15 +86,12 @@ test.describe("Backend API workflows (admin)", () => {
 
     const variantId = product.variants?.[0]?.id || (product as any).variant_id;
 
-    // 1. Get a valid region (Preferably US to match ShippingFactory defaults)
-    const regions = await apiRequest<{ regions: any[] }>({
+    // 1. Get regions with their linked sales channels
+    const regionsResponse = await apiRequest<{ regions: any[] }>({
       method: "GET",
-      url: "/admin/regions",
+      url: "/admin/regions?fields=+countries,+sales_channels",
     });
-    const region = regions.regions.find(r => r.name === "United States") || regions.regions[0];
-    const regionId = region.id;
 
-    // 1.5 Get Sales Channel
     // 2. Get Sales Channel (Prefer one associated with the product)
     let salesChannelId = (product as any).sales_channel_id;
     if (!salesChannelId) {
@@ -104,6 +101,12 @@ test.describe("Backend API workflows (admin)", () => {
       });
       salesChannelId = salesChannelsInput.sales_channels?.[0]?.id;
     }
+
+    // 3. Find a region linked to this sales channel
+    const region = regionsResponse.regions.find(r => 
+      r.sales_channels?.some((sc: any) => sc.id === salesChannelId)
+    ) || regionsResponse.regions[0];
+    const regionId = region.id;
 
     const cartResponse = await apiRequest<{ cart: { id: string; region: any } }>({
       method: "POST",
