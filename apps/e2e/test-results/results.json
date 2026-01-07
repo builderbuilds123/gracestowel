@@ -2,7 +2,7 @@
   "config": {
     "configFile": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/playwright.config.ts",
     "rootDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/tests",
-    "forbidOnly": true,
+    "forbidOnly": false,
     "fullyParallel": true,
     "globalSetup": null,
     "globalTeardown": null,
@@ -35,7 +35,7 @@
         }
       ],
       [
-        "github",
+        "list",
         null
       ]
     ],
@@ -48,13 +48,13 @@
       {
         "outputDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results",
         "repeatEach": 1,
-        "retries": 2,
+        "retries": 0,
         "metadata": {
           "actualWorkers": 1
         },
-        "id": "storefront-chromium",
-        "name": "storefront-chromium",
-        "testDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/tests/storefront",
+        "id": "chromium",
+        "name": "chromium",
+        "testDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/tests",
         "testIgnore": [],
         "testMatch": [
           "**/*.@(spec|test).?(c|m)[jt]s?(x)"
@@ -64,13 +64,13 @@
       {
         "outputDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results",
         "repeatEach": 1,
-        "retries": 2,
+        "retries": 0,
         "metadata": {
           "actualWorkers": 1
         },
-        "id": "storefront-firefox",
-        "name": "storefront-firefox",
-        "testDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/tests/storefront",
+        "id": "firefox",
+        "name": "firefox",
+        "testDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/tests",
         "testIgnore": [],
         "testMatch": [
           "**/*.@(spec|test).?(c|m)[jt]s?(x)"
@@ -80,13 +80,13 @@
       {
         "outputDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results",
         "repeatEach": 1,
-        "retries": 2,
+        "retries": 0,
         "metadata": {
           "actualWorkers": 1
         },
-        "id": "storefront-webkit",
-        "name": "storefront-webkit",
-        "testDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/tests/storefront",
+        "id": "webkit",
+        "name": "webkit",
+        "testDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/tests",
         "testIgnore": [],
         "testMatch": [
           "**/*.@(spec|test).?(c|m)[jt]s?(x)"
@@ -96,13 +96,13 @@
       {
         "outputDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results",
         "repeatEach": 1,
-        "retries": 2,
+        "retries": 0,
         "metadata": {
           "actualWorkers": 1
         },
-        "id": "storefront-mobile-chrome",
-        "name": "storefront-mobile-chrome",
-        "testDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/tests/storefront",
+        "id": "Mobile Chrome",
+        "name": "Mobile Chrome",
+        "testDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/tests",
         "testIgnore": [],
         "testMatch": [
           "**/*.@(spec|test).?(c|m)[jt]s?(x)"
@@ -112,13 +112,13 @@
       {
         "outputDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results",
         "repeatEach": 1,
-        "retries": 2,
+        "retries": 0,
         "metadata": {
           "actualWorkers": 1
         },
-        "id": "storefront-mobile-safari",
-        "name": "storefront-mobile-safari",
-        "testDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/tests/storefront",
+        "id": "Mobile Safari",
+        "name": "Mobile Safari",
+        "testDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/tests",
         "testIgnore": [],
         "testMatch": [
           "**/*.@(spec|test).?(c|m)[jt]s?(x)"
@@ -128,23 +128,7 @@
       {
         "outputDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results",
         "repeatEach": 1,
-        "retries": 2,
-        "metadata": {
-          "actualWorkers": 1
-        },
-        "id": "backend-api",
-        "name": "backend-api",
-        "testDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/tests/backend",
-        "testIgnore": [],
-        "testMatch": [
-          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
-        ],
-        "timeout": 60000
-      },
-      {
-        "outputDir": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results",
-        "repeatEach": 1,
-        "retries": 2,
+        "retries": 0,
         "metadata": {
           "actualWorkers": 1
         },
@@ -164,62 +148,114 @@
     "updateSourceMethod": "patch",
     "version": "1.57.0",
     "workers": 1,
-    "webServer": null
+    "webServer": {
+      "command": "cd ../.. && MEDUSA_PUBLISHABLE_KEY=undefined CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE='postgresql://postgres:postgres@localhost:5432/medusa' pnpm --filter=apps-storefront dev",
+      "url": "https://localhost:5173",
+      "reuseExistingServer": true,
+      "ignoreHTTPSErrors": true,
+      "timeout": 120000
+    }
   },
   "suites": [
     {
-      "title": "backend/api-workflows.spec.ts",
-      "file": "backend/api-workflows.spec.ts",
+      "title": "storefront/homepage-navigation.spec.ts",
+      "file": "storefront/homepage-navigation.spec.ts",
       "column": 0,
       "line": 0,
       "specs": [],
       "suites": [
         {
-          "title": "Backend API workflows (admin)",
-          "file": "backend/api-workflows.spec.ts",
-          "line": 9,
+          "title": "Homepage",
+          "file": "storefront/homepage-navigation.spec.ts",
+          "line": 15,
           "column": 6,
           "specs": [
             {
-              "title": "products catalog CRUD with publish/unpublish and pricing updates",
-              "ok": true,
+              "title": "should load homepage with all critical elements",
+              "ok": false,
               "tags": [],
               "tests": [
                 {
                   "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
-                  "projectId": "backend-api",
-                  "projectName": "backend-api",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
                   "results": [
                     {
                       "workerIndex": 0,
                       "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 258,
-                      "errors": [],
-                      "stdout": [
+                      "status": "failed",
+                      "duration": 0,
+                      "error": {
+                        "message": "ApiError: API request failed: 401 Unauthorized",
+                        "stack": "ApiError: API request failed: 401 Unauthorized\n    at apiRequest (/Users/leonliang/Github Repo/gracestowel/apps/e2e/support/helpers/api-request.ts:88:11)\n    at ensureTheNuzzleExists (/Users/leonliang/Github Repo/gracestowel/apps/e2e/support/helpers/seed-helpers.ts:134:27)\n    at /Users/leonliang/Github Repo/gracestowel/apps/e2e/tests/storefront/homepage-navigation.spec.ts:6:3",
+                        "location": {
+                          "file": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/support/helpers/api-request.ts",
+                          "column": 11,
+                          "line": 88
+                        },
+                        "snippet": "\u001b[90m   at \u001b[39m../support/helpers/api-request.ts:88\n\n\u001b[0m \u001b[90m 86 |\u001b[39m     \u001b[36mconst\u001b[39m errorText \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m response\u001b[33m.\u001b[39mtext()\u001b[33m;\u001b[39m\n \u001b[90m 87 |\u001b[39m     console\u001b[33m.\u001b[39merror(\u001b[32m`API Error ${response.status()} at ${url}:`\u001b[39m\u001b[33m,\u001b[39m errorText)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 88 |\u001b[39m     \u001b[36mthrow\u001b[39m \u001b[36mnew\u001b[39m \u001b[33mApiError\u001b[39m(response\u001b[33m.\u001b[39mstatus()\u001b[33m,\u001b[39m response\u001b[33m.\u001b[39mstatusText()\u001b[33m,\u001b[39m errorText)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m           \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 89 |\u001b[39m   }\n \u001b[90m 90 |\u001b[39m\n \u001b[90m 91 |\u001b[39m   \u001b[36mreturn\u001b[39m response\u001b[33m.\u001b[39mjson()\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
                         {
-                          "text": "Creating product with payload: {\n  \"title\": \"Unbranded Ceramic Mouse\",\n  \"description\": \"Featuring Cobalt-enhanced technology, our Cheese offers unparalleled normal performance\",\n  \"handle\": \"sleek-ceramic-bike\",\n  \"status\": \"published\",\n  \"images\": [\n    {\n      \"url\": \"https://picsum.photos/seed/2qD6YAb/3159/534\"\n    }\n  ],\n  \"options\": [\n    {\n      \"title\": \"Size\",\n      \"values\": [\n        \"Default\"\n      ]\n    }\n  ],\n  \"variants\": [\n    {\n      \"title\": \"Default\",\n      \"sku\": \"JT7btYPMg4\",\n      \"options\": {\n        \"Size\": \"Default\"\n      },\n      \"prices\": [\n        {\n          \"amount\": 2500,\n          \"currency_code\": \"usd\"\n        },\n        {\n          \"amount\": 3500,\n          \"currency_code\": \"cad\"\n        }\n      ],\n      \"allow_backorder\": true,\n      \"manage_inventory\": false\n    }\n  ]\n}\n"
+                          "location": {
+                            "file": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/support/helpers/api-request.ts",
+                            "column": 11,
+                            "line": 88
+                          },
+                          "message": "ApiError: API request failed: 401 Unauthorized\n\n\u001b[90m   at \u001b[39m../support/helpers/api-request.ts:88\n\n\u001b[0m \u001b[90m 86 |\u001b[39m     \u001b[36mconst\u001b[39m errorText \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m response\u001b[33m.\u001b[39mtext()\u001b[33m;\u001b[39m\n \u001b[90m 87 |\u001b[39m     console\u001b[33m.\u001b[39merror(\u001b[32m`API Error ${response.status()} at ${url}:`\u001b[39m\u001b[33m,\u001b[39m errorText)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 88 |\u001b[39m     \u001b[36mthrow\u001b[39m \u001b[36mnew\u001b[39m \u001b[33mApiError\u001b[39m(response\u001b[33m.\u001b[39mstatus()\u001b[33m,\u001b[39m response\u001b[33m.\u001b[39mstatusText()\u001b[33m,\u001b[39m errorText)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m           \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 89 |\u001b[39m   }\n \u001b[90m 90 |\u001b[39m\n \u001b[90m 91 |\u001b[39m   \u001b[36mreturn\u001b[39m response\u001b[33m.\u001b[39mjson()\u001b[33m;\u001b[39m\u001b[0m\n\u001b[2m    at apiRequest (/Users/leonliang/Github Repo/gracestowel/apps/e2e/support/helpers/api-request.ts:88:11)\u001b[22m\n\u001b[2m    at ensureTheNuzzleExists (/Users/leonliang/Github Repo/gracestowel/apps/e2e/support/helpers/seed-helpers.ts:134:27)\u001b[22m\n\u001b[2m    at /Users/leonliang/Github Repo/gracestowel/apps/e2e/tests/storefront/homepage-navigation.spec.ts:6:3\u001b[22m"
                         }
                       ],
-                      "stderr": [],
+                      "stdout": [
+                        {
+                          "text": "[Self-Heal] Checking ADMIN_TOKEN presence: false\n"
+                        },
+                        {
+                          "text": "[Self-Heal] Product check failed, assuming missing.\n"
+                        },
+                        {
+                          "text": "[Self-Heal] \"The Nuzzle\" is looking missing. Creating it...\n"
+                        }
+                      ],
+                      "stderr": [
+                        {
+                          "text": "API Error 401 at /admin/products?handle=the-nuzzle&limit=1&fields=+sales_channels: {\"message\":\"Unauthorized\"}\n"
+                        },
+                        {
+                          "text": "API Error 401 at /admin/products: {\"message\":\"Unauthorized\"}\n"
+                        },
+                        {
+                          "text": "[Self-Heal] Failed to create \"The Nuzzle\": ApiError: API request failed: 401 Unauthorized\n    at apiRequest \u001b[90m(/Users/leonliang/Github Repo/gracestowel/apps/e2e/\u001b[39msupport/helpers/api-request.ts:88:11\u001b[90m)\u001b[39m\n    at ensureTheNuzzleExists \u001b[90m(/Users/leonliang/Github Repo/gracestowel/apps/e2e/\u001b[39msupport/helpers/seed-helpers.ts:134:27\u001b[90m)\u001b[39m\n    at \u001b[90m/Users/leonliang/Github Repo/gracestowel/apps/e2e/\u001b[39mtests/storefront/homepage-navigation.spec.ts:6:3\n    at /Users/leonliang/Github Repo/gracestowel/node_modules/\u001b[4m.pnpm\u001b[24m/playwright@1.57.0/node_modules/\u001b[4mplaywright\u001b[24m/lib/worker/testInfo.js:311:11\n    at TimeoutManager.withRunnable (/Users/leonliang/Github Repo/gracestowel/node_modules/\u001b[4m.pnpm\u001b[24m/playwright@1.57.0/node_modules/\u001b[4mplaywright\u001b[24m/lib/worker/timeoutManager.js:67:14)\n    at TestInfoImpl._runWithTimeout (/Users/leonliang/Github Repo/gracestowel/node_modules/\u001b[4m.pnpm\u001b[24m/playwright@1.57.0/node_modules/\u001b[4mplaywright\u001b[24m/lib/worker/testInfo.js:309:7)\n    at FixtureRunner.resolveParametersAndRunFunction (/Users/leonliang/Github Repo/gracestowel/node_modules/\u001b[4m.pnpm\u001b[24m/playwright@1.57.0/node_modules/\u001b[4mplaywright\u001b[24m/lib/worker/fixtureRunner.js:228:5)\n    at /Users/leonliang/Github Repo/gracestowel/node_modules/\u001b[4m.pnpm\u001b[24m/playwright@1.57.0/node_modules/\u001b[4mplaywright\u001b[24m/lib/worker/workerMain.js:441:13\n    at TestInfoImpl._runAsStep (/Users/leonliang/Github Repo/gracestowel/node_modules/\u001b[4m.pnpm\u001b[24m/playwright@1.57.0/node_modules/\u001b[4mplaywright\u001b[24m/lib/worker/testInfo.js:300:7)\n    at WorkerMain._runAllHooksForSuite (/Users/leonliang/Github Repo/gracestowel/node_modules/\u001b[4m.pnpm\u001b[24m/playwright@1.57.0/node_modules/\u001b[4mplaywright\u001b[24m/lib/worker/workerMain.js:436:9)\n    at WorkerMain._runBeforeAllHooksForSuite (/Users/leonliang/Github Repo/gracestowel/node_modules/\u001b[4m.pnpm\u001b[24m/playwright@1.57.0/node_modules/\u001b[4mplaywright\u001b[24m/lib/worker/workerMain.js:430:5)\n    at /Users/leonliang/Github Repo/gracestowel/node_modules/\u001b[4m.pnpm\u001b[24m/playwright@1.57.0/node_modules/\u001b[4mplaywright\u001b[24m/lib/worker/workerMain.js:312:11\n    at TestInfoImpl._runAsStep (/Users/leonliang/Github Repo/gracestowel/node_modules/\u001b[4m.pnpm\u001b[24m/playwright@1.57.0/node_modules/\u001b[4mplaywright\u001b[24m/lib/worker/testInfo.js:300:7)\n    at /Users/leonliang/Github Repo/gracestowel/node_modules/\u001b[4m.pnpm\u001b[24m/playwright@1.57.0/node_modules/\u001b[4mplaywright\u001b[24m/lib/worker/workerMain.js:310:7\n    at WorkerMain._runTest (/Users/leonliang/Github Repo/gracestowel/node_modules/\u001b[4m.pnpm\u001b[24m/playwright@1.57.0/node_modules/\u001b[4mplaywright\u001b[24m/lib/worker/workerMain.js:295:5)\n    at WorkerMain.runTestGroup (/Users/leonliang/Github Repo/gracestowel/node_modules/\u001b[4m.pnpm\u001b[24m/playwright@1.57.0/node_modules/\u001b[4mplaywright\u001b[24m/lib/worker/workerMain.js:199:11)\n    at process.<anonymous> (/Users/leonliang/Github Repo/gracestowel/node_modules/\u001b[4m.pnpm\u001b[24m/playwright@1.57.0/node_modules/\u001b[4mplaywright\u001b[24m/lib/common/process.js:65:22) {\n  status: \u001b[33m401\u001b[39m,\n  statusText: \u001b[32m'Unauthorized'\u001b[39m,\n  responseBody: \u001b[32m'{\"message\":\"Unauthorized\"}'\u001b[39m\n}\n"
+                        }
+                      ],
                       "retry": 0,
-                      "startTime": "2026-01-05T22:40:38.293Z",
+                      "startTime": "2026-01-07T08:06:02.594Z",
                       "annotations": [],
-                      "attachments": []
+                      "attachments": [
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/test-results/storefront-homepage-naviga-68c66--with-all-critical-elements-chromium/trace.zip"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/Users/leonliang/Github Repo/gracestowel/apps/e2e/support/helpers/api-request.ts",
+                        "column": 11,
+                        "line": 88
+                      }
                     }
                   ],
-                  "status": "expected"
+                  "status": "unexpected"
                 }
               ],
-              "id": "ccf25a36e93e76d4a45a-61ded7e2b05a3f77dfcc",
-              "file": "backend/api-workflows.spec.ts",
-              "line": 11,
+              "id": "884743e3f7dc97ed0588-f867743162d2f7ec02c2",
+              "file": "storefront/homepage-navigation.spec.ts",
+              "line": 16,
               "column": 7
             },
             {
-              "title": "customers issue tokens and manage addresses",
+              "title": "should have accessible navigation",
               "ok": true,
               "tags": [],
               "tests": [
@@ -227,33 +263,33 @@
                   "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
-                  "projectId": "backend-api",
-                  "projectName": "backend-api",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
                   "results": [
                     {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 25,
+                      "workerIndex": -1,
+                      "parallelIndex": -1,
+                      "status": "skipped",
+                      "duration": 0,
                       "errors": [],
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-01-05T22:40:38.558Z",
+                      "startTime": "2026-01-07T08:06:02.731Z",
                       "annotations": [],
                       "attachments": []
                     }
                   ],
-                  "status": "expected"
+                  "status": "skipped"
                 }
               ],
-              "id": "ccf25a36e93e76d4a45a-52efda107cd686901930",
-              "file": "backend/api-workflows.spec.ts",
-              "line": 56,
+              "id": "884743e3f7dc97ed0588-21c6474c340b20213a3e",
+              "file": "storefront/homepage-navigation.spec.ts",
+              "line": 35,
               "column": 7
             },
             {
-              "title": "carts and orders apply discounts, shipping, tax, and payment intents",
+              "title": "should display product cards with images and prices",
               "ok": true,
               "tags": [],
               "tests": [
@@ -261,132 +297,291 @@
                   "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
-                  "projectId": "backend-api",
-                  "projectName": "backend-api",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
                   "results": [
                     {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 875,
-                      "errors": [],
-                      "stdout": [
-                        {
-                          "text": "Creating product with payload: {\n  \"title\": \"Intelligent Concrete Cheese\",\n  \"description\": \"Savor the bitter essence in our Ball, designed for ashamed culinary adventures\",\n  \"handle\": \"small-gold-pants\",\n  \"status\": \"published\",\n  \"images\": [\n    {\n      \"url\": \"https://loremflickr.com/1413/274?lock=4281164094410439\"\n    }\n  ],\n  \"options\": [\n    {\n      \"title\": \"Size\",\n      \"values\": [\n        \"Default\"\n      ]\n    }\n  ],\n  \"variants\": [\n    {\n      \"title\": \"Default\",\n      \"sku\": \"s7me7RmPPB\",\n      \"options\": {\n        \"Size\": \"Default\"\n      },\n      \"prices\": [\n        {\n          \"amount\": 2500,\n          \"currency_code\": \"usd\"\n        },\n        {\n          \"amount\": 3500,\n          \"currency_code\": \"cad\"\n        }\n      ],\n      \"allow_backorder\": true,\n      \"manage_inventory\": false\n    }\n  ]\n}\n"
-                        }
-                      ],
-                      "stderr": [
-                        {
-                          "text": "API Error 404 at /admin/payment-intents/pay_col_01KE853KT2NZEHG2W0GABPDWC5: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>Cannot DELETE /admin/payment-intents/pay_col_01KE853KT2NZEHG2W0GABPDWC5</pre>\n</body>\n</html>\n\n"
-                        },
-                        {
-                          "text": "Payment intent cleanup skipped for pay_col_01KE853KT2NZEHG2W0GABPDWC5.\n"
-                        }
-                      ],
-                      "retry": 0,
-                      "startTime": "2026-01-05T22:40:38.587Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "ccf25a36e93e76d4a45a-d2067b65907cadcde141",
-              "file": "backend/api-workflows.spec.ts",
-              "line": 78,
-              "column": 7
-            },
-            {
-              "title": "grace period tokens gate cancellation and edit windows",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 60000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "backend-api",
-                  "projectName": "backend-api",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 667,
-                      "errors": [],
-                      "stdout": [
-                        {
-                          "text": "Creating product with payload: {\n  \"title\": \"Rustic Aluminum Salad\",\n  \"description\": \"Stylish Mouse designed to make you stand out with aware looks\",\n  \"handle\": \"awesome-bronze-chair\",\n  \"status\": \"published\",\n  \"images\": [\n    {\n      \"url\": \"https://picsum.photos/seed/Cmr5IQLP/2978/2532\"\n    }\n  ],\n  \"options\": [\n    {\n      \"title\": \"Size\",\n      \"values\": [\n        \"Default\"\n      ]\n    }\n  ],\n  \"variants\": [\n    {\n      \"title\": \"Default\",\n      \"sku\": \"mNbTpurwGT\",\n      \"options\": {\n        \"Size\": \"Default\"\n      },\n      \"prices\": [\n        {\n          \"amount\": 2500,\n          \"currency_code\": \"usd\"\n        },\n        {\n          \"amount\": 3500,\n          \"currency_code\": \"cad\"\n        }\n      ],\n      \"allow_backorder\": true,\n      \"manage_inventory\": false\n    }\n  ]\n}\n"
-                        }
-                      ],
-                      "stderr": [
-                        {
-                          "text": "API Error 404 at /admin/orders/order_01KE853MGH9NYSBCJE5TGX11CM: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>Cannot DELETE /admin/orders/order_01KE853MGH9NYSBCJE5TGX11CM</pre>\n</body>\n</html>\n\n"
-                        },
-                        {
-                          "text": "Order cleanup skipped for order_01KE853MGH9NYSBCJE5TGX11CM.\n"
-                        }
-                      ],
-                      "retry": 0,
-                      "startTime": "2026-01-05T22:40:39.470Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "ccf25a36e93e76d4a45a-2ef3c7da54398e579543",
-              "file": "backend/api-workflows.spec.ts",
-              "line": 199,
-              "column": 7
-            },
-            {
-              "title": "rejects invalid payloads with 4xx and retries idempotently",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 60000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "backend-api",
-                  "projectName": "backend-api",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 7,
+                      "workerIndex": -1,
+                      "parallelIndex": -1,
+                      "status": "skipped",
+                      "duration": 0,
                       "errors": [],
                       "stdout": [],
-                      "stderr": [
-                        {
-                          "text": "API Error 500 at /admin/products: {\"message\":\"Invalid request: Field 'variants, 0, prices' is required; Unrecognized fields: 'unrecognized'\",\"code\":\"INTERNAL_ERROR\",\"stack\":\"Error: Invalid request: Field 'variants, 0, prices' is required; Unrecognized fields: 'unrecognized'\\n    at zodValidator (/Users/leonliang/Github Repo/gracestowel/node_modules/.pnpm/@medusajs+framework@2.12.3_@medusajs+cli@2.12.3_@types+node@20.19.25__@types+node@20.19.25_io_pz7bcky5yx4vbfqh7fhf62s5pi/node_modules/@medusajs/framework/src/zod/zod-helpers.ts:126:13)\\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\\n    at async validateBody (/Users/leonliang/Github Repo/gracestowel/node_modules/.pnpm/@medusajs+framework@2.12.3_@medusajs+cli@2.12.3_@types+node@20.19.25__@types+node@20.19.25_io_pz7bcky5yx4vbfqh7fhf62s5pi/node_modules/@medusajs/framework/src/http/utils/validate-body.ts:31:27)\\n    at async validateBody (/Users/leonliang/Github Repo/gracestowel/node_modules/.pnpm/@medusajs+framework@2.12.3_@medusajs+cli@2.12.3_@types+node@20.19.25__@types+node@20.19.25_io_pz7bcky5yx4vbfqh7fhf62s5pi/node_modules/@medusajs/framework/src/http/utils/wrap-handler.ts:27:14)\"}\n"
-                        },
-                        {
-                          "text": "API Error 500 at /admin/products: {\"message\":\"Invalid request: Field 'variants, 0, prices' is required; Unrecognized fields: 'unrecognized'\",\"code\":\"INTERNAL_ERROR\",\"stack\":\"Error: Invalid request: Field 'variants, 0, prices' is required; Unrecognized fields: 'unrecognized'\\n    at zodValidator (/Users/leonliang/Github Repo/gracestowel/node_modules/.pnpm/@medusajs+framework@2.12.3_@medusajs+cli@2.12.3_@types+node@20.19.25__@types+node@20.19.25_io_pz7bcky5yx4vbfqh7fhf62s5pi/node_modules/@medusajs/framework/src/zod/zod-helpers.ts:126:13)\\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\\n    at async validateBody (/Users/leonliang/Github Repo/gracestowel/node_modules/.pnpm/@medusajs+framework@2.12.3_@medusajs+cli@2.12.3_@types+node@20.19.25__@types+node@20.19.25_io_pz7bcky5yx4vbfqh7fhf62s5pi/node_modules/@medusajs/framework/src/http/utils/validate-body.ts:31:27)\\n    at async validateBody (/Users/leonliang/Github Repo/gracestowel/node_modules/.pnpm/@medusajs+framework@2.12.3_@medusajs+cli@2.12.3_@types+node@20.19.25__@types+node@20.19.25_io_pz7bcky5yx4vbfqh7fhf62s5pi/node_modules/@medusajs/framework/src/http/utils/wrap-handler.ts:27:14)\"}\n"
-                        },
-                        {
-                          "text": "API Error 404 at /admin/webhooks/test: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>Cannot POST /admin/webhooks/test</pre>\n</body>\n</html>\n\n"
-                        },
-                        {
-                          "text": "Webhook test skipped or failed due to missing endpoint.\n"
-                        }
-                      ],
+                      "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-01-05T22:40:40.143Z",
+                      "startTime": "2026-01-07T08:06:02.737Z",
                       "annotations": [],
                       "attachments": []
                     }
                   ],
-                  "status": "expected"
+                  "status": "skipped"
                 }
               ],
-              "id": "ccf25a36e93e76d4a45a-b750e767d9e67dcd1291",
-              "file": "backend/api-workflows.spec.ts",
-              "line": 213,
+              "id": "884743e3f7dc97ed0588-47b49d58762ac8c63b47",
+              "file": "storefront/homepage-navigation.spec.ts",
+              "line": 50,
+              "column": 7
+            }
+          ]
+        },
+        {
+          "title": "Navigation",
+          "file": "storefront/homepage-navigation.spec.ts",
+          "line": 67,
+          "column": 6,
+          "specs": [
+            {
+              "title": "should navigate from homepage to product page",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": -1,
+                      "parallelIndex": -1,
+                      "status": "skipped",
+                      "duration": 0,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-01-07T08:06:02.743Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "skipped"
+                }
+              ],
+              "id": "884743e3f7dc97ed0588-ab161a13666a4792ae97",
+              "file": "storefront/homepage-navigation.spec.ts",
+              "line": 68,
+              "column": 7
+            },
+            {
+              "title": "should navigate to checkout page",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": -1,
+                      "parallelIndex": -1,
+                      "status": "skipped",
+                      "duration": 0,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-01-07T08:06:02.749Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "skipped"
+                }
+              ],
+              "id": "884743e3f7dc97ed0588-73cf1bd9cbe977530b7d",
+              "file": "storefront/homepage-navigation.spec.ts",
+              "line": 93,
+              "column": 7
+            },
+            {
+              "title": "should handle direct product URL navigation",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": -1,
+                      "parallelIndex": -1,
+                      "status": "skipped",
+                      "duration": 0,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-01-07T08:06:02.754Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "skipped"
+                }
+              ],
+              "id": "884743e3f7dc97ed0588-3da1cfa94a785409e817",
+              "file": "storefront/homepage-navigation.spec.ts",
+              "line": 101,
+              "column": 7
+            },
+            {
+              "title": "should return to homepage via logo/brand link",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": -1,
+                      "parallelIndex": -1,
+                      "status": "skipped",
+                      "duration": 0,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-01-07T08:06:02.760Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "skipped"
+                }
+              ],
+              "id": "884743e3f7dc97ed0588-b96593e0a41b09a5c845",
+              "file": "storefront/homepage-navigation.spec.ts",
+              "line": 115,
+              "column": 7
+            }
+          ]
+        },
+        {
+          "title": "Cart Access",
+          "file": "storefront/homepage-navigation.spec.ts",
+          "line": 131,
+          "column": 6,
+          "specs": [
+            {
+              "title": "should open empty cart from homepage",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": -1,
+                      "parallelIndex": -1,
+                      "status": "skipped",
+                      "duration": 0,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-01-07T08:06:02.765Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "skipped"
+                }
+              ],
+              "id": "884743e3f7dc97ed0588-70bdbc79e96fb05d2ed4",
+              "file": "storefront/homepage-navigation.spec.ts",
+              "line": 132,
+              "column": 7
+            },
+            {
+              "title": "should show cart with items after adding product",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": -1,
+                      "parallelIndex": -1,
+                      "status": "skipped",
+                      "duration": 0,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-01-07T08:06:02.770Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "skipped"
+                }
+              ],
+              "id": "884743e3f7dc97ed0588-2f445e7a33a4d37b85b7",
+              "file": "storefront/homepage-navigation.spec.ts",
+              "line": 152,
+              "column": 7
+            }
+          ]
+        },
+        {
+          "title": "Footer and Links",
+          "file": "storefront/homepage-navigation.spec.ts",
+          "line": 168,
+          "column": 6,
+          "specs": [
+            {
+              "title": "should have visible footer on homepage",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": -1,
+                      "parallelIndex": -1,
+                      "status": "skipped",
+                      "duration": 0,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-01-07T08:06:02.777Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "skipped"
+                }
+              ],
+              "id": "884743e3f7dc97ed0588-bdcab0cdf83956a667dd",
+              "file": "storefront/homepage-navigation.spec.ts",
+              "line": 169,
               "column": 7
             }
           ]
@@ -396,11 +591,11 @@
   ],
   "errors": [],
   "stats": {
-    "startTime": "2026-01-05T22:40:37.789Z",
-    "duration": 2376.956,
-    "expected": 5,
-    "skipped": 0,
-    "unexpected": 0,
+    "startTime": "2026-01-07T08:06:01.194Z",
+    "duration": 1614.2579999999998,
+    "expected": 0,
+    "skipped": 9,
+    "unexpected": 1,
     "flaky": 0
   }
 }

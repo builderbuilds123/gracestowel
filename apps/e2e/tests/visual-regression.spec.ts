@@ -59,7 +59,7 @@ test.describe("Visual Regression", () => {
       await page.waitForLoadState("domcontentloaded");
       await expect(page.getByRole("heading", { name: /Nuzzle/i })).toBeVisible();
 
-      await page.getByRole("button", { name: /hang it up|add to cart/i }).click();
+      await page.getByRole("button", { name: /hang it up|add to cart/i }).first().click();
 
       // Standardize cart heading and wait for hydration
       await expect(page.getByRole("heading", { name: /towel rack/i })).toBeVisible({ timeout: 30000 });

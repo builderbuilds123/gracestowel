@@ -40,11 +40,25 @@ interface LoaderData {
     initialParams: PaymentParams | null;
 }
 
+/**
+ * SEC-06: SameSite=Lax required for cross-site redirect flow
+ *
+ * When Stripe redirects back to our site after payment, browsers treat this as a
+ * cross-site navigation. SameSite=Strict would prevent the cookie from being sent
+ * on the subsequent request after our internal redirect. SameSite=Lax allows cookies
+ * on top-level navigations (redirects), which is exactly what we need.
+ *
+ * Security is maintained because:
+ * 1. HttpOnly prevents XSS access
+ * 2. Secure ensures HTTPS only
+ * 3. Short Max-Age (600s = 10 min) limits exposure window
+ * 4. Cookie is cleared immediately after consumption
+ */
 const serializeParamsCookie = (params: PaymentParams): string =>
-    `${CHECKOUT_PARAMS_COOKIE}=${encodeURIComponent(JSON.stringify(params))}; Max-Age=600; Path=/; SameSite=Strict; Secure; HttpOnly`;
+    `${CHECKOUT_PARAMS_COOKIE}=${encodeURIComponent(JSON.stringify(params))}; Max-Age=600; Path=/; SameSite=Lax; Secure; HttpOnly`;
 
 const clearParamsCookie = (): string =>
-    `${CHECKOUT_PARAMS_COOKIE}=; Max-Age=0; Path=/; SameSite=Strict; Secure; HttpOnly`;
+    `${CHECKOUT_PARAMS_COOKIE}=; Max-Age=0; Path=/; SameSite=Lax; Secure; HttpOnly`;
 
 const parseParamsFromCookie = (cookieHeader: string | null): PaymentParams | null => {
     if (!cookieHeader) return null;
@@ -79,7 +93,8 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
     if (paramsFromUrl.paymentIntentClientSecret) {
         const headers = new Headers();
         headers.set("Set-Cookie", serializeParamsCookie(paramsFromUrl));
-        return redirect(`${url.origin}${url.pathname}`, { headers });
+        // Use relative redirect to preserve the correct origin (including port in dev)
+        return redirect(url.pathname, { headers });
     }
 
     const paramsFromCookie = parseParamsFromCookie(request.headers.get("cookie"));

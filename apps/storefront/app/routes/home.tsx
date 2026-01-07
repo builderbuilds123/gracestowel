@@ -245,6 +245,8 @@ export default function Home() {
               price={product.price}
               image={product.image}
               handle={product.handle}
+              variantId={product.variantId}
+              sku={product.sku}
             />
           ))}
         </div>

@@ -81,6 +81,16 @@ type Pages = {
       "id": string;
     };
   };
+  "/api/carts/:id/shipping-methods": {
+    params: {
+      "id": string;
+    };
+  };
+  "/api/carts/:id/complete": {
+    params: {
+      "id": string;
+    };
+  };
   "/api/health": {
     params: {};
   };
@@ -100,7 +110,7 @@ type Pages = {
 type RouteFiles = {
   "root.tsx": {
     id: "root";
-    page: "/" | "/products/:handle" | "/collections/:handle" | "/checkout" | "/checkout/success" | "/about" | "/blog" | "/towels" | "/search" | "/wishlist" | "/account" | "/account/login" | "/account/register" | "/order/status/:id" | "/api/payment-intent" | "/api/shipping-rates" | "/api/checkout-session" | "/api/carts" | "/api/carts/:id" | "/api/carts/:id/shipping-options" | "/api/health" | "/blog/:id" | "/sitemap.xml" | "/robots.txt";
+    page: "/" | "/products/:handle" | "/collections/:handle" | "/checkout" | "/checkout/success" | "/about" | "/blog" | "/towels" | "/search" | "/wishlist" | "/account" | "/account/login" | "/account/register" | "/order/status/:id" | "/api/payment-intent" | "/api/shipping-rates" | "/api/checkout-session" | "/api/carts" | "/api/carts/:id" | "/api/carts/:id/shipping-options" | "/api/carts/:id/shipping-methods" | "/api/carts/:id/complete" | "/api/health" | "/blog/:id" | "/sitemap.xml" | "/robots.txt";
   };
   "routes/home.tsx": {
     id: "routes/home";
@@ -182,6 +192,14 @@ type RouteFiles = {
     id: "routes/api.carts.$id.shipping-options";
     page: "/api/carts/:id/shipping-options";
   };
+  "routes/api.carts.$id.shipping-methods.ts": {
+    id: "routes/api.carts.$id.shipping-methods";
+    page: "/api/carts/:id/shipping-methods";
+  };
+  "routes/api.carts.$id.complete.ts": {
+    id: "routes/api.carts.$id.complete";
+    page: "/api/carts/:id/complete";
+  };
   "routes/api.health.ts": {
     id: "routes/api.health";
     page: "/api/health";
@@ -222,6 +240,8 @@ type RouteModules = {
   "routes/api.carts": typeof import("./app/routes/api.carts.ts");
   "routes/api.carts.$id": typeof import("./app/routes/api.carts.$id.ts");
   "routes/api.carts.$id.shipping-options": typeof import("./app/routes/api.carts.$id.shipping-options.ts");
+  "routes/api.carts.$id.shipping-methods": typeof import("./app/routes/api.carts.$id.shipping-methods.ts");
+  "routes/api.carts.$id.complete": typeof import("./app/routes/api.carts.$id.complete.ts");
   "routes/api.health": typeof import("./app/routes/api.health.ts");
   "routes/blog.$id": typeof import("./app/routes/blog.$id.tsx");
   "routes/sitemap[.]xml": typeof import("./app/routes/sitemap[.]xml.tsx");

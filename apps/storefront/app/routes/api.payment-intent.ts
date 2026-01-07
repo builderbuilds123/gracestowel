@@ -292,14 +292,14 @@ export async function action({ request, context }: ActionFunctionArgs) {
             // Prefer summary.current_order_total if available (Medusa v2 pattern)
             const cartTotal = cart.summary?.current_order_total ?? cart.total;
 
-            // AI-NOTE: Medusa returns cents (e.g. 5000). Stripe expects cents (5000).
-            // Do NOT multiply by 100. Reference: MNY-01 correction.
-            calculatedAmount = Number(cartTotal);
+            // MNY-01: Medusa v2 returns amounts in major currency units (e.g., 27 = $27.00)
+            // Stripe expects amounts in minor units (cents), so multiply by 100
+            calculatedAmount = toCents(Number(cartTotal));
 
             logger.info("Used Medusa cart for pricing", {
                 cartId,
-                medusaTotal: cartTotal,
-                calculatedCents: calculatedAmount,
+                medusaTotalDollars: cartTotal,
+                stripeAmountCents: calculatedAmount,
                 clientAmount: amount,
                 clientShipping: shipping
             });

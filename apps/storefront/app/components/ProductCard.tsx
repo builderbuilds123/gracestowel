@@ -11,9 +11,11 @@ interface ProductCardProps {
     description: string;
     price: string;
     handle: string;
+    variantId?: string;  // First variant ID for cart operations
+    sku?: string;        // First variant SKU for cart operations
 }
 
-export function ProductCard({ id, image, title, description, price, handle }: ProductCardProps) {
+export function ProductCard({ id, image, title, description, price, handle, variantId, sku }: ProductCardProps) {
     const { addToCart } = useCart();
 
     const { formatPrice } = useLocale();
@@ -21,7 +23,7 @@ export function ProductCard({ id, image, title, description, price, handle }: Pr
     const handleAddToCart = (e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        addToCart({ id, title, price, image });
+        addToCart({ id, variantId, sku, title, price, image });
     };
 
     return (

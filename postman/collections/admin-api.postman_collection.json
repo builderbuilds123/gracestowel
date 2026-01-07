@@ -5,6 +5,52 @@
     "description": "Medusa Admin API endpoints for administrative operations including products, orders, customers, and users management. These endpoints require authentication via JWT token.\n\n## Authentication\n\nAll requests in this collection require a valid JWT token. Set the `jwt_token` environment variable with your admin authentication token before making requests.\n\nTo obtain a JWT token:\n1. POST to /admin/auth with admin credentials\n2. Copy the token from the response\n3. Set it as the `jwt_token` environment variable\n\nThe collection automatically includes the Authorization header with Bearer token for all requests.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Load tv4 library for JSON schema validation",
+          "if (typeof tv4 === 'undefined') {",
+          "    pm.sendRequest({",
+          "        url: 'https://cdn.jsdelivr.net/npm/tv4@1.2.7/tv4.min.js',",
+          "        method: 'GET'",
+          "    }, function (err, res) {",
+          "        if (!err) {",
+          "            eval(res.text());",
+          "            pm.globals.set('tv4', tv4);",
+          "        } else {",
+          "            console.error('Failed to load tv4 library:', err);",
+          "        }",
+          "    });",
+          "} else {",
+          "    pm.globals.set('tv4', tv4);",
+          "}",
+          "",
+          "// Validate required environment variables",
+          "if (!pm.environment.get('base_url') && !pm.collectionVariables.get('base_url')) {",
+          "    console.warn('Warning: base_url not set in environment or collection variables');",
+          "}",
+          "if (!pm.environment.get('jwt_token') && !pm.collectionVariables.get('jwt_token')) {",
+          "    console.warn('Warning: jwt_token not set in environment or collection variables');",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Ensure tv4 is available for tests",
+          "if (typeof tv4 === 'undefined' && pm.globals.get('tv4')) {",
+          "    tv4 = pm.globals.get('tv4');",
+          "}"
+        ]
+      }
+    }
+  ],
   "item": [
     {
       "name": "Products",
@@ -171,6 +217,83 @@
         {
           "name": "Create Product",
           "id": "8453c625-75f1-4094-8ca4-2f47585480bd",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// JSON Schema for Create Product Response - Contract Test",
+                  "const createProductSchema = {",
+                  "    type: 'object',",
+                  "    required: ['product'],",
+                  "    properties: {",
+                  "        product: {",
+                  "            type: 'object',",
+                  "            required: ['id', 'title', 'handle', 'status'],",
+                  "            properties: {",
+                  "                id: { type: 'string' },",
+                  "                title: { type: 'string' },",
+                  "                subtitle: { type: ['string', 'null'] },",
+                  "                description: { type: ['string', 'null'] },",
+                  "                handle: { type: 'string' },",
+                  "                is_giftcard: { type: 'boolean' },",
+                  "                status: {",
+                  "                    type: 'string',",
+                  "                    enum: ['draft', 'proposed', 'published', 'rejected']",
+                  "                },",
+                  "                thumbnail: { type: ['string', 'null'] },",
+                  "                variants: {",
+                  "                    type: 'array',",
+                  "                    items: {",
+                  "                        type: 'object',",
+                  "                        required: ['id'],",
+                  "                        properties: {",
+                  "                            id: { type: 'string' },",
+                  "                            title: { type: ['string', 'null'] },",
+                  "                            sku: { type: ['string', 'null'] },",
+                  "                            inventory_quantity: { type: 'number' },",
+                  "                            prices: {",
+                  "                                type: 'array',",
+                  "                                items: {",
+                  "                                    type: 'object',",
+                  "                                    properties: {",
+                  "                                        amount: { type: 'number' },",
+                  "                                        currency_code: { type: 'string' }",
+                  "                                    }",
+                  "                                }",
+                  "                            }",
+                  "                        }",
+                  "                    }",
+                  "                },",
+                  "                created_at: { type: 'string' },",
+                  "                updated_at: { type: 'string' }",
+                  "            }",
+                  "        }",
+                  "    }",
+                  "};",
+                  "",
+                  "pm.test('Response status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Create product response matches schema', function () {",
+                  "    const response = pm.response.json();",
+                  "    if (typeof tv4 !== 'undefined') {",
+                  "        pm.expect(tv4.validate(response, createProductSchema)).to.be.true;",
+                  "        if (!tv4.validate(response, createProductSchema)) {",
+                  "            console.log('Schema validation error:', tv4.error);",
+                  "        }",
+                  "    } else {",
+                  "        pm.expect(response).to.have.property('product');",
+                  "        pm.expect(response.product).to.have.property('id');",
+                  "        pm.expect(response.product).to.have.property('title');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -418,6 +541,69 @@
         {
           "name": "List Customers",
           "id": "e48fa757-abe8-4e33-afc3-4e5a6ab68d72",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// JSON Schema for Customers List Response - Contract Test",
+                  "const customersListSchema = {",
+                  "    type: 'object',",
+                  "    required: ['customers', 'count', 'offset', 'limit'],",
+                  "    properties: {",
+                  "        customers: {",
+                  "            type: 'array',",
+                  "            items: {",
+                  "                type: 'object',",
+                  "                required: ['id'],",
+                  "                properties: {",
+                  "                    id: { type: 'string' },",
+                  "                    email: { type: ['string', 'null'] },",
+                  "                    first_name: { type: ['string', 'null'] },",
+                  "                    last_name: { type: ['string', 'null'] },",
+                  "                    phone: { type: ['string', 'null'] },",
+                  "                    has_account: { type: 'boolean' },",
+                  "                    orders: {",
+                  "                        type: 'array',",
+                  "                        items: { type: 'object' }",
+                  "                    },",
+                  "                    groups: {",
+                  "                        type: 'array',",
+                  "                        items: { type: 'object' }",
+                  "                    },",
+                  "                    metadata: { type: 'object' },",
+                  "                    created_at: { type: 'string' },",
+                  "                    updated_at: { type: 'string' }",
+                  "                }",
+                  "            }",
+                  "        },",
+                  "        count: { type: 'number' },",
+                  "        offset: { type: 'number' },",
+                  "        limit: { type: 'number' }",
+                  "    }",
+                  "};",
+                  "",
+                  "pm.test('Response status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Customers list response matches schema', function () {",
+                  "    const response = pm.response.json();",
+                  "    if (typeof tv4 !== 'undefined') {",
+                  "        pm.expect(tv4.validate(response, customersListSchema)).to.be.true;",
+                  "        if (!tv4.validate(response, customersListSchema)) {",
+                  "            console.log('Schema validation error:', tv4.error);",
+                  "        }",
+                  "    } else {",
+                  "        pm.expect(response).to.have.property('customers');",
+                  "        pm.expect(response.customers).to.be.an('array');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [
@@ -476,6 +662,72 @@
         {
           "name": "List Users",
           "id": "ccdd1852-c579-4690-acb8-a3a84597fdc0",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// JSON Schema for Users List Response - Contract Test",
+                  "const usersListSchema = {",
+                  "    type: 'object',",
+                  "    required: ['users', 'count', 'offset', 'limit'],",
+                  "    properties: {",
+                  "        users: {",
+                  "            type: 'array',",
+                  "            items: {",
+                  "                type: 'object',",
+                  "                required: ['id', 'email'],",
+                  "                properties: {",
+                  "                    id: { type: 'string' },",
+                  "                    email: { type: 'string' },",
+                  "                    first_name: { type: ['string', 'null'] },",
+                  "                    last_name: { type: ['string', 'null'] },",
+                  "                    role: {",
+                  "                        type: 'string',",
+                  "                        enum: ['admin', 'member', 'developer']",
+                  "                    },",
+                  "                    created_at: { type: 'string' },",
+                  "                    updated_at: { type: 'string' }",
+                  "                }",
+                  "            }",
+                  "        },",
+                  "        count: { type: 'number' },",
+                  "        offset: { type: 'number' },",
+                  "        limit: { type: 'number' }",
+                  "    }",
+                  "};",
+                  "",
+                  "pm.test('Response status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Users list response matches schema', function () {",
+                  "    const response = pm.response.json();",
+                  "    if (typeof tv4 !== 'undefined') {",
+                  "        pm.expect(tv4.validate(response, usersListSchema)).to.be.true;",
+                  "        if (!tv4.validate(response, usersListSchema)) {",
+                  "            console.log('Schema validation error:', tv4.error);",
+                  "        }",
+                  "    } else {",
+                  "        pm.expect(response).to.have.property('users');",
+                  "        pm.expect(response.users).to.be.an('array');",
+                  "    }",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: User role is valid enum value', function () {",
+                  "    const response = pm.response.json();",
+                  "    const validRoles = ['admin', 'member', 'developer'];",
+                  "    response.users.forEach(function(user) {",
+                  "        if (user.role) {",
+                  "            pm.expect(validRoles).to.include(user.role);",
+                  "        }",
+                  "    });",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [
@@ -527,6 +779,57 @@
         {
           "name": "Create User",
           "id": "9dd5251f-c269-4942-bd29-e59b5fa8b356",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// JSON Schema for Create User Response - Contract Test",
+                  "const createUserSchema = {",
+                  "    type: 'object',",
+                  "    required: ['user'],",
+                  "    properties: {",
+                  "        user: {",
+                  "            type: 'object',",
+                  "            required: ['id', 'email'],",
+                  "            properties: {",
+                  "                id: { type: 'string' },",
+                  "                email: { type: 'string' },",
+                  "                first_name: { type: ['string', 'null'] },",
+                  "                last_name: { type: ['string', 'null'] },",
+                  "                role: {",
+                  "                    type: 'string',",
+                  "                    enum: ['admin', 'member', 'developer']",
+                  "                },",
+                  "                created_at: { type: 'string' },",
+                  "                updated_at: { type: 'string' }",
+                  "            }",
+                  "        }",
+                  "    }",
+                  "};",
+                  "",
+                  "pm.test('Response status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Create user response matches schema', function () {",
+                  "    const response = pm.response.json();",
+                  "    if (typeof tv4 !== 'undefined') {",
+                  "        pm.expect(tv4.validate(response, createUserSchema)).to.be.true;",
+                  "        if (!tv4.validate(response, createUserSchema)) {",
+                  "            console.log('Schema validation error:', tv4.error);",
+                  "        }",
+                  "    } else {",
+                  "        pm.expect(response).to.have.property('user');",
+                  "        pm.expect(response.user).to.have.property('id');",
+                  "        pm.expect(response.user).to.have.property('email');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -591,6 +894,385 @@
       ],
       "id": "8d487907-bf87-4d8b-a361-d12d985f2c70",
       "description": "Admin user management endpoints for creating and managing admin accounts"
+    },
+    {
+      "name": "Reviews",
+      "item": [
+        {
+          "name": "List Reviews",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// JSON Schema for Admin Reviews List Response - Contract Test",
+                  "const adminReviewsListSchema = {",
+                  "    type: 'object',",
+                  "    required: ['reviews', 'count', 'offset', 'limit'],",
+                  "    properties: {",
+                  "        reviews: {",
+                  "            type: 'array',",
+                  "            items: {",
+                  "                type: 'object',",
+                  "                required: ['id', 'rating', 'status'],",
+                  "                properties: {",
+                  "                    id: { type: 'string' },",
+                  "                    product_id: { type: 'string' },",
+                  "                    customer_id: { type: ['string', 'null'] },",
+                  "                    customer_name: { type: 'string' },",
+                  "                    rating: {",
+                  "                        type: 'number',",
+                  "                        minimum: 1,",
+                  "                        maximum: 5",
+                  "                    },",
+                  "                    title: { type: ['string', 'null'] },",
+                  "                    content: { type: ['string', 'null'] },",
+                  "                    status: {",
+                  "                        type: 'string',",
+                  "                        enum: ['pending', 'approved', 'rejected']",
+                  "                    },",
+                  "                    verified_purchase: { type: 'boolean' },",
+                  "                    helpful_count: { type: 'number' },",
+                  "                    created_at: { type: 'string' },",
+                  "                    updated_at: { type: 'string' }",
+                  "                }",
+                  "            }",
+                  "        },",
+                  "        count: { type: 'number' },",
+                  "        offset: { type: 'number' },",
+                  "        limit: { type: 'number' }",
+                  "    }",
+                  "};",
+                  "",
+                  "pm.test('Response status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Admin reviews list response matches schema', function () {",
+                  "    const response = pm.response.json();",
+                  "    if (typeof tv4 !== 'undefined') {",
+                  "        pm.expect(tv4.validate(response, adminReviewsListSchema)).to.be.true;",
+                  "        if (!tv4.validate(response, adminReviewsListSchema)) {",
+                  "            console.log('Schema validation error:', tv4.error);",
+                  "        }",
+                  "    } else {",
+                  "        pm.expect(response).to.have.property('reviews');",
+                  "        pm.expect(response.reviews).to.be.an('array');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "id": "admin-reviews-list",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/admin/reviews?limit=20&offset=0&status=pending",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "reviews"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Number of reviews per page"
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Pagination offset"
+                },
+                {
+                  "key": "status",
+                  "value": "pending",
+                  "description": "Filter by status: pending, approved, rejected"
+                },
+                {
+                  "key": "product_id",
+                  "value": "",
+                  "description": "Filter by product ID",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "List all reviews with optional filters for status and product_id"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Review by ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Response status is 200 or 404', function () {",
+                  "    pm.expect([200, 404]).to.include(pm.response.code);",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Get review response structure', function () {",
+                  "    if (pm.response.code === 200) {",
+                  "        const response = pm.response.json();",
+                  "        pm.expect(response).to.have.property('review');",
+                  "        pm.expect(response.review).to.have.property('id');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "id": "admin-reviews-get",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/admin/reviews/{{review_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "reviews",
+                "{{review_id}}"
+              ]
+            },
+            "description": "Get a single review by ID"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Review",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Response status is 200 or 404', function () {",
+                  "    pm.expect([200, 404]).to.include(pm.response.code);",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Update review response structure', function () {",
+                  "    if (pm.response.code === 200) {",
+                  "        const response = pm.response.json();",
+                  "        pm.expect(response).to.have.property('review');",
+                  "        pm.expect(response).to.have.property('message');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "id": "admin-reviews-update",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"approved\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/admin/reviews/{{review_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "reviews",
+                "{{review_id}}"
+              ]
+            },
+            "description": "Update a review (approve, reject, or update fields). Status can be: pending, approved, rejected"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Review",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Response status is 200 or 404', function () {",
+                  "    pm.expect([200, 404]).to.include(pm.response.code);",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Delete review response structure', function () {",
+                  "    if (pm.response.code === 200) {",
+                  "        const response = pm.response.json();",
+                  "        pm.expect(response).to.have.property('message');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "id": "admin-reviews-delete",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/admin/reviews/{{review_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "reviews",
+                "{{review_id}}"
+              ]
+            },
+            "description": "Delete a review permanently"
+          },
+          "response": []
+        },
+        {
+          "name": "Batch Update Reviews",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Response status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Batch update response structure', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.have.property('updated');",
+                  "    pm.expect(response.updated).to.be.a('number');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "id": "admin-reviews-batch",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"review_ids\": [\"{{review_id}}\"],\n  \"status\": \"approved\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/admin/reviews/batch",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "reviews",
+                "batch"
+              ]
+            },
+            "description": "Batch update multiple reviews (e.g., approve/reject multiple reviews at once)"
+          },
+          "response": []
+        }
+      ],
+      "id": "admin-reviews-section",
+      "description": "Admin review management endpoints for moderating product reviews"
+    },
+    {
+      "name": "Stripe Queue",
+      "item": [
+        {
+          "name": "Get Stripe Queue Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Response status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Queue status response structure', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.have.property('status');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "id": "admin-stripe-queue-status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/admin/stripe-queue-status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "stripe-queue-status"
+              ]
+            },
+            "description": "Get status of Stripe webhook event processing queue"
+          },
+          "response": []
+        }
+      ],
+      "id": "admin-stripe-queue-section",
+      "description": "Stripe queue monitoring endpoints"
     }
   ],
   "auth": {

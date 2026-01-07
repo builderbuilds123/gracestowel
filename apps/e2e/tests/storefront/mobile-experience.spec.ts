@@ -45,7 +45,7 @@ test.describe("Mobile Navigation", () => {
     
     // Verify add to cart button is visible
     await expect(
-      page.getByRole("button", { name: /hang it up|add to cart/i })
+      page.getByRole("button", { name: /hang it up|add to cart/i }).first()
     ).toBeVisible();
   });
 });
@@ -60,7 +60,7 @@ test.describe("Mobile Cart Experience", () => {
     await expect(page.getByRole("heading", { name: product.title })).toBeVisible();
 
     // Add to cart
-    await page.getByRole("button", { name: /hang it up|add to cart/i }).click({ force: true });
+    await page.getByRole("button", { name: /hang it up|add to cart/i }).first().click({ force: true });
 
     // Verify cart drawer opens (should work on mobile)
     await expect(page.getByRole("heading", { name: /towel rack|cart/i })).toBeVisible();
@@ -79,7 +79,7 @@ test.describe("Mobile Cart Experience", () => {
     await page.waitForLoadState("domcontentloaded");
 
     // Add to cart
-    await page.getByRole("button", { name: /hang it up|add to cart/i }).click({ force: true });
+    await page.getByRole("button", { name: /hang it up|add to cart/i }).first().click({ force: true });
     await expect(page.getByRole("heading", { name: /towel rack|cart/i })).toBeVisible();
 
     // Update quantity
@@ -96,7 +96,7 @@ test.describe("Mobile Cart Experience", () => {
     await page.waitForLoadState("domcontentloaded");
 
     // Add to cart
-    await page.getByRole("button", { name: /hang it up|add to cart/i }).click({ force: true });
+    await page.getByRole("button", { name: /hang it up|add to cart/i }).first().click({ force: true });
     await expect(page.getByRole("heading", { name: /towel rack|cart/i })).toBeVisible();
 
     // Find checkout link and click
@@ -115,7 +115,7 @@ test.describe("Mobile Checkout Form", () => {
     const product = await productFactory.createProduct();
     await page.goto(`/products/${product.handle}`);
     await page.waitForLoadState("domcontentloaded");
-    await page.getByRole("button", { name: /hang it up|add to cart/i }).click();
+    await page.getByRole("button", { name: /hang it up|add to cart/i }).first().click();
     await expect(page.getByRole("heading", { name: /towel rack|cart/i })).toBeVisible();
 
     // Go to checkout

@@ -44,7 +44,7 @@ test.describe("Guest Checkout Flow", () => {
 
     // Look for add to cart button (uses "Hang it Up" text in this storefront)
     await expect(
-      page.getByRole("button", { name: /hang it up|add to cart/i }),
+      page.getByRole("button", { name: /hang it up|add to cart/i }).first(),
     ).toBeVisible({ timeout: 30000 });
   });
 
@@ -222,7 +222,7 @@ test.describe("Cart Persistence", () => {
     await expect(page.getByRole("heading", { name: product.title })).toBeVisible();
     
     // Add item to cart
-    const addToCartButton = page.getByRole("button", { name: /hang it up|add to cart/i });
+    const addToCartButton = page.getByRole("button", { name: /hang it up|add to cart/i }).first();
     await addToCartButton.scrollIntoViewIfNeeded();
     await page.waitForTimeout(1000); // Wait for hydration
     await addToCartButton.click({ force: true });

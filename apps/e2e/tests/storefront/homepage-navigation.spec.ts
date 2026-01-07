@@ -86,7 +86,7 @@ test.describe("Navigation", () => {
 
     // Verify product page loaded (has add to cart button)
     await expect(
-      page.getByRole("button", { name: /hang it up|add to cart/i })
+      page.getByRole("button", { name: /hang it up|add to cart/i }).first()
     ).toBeVisible();
   });
 
@@ -108,7 +108,7 @@ test.describe("Navigation", () => {
     
     // Verify add to cart button
     await expect(
-      page.getByRole("button", { name: /hang it up|add to cart/i })
+      page.getByRole("button", { name: /hang it up|add to cart/i }).first()
     ).toBeVisible();
   });
 
@@ -154,7 +154,7 @@ test.describe("Cart Access", () => {
     // Add item to cart
     await page.goto(`/products/${product.handle}`);
     await page.waitForLoadState("domcontentloaded");
-    const addToCartButton = page.getByRole("button", { name: /hang it up|add to cart/i });
+    const addToCartButton = page.getByRole("button", { name: /hang it up|add to cart/i }).first();
     await addToCartButton.scrollIntoViewIfNeeded();
     await addToCartButton.click({ force: true });
 

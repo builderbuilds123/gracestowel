@@ -84,7 +84,7 @@ test.describe("Storefront navigation, discovery, and PDP coverage", () => {
 
     // Verify add to cart button
     await expect(
-      page.getByRole("button", { name: /hang it up|add to cart/i }),
+      page.getByRole("button", { name: /hang it up|add to cart/i }).first(),
     ).toBeVisible();
 
     // Verify reviews section exists (more reliable than Suspense-wrapped related products)

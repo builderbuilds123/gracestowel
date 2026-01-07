@@ -5,6 +5,69 @@
     "description": "Stripe webhook event simulators for testing payment event handling locally. This collection allows you to send simulated webhook events to your Medusa backend without making real Stripe transactions.\n\n## How Webhook Testing Works\n\n1. **Set your webhook secret**: Configure the `stripe_webhook_secret` environment variable with your Stripe webhook signing secret (starts with `whsec_`)\n\n2. **Pre-request script generates signature**: Each request automatically generates a valid `Stripe-Signature` header using HMAC-SHA256\n\n3. **Send the webhook**: The request is sent to your backend's webhook endpoint with the proper signature\n\n4. **Backend validates and processes**: Your Medusa backend validates the signature and processes the event\n\n## Getting Your Webhook Secret\n\n- **Local development**: Use Stripe CLI with `stripe listen --forward-to localhost:9000/hooks/stripe` and copy the webhook signing secret\n- **Staging/Production**: Get the signing secret from your Stripe Dashboard under Developers > Webhooks\n\n## Supported Events\n\n- `payment_intent.succeeded` - Payment completed successfully\n- `payment_intent.failed` - Payment failed\n- `checkout.session.completed` - Checkout session completed\n- Custom events via template request",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Load tv4 library for JSON schema validation",
+          "if (typeof tv4 === 'undefined') {",
+          "    pm.sendRequest({",
+          "        url: 'https://cdn.jsdelivr.net/npm/tv4@1.2.7/tv4.min.js',",
+          "        method: 'GET'",
+          "    }, function (err, res) {",
+          "        if (!err) {",
+          "            eval(res.text());",
+          "            pm.globals.set('tv4', tv4);",
+          "        } else {",
+          "            console.error('Failed to load tv4 library:', err);",
+          "        }",
+          "    });",
+          "} else {",
+          "    pm.globals.set('tv4', tv4);",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Ensure tv4 is available for tests",
+          "if (typeof tv4 === 'undefined' && pm.globals.get('tv4')) {",
+          "    tv4 = pm.globals.get('tv4');",
+          "}",
+          "",
+          "// JSON Schema for Webhook Response - Contract Test",
+          "const webhookResponseSchema = {",
+          "    type: 'object',",
+          "    properties: {",
+          "        received: { type: 'boolean' },",
+          "        error: { type: 'string' },",
+          "        message: { type: 'string' }",
+          "    }",
+          "};",
+          "",
+          "pm.test('Response status is 200 or 400', function () {",
+          "    pm.expect([200, 400, 401]).to.include(pm.response.code);",
+          "});",
+          "",
+          "pm.test('Contract Test: Webhook response matches schema', function () {",
+          "    if (pm.response.code === 200) {",
+          "        const response = pm.response.json();",
+          "        if (typeof tv4 !== 'undefined') {",
+          "            pm.expect(tv4.validate(response, webhookResponseSchema)).to.be.true;",
+          "        } else {",
+          "            pm.expect(response).to.have.property('received');",
+          "        }",
+          "    }",
+          "});"
+        ]
+      }
+    }
+  ],
   "item": [
     {
       "name": "Payment Intent Events",

@@ -77,4 +77,13 @@ apps/storefront/.pnpm-store/*
 
 apps/storefront/.vite
 
+# Python (for ralph-orchestrator)
+tools/ralph-orchestrator/.venv/
+tools/ralph-orchestrator/__pycache__/
+tools/ralph-orchestrator/**/__pycache__/
+tools/ralph-orchestrator/*.pyc
+tools/ralph-orchestrator/.agent/
+tools/ralph-orchestrator/.ralph/
+tools/ralph-orchestrator/prompts/archive/
+
 /interview

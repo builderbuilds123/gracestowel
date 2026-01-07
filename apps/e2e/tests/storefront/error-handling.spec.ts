@@ -66,7 +66,7 @@ test.describe("API Error Handling", () => {
     });
 
     // Try to add to cart
-    await page.getByRole("button", { name: /hang it up|add to cart/i }).click();
+    await page.getByRole("button", { name: /hang it up|add to cart/i }).first().click();
 
     // Wait for error handling - look for error message or alert
     // The app should either show an error message or remain interactive
@@ -77,7 +77,7 @@ test.describe("API Error Handling", () => {
     }
 
     // Page should not crash - verify it's still interactive
-    await expect(page.getByRole("button", { name: /hang it up|add to cart/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /hang it up|add to cart/i }).first()).toBeVisible();
   });
 });
 

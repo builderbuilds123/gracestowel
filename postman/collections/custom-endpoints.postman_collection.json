@@ -5,6 +5,49 @@
     "description": "Grace Stowel custom API endpoints including health checks and custom store/admin routes. These endpoints extend the standard Medusa API with application-specific functionality.\n\n## Endpoints Overview\n\n- **Health Check**: System health monitoring endpoint for deployment verification\n- **Store Custom**: Custom storefront-facing endpoints\n- **Admin Custom**: Custom admin endpoints (requires authentication)",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Load tv4 library for JSON schema validation",
+          "if (typeof tv4 === 'undefined') {",
+          "    pm.sendRequest({",
+          "        url: 'https://cdn.jsdelivr.net/npm/tv4@1.2.7/tv4.min.js',",
+          "        method: 'GET'",
+          "    }, function (err, res) {",
+          "        if (!err) {",
+          "            eval(res.text());",
+          "            pm.globals.set('tv4', tv4);",
+          "        } else {",
+          "            console.error('Failed to load tv4 library:', err);",
+          "        }",
+          "    });",
+          "} else {",
+          "    pm.globals.set('tv4', tv4);",
+          "}",
+          "",
+          "// Validate required environment variables",
+          "if (!pm.environment.get('base_url') && !pm.collectionVariables.get('base_url')) {",
+          "    console.warn('Warning: base_url not set in environment or collection variables');",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Ensure tv4 is available for tests",
+          "if (typeof tv4 === 'undefined' && pm.globals.get('tv4')) {",
+          "    tv4 = pm.globals.get('tv4');",
+          "}"
+        ]
+      }
+    }
+  ],
   "item": [
     {
       "name": "Health Check",
@@ -12,6 +55,86 @@
         {
           "name": "Health Check",
           "id": "abc6c457-f23c-46b8-81b4-9460dd828f83",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// JSON Schema for Health Check Response - Contract Test",
+                  "const healthCheckSchema = {",
+                  "    type: 'object',",
+                  "    required: ['status', 'service', 'timestamp'],",
+                  "    properties: {",
+                  "        status: {",
+                  "            type: 'string',",
+                  "            enum: ['healthy', 'unhealthy']",
+                  "        },",
+                  "        service: { type: 'string' },",
+                  "        timestamp: { type: 'string' },",
+                  "        response_time_ms: { type: 'number' },",
+                  "        checks: {",
+                  "            type: 'object',",
+                  "            properties: {",
+                  "                database: {",
+                  "                    type: 'object',",
+                  "                    properties: {",
+                  "                        status: {",
+                  "                            type: 'string',",
+                  "                            enum: ['ok', 'error']",
+                  "                        },",
+                  "                        latency_ms: { type: 'number' },",
+                  "                        error: { type: ['string', 'null'] }",
+                  "                    }",
+                  "                },",
+                  "                redis: {",
+                  "                    type: 'object',",
+                  "                    properties: {",
+                  "                        status: {",
+                  "                            type: 'string',",
+                  "                            enum: ['ok', 'error', 'not_configured']",
+                  "                        },",
+                  "                        latency_ms: { type: 'number' },",
+                  "                        error: { type: ['string', 'null'] }",
+                  "                    }",
+                  "                }",
+                  "            }",
+                  "        },",
+                  "        errors: {",
+                  "            type: ['array', 'null'],",
+                  "            items: { type: 'string' }",
+                  "        }",
+                  "    }",
+                  "};",
+                  "",
+                  "pm.test('Response status is 200 or 503', function () {",
+                  "    pm.expect([200, 503]).to.include(pm.response.code);",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Health check response matches schema', function () {",
+                  "    const response = pm.response.json();",
+                  "    if (typeof tv4 !== 'undefined') {",
+                  "        pm.expect(tv4.validate(response, healthCheckSchema)).to.be.true;",
+                  "        if (!tv4.validate(response, healthCheckSchema)) {",
+                  "            console.log('Schema validation error:', tv4.error);",
+                  "        }",
+                  "    } else {",
+                  "        pm.expect(response).to.have.property('status');",
+                  "        pm.expect(response).to.have.property('service');",
+                  "        pm.expect(['healthy', 'unhealthy']).to.include(response.status);",
+                  "    }",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Health check has required fields', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.have.property('status');",
+                  "    pm.expect(response).to.have.property('service');",
+                  "    pm.expect(response).to.have.property('timestamp');",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [
@@ -237,6 +360,157 @@
       ],
       "id": "ef449fcc-debb-43d8-af63-6dd2602bcbe0",
       "description": "Custom admin endpoints for Grace Stowel administrative functionality. These endpoints require authentication."
+    },
+    {
+      "name": "Health Workers",
+      "item": [
+        {
+          "name": "Get Workers Health",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// JSON Schema for Workers Health Response - Contract Test",
+                  "const workersHealthSchema = {",
+                  "    type: 'object',",
+                  "    required: ['redis', 'stripeEventQueue', 'paymentCaptureQueue', 'errors'],",
+                  "    properties: {",
+                  "        redis: {",
+                  "            type: 'object',",
+                  "            required: ['connected'],",
+                  "            properties: {",
+                  "                connected: { type: 'boolean' },",
+                  "                error: { type: ['string', 'null'] }",
+                  "            }",
+                  "        },",
+                  "        stripeEventQueue: {",
+                  "            type: ['object', 'null'],",
+                  "            properties: {",
+                  "                waiting: { type: 'number' },",
+                  "                active: { type: 'number' },",
+                  "                delayed: { type: 'number' },",
+                  "                completed: { type: 'number' },",
+                  "                failed: { type: 'number' }",
+                  "            }",
+                  "        },",
+                  "        paymentCaptureQueue: {",
+                  "            type: ['object', 'null'],",
+                  "            properties: {",
+                  "                waiting: { type: 'number' },",
+                  "                active: { type: 'number' },",
+                  "                delayed: { type: 'number' },",
+                  "                completed: { type: 'number' },",
+                  "                failed: { type: 'number' }",
+                  "            }",
+                  "        },",
+                  "        paymentCaptureDelayedJobs: {",
+                  "            type: ['array', 'null'],",
+                  "            items: {",
+                  "                type: 'object'",
+                  "            }",
+                  "        },",
+                  "        errors: {",
+                  "            type: 'array',",
+                  "            items: { type: 'string' }",
+                  "        }",
+                  "    }",
+                  "};",
+                  "",
+                  "pm.test('Response status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Workers health response matches schema', function () {",
+                  "    const response = pm.response.json();",
+                  "    if (typeof tv4 !== 'undefined') {",
+                  "        pm.expect(tv4.validate(response, workersHealthSchema)).to.be.true;",
+                  "        if (!tv4.validate(response, workersHealthSchema)) {",
+                  "            console.log('Schema validation error:', tv4.error);",
+                  "        }",
+                  "    } else {",
+                  "        pm.expect(response).to.have.property('redis');",
+                  "        pm.expect(response).to.have.property('errors');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "id": "health-workers",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/health/workers",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "health",
+                "workers"
+              ]
+            },
+            "description": "Get health status of background workers and queues (Stripe events, payment capture)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Failed Workers",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Response status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Contract Test: Failed workers response structure', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.have.property('failed');",
+                  "    pm.expect(response.failed).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "id": "health-workers-failed",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/health/workers/failed",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "health",
+                "workers",
+                "failed"
+              ]
+            },
+            "description": "Get list of failed worker jobs"
+          },
+          "response": []
+        }
+      ],
+      "id": "health-workers-section",
+      "description": "Background worker health monitoring endpoints"
     }
   ],
   "variable": [
