@@ -58,10 +58,9 @@ test.describe("Guest Checkout Flow", () => {
     await expect(page.getByRole("heading", { name: product.title })).toBeVisible({ timeout: 30000 });
 
     // Add to cart (button says "Hang it Up" in this storefront)
-    await page
-      .getByRole("button", { name: /hang it up|add to cart/i })
-      .first()
-      .click({ force: true });
+    const addToCartButton = page.getByRole("button", { name: /hang it up|add to cart/i }).first();
+    await addToCartButton.scrollIntoViewIfNeeded();
+    await addToCartButton.click({ force: true });
 
     // Verify cart drawer opens with the item - increased timeout for API call
     await expect(
@@ -89,10 +88,9 @@ test.describe("Guest Checkout Flow", () => {
 
     // Find and click increase quantity button (+ button)
     // Increase quantity - use force: true if backdrop intercepts
-    await page
-      .locator('button[aria-label="Increase quantity"]')
-      .first()
-      .click({ force: true });
+    const increaseBtn = page.locator('button[aria-label="Increase quantity"]').first();
+    await increaseBtn.scrollIntoViewIfNeeded();
+    await increaseBtn.click({ force: true });
 
     // Wait for UI to reflect the change
     await page.waitForTimeout(500);

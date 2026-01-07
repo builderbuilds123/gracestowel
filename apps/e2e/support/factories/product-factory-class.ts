@@ -23,7 +23,7 @@ export class ProductFactory {
       const adminProducts = await apiRequest<{ products: any[] }>({
         request: this.request,
         method: 'GET',
-        url: '/admin/products?status=published&limit=20&fields=+variants,+sales_channels',
+        url: '/admin/products?status[]=published&limit=20&fields=+variants,+sales_channels',
       });
 
       if (adminProducts.products?.length > 0) {
