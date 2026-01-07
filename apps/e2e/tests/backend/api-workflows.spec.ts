@@ -119,6 +119,10 @@ test.describe("Backend API workflows (admin)", () => {
       }
     }
     const regionId = region.id;
+    const countryCode = region.countries?.find((c: any) => c.iso_2 === "us")?.iso_2 
+      || region.countries?.[0]?.iso_2 
+      || "us";
+    console.log(`[Test] Selected Country Code: ${countryCode}`);
 
     console.log(`[Test] Creating cart with Region: ${regionId}, Sales Channel: ${salesChannelId}`);
 
@@ -179,7 +183,7 @@ test.describe("Backend API workflows (admin)", () => {
           last_name: "User",
           address_1: "123 Test St",
           city: "Los Angeles",
-          country_code: "us", 
+          country_code: countryCode, 
           postal_code: "90001",
         },
       },
