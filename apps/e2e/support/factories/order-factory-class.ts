@@ -64,11 +64,11 @@ export class OrderFactory {
     });
 
     // 5. Add Shipping Method
-    // Use /store/carts/:id/shipping-options to get options valid for this cart's region
+    // Use /store/shipping-options/:cart_id to get options valid for this cart's region (V2 API)
     const shippingOptionsResponse = await apiRequest<{ shipping_options: { id: string; name: string }[] }>({
       request: this.request,
       method: "GET",
-      url: `/store/carts/${cartId}/shipping-options`,
+      url: `/store/shipping-options/${cartId}`,
     });
 
     const shippingOptionId = shippingOptionsResponse.shipping_options?.[0]?.id;
