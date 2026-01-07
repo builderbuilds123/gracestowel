@@ -1,125 +1,95 @@
 import { APIRequestContext } from '@playwright/test';
-import { Product, createProduct } from './product-factory';
+import { Product } from './product-factory';
 import { apiRequest } from '../helpers/api-request';
 
 /**
- * ProductFactory with auto-cleanup
+ * ProductFactory - fetches existing seeded products for testing
  * 
- * This factory first tries to fetch existing seeded products (preferred),
- * falling back to creating new ones only if needed.
+ * This factory ONLY fetches existing seeded products (like "The Nuzzle")
+ * to avoid V2 API format issues when creating products.
  */
 export class ProductFactory {
-  private createdProductIds: string[] = [];
-
   constructor(private request: APIRequestContext) {}
 
   /**
-   * Get a product for testing.
+   * Get an existing seeded product for testing.
    * 
-   * Strategy:
-   * 1. First try to fetch existing seeded products (most reliable)
-   * 2. Only create new products if no seeded products exist
+   * This fetches published products from the store API (not admin)
+   * to ensure we get products that are available for purchase.
    */
   async createProduct(overrides: Partial<Product> = {}): Promise<Product> {
-    // Try to fetch existing seeded products first (more reliable than creating)
+    // STRATEGY: Fetch from store API (published products only)
+    // This avoids issues with admin API and ensures products are purchasable
     try {
-      const existingProducts = await apiRequest<{ products: Product[] }>({
+      const storeProducts = await apiRequest<{ products: any[] }>({
         request: this.request,
         method: 'GET',
-        url: '/admin/products?limit=10',
+        url: '/store/products?limit=10',
       });
 
-      if (existingProducts.products?.length > 0) {
-        const existingProduct = existingProducts.products[0];
-        console.log(`Using existing seeded product: ${existingProduct.title} (${existingProduct.id})`);
+      if (storeProducts.products?.length > 0) {
+        // Prefer "The Nuzzle" product since tests reference it
+        const nuzzle = storeProducts.products.find(p => 
+          p.handle === 'the-nuzzle' || p.title?.includes('Nuzzle')
+        );
+        const product = nuzzle || storeProducts.products[0];
         
-        // Get variant ID from the product
-        const variantId = (existingProduct as any).variants?.[0]?.id;
+        console.log(`Using seeded product: ${product.title} (${product.id})`);
+        
+        // Get the first variant with all its details
+        const variant = product.variants?.[0];
+        if (!variant) {
+          console.warn('Product has no variants, looking for another product...');
+        }
         
         return {
-          id: existingProduct.id,
-          title: existingProduct.title,
-          description: existingProduct.description,
-          handle: existingProduct.handle,
-          status: existingProduct.status,
-          variants: (existingProduct as any).variants,
-          variant_id: variantId,
+          id: product.id,
+          title: product.title,
+          description: product.description,
+          handle: product.handle,
+          status: 'published',
+          variants: product.variants,
+          variant_id: variant?.id,
         };
       }
     } catch (error) {
-      console.warn('Could not fetch existing products:', error);
+      console.warn('Could not fetch from store API:', error);
     }
 
-    // Fallback: create a new product via API
-    const product = createProduct(overrides);
-
+    // FALLBACK: Try admin API for published products
     try {
-      const { id, variant_id, ...payload } = product;
-      
-      // Format payload for Medusa V2 Admin API
-      const v2Payload = {
-        title: payload.title,
-        description: payload.description,
-        handle: payload.handle,
-        status: payload.status || 'published',
-        options: payload.options?.map(opt => ({
-          title: opt.title,
-          values: opt.values,
-        })),
-        variants: payload.variants?.map(v => ({
-          title: v.title,
-          sku: v.sku,
-          options: v.options,
-          manage_inventory: false,
-          allow_backorder: true,
-          prices: v.prices?.map(p => ({
-            amount: p.amount,
-            currency_code: p.currency_code,
-          })),
-        })),
-      };
-
-      console.log("Creating product with V2 payload:", JSON.stringify(v2Payload, null, 2));
-      
-      const created = await apiRequest<{ product: Product }>({
+      const adminProducts = await apiRequest<{ products: any[] }>({
         request: this.request,
-        method: 'POST',
-        url: '/admin/products',
-        data: v2Payload,
+        method: 'GET',
+        url: '/admin/products?status=published&limit=10',
       });
 
-      if (created.product?.id) {
-        this.createdProductIds.push(created.product.id);
-        const apiProduct = created.product;
-        return { 
-          ...product, 
-          id: apiProduct.id,
-          variants: (apiProduct as any).variants,
-          variant_id: (apiProduct as any).variants?.[0]?.id 
+      if (adminProducts.products?.length > 0) {
+        const product = adminProducts.products[0];
+        console.log(`Using admin product: ${product.title} (${product.id})`);
+        
+        const variant = product.variants?.[0];
+        return {
+          id: product.id,
+          title: product.title,
+          description: product.description,
+          handle: product.handle,
+          status: 'published',
+          variants: product.variants,
+          variant_id: variant?.id,
         };
       }
     } catch (error) {
-      console.warn('Could not create product via API, using factory data only:', error);
+      console.warn('Could not fetch from admin API:', error);
     }
 
-    // Last resort: return mock product data for UI tests only
-    return { ...product, variant_id: `variant_${product.id}` };
+    // If we can't find existing products, throw error instead of creating invalid ones
+    throw new Error(
+      'No seeded products found. Please run the seed script first: pnpm --filter backend seed'
+    );
   }
 
   async cleanup(): Promise<void> {
-    // Only cleanup products we created (not seeded ones)
-    for (const productId of this.createdProductIds) {
-      try {
-        await apiRequest({
-          request: this.request,
-          method: 'DELETE',
-          url: `/admin/products/${productId}`,
-        });
-      } catch (error) {
-        // Ignore cleanup errors
-        console.warn(`Could not cleanup product ${productId}:`, error);
-      }
-    }
-    this.createdProductIds = [];
+    // No cleanup needed - we don't create products
   }
 }

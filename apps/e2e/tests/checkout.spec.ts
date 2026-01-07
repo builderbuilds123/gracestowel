@@ -59,8 +59,8 @@ test.describe("Guest Checkout Flow", () => {
       page.getByRole("heading", { name: /towel rack/i }),
     ).toBeVisible({ timeout: 30000 });
 
-    // Verify item is in cart
-    await expect(page.getByText("The Nuzzle")).toBeVisible({ timeout: 30000 });
+    // Verify item is in cart (use first match since product name appears multiple places)
+    await expect(page.getByText("The Nuzzle").first()).toBeVisible({ timeout: 30000 });
   });
 
   test("should update cart quantity", async ({ page }) => {
