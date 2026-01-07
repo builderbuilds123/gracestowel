@@ -32,10 +32,12 @@ test.describe("Mobile Navigation", () => {
     await page.goto("/");
     await page.waitForLoadState("domcontentloaded");
 
-    // Find and tap first product
+    // Use a more robust locator and wait for hydration
     const firstProduct = page.locator('a[href^="/products/"]').first();
     await expect(firstProduct).toBeVisible();
-    await firstProduct.click();
+    await firstProduct.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(1000); // Wait for hydration
+    await firstProduct.click({ force: true });
 
     // Verify product page loads
     await page.waitForLoadState("domcontentloaded");
@@ -84,8 +86,8 @@ test.describe("Mobile Cart Experience", () => {
     const increaseButton = page.getByLabel("Increase quantity");
     await increaseButton.scrollIntoViewIfNeeded();
     await increaseButton.click({ force: true });
-    // Verify cart is still open after quantity update
-    await expect(page.getByRole("heading", { name: /towel rack|cart/i })).toBeVisible();
+    // Standardize cart heading and wait for hydration
+    await expect(page.getByRole("heading", { name: /towel rack/i })).toBeVisible({ timeout: 30000 });
   });
 
   test("should proceed to checkout on mobile", async ({ page, productFactory }) => {

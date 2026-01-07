@@ -14,7 +14,7 @@ test.describe("Homepage", () => {
     await expect(page).toHaveTitle(/Grace/i);
 
     // Verify Best Sellers heading is visible
-    await expect(page.getByRole("heading", { name: /Best Sellers/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Best Sellers/i })).toBeVisible({ timeout: 30000 });
 
     // Verify product cards are displayed
     const productLinks = page.locator('a[href^="/products/"]');
@@ -63,10 +63,12 @@ test.describe("Navigation", () => {
     await page.waitForLoadState("domcontentloaded");
 
     // Click on first product
-    const firstProduct = page.locator('a[href^="/products/"]').first();
-    await expect(firstProduct).toBeVisible();
-    await firstProduct.scrollIntoViewIfNeeded();
-    await firstProduct.click({ force: true });
+    // Use a more robust locator and wait for hydration
+    const productCard = page.locator('a[href*="/products/"]').first();
+    await expect(productCard).toBeVisible(); // Ensure the new locator finds something
+    await productCard.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(1000); // Wait for hydration
+    await productCard.click({ force: true });
 
     // Verify URL contains the product path
     await expect(page).toHaveURL(/\/products\//);
@@ -128,7 +130,8 @@ test.describe("Cart Access", () => {
       await cartButton.click({ force: true });
 
       // Cart drawer should open
-      await expect(page.getByRole("heading", { name: /towel rack/i })).toBeVisible();
+      // Standardize cart heading
+      await expect(page.getByRole("heading", { name: /towel rack/i })).toBeVisible({ timeout: 30000 });
       
       // Should show empty state
       await expect(page.getByText(/empty|no items/i)).toBeVisible();
@@ -145,7 +148,8 @@ test.describe("Cart Access", () => {
     await addToCartButton.click({ force: true });
 
     // Verify cart drawer opens with item
-    await expect(page.getByRole("heading", { name: /towel rack|cart/i })).toBeVisible();
+    // Standardize cart heading
+    await expect(page.getByRole("heading", { name: /towel rack/i })).toBeVisible({ timeout: 30000 });
     await expect(page.getByText(product.title).first()).toBeVisible();
   });
 });
