@@ -6,6 +6,64 @@ Grace's Towel uses a hybrid data approach:
 - **Static Data**: Product catalog defined in TypeScript files
 - **Dynamic Data**: Medusa API for real-time product management
 - **Client State**: React Context for cart and locale
+- **Edge Caching**: Hyperdrive for fast database reads
+
+## Data Flow Architecture
+
+```mermaid
+flowchart TB
+    subgraph "Data Sources"
+        Static["📄 Static Products<br/>(products.ts)"]
+        Medusa["🖥️ Medusa API"]
+        HD["⚡ Hyperdrive"]
+    end
+
+    subgraph "State Management"
+        Context["⚛️ React Context"]
+        Session["💾 Session Storage"]
+    end
+
+    subgraph "Components"
+        PLP["Product List"]
+        PDP["Product Detail"]
+        Cart["Cart"]
+        Checkout["Checkout"]
+    end
+
+    Static --> PLP
+    Medusa --> PLP
+    HD --> PLP
+    Medusa --> PDP
+    HD --> PDP
+    Context --> Cart
+    Session --> Context
+    Context --> Checkout
+```
+
+## Caching Strategy
+
+```mermaid
+flowchart LR
+    subgraph "Cache Layers"
+        L1["🌐 Browser Cache"]
+        L2["☁️ CDN Edge Cache"]
+        L3["⚡ Hyperdrive Pool"]
+        L4["🐘 PostgreSQL"]
+    end
+
+    Request --> L1
+    L1 -->|Miss| L2
+    L2 -->|Miss| L3
+    L3 --> L4
+```
+
+| Data Type | Cache TTL | Strategy |
+|-----------|-----------|----------|
+| Product catalog | 5 min | Stale-while-revalidate |
+| Pricing | Real-time | No cache (via API) |
+| Inventory | Real-time | No cache (via API) |
+| Cart | Session | Session storage |
+| Orders | N/A | Always fresh |
 
 ---
 
@@ -139,6 +197,21 @@ const SITE_CONFIG = {
 
 ## Cart State
 
+### Cart State Flow
+
+```mermaid
+stateDiagram-v2
+    [*] --> Empty: Page Load
+    Empty --> Loading: Check Session
+    Loading --> Empty: No Data
+    Loading --> Active: Data Found
+    Active --> Active: Add/Remove Item
+    Active --> Empty: Clear Cart
+    Active --> Checkout: Begin Checkout
+    Checkout --> Complete: Payment Success
+    Complete --> Empty: New Session
+```
+
 ### Location
 `apps/storefront/app/context/CartContext.tsx`
 
@@ -189,3 +262,12 @@ When cart total ≥ $35:
 
 When cart total < $35:
 - Automatically removes the free gift
+
+---
+
+## See Also
+
+- [Architecture Overview](./overview.md) - High-level system design
+- [Data Models](./data-models.md) - Database schema
+- [Storefront Architecture](./storefront.md) - Frontend patterns
+- [Integrations](./integrations.md) - Hyperdrive and API details

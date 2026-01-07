@@ -2,7 +2,7 @@
 
 **Date**: 2025-11-26
 **Reviewer**: Senior Technical Plan Reviewer
-**Target PRD**: [2025-11-26_task_summary.md](file:///Users/leonliang/Github%20Repo/gracestowel/docs/tasks/2025-11-26_task_summary.md)
+**Target PRD**: [2025-11-26_task_summary.md](./2025-11-26_task_summary.md)
 
 ## 1. Executive Summary
 

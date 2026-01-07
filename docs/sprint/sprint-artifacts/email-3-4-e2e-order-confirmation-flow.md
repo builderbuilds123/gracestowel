@@ -282,10 +282,10 @@ For manual testing, use a real email address you can access. Consider:
 
 ## References
 
-- [Email Queue (Story 1.1)](docs/sprint/sprint-artifacts/email-1-1-create-email-queue-service.md)
-- [Magic Link (Story 3.2)](docs/sprint/sprint-artifacts/email-3-2-generate-magic-link-for-guests.md)
-- [DLQ (Story 2.2)](docs/sprint/sprint-artifacts/email-2-2-implement-dead-letter-queue.md)
-- [Architecture Doc](docs/product/architecture/transactional-email-architecture.md)
+- [Email Queue (Story 1.1)](./email-1-1-create-email-queue-service.md)
+- [Magic Link (Story 3.2)](./email-3-2-generate-magic-link-for-guests.md)
+- [DLQ (Story 2.2)](./email-2-2-implement-dead-letter-queue.md)
+- [Architecture Doc](../../product/architecture/transactional-email-architecture.md)
 
 ## Dev Agent Record
 

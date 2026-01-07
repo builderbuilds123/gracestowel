@@ -198,10 +198,10 @@ Keep styles inline and simple for email client compatibility:
 
 ## References
 
-- [Magic Link Generation (Story 3.2)](docs/sprint/sprint-artifacts/email-3-2-generate-magic-link-for-guests.md)
-- [Existing Email Templates](apps/backend/src/modules/resend/emails/)
+- [Magic Link Generation (Story 3.2)](./email-3-2-generate-magic-link-for-guests.md)
+- Existing Email Templates: `apps/backend/src/modules/resend/emails/`
 - [React Email Docs](https://react.email/docs/introduction)
-- [Architecture Doc](docs/product/architecture/transactional-email-architecture.md)
+- [Architecture Doc](../../product/architecture/transactional-email-architecture.md)
 
 ## Dev Agent Record
 

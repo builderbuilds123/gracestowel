@@ -4,6 +4,56 @@
 
 Grace's Towel integrates with external services for payments, commerce, and infrastructure. This document details each integration and how data flows through the system.
 
+## Integration Architecture
+
+```mermaid
+flowchart TB
+    subgraph "Frontend Layer"
+        SF["📱 Storefront"]
+    end
+
+    subgraph "Payment Services"
+        Stripe["💳 Stripe"]
+    end
+
+    subgraph "Communication"
+        Resend["📧 Resend"]
+    end
+
+    subgraph "Analytics"
+        PostHog["📊 PostHog"]
+    end
+
+    subgraph "Infrastructure"
+        CF["☁️ Cloudflare"]
+        HD["⚡ Hyperdrive"]
+        R2["📦 R2 Storage"]
+    end
+
+    subgraph "Backend Services"
+        BE["🖥️ Medusa Backend"]
+    end
+
+    subgraph "Database Layer"
+        Railway["🚂 Railway"]
+        PG[("PostgreSQL")]
+        Redis[("Redis")]
+    end
+
+    SF --> Stripe
+    SF --> PostHog
+    SF --> HD
+    SF --> BE
+    SF --> R2
+    BE --> Stripe
+    BE --> Resend
+    BE --> PG
+    BE --> Redis
+    HD --> PG
+    Railway --> PG
+    Railway --> Redis
+```
+
 ---
 
 ## Stripe Integration
@@ -15,12 +65,37 @@ Stripe handles all payment processing, including:
 - Shipping rate management
 - Checkout sessions
 
+### Payment Flow
+
+```mermaid
+sequenceDiagram
+    participant C as Customer
+    participant SF as Storefront
+    participant BE as Backend
+    participant S as Stripe
+
+    C->>SF: Begin checkout
+    SF->>BE: Create payment session
+    BE->>S: Create PaymentIntent
+    S-->>BE: PaymentIntent ID
+    BE-->>SF: Client secret
+    
+    SF->>C: Show payment form
+    C->>S: Enter card details
+    S-->>C: Payment confirmed
+    
+    S->>BE: Webhook: payment_intent.succeeded
+    BE->>BE: Create order
+    BE-->>C: Order confirmation
+```
+
 ### Configuration
 
 **Environment Variables**:
 ```bash
 STRIPE_SECRET_KEY=sk_live_...   # Server-side API key
 STRIPE_PUBLISHABLE_KEY=pk_live_...  # Client-side key (embedded in code)
+STRIPE_WEBHOOK_SECRET=whsec_...  # Webhook signature verification
 ```
 
 ### API Endpoints
@@ -45,25 +120,6 @@ Creates a Stripe PaymentIntent for checkout.
 }
 ```
 
-**Flow**:
-```
-Checkout page loads
-        ↓
-POST /api/payment-intent
-        ↓
-Stripe PaymentIntent created
-        ↓
-Client secret returned
-        ↓
-Stripe Elements initialized
-        ↓
-User completes payment
-        ↓
-Stripe confirms payment
-        ↓
-Redirect to /checkout/success
-```
-
 #### Shipping Rates (`/api/shipping-rates`)
 
 Fetches available shipping options from Stripe.
@@ -81,6 +137,21 @@ Fetches available shipping options from Stripe.
 | `AddressElement` | Shipping address collection |
 | `LinkAuthenticationElement` | Email + Stripe Link |
 | `ExpressCheckoutElement` | Apple Pay, Google Pay, PayPal |
+
+### Error Handling
+
+```mermaid
+flowchart TD
+    A[Payment Attempt] --> B{Successful?}
+    B -->|Yes| C[Create Order]
+    B -->|No| D{Error Type}
+    D -->|Card Declined| E[Show User-Friendly Error]
+    D -->|Network Error| F[Retry with Backoff]
+    D -->|Rate Limit| G[Queue for Later]
+    E --> H[Log Error]
+    F --> H
+    G --> H
+```
 
 ---
 
@@ -115,6 +186,37 @@ const response = await fetch(`${MEDUSA_API_URL}/store/products`, {
 | Checkout via Medusa | ✅ Ready |
 | Order Management | ✅ Ready |
 | Customer Auth | ✅ Ready |
+
+---
+
+## Resend (Email) Integration
+
+### Overview
+
+Resend handles all transactional emails:
+- Order confirmation
+- Shipping updates
+- Password reset
+- Guest order access (magic links)
+
+### Email Queue Architecture
+
+```mermaid
+flowchart LR
+    A[Order Created] --> B[Email Queue]
+    B --> C{BullMQ Worker}
+    C -->|Success| D[Email Sent]
+    C -->|Failure| E[Retry with Backoff]
+    E -->|Max Retries| F[Dead Letter Queue]
+    F --> G[Alert Team]
+```
+
+### Configuration
+
+```bash
+RESEND_API_KEY=re_...
+EMAIL_FROM_ADDRESS=orders@gracestowel.com
+```
 
 ---
 
@@ -165,6 +267,17 @@ The storefront runs on Cloudflare's edge network:
 }
 ```
 
+### R2 Storage
+
+Used for static assets and product images:
+
+```bash
+R2_BUCKET_NAME=gracestowel-assets
+R2_ACCOUNT_ID=...
+R2_ACCESS_KEY_ID=...
+R2_SECRET_ACCESS_KEY=...
+```
+
 ---
 
 ## Hyperdrive Integration
@@ -181,23 +294,19 @@ Hyperdrive provides connection pooling for PostgreSQL at Cloudflare's edge, enab
 
 ### Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                     HYPERDRIVE DATA FLOW                                 │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                          │
-│  ┌─────────────┐     ┌──────────────┐     ┌─────────────────────────┐  │
-│  │  Customer   │────▶│  Storefront  │────▶│      Hyperdrive         │  │
-│  │   Browser   │     │  (CF Worker) │     │  (Edge Connection Pool) │  │
-│  └─────────────┘     └──────────────┘     └───────────┬─────────────┘  │
-│                                                        │                 │
-│                                            ┌───────────▼─────────────┐  │
-│                                            │      PostgreSQL         │  │
-│                                            │       (Railway)         │  │
-│                                            └─────────────────────────┘  │
-│                                                                          │
-│  Typical latency: 50-150ms (vs 200-500ms+ through Medusa)               │
-└─────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    subgraph "Edge (Cloudflare)"
+        SF["Storefront"]
+        HD["Hyperdrive Pool"]
+    end
+
+    subgraph "Origin (Railway)"
+        PG[("PostgreSQL")]
+    end
+
+    SF -->|"~50-150ms"| HD
+    HD -->|"Connection Pool"| PG
 ```
 
 ### Operations via Hyperdrive
@@ -216,40 +325,78 @@ Hyperdrive provides connection pooling for PostgreSQL at Cloudflare's edge, enab
 
 ---
 
-## Data Flow Diagrams
+## PostHog Integration
 
-### Product Data Flow (Hyperdrive - Fast Path)
+### Overview
 
-```
-┌─────────────┐     ┌──────────────┐     ┌─────────────┐     ┌──────────┐
-│  Customer   │────▶│  Storefront  │────▶│  Hyperdrive │────▶│ PostgreSQL│
-│   Browser   │     │  (CF Worker) │     │  (CF Edge)  │     │ (Railway) │
-└─────────────┘     └──────────────┘     └─────────────┘     └──────────┘
+PostHog provides analytics and event tracking:
+- Page views
+- User interactions
+- Checkout funnel analytics
+- A/B testing
+
+### Configuration
+
+```bash
+VITE_POSTHOG_KEY=phc_...
+VITE_POSTHOG_HOST=https://app.posthog.com
 ```
 
-### Complete Checkout Flow
+### Event Tracking
 
+```typescript
+// Track custom event
+posthog.capture('product_added_to_cart', {
+  product_id: 'prod_123',
+  product_name: 'Turkish Bath Towel',
+  quantity: 2,
+  price: 45.00
+});
 ```
-┌─────────────┐     ┌──────────────┐     ┌─────────────┐
-│  Customer   │────▶│  Storefront  │────▶│   Stripe    │
-│   Browser   │     │  (CF Worker) │     │    API      │
-└─────────────┘     └──────────────┘     └─────────────┘
-      │                    │                    │
-      │  1. Add to cart    │                    │
-      │ ─────────────────▶ │                    │
-      │                    │                    │
-      │  2. Checkout       │  3. Create Intent  │
-      │ ─────────────────▶ │ ──────────────────▶│
-      │                    │                    │
-      │                    │  4. Client Secret  │
-      │                    │ ◀──────────────────│
-      │                    │                    │
-      │  5. Payment Form   │                    │
-      │ ◀───────────────── │                    │
-      │                    │                    │
-      │  6. Submit Payment │  7. Confirm        │
-      │ ─────────────────▶ │ ──────────────────▶│
-      │                    │                    │
-      │  8. Success        │  9. Confirmation   │
-      │ ◀───────────────── │ ◀──────────────────│
+
+---
+
+## Complete Checkout Flow
+
+```mermaid
+sequenceDiagram
+    participant C as Customer
+    participant SF as Storefront
+    participant HD as Hyperdrive
+    participant BE as Backend
+    participant S as Stripe
+    participant R as Resend
+
+    Note over C,R: Browse Products (Fast Path)
+    C->>SF: View products
+    SF->>HD: Query products
+    HD-->>SF: Product data
+    SF-->>C: Display products
+
+    Note over C,R: Checkout (API Path)
+    C->>SF: Add to cart
+    SF->>BE: Create/update cart
+    BE-->>SF: Cart data
+    
+    C->>SF: Checkout
+    SF->>BE: Initialize payment
+    BE->>S: Create PaymentIntent
+    S-->>BE: Client secret
+    BE-->>SF: Payment ready
+    
+    C->>S: Submit payment
+    S->>BE: Webhook
+    BE->>BE: Create order
+    BE->>R: Queue email
+    R-->>C: Order confirmation
 ```
+
+---
+
+## See Also
+
+- [Architecture Overview](./overview.md) - High-level system design
+- [Backend Architecture](./backend.md) - Medusa patterns
+- [Storefront Architecture](./storefront.md) - Frontend patterns
+- [Environment Registry](../reference/env-registry.md) - All environment variables
+- [Stripe Troubleshooting](../troubleshooting/stripe-errors.md) - Common Stripe issues

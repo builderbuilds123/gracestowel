@@ -228,9 +228,9 @@ export async function clearGuestToken(orderId: string): Promise<string> {
 
 ### References
 
-- [Story 4.2 (Guest Auth)](file:///Users/leonliang/Github%20Repo/gracestowel/docs/sprint/sprint-artifacts/4-2-guest-auth-middleware.md)
-- [Story 3.1 (Order Status Route)](file:///Users/leonliang/Github%20Repo/gracestowel/docs/sprint/sprint-artifacts/3-1-storefront-timer-edit-ui.md)
-- [ModificationTokenService](file:///Users/leonliang/Github%20Repo/gracestowel/apps/backend/src/services/modification-token.ts)
+- [Story 4.2 (Guest Auth)](./4-2-guest-auth-middleware.md)
+- [Story 3.1 (Order Status Route)](./3-1-storefront-timer-edit-ui.md)
+- ModificationTokenService: `apps/backend/src/services/modification-token.ts`
 - [Cloudflare Workers Compatibility](https://developers.cloudflare.com/workers/runtime-apis/web-standards/)
 
 ## Dev Agent Record

@@ -221,10 +221,10 @@ Create runbook for ops team:
 
 ## References
 
-- [DLQ Implementation (Story 2.2)](docs/sprint/sprint-artifacts/email-2-2-implement-dead-letter-queue.md)
-- [Structured Logging (Story 4.2)](docs/sprint/sprint-artifacts/email-4-2-add-structured-logging.md)
-- [Architecture Doc - Alerting](docs/product/architecture/transactional-email-architecture.md)
-- [PRD - FR16](docs/product/prds/transactional-email-prd.md)
+- [DLQ Implementation (Story 2.2)](./email-2-2-implement-dead-letter-queue.md)
+- [Structured Logging (Story 4.2)](./email-4-2-add-structured-logging.md)
+- [Architecture Doc - Alerting](../../product/architecture/transactional-email-architecture.md)
+- [PRD - FR16](../../product/prds/transactional-email-prd.md)
 
 ## Dev Agent Record
 

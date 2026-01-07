@@ -199,10 +199,10 @@ catch (error) {
 
 ## References
 
-- [Email Queue (Story 1.1)](docs/sprint/sprint-artifacts/email-1-1-create-email-queue-service.md)
-- [Email Worker (Story 1.2)](docs/sprint/sprint-artifacts/email-1-2-create-email-worker.md)
+- [Email Queue (Story 1.1)](./email-1-1-create-email-queue-service.md)
+- [Email Worker (Story 1.2)](./email-1-2-create-email-worker.md)
 - [BullMQ Retry Docs](https://docs.bullmq.io/guide/retrying-failing-jobs)
-- [Architecture Doc](docs/product/architecture/transactional-email-architecture.md)
+- [Architecture Doc](../../product/architecture/transactional-email-architecture.md)
 
 ## Dev Agent Record
 

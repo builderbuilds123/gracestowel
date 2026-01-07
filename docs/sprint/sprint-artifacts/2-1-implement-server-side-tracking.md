@@ -57,7 +57,7 @@ So that we can reliably capture conversion data.
 
 - [PostHog-Node SDK](https://posthog.com/docs/libraries/node)
 - [Medusa Subscribers](https://docs.medusajs.com/v2/advanced-development/events-and-subscribers)
-- [Epic 2 Overview](docs/product/epics/overview.md#epic-2-comprehensive-data-capture--user-identification)
+- [Epic 2 Overview](../../product/epics/overview.md)
 
 ## Dev Agent Record
 

@@ -3,6 +3,62 @@
 ## Overview
 The backend is a **Medusa v2** application located in `apps/backend`. It adopts a modular architecture, leveraging Medusa's module system for isolation and scalability.
 
+## Module Architecture
+
+```mermaid
+flowchart TB
+    subgraph "API Layer"
+        Store["🏪 Store API<br/>/store/*"]
+        Admin["👤 Admin API<br/>/admin/*"]
+        Webhooks["🔗 Webhooks<br/>/webhooks/*"]
+        Health["💚 Health<br/>/health"]
+    end
+
+    subgraph "Business Logic"
+        Workflows["⚙️ Workflows"]
+        Services["🔧 Services"]
+        Subscribers["📡 Subscribers"]
+    end
+
+    subgraph "Medusa Modules"
+        Product["📦 Product"]
+        Order["📋 Order"]
+        Cart["🛒 Cart"]
+        Payment["💳 Payment"]
+        Inventory["📊 Inventory"]
+    end
+
+    subgraph "Custom Modules"
+        Review["⭐ Review"]
+        Resend["📧 Resend"]
+    end
+
+    subgraph "Infrastructure"
+        PG[("PostgreSQL")]
+        Redis[("Redis")]
+        BullMQ["BullMQ Jobs"]
+    end
+
+    Store --> Workflows
+    Admin --> Workflows
+    Webhooks --> Workflows
+    Workflows --> Services
+    Workflows --> Product
+    Workflows --> Order
+    Workflows --> Cart
+    Workflows --> Payment
+    Workflows --> Inventory
+    Services --> Review
+    Services --> Resend
+    Subscribers --> BullMQ
+    Product --> PG
+    Order --> PG
+    Cart --> PG
+    Payment --> PG
+    Inventory --> PG
+    BullMQ --> Redis
+```
+
 ## Configuration
 - **Entry Point**: `medusa-config.ts`
 - **Database**: PostgreSQL (configured via `DATABASE_URL` with SSL options).
@@ -22,6 +78,7 @@ The backend is a **Medusa v2** application located in `apps/backend`. It adopts 
 
 ### Custom Services
 - **InventoryDecrementService**: Located in `src/services/inventory-decrement-logic.ts`. Handles atomic inventory decrements with backorder support.
+- **ModificationTokenService**: Located in `src/services/modification-token.ts`. Generates JWT tokens for guest order access.
 
 ### API Structure
 The backend exposes API endpoints in `src/api`:
@@ -38,6 +95,37 @@ The backend exposes API endpoints in `src/api`:
 (Updated 2026-01-04)
 
 We implement a **Delayed Capture** pattern with strict adherence to Medusa's Payment Module to ensure data integrity and reconciliation.
+
+### Payment Flow Diagram
+
+```mermaid
+sequenceDiagram
+    participant C as Customer
+    participant SF as Storefront
+    participant BE as Backend
+    participant S as Stripe
+    participant R as Redis
+
+    C->>SF: Checkout
+    SF->>BE: Initialize payment session
+    BE->>S: Create PaymentIntent
+    S-->>BE: PaymentIntent ID
+    BE-->>SF: Client secret
+    
+    C->>S: Enter card details
+    S-->>SF: Payment confirmed
+    S->>BE: Webhook: payment_intent.succeeded
+    
+    BE->>BE: Create Order + PaymentCollection
+    BE->>R: Set capture timer (1hr TTL)
+    BE-->>SF: Order confirmation
+    
+    Note over R: After 1 hour...
+    R->>BE: TTL expired notification
+    BE->>S: Capture payment
+    S-->>BE: Capture confirmed
+    BE->>BE: Create OrderTransaction
+```
 
 - **Provider**: Stripe (via `@medusajs/payment-stripe`).
 - **Data Model**:
@@ -69,6 +157,25 @@ We implement a **Delayed Capture** pattern with strict adherence to Medusa's Pay
 
 ## Inventory Management
 (Updated 2026-01-04)
+
+### Inventory Flow Diagram
+
+```mermaid
+flowchart TD
+    subgraph "Order Creation"
+        A[Stripe Webhook] --> B{Acquire Lock}
+        B -->|Success| C[Create Order]
+        B -->|Fail| X[Return existing order]
+        C --> D[Reserve Inventory]
+        D --> E{Stock Available?}
+        E -->|Yes| F[Decrement stock]
+        E -->|No| G{Backorder allowed?}
+        G -->|Yes| H[Allow negative stock]
+        G -->|No| I[Fail with OOS error]
+        F --> J[Release Lock]
+        H --> J
+    end
+```
 
 ### Atomic Inventory Decrement
 - **Service**: `InventoryDecrementService` in `src/services/inventory-decrement-logic.ts`
@@ -102,3 +209,13 @@ We implement a **Delayed Capture** pattern with strict adherence to Medusa's Pay
 - **PII**: Read-only endpoints (e.g., `orders/by-payment-intent`) return strict subsets of data (no PII).
 - **Idempotency**: Webhook handlers and critical mutation endpoints use deterministic keys (e.g., `hash(cartId + amount)`) to prevent duplication.
 - **Locking**: Workflow-level locks prevent race conditions in concurrent order creation.
+
+---
+
+## See Also
+
+- [Architecture Overview](./overview.md) - High-level system design
+- [Storefront Architecture](./storefront.md) - Frontend patterns
+- [Data Models](./data-models.md) - Database schema
+- [Backend API Reference](../reference/backend-api.md) - API endpoints
+- [Integrations](./integrations.md) - External service details

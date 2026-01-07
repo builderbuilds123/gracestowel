@@ -48,9 +48,9 @@ so that we can understand user behavior.
 
 ### References
 
--   [Epics: Story 1.2](file:///Users/leonliang/Github%20Repo/gracestowel/docs/epics.md#story-12-track-key-user-events-on-the-storefront)
--   [Architecture: PostHog Integration](file:///Users/leonliang/Github%20Repo/gracestowel/docs/architecture.md#posthog-analytics-integration)
--   [Project Context](file:///Users/leonliang/Github%20Repo/gracestowel/docs/project_context.md)
+-   [Epic Overview](../../product/epics/overview.md)
+-   [Architecture: PostHog Integration](../../architecture/integrations.md)
+-   [Project Context](../../project_context.md)
 
 ## Dev Agent Record
 

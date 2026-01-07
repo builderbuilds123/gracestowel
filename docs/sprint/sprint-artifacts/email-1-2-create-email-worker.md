@@ -188,10 +188,10 @@ Set `concurrency: 5` to process multiple emails in parallel. Adjust based on Res
 
 ## References
 
-- [Fallback Capture Job (pattern)](apps/backend/src/jobs/fallback-capture.ts)
-- [Resend Service](apps/backend/src/modules/resend/service.ts)
-- [Email Queue (Story 1.1)](docs/sprint/sprint-artifacts/email-1-1-create-email-queue-service.md)
-- [Architecture Doc](docs/product/architecture/transactional-email-architecture.md)
+- Fallback Capture Job (pattern): `apps/backend/src/jobs/fallback-capture.ts`
+- Resend Service: `apps/backend/src/modules/resend/service.ts`
+- [Email Queue (Story 1.1)](./email-1-1-create-email-queue-service.md)
+- [Architecture Doc](../../product/architecture/transactional-email-architecture.md)
 
 ## Dev Agent Record
 

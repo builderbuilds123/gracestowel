@@ -183,11 +183,11 @@ so that unauthorized users cannot access random orders.
 
 ### References
 
-- [Story 4.1 (Token Generation)](file:///Users/leonliang/Github%20Repo/gracestowel/docs/sprint/sprint-artifacts/4-1-magic-link-generation.md)
-- [Story 4.3 (Session Persistence)](file:///Users/leonliang/Github%20Repo/gracestowel/docs/sprint/sprint-artifacts/4-3-session-persistence.md)
-- [Backend Guest View Route](file:///Users/leonliang/Github%20Repo/gracestowel/apps/backend/src/api/store/orders/[id]/guest-view/route.ts)
-- [Storefront Order Status Route](file:///Users/leonliang/Github%20Repo/gracestowel/apps/storefront/app/routes/order_.status.$id.tsx)
-- [ModificationTokenService](file:///Users/leonliang/Github%20Repo/gracestowel/apps/backend/src/services/modification-token.ts)
+- [Story 4.1 (Token Generation)](./4-1-magic-link-generation.md)
+- [Story 4.3 (Session Persistence)](./4-3-session-persistence.md)
+- Backend Guest View Route: `apps/backend/src/api/store/orders/[id]/guest-view/route.ts`
+- Storefront Order Status Route: `apps/storefront/app/routes/order_.status.$id.tsx`
+- ModificationTokenService: `apps/backend/src/services/modification-token.ts`
 
 ## Dev Agent Record
 

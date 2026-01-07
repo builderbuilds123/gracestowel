@@ -195,9 +195,9 @@ export default async function emailQueueLoader({ container }) {
 
 ## References
 
-- [Email Queue (Story 1.1)](docs/sprint/sprint-artifacts/email-1-1-create-email-queue-service.md)
-- [Architecture Doc - Non-Blocking Pattern](docs/product/architecture/transactional-email-architecture.md)
-- [PRD - NFR10](docs/product/prds/transactional-email-prd.md)
+- [Email Queue (Story 1.1)](./email-1-1-create-email-queue-service.md)
+- [Architecture Doc - Non-Blocking Pattern](../../product/architecture/transactional-email-architecture.md)
+- [PRD - NFR10](../../product/prds/transactional-email-prd.md)
 
 ## Dev Agent Record
 

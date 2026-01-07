@@ -36,8 +36,8 @@ so that we can analyze user journeys.
 
 ### References
 
-- [Epics: Story 1.3](file:///Users/leonliang/Github%20Repo/gracestowel/docs/epics.md#story-13-associate-events-with-anonymous-user-ids)
-- [Architecture: Cookie Policy](file:///Users/leonliang/Github%20Repo/gracestowel/docs/architecture.md#cookie-policy-integration)
+- [Epic Overview](../../product/epics/overview.md)
+- [Architecture Overview](../../architecture/overview.md)
 
 ## Dev Agent Record
 

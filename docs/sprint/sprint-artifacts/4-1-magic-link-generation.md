@@ -157,11 +157,11 @@ sequenceDiagram
 
 ###  References
 
-- [ModificationTokenService](file:///Users/leonliang/Github%20Repo/gracestowel/apps/backend/src/services/modification-token.ts)
-- [Order Placed Subscriber](file:///Users/leonliang/Github%20Repo/gracestowel/apps/backend/src/subscribers/order-placed.ts)
-- [Create Order Workflow](file:///Users/leonliang/Github%20Repo/gracestowel/apps/backend/src/workflows/create-order-from-stripe.ts)
-- [Epic 7.1 (Security)](file:///Users/leonliang/Github%20Repo/gracestowel/docs/epics.md)
-- [Backend Architecture](file:///Users/leonliang/Github%20Repo/gracestowel/docs/architecture/backend.md)
+- ModificationTokenService: `apps/backend/src/services/modification-token.ts`
+- Order Placed Subscriber: `apps/backend/src/subscribers/order-placed.ts`
+- Create Order Workflow: `apps/backend/src/workflows/create-order-from-stripe.ts`
+- [Epic Overview](../../product/epics/overview.md)
+- [Backend Architecture](../../architecture/backend.md)
 
 ## Dev Agent Record
 

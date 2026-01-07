@@ -204,10 +204,10 @@ The `failed` event handler (Story 2.2) won't fire because the job "succeeded" (f
 
 ## References
 
-- [Email Worker (Story 1.2)](docs/sprint/sprint-artifacts/email-1-2-create-email-worker.md)
-- [DLQ Implementation (Story 2.2)](docs/sprint/sprint-artifacts/email-2-2-implement-dead-letter-queue.md)
+- [Email Worker (Story 1.2)](./email-1-2-create-email-worker.md)
+- [DLQ Implementation (Story 2.2)](./email-2-2-implement-dead-letter-queue.md)
 - [Resend API Docs](https://resend.com/docs/api-reference/errors)
-- [Architecture Doc](docs/product/architecture/transactional-email-architecture.md)
+- [Architecture Doc](../../product/architecture/transactional-email-architecture.md)
 
 ## Dev Agent Record
 

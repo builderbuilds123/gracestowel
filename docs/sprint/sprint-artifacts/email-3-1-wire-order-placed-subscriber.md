@@ -197,9 +197,9 @@ The order's email comes from checkout. It's stored in `order.email`. For guest o
 
 ## References
 
-- [Email Queue (Story 1.1)](docs/sprint/sprint-artifacts/email-1-1-create-email-queue-service.md)
-- [Existing Order Placed Subscriber](apps/backend/src/subscribers/order-placed.ts)
-- [Architecture Doc](docs/product/architecture/transactional-email-architecture.md)
+- [Email Queue (Story 1.1)](./email-1-1-create-email-queue-service.md)
+- Existing Order Placed Subscriber: `apps/backend/src/subscribers/order-placed.ts`
+- [Architecture Doc](../../product/architecture/transactional-email-architecture.md)
 
 ## Dev Agent Record
 

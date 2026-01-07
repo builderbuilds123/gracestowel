@@ -1,7 +1,58 @@
 # Storefront Architecture
 
 ## Overview
-The storefront is a **React Router v7** application located in `apps/storefront`. It is designed to be performant, SEO-friendly, and responsive.
+The storefront is a **React Router v7** application located in `apps/storefront`. It is designed to be performant, SEO-friendly, and responsive. It runs on **Cloudflare Workers** at the edge for optimal performance.
+
+## Architecture Diagram
+
+```mermaid
+flowchart TB
+    subgraph "Client Browser"
+        UI["React UI Components"]
+        Stripe["Stripe Elements"]
+        PostHog["PostHog SDK"]
+    end
+
+    subgraph "Cloudflare Workers (Edge)"
+        SF["Storefront App"]
+        Loader["Route Loaders"]
+        Actions["Route Actions"]
+        API["API Routes"]
+    end
+
+    subgraph "Data Sources"
+        HD["⚡ Hyperdrive<br/>(Direct DB reads)"]
+        BE["🖥️ Backend API<br/>(Writes)"]
+    end
+
+    UI --> Loader
+    UI --> Actions
+    UI --> API
+    Stripe --> API
+    PostHog --> PostHog["PostHog Cloud"]
+    Loader --> HD
+    Actions --> BE
+    API --> BE
+    HD --> PG[("PostgreSQL")]
+    BE --> PG
+```
+
+## Data Access Pattern
+
+```mermaid
+flowchart LR
+    subgraph "READ Path (Fast)"
+        R1["Product Page"] --> R2["Hyperdrive"]
+        R2 --> R3[("PostgreSQL")]
+    end
+
+    subgraph "WRITE Path (Safe)"
+        W1["Add to Cart"] --> W2["Medusa API"]
+        W2 --> W3[("PostgreSQL")]
+    end
+```
+
+**Key Principle**: Reads go directly to the database via Hyperdrive for speed. Writes go through the Medusa API to ensure business logic execution.
 
 ## Core Capabilities
 
@@ -16,6 +67,7 @@ The application uses file-system based routing:
     - `/cart`: Shopping cart view.
     - `/checkout`: Main checkout process.
     - `/checkout/success`: Order confirmation.
+    - `/order/status/$id`: Guest order status page.
 - **User Account**:
     - `/account`: Dashboard.
     - `/account/login`: Authentication.
@@ -25,7 +77,28 @@ The application uses file-system based routing:
     - `/about`: About page.
     - `/wishlist`: User wishlist.
 
-### API Proxying & BFF pattern
+### Route Structure
+
+```
+apps/storefront/app/routes/
+├── home.tsx                        # Landing page
+├── products.$handle.tsx            # Product detail page
+├── collections.$handle.tsx         # Collection pages
+├── cart.tsx                        # Shopping cart
+├── checkout.tsx                    # Checkout flow
+├── checkout.success.tsx            # Order confirmation
+├── order_.status.$id.tsx           # Guest order status
+├── account.tsx                     # Account dashboard
+├── account.login.tsx               # Login page
+├── account.register.tsx            # Registration
+├── api.carts.$id.ts               # Cart API
+├── api.carts.$id.shipping-options.ts  # Shipping options
+├── api.payment-intent.ts           # Payment intent API
+├── api.checkout-session.ts         # Checkout session API
+└── api.health.ts                   # Health check
+```
+
+### API Proxying & BFF Pattern
 The storefront includes server-side resource routes (loaders/actions) that act as a Backend-for-Frontend (BFF) to securely interact with third-party services or abstract complex backend calls:
 - `api.checkout-session.ts`: Manages Stripe checkout sessions.
 - `api.payment-intent.ts`: Manages Stripe PaymentIntent lifecycle (create OR update).
@@ -48,3 +121,26 @@ The storefront includes server-side resource routes (loaders/actions) that act a
 - **Medusa SDK**: Used for cart management, product retrieval, and customer auth.
 - **PostHog**: Integrated via `utils/posthog.ts` for client-side event tracking.
 - **Stripe**: Integrated via `@stripe/react-stripe-js` for payment element rendering.
+
+## Edge Runtime Constraints
+
+Since the storefront runs on Cloudflare Workers:
+
+| ❌ Not Available | ✅ Available |
+|-----------------|-------------|
+| Node.js `fs`, `path`, `child_process` | Web APIs (fetch, crypto, etc.) |
+| Direct database drivers | Hyperdrive for DB access |
+| Node.js-specific libraries | Web-compatible libraries |
+| Long-running processes | Edge-optimized functions |
+
+**Important**: Always use `env.HYPERDRIVE.connectionString` for database access, never direct PostgreSQL URLs.
+
+---
+
+## See Also
+
+- [Architecture Overview](./overview.md) - High-level system design
+- [Backend Architecture](./backend.md) - Medusa backend patterns
+- [Storefront API Reference](../reference/storefront-api.md) - API route documentation
+- [Storefront Components](../reference/storefront-components.md) - React component library
+- [Development Guide](../guides/development.md) - Local setup instructions
