@@ -68,10 +68,11 @@ test.describe("Navigation", () => {
     await expect(productCard).toBeVisible({ timeout: 30000 }); // Ensure the new locator finds something
     await productCard.scrollIntoViewIfNeeded();
     await page.waitForTimeout(1000); // Wait for hydration
-    await productCard.click({ force: true });
-
     // Verify URL contains the product path
-    await expect(page).toHaveURL(/\/products\//);
+    await Promise.all([
+      page.waitForURL(/\/products\//),
+      productCard.click({ force: true })
+    ]);
 
     // Verify product page loaded (has add to cart button)
     await expect(

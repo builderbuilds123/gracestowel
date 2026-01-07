@@ -36,9 +36,22 @@ export class OrderFactory {
 
     // 3. Find a region linked to this sales channel
     // In V2, a region is linked to 1 or more sales channels.
-    const region = regionsResponse.regions.find(r => 
+    // 3. Find a region linked to this sales channel
+    let region = regionsResponse.regions.find(r => 
       r.sales_channels?.some((sc: any) => sc.id === salesChannelId)
-    ) || regionsResponse.regions[0];
+    );
+
+    // If no region supports this sales channel, or if we just want to be safe:
+    // Pick the first region and use one of ITS sales channels
+    if (!region) {
+      console.warn(`[OrderFactory] Sales channel ${salesChannelId} not linked to any fetched region. Falling back to first available region.`);
+      region = regionsResponse.regions[0];
+      const compatibleScId = region.sales_channels?.[0]?.id;
+      if (compatibleScId) {
+        console.warn(`[OrderFactory] Switched to region-compatible sales channel: ${compatibleScId}`);
+        salesChannelId = compatibleScId;
+      }
+    }
 
     if (!region) {
       throw new Error("No regions found in the system. Seed may have failed.");
