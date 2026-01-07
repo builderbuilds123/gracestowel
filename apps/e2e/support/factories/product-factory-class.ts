@@ -15,7 +15,38 @@ export class ProductFactory {
    * Get an existing seeded product for testing.
    */
   async createProduct(overrides: Partial<Product> = {}): Promise<Product> {
-    // STRATEGY: Try admin API for published products (this gives us more info like sales channels)
+    // 1. Identify which sales channels are linked to our current publishable key
+    let linkedSalesChannelIds: string[] = [];
+    const pk = process.env.MEDUSA_PUBLISHABLE_KEY;
+    
+    if (pk) {
+      try {
+        const adminApiKeys = await apiRequest<{ api_keys: any[] }>({
+          request: this.request,
+          method: 'GET',
+          url: '/admin/api-keys?limit=20',
+        });
+        
+        const currentPk = adminApiKeys.api_keys.find(k => k.token === pk);
+        if (currentPk && currentPk.sales_channels) {
+          linkedSalesChannelIds = currentPk.sales_channels.map((sc: any) => sc.id);
+          console.log(`Current publishable key is linked to sales channels: ${linkedSalesChannelIds.join(', ')}`);
+        } else if (currentPk) {
+          // In some V2 versions, we might need a separate call to /admin/api-keys/:id/sales-channels
+          const scLinks = await apiRequest<{ sales_channels: any[] }>({
+            request: this.request,
+            method: 'GET',
+            url: `/admin/api-keys/${currentPk.id}/sales-channels`,
+          });
+          linkedSalesChannelIds = scLinks.sales_channels.map((sc: any) => sc.id);
+          console.log(`Fetched linked sales channels: ${linkedSalesChannelIds.join(', ')}`);
+        }
+      } catch (error) {
+        console.warn('Could not identify linked sales channels for publishable key:', error);
+      }
+    }
+
+    // 2. STRATEGY: Try admin API for published products
     try {
       const adminProducts = await apiRequest<{ products: any[] }>({
         request: this.request,
@@ -24,16 +55,24 @@ export class ProductFactory {
       });
 
       if (adminProducts.products?.length > 0) {
-        // Filter out products that have no variants or no sales channels (Medusa V2 requirement for storefront)
-        const validProducts = adminProducts.products.filter(p => 
+        // Filter products that have variants AND are linked to a sales channel
+        let validProducts = adminProducts.products.filter(p => 
           (p.variants?.length > 0) && (p.sales_channels?.length > 0)
         );
 
-        if (validProducts.length === 0) {
-          console.warn('No products found with both variants AND sales channels among admin products!');
+        // EXTRA CREDIT: Filter products that are linked to one of OUR publishable key's sales channels
+        if (linkedSalesChannelIds.length > 0) {
+          const compatibleProducts = validProducts.filter(p => 
+            p.sales_channels.some((sc: any) => linkedSalesChannelIds.includes(sc.id))
+          );
+          if (compatibleProducts.length > 0) {
+            console.log(`Found ${compatibleProducts.length} products compatible with the current publishable key`);
+            validProducts = compatibleProducts;
+          } else {
+            console.warn('No products found that match the current publishable key\'s sales channels!');
+          }
         }
 
-        // Prefer "The Nuzzle" product if it's among valid ones
         const nuzzle = validProducts.find(p => 
           p.handle === 'the-nuzzle' || p.title?.includes('Nuzzle')
         );
@@ -42,12 +81,16 @@ export class ProductFactory {
         console.log(`Using admin product: ${product.title} (${product.id})`);
         
         const variant = product.variants?.find((v: any) => v.inventory_quantity !== 0) || product.variants?.[0];
-        const scId = product.sales_channels?.[0]?.id;
+        
+        // Pick a sales channel that is both on the product AND linked to the PK
+        let scId = product.sales_channels?.[0]?.id;
+        if (linkedSalesChannelIds.length > 0) {
+          const compatibleSc = product.sales_channels.find((sc: any) => linkedSalesChannelIds.includes(sc.id));
+          if (compatibleSc) scId = compatibleSc.id;
+        }
 
         if (scId) {
           console.log(`Product ${product.handle} is linked to sales channel: ${scId}`);
-        } else {
-          console.warn(`Product ${product.handle} has NO sales channels linked!`);
         }
 
         return {
