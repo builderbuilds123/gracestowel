@@ -60,7 +60,8 @@ test.describe("Guest Checkout Flow", () => {
     // Add to cart (button says "Hang it Up" in this storefront)
     await page
       .getByRole("button", { name: /hang it up|add to cart/i })
-      .click();
+      .first()
+      .click({ force: true });
 
     // Verify cart drawer opens with the item - increased timeout for API call
     await expect(

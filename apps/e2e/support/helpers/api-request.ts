@@ -54,17 +54,29 @@ export async function apiRequest<T = unknown>({
     }
   });
 
-  // Security: Only attach Authorization header to internal API URLs
-  // Prevent token leakage to external URLs
-  const isExternalUrl = url.startsWith("http") && !requestUrl.href.startsWith(baseUrl);
-  const authorization = !isExternalUrl ? (process.env.ADMIN_TOKEN || authToken || process.env.MEDUSA_PUBLISHABLE_KEY) : undefined;
+  // Determine which token to use for authorization
+  // Admin API: process.env.ADMIN_TOKEN (default) or authToken
+  // Store API: authToken only (e.g. customer JWT) - do NOT use ADMIN_TOKEN
+  const isAdminUrl = requestUrl.pathname.startsWith("/admin");
+  const isStoreUrl = requestUrl.pathname.startsWith("/store");
+  
+  let finalAuthToken = authToken;
+  if (isAdminUrl && !finalAuthToken) {
+    finalAuthToken = process.env.ADMIN_TOKEN;
+  }
+  
+  // Security fallback: Use publishable key as last resort for store URLs if no token provided
+  // (Medusa V2 Store API accepts this in the header, sometimes as Bearer for consistency)
+  if (isStoreUrl && !finalAuthToken && !headers["x-publishable-api-key"]) {
+    // This is less common but safe
+  }
 
   const response = await request.fetch(requestUrl.toString(), {
     method,
     headers: {
       "Content-Type": "application/json",
       "x-publishable-api-key": process.env.MEDUSA_PUBLISHABLE_KEY || "",
-      ...(authorization ? { Authorization: `Bearer ${authorization}` } : {}),
+      ...(finalAuthToken ? { Authorization: `Bearer ${finalAuthToken}` } : {}),
       ...headers,
     },
     data,

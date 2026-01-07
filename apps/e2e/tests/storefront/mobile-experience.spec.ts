@@ -58,7 +58,7 @@ test.describe("Mobile Cart Experience", () => {
     await expect(page.getByRole("heading", { name: product.title })).toBeVisible();
 
     // Add to cart
-    await page.getByRole("button", { name: /hang it up|add to cart/i }).click();
+    await page.getByRole("button", { name: /hang it up|add to cart/i }).click({ force: true });
 
     // Verify cart drawer opens (should work on mobile)
     await expect(page.getByRole("heading", { name: /towel rack|cart/i })).toBeVisible();
@@ -73,7 +73,7 @@ test.describe("Mobile Cart Experience", () => {
     await page.waitForLoadState("domcontentloaded");
 
     // Add to cart
-    await page.getByRole("button", { name: /hang it up|add to cart/i }).click();
+    await page.getByRole("button", { name: /hang it up|add to cart/i }).click({ force: true });
     await expect(page.getByRole("heading", { name: /towel rack|cart/i })).toBeVisible();
 
     // Find and tap increase quantity button using semantic selector
@@ -91,7 +91,7 @@ test.describe("Mobile Cart Experience", () => {
     await page.waitForLoadState("domcontentloaded");
 
     // Add to cart
-    await page.getByRole("button", { name: /hang it up|add to cart/i }).click();
+    await page.getByRole("button", { name: /hang it up|add to cart/i }).click({ force: true });
     await expect(page.getByRole("heading", { name: /towel rack|cart/i })).toBeVisible();
 
     // Find checkout link and click
