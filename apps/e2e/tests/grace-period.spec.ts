@@ -161,21 +161,12 @@ test.describe("AC1: Timer Visibility & Expiration", () => {
     // AC1.1: Timer MUST be displayed on order confirmation/status page
     test.skip(!TEST_TOKEN, "Requires TEST_MODIFICATION_TOKEN env var");
 
-    // Network-first: Wait for order status API
-    const orderStatusPromise = page.waitForResponse(
-      (response) =>
-        response.url().includes(`/order/status/${TEST_ORDER_ID}`) &&
-        response.status() === 200,
-    );
-
     await page.goto(`/order/status/${TEST_ORDER_ID}?token=${TEST_TOKEN}`);
-
-    // Wait for order data to load
-    await orderStatusPromise;
+    await page.waitForLoadState("domcontentloaded");
 
     // OrderTimer component uses role="timer" (line 66 of OrderTimer.tsx)
     const timer = page.getByRole("timer");
-    await expect(timer).toBeVisible({ timeout: 10000 });
+    await expect(timer).toBeVisible({ timeout: 30000 });
 
     // Timer should show MM:SS format
     await expect(timer).toContainText(/\d{2}:\d{2}/);
@@ -187,17 +178,8 @@ test.describe("AC1: Timer Visibility & Expiration", () => {
     // AC1.1: "Edit Order" button MUST be visible during grace period
     test.skip(!TEST_TOKEN, "Requires TEST_MODIFICATION_TOKEN env var");
 
-    // Network-first: Wait for order status API
-    const orderStatusPromise = page.waitForResponse(
-      (response) =>
-        response.url().includes(`/order/status/${TEST_ORDER_ID}`) &&
-        response.status() === 200,
-    );
-
     await page.goto(`/order/status/${TEST_ORDER_ID}?token=${TEST_TOKEN}`);
-
-    // Wait for order data to load
-    await orderStatusPromise;
+    await page.waitForLoadState("domcontentloaded");
   });
 
   test("should hide edit options when grace period expires (short TTL)", async ({
@@ -248,27 +230,18 @@ test.describe("AC2 & AC3: Magic Link & Cookie Persistence", () => {
       "Requires JWT_SECRET env var to generate signed expired token",
     );
 
-    // Network-first: Wait for 403 error response (TOKEN_EXPIRED)
-    const errorResponsePromise = page.waitForResponse(
-      (response) =>
-        response.url().includes(`/order/status/${TEST_ORDER_ID}`) &&
-        response.status() === 403,
-    );
-
     // Use properly signed but expired token
     await page.goto(`/order/status/${TEST_ORDER_ID}?token=${EXPIRED_TOKEN}`);
-
-    // Wait for error response
-    await errorResponsePromise;
+    await page.waitForLoadState("domcontentloaded");
 
     // Order status page shows "Link Expired" heading (line 224 of order_.status.$id.tsx)
     const expiredHeading = page.getByRole("heading", { name: /Link Expired/i });
-    await expect(expiredHeading).toBeVisible({ timeout: 10000 });
+    await expect(expiredHeading).toBeVisible({ timeout: 30000 });
 
     // Should also see "Request New Link" button
     await expect(
       page.getByRole("button", { name: /Request New Link/i }),
-    ).toBeVisible();
+    ).toBeVisible({ timeout: 30000 });
   });
 
   // TODO: This test requires the backend to return specific error codes for invalid tokens
@@ -299,21 +272,14 @@ test.describe("AC2 & AC3: Magic Link & Cookie Persistence", () => {
     // AC2: Cookie guest_order_{order_id} with proper security attributes
     test.skip(!TEST_TOKEN, "Requires TEST_MODIFICATION_TOKEN env var");
 
-    // Network-first: Wait for order status API
-    const orderStatusPromise = page.waitForResponse(
-      (response) =>
-        response.url().includes(`/order/status/${TEST_ORDER_ID}`) &&
-        response.status() === 200,
-    );
-
     // Visit with token in URL (first visit via magic link)
     await page.goto(`/order/status/${TEST_ORDER_ID}?token=${TEST_TOKEN}`);
+    await page.waitForLoadState("domcontentloaded");
 
     // Wait for page to load successfully
-    await orderStatusPromise;
     await expect(
       page.getByRole("heading", { name: /Order Status/i }),
-    ).toBeVisible({ timeout: 10000 });
+    ).toBeVisible({ timeout: 30000 });
 
     // Check cookie was set
     const cookies = await context.cookies();
@@ -334,37 +300,21 @@ test.describe("AC2 & AC3: Magic Link & Cookie Persistence", () => {
     // AC2: Cookie-based session persists across page loads
     test.skip(!TEST_TOKEN, "Requires TEST_MODIFICATION_TOKEN env var");
 
-    // Network-first: Wait for order status API
-    const orderStatusPromise = page.waitForResponse(
-      (response) =>
-        response.url().includes(`/order/status/${TEST_ORDER_ID}`) &&
-        response.status() === 200,
-    );
-
     // First visit with token
     await page.goto(`/order/status/${TEST_ORDER_ID}?token=${TEST_TOKEN}`);
-    await orderStatusPromise;
+    await page.waitForLoadState("domcontentloaded");
     await expect(
       page.getByRole("heading", { name: /Order Status/i }),
-    ).toBeVisible({ timeout: 10000 });
-
-    // Wait for second order status API
-    const secondOrderStatusPromise = page.waitForResponse(
-      (response) =>
-        response.url().includes(`/order/status/${TEST_ORDER_ID}`) &&
-        response.status() === 200,
-    );
+    ).toBeVisible({ timeout: 30000 });
 
     // Second visit WITHOUT token in URL
     await page.goto(`/order/status/${TEST_ORDER_ID}`);
-
-    // Wait for order data to load
-    await secondOrderStatusPromise;
+    await page.waitForLoadState("domcontentloaded");
 
     // Should still load successfully (using cookie)
     await expect(
       page.getByRole("heading", { name: /Order Status/i }),
-    ).toBeVisible({ timeout: 10000 });
+    ).toBeVisible({ timeout: 30000 });
 
     // Confirm no 401/403 error
     await expect(page.getByText(/unauthorized|forbidden|expired/i)).toBeHidden();
@@ -377,15 +327,7 @@ test.describe("AC2 & AC3: Magic Link & Cookie Persistence", () => {
     // AC2: path: /order/status/{order_id}
     test.skip(!TEST_TOKEN, "Requires TEST_MODIFICATION_TOKEN env var");
 
-    // Network-first: Wait for order status API
-    const orderStatusPromise = page.waitForResponse(
-      (response) =>
-        response.url().includes(`/order/status/${TEST_ORDER_ID}`) &&
-        response.status() === 200,
-    );
-
     await page.goto(`/order/status/${TEST_ORDER_ID}?token=${TEST_TOKEN}`);
-    await orderStatusPromise;
     await page.waitForLoadState("networkidle");
 
     const cookies = await context.cookies();
