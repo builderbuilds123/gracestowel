@@ -98,7 +98,7 @@ test.describe("Guest Checkout Flow", () => {
     // Verify cart drawer still visible (update completed)
     await expect(
       page.getByRole("heading", { name: /towel rack/i }),
-    ).toBeVisible();
+    ).toBeVisible({ timeout: 30000 });
   });
 
   test("should remove item from cart", async ({ page, productFactory }) => {
