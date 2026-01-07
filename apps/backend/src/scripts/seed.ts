@@ -176,14 +176,18 @@ export default async function seedDemoData({ container }: ExecArgs) {
   logger.info("Finished seeding regions.");
   
   if (regionUS || regionCA || regionEU) {
-    // Link Regions to Sales Channel using 'id' as key to match standard link definition
-    const links: any[] = [];
-    if (regionUS) links.push({ [Modules.REGION]: { id: regionUS.id }, [Modules.SALES_CHANNEL]: { id: defaultSalesChannel[0].id } });
-    if (regionCA) links.push({ [Modules.REGION]: { id: regionCA.id }, [Modules.SALES_CHANNEL]: { id: defaultSalesChannel[0].id } });
-    if (regionEU) links.push({ [Modules.REGION]: { id: regionEU.id }, [Modules.SALES_CHANNEL]: { id: defaultSalesChannel[0].id } });
+    // FIXME: The direct Remote Link 'region' <-> 'sales_channel' is not defined in Medusa V2 standard links.
+    // We cannot use link.create({ [Modules.REGION]: ..., [Modules.SALES_CHANNEL]: ... }) without a definition.
+    // Ideally we'd use a workflow, but none exists for this specific link in default exports.
+    // Proceeding without link; E2E tests may fail with 500s if context is invalid.
     
-    await link.create(links);
-    logger.info("Linked regions to Default Sales Channel.");
+    // const links: any[] = [];
+    // if (regionUS) links.push({ [Modules.REGION]: { id: regionUS.id }, [Modules.SALES_CHANNEL]: { id: defaultSalesChannel[0].id } });
+    // if (regionCA) links.push({ [Modules.REGION]: { id: regionCA.id }, [Modules.SALES_CHANNEL]: { id: defaultSalesChannel[0].id } });
+    // if (regionEU) links.push({ [Modules.REGION]: { id: regionEU.id }, [Modules.SALES_CHANNEL]: { id: defaultSalesChannel[0].id } });
+    
+    // await link.create(links);
+    logger.warn("Skipping Region <-> Sales Channel linking due to missing link definition. This may cause 500 errors in E2E.");
   }
 
   logger.info("Seeding tax regions...");
