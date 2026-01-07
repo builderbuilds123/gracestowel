@@ -174,6 +174,16 @@ export default async function seedDemoData({ container }: ExecArgs) {
   }
   
   logger.info("Finished seeding regions.");
+  
+  if (regionUS || regionCA || regionEU) {
+    const links = [];
+    if (regionUS) links.push({ [Modules.REGION]: { region_id: regionUS.id }, [Modules.SALES_CHANNEL]: { sales_channel_id: defaultSalesChannel[0].id } });
+    if (regionCA) links.push({ [Modules.REGION]: { region_id: regionCA.id }, [Modules.SALES_CHANNEL]: { sales_channel_id: defaultSalesChannel[0].id } });
+    if (regionEU) links.push({ [Modules.REGION]: { region_id: regionEU.id }, [Modules.SALES_CHANNEL]: { sales_channel_id: defaultSalesChannel[0].id } });
+    
+    await link.create(links);
+    logger.info("Linked regions to Default Sales Channel.");
+  }
 
   logger.info("Seeding tax regions...");
   // Check if tax regions already exist to make seed idempotent
