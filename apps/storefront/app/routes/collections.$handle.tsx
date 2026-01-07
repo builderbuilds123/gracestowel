@@ -14,6 +14,8 @@ export default function Collection() {
             price: "$18.00",
             image: "/washcloth-nuzzle.jpg",
             handle: "the-nuzzle",
+            variantId: undefined,
+            sku: undefined,
         },
         {
             id: 2,
@@ -22,6 +24,8 @@ export default function Collection() {
             price: "$25.00",
             image: "/hand-towel-cradle.jpg",
             handle: "the-cradle",
+            variantId: undefined,
+            sku: undefined,
         },
         {
             id: 3,
@@ -30,6 +34,8 @@ export default function Collection() {
             price: "$35.00",
             image: "/bath-towel-bearhug.jpg",
             handle: "the-bearhug",
+            variantId: undefined,
+            sku: undefined,
         },
     ];
 

@@ -62,6 +62,8 @@ export async function loader({ context, request }: Route.LoaderArgs) {
             price: priceData?.formatted || "$0.00",
             image: product.images?.[0]?.url || product.thumbnail || "/placeholder.jpg",
             description: product.description || "",
+            variantId: product.variants?.[0]?.id,
+            sku: product.variants?.[0]?.sku || undefined,
         };
     });
 
