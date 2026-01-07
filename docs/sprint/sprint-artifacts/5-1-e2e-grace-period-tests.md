@@ -109,7 +109,7 @@ PAYMENT_CAPTURE_DELAY_MS=10000 # 10 seconds
 | path | `/order/status/{order_id}` |
 | maxAge | Dynamic from JWT `exp` |
 
-**Source:** [`guest-session.server.ts`](file:///Users/leonliang/Github%20Repo/gracestowel/apps/storefront/app/utils/guest-session.server.ts)
+**Source:** Guest session utilities: `apps/storefront/app/utils/guest-session.server.ts`
 
 ### UI Selectors
 
@@ -137,8 +137,8 @@ PAYMENT_CAPTURE_DELAY_MS=10000 # 10 seconds
 
 ### References
 
-- [Story 3.1: Timer UI](file:///Users/leonliang/Github%20Repo/gracestowel/docs/sprint/sprint-artifacts/3-1-storefront-timer-edit-ui.md)
-- [Story 4.3: Session Persistence](file:///Users/leonliang/Github%20Repo/gracestowel/docs/sprint/sprint-artifacts/4-3-session-persistence.md)
+- [Story 3.1: Timer UI](./3-1-storefront-timer-edit-ui.md)
+- [Story 4.3: Session Persistence](./4-3-session-persistence.md)
 
 ## Dev Agent Record
 

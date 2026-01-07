@@ -155,9 +155,9 @@ template: "order_confirmation" | "order_modified" | "order_shipped"
 
 ## References
 
-- [Payment Capture Queue (pattern)](apps/backend/src/lib/payment-capture-queue.ts)
-- [Redis Connection](apps/backend/src/lib/redis.ts)
-- [Architecture Doc](docs/product/architecture/transactional-email-architecture.md)
+- Payment Capture Queue (pattern): `apps/backend/src/lib/payment-capture-queue.ts`
+- Redis Connection: `apps/backend/src/lib/redis.ts`
+- [Architecture Doc](../../product/architecture/transactional-email-architecture.md)
 - [BullMQ Docs](https://docs.bullmq.io/)
 
 ## Dev Agent Record

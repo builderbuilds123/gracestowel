@@ -219,10 +219,10 @@ This path may vary - check actual order structure.
 
 ## References
 
-- [Order Placed Subscriber (Story 3.1)](docs/sprint/sprint-artifacts/email-3-1-wire-order-placed-subscriber.md)
-- [ModificationTokenService](apps/backend/src/services/modification-token.ts)
-- [Magic Link Story (Epic 4)](docs/sprint/sprint-artifacts/4-1-magic-link-generation.md)
-- [Architecture Doc](docs/product/architecture/transactional-email-architecture.md)
+- [Order Placed Subscriber (Story 3.1)](./email-3-1-wire-order-placed-subscriber.md)
+- ModificationTokenService: `apps/backend/src/services/modification-token.ts`
+- [Magic Link Story (Epic 4)](./4-1-magic-link-generation.md)
+- [Architecture Doc](../../product/architecture/transactional-email-architecture.md)
 
 ## Dev Agent Record
 

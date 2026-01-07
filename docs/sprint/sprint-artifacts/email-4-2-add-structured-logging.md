@@ -203,10 +203,10 @@ logger.info(`Sent to ${maskEmail(recipient)}`)
 
 ## References
 
-- [PII Masking (Story 4.1)](docs/sprint/sprint-artifacts/email-4-1-create-pii-masking-utility.md)
-- [Email Queue (Story 1.1)](docs/sprint/sprint-artifacts/email-1-1-create-email-queue-service.md)
-- [Email Worker (Story 1.2)](docs/sprint/sprint-artifacts/email-1-2-create-email-worker.md)
-- [Architecture Doc - Logging](docs/product/architecture/transactional-email-architecture.md)
+- [PII Masking (Story 4.1)](./email-4-1-create-pii-masking-utility.md)
+- [Email Queue (Story 1.1)](./email-1-1-create-email-queue-service.md)
+- [Email Worker (Story 1.2)](./email-1-2-create-email-worker.md)
+- [Architecture Doc - Logging](../../product/architecture/transactional-email-architecture.md)
 
 ## Dev Agent Record
 

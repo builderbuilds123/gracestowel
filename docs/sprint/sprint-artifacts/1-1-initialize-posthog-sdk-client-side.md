@@ -46,9 +46,9 @@ so that we can start capturing client-side events.
 
 ### References
 
-- [Epics: Story 1.1](file:///Users/leonliang/Github%20Repo/gracestowel/docs/epics.md#story-11-initialize-posthog-sdk-for-client-side-tracking)
-- [Architecture: PostHog Integration](file:///Users/leonliang/Github%20Repo/gracestowel/docs/architecture.md#posthog-analytics-integration)
-- [Project Context](file:///Users/leonliang/Github%20Repo/gracestowel/docs/project_context.md)
+- [Epic Overview](../../product/epics/overview.md)
+- [Architecture: PostHog Integration](../../architecture/integrations.md)
+- [Project Context](../../project_context.md)
 
 ## Dev Agent Record
 

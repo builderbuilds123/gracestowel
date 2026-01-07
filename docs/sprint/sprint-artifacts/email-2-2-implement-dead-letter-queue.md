@@ -215,10 +215,10 @@ try {
 
 ## References
 
-- [Email Worker (Story 1.2)](docs/sprint/sprint-artifacts/email-1-2-create-email-worker.md)
-- [Retry Logic (Story 2.1)](docs/sprint/sprint-artifacts/email-2-1-implement-exponential-backoff-retry.md)
-- [PII Masking (Story 4.1)](docs/sprint/sprint-artifacts/email-4-1-create-pii-masking-utility.md)
-- [Architecture Doc - DLQ](docs/product/architecture/transactional-email-architecture.md)
+- [Email Worker (Story 1.2)](./email-1-2-create-email-worker.md)
+- [Retry Logic (Story 2.1)](./email-2-1-implement-exponential-backoff-retry.md)
+- [PII Masking (Story 4.1)](./email-4-1-create-pii-masking-utility.md)
+- [Architecture Doc - DLQ](../../product/architecture/transactional-email-architecture.md)
 
 ## Dev Agent Record
 

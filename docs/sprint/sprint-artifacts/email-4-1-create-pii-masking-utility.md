@@ -245,10 +245,10 @@ Consider these edge cases:
 
 ## References
 
-- [Email Worker (Story 1.2)](docs/sprint/sprint-artifacts/email-1-2-create-email-worker.md)
-- [DLQ (Story 2.2)](docs/sprint/sprint-artifacts/email-2-2-implement-dead-letter-queue.md)
-- [Architecture Doc - PII](docs/product/architecture/transactional-email-architecture.md)
-- [PRD - NFR6](docs/product/prds/transactional-email-prd.md)
+- [Email Worker (Story 1.2)](./email-1-2-create-email-worker.md)
+- [DLQ (Story 2.2)](./email-2-2-implement-dead-letter-queue.md)
+- [Architecture Doc - PII](../../product/architecture/transactional-email-architecture.md)
+- [PRD - NFR6](../../product/prds/transactional-email-prd.md)
 
 ## Dev Agent Record
 
