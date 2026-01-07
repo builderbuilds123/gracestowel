@@ -52,11 +52,24 @@ export class ShippingFactory {
     if (overrides.region_id) {
       try {
         // Create a temporary cart to get shipping options
+        const salesChannelsRes = await apiRequest<{ sales_channels: any[] }>({
+          request: this.request,
+          method: "GET",
+          url: "/admin/sales-channels",
+        });
+        const salesChannelId = salesChannelsRes.sales_channels?.[0]?.id;
+
         const cartResponse = await apiRequest<{ cart: { id: string } }>({
           request: this.request,
           method: "POST",
           url: "/store/carts",
-          data: { region_id: overrides.region_id },
+          data: { 
+            region_id: overrides.region_id,
+            sales_channel_id: salesChannelId
+          },
+          headers: {
+            "x-publishable-api-key": process.env.MEDUSA_PUBLISHABLE_KEY || "",
+          },
         });
         
         const storeOptions = await apiRequest<{ shipping_options: any[] }>({

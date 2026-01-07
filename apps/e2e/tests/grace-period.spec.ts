@@ -47,24 +47,53 @@ test.beforeEach(async () => {
               },
           });
 
+          // Fetch regions and sales channels first (Required for Medusa V2)
+          const regionsRes = await api.get("/admin/regions");
+          const regions = await regionsRes.json();
+          const regionId = regions.regions?.[0]?.id;
+
+          const scRes = await api.get("/admin/sales-channels");
+          const scs = await scRes.json();
+          const salesChannelId = scs.sales_channels?.[0]?.id;
+
           // Fetch a product to get variant ID
           const productsRes = await api.get("/store/products");
           const products = await productsRes.json();
-          const variantId = products.products?.[0]?.variants?.[0]?.id;
+          
+          // Log handles for debugging
+          console.log(`DEBUG: Available products: ${products.products?.map((p: any) => p.handle).join(", ")}`);
+          
+          const product = products.products?.find((p: any) => p.handle === "the-nuzzle") || products.products?.[0];
+          const variantId = product?.variants?.[0]?.id;
           
           if (!variantId) {
-             console.warn("DEBUG: No products found. Seeding might fail.");
+             console.warn("DEBUG: No products or variants found. Seeding might fail.");
           }
 
-          if (variantId) {
-              // Create Cart
-              const cartRes = await api.post("/store/carts", { data: {} });
-              const cart = (await cartRes.json()).cart;
+          if (variantId && regionId) {
+              console.log(`DEBUG: Using product ${product.handle} and variant ${variantId}`);
+              
+              // Create Cart with region and sales channel
+              const cartRes = await api.post("/store/carts", { 
+                  data: {
+                      region_id: regionId,
+                      sales_channel_id: salesChannelId
+                  } 
+              });
+              const cartData = await cartRes.json();
+              if (!cartData.cart) {
+                  throw new Error(`Cart creation failed: ${JSON.stringify(cartData)}`);
+              }
+              const cart = cartData.cart;
 
               // Add Item
-              await api.post(`/store/carts/${cart.id}/line-items`, {
+              const itemRes = await api.post(`/store/carts/${cart.id}/line-items`, {
                   data: { variant_id: variantId, quantity: 1 }
               });
+              if (itemRes.status() >= 400) {
+                  const error = await itemRes.text();
+                  throw new Error(`Add line item failed (${itemRes.status()}): ${error}`);
+              }
 
               // Add Email/Shipping (Required for completion)
                await api.post(`/store/carts/${cart.id}`, {
@@ -79,7 +108,7 @@ test.beforeEach(async () => {
 
                // Complete Cart
                const completeRes = await api.post(`/store/carts/${cart.id}/complete`);
-              const orderData = await completeRes.json();
+               const orderData = await completeRes.json();
               
               if (orderData.type === "order" && orderData.data?.id) {
                   TEST_ORDER_ID = orderData.data.id;
