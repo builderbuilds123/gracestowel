@@ -79,6 +79,7 @@ services:
     environment:
       MEDUSA_BACKEND_URL: http://backend:8080
       MEDUSA_PUBLISHABLE_KEY: ${MEDUSA_PUBLISHABLE_KEY}
+      JWT_SECRET: test-secret-must-be-at-least-32-characters-long-for-security
       NODE_ENV: development
       CI: "true"
       CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE: postgresql://medusa_test:medusa_test@postgres:5432/medusa_test
@@ -105,6 +106,7 @@ services:
       API_URL: http://backend:8080
       CI: "true"
       MEDUSA_PUBLISHABLE_KEY: ${MEDUSA_PUBLISHABLE_KEY}
+      JWT_SECRET: ${JWT_SECRET}
       ADMIN_TOKEN: ${ADMIN_TOKEN}
     volumes:
       - ./apps/e2e:/app
