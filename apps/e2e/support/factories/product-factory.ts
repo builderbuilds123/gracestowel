@@ -22,6 +22,7 @@ export type Product = {
     allow_backorder?: boolean;
   }>;
   variant_id?: string;
+  sales_channel_id?: string;
 };
 
 export const createProduct = (overrides: Partial<Product> = {}): Product => ({

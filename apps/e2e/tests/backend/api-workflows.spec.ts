@@ -95,14 +95,17 @@ test.describe("Backend API workflows (admin)", () => {
     const regionId = region.id;
 
     // 1.5 Get Sales Channel
-    const salesChannelsInput = await apiRequest<{ sales_channels: any[] }>({
-      method: "GET",
-      url: "/admin/sales-channels",
-    });
-    const salesChannelId = salesChannelsInput.sales_channels?.[0]?.id;
+    // 2. Get Sales Channel (Prefer one associated with the product)
+    let salesChannelId = (product as any).sales_channel_id;
+    if (!salesChannelId) {
+      const salesChannelsInput = await apiRequest<{ sales_channels: any[] }>({
+        method: "GET",
+        url: "/admin/sales-channels",
+      });
+      salesChannelId = salesChannelsInput.sales_channels?.[0]?.id;
+    }
 
-    // 2. Create Cart
-    const cartResponse = await apiRequest<{ cart: { id: string } }>({
+    const cartResponse = await apiRequest<{ cart: { id: string; region: any } }>({
       method: "POST",
       url: "/store/carts",
       data: {

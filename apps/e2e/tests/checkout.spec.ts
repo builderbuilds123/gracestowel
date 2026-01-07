@@ -28,14 +28,19 @@ test.describe("Guest Checkout Flow", () => {
     await expect(page.locator('a[href^="/products/"]').first()).toBeVisible({ timeout: 30000 });
   });
 
-  test("should display product page with details", async ({ page }) => {
-    // Navigate directly to a known product page
-    await page.goto("/products/the-nuzzle");
-    await page.waitForLoadState("domcontentloaded");
+  test("should display product page with details", async ({
+    page,
+    productFactory,
+  }) => {
+    const product = await productFactory.createProduct();
+    const handle = product.handle;
+    const title = product.title;
 
+    await page.goto(`/products/${handle}`);
+    
     // Verify product page loads with details - increase timeout for slow CI
     await page.waitForLoadState("networkidle");
-    await expect(page.getByRole("heading", { name: "The Nuzzle" })).toBeVisible({ timeout: 30000 });
+    await expect(page.getByRole("heading", { name: title })).toBeVisible({ timeout: 30000 });
 
     // Look for add to cart button (uses "Hang it Up" text in this storefront)
     await expect(
@@ -43,13 +48,14 @@ test.describe("Guest Checkout Flow", () => {
     ).toBeVisible({ timeout: 30000 });
   });
 
-  test("should add product to cart", async ({ page }) => {
+  test("should add product to cart", async ({ page, productFactory }) => {
+    const product = await productFactory.createProduct();
     // Navigate directly to a known product page
-    await page.goto("/products/the-nuzzle");
+    await page.goto(`/products/${product.handle}`);
     await page.waitForLoadState("domcontentloaded");
 
     // Wait for product page to load
-    await expect(page.getByRole("heading", { name: "The Nuzzle" })).toBeVisible({ timeout: 30000 });
+    await expect(page.getByRole("heading", { name: product.title })).toBeVisible({ timeout: 30000 });
 
     // Add to cart (button says "Hang it Up" in this storefront)
     await page
@@ -62,14 +68,15 @@ test.describe("Guest Checkout Flow", () => {
     ).toBeVisible({ timeout: 30000 });
 
     // Verify item is in cart (use first match since product name appears multiple places)
-    await expect(page.getByText("The Nuzzle").first()).toBeVisible({ timeout: 30000 });
+    await expect(page.getByText(product.title).first()).toBeVisible({ timeout: 30000 });
   });
 
-  test("should update cart quantity", async ({ page }) => {
+  test("should update cart quantity", async ({ page, productFactory }) => {
+    const product = await productFactory.createProduct();
     // Add product to cart first
-    await page.goto("/products/the-nuzzle");
+    await page.goto(`/products/${product.handle}`);
     await page.waitForLoadState("domcontentloaded");
-    await expect(page.getByRole("heading", { name: "The Nuzzle" })).toBeVisible({ timeout: 30000 });
+    await expect(page.getByRole("heading", { name: product.title })).toBeVisible({ timeout: 30000 });
     await page
       .getByRole("button", { name: /hang it up|add to cart/i })
       .click();
@@ -95,11 +102,12 @@ test.describe("Guest Checkout Flow", () => {
     ).toBeVisible();
   });
 
-  test("should remove item from cart", async ({ page }) => {
+  test("should remove item from cart", async ({ page, productFactory }) => {
+    const product = await productFactory.createProduct();
     // Add product to cart first
-    await page.goto("/products/the-nuzzle");
+    await page.goto(`/products/${product.handle}`);
     await page.waitForLoadState("domcontentloaded");
-    await expect(page.getByRole("heading", { name: "The Nuzzle" })).toBeVisible({ timeout: 30000 });
+    await expect(page.getByRole("heading", { name: product.title })).toBeVisible({ timeout: 30000 });
     await page
       .getByRole("button", { name: /hang it up|add to cart/i })
       .click();
@@ -124,11 +132,12 @@ test.describe("Guest Checkout Flow", () => {
     await expect(page.getByText(/empty|no items/i)).toBeVisible({ timeout: 30000 });
   });
 
-  test("should proceed to checkout", async ({ page }) => {
+  test("should proceed to checkout", async ({ page, productFactory }) => {
+    const product = await productFactory.createProduct();
     // Add product to cart
-    await page.goto("/products/the-nuzzle");
+    await page.goto(`/products/${product.handle}`);
     await page.waitForLoadState("domcontentloaded");
-    await expect(page.getByRole("heading", { name: "The Nuzzle" })).toBeVisible({ timeout: 30000 });
+    await expect(page.getByRole("heading", { name: product.title })).toBeVisible({ timeout: 30000 });
     await page
       .getByRole("button", { name: /hang it up|add to cart/i })
       .click();
@@ -166,11 +175,12 @@ test.describe("Guest Checkout Flow", () => {
     await expect(firstNameInput).toHaveValue("Test");
   });
 
-  test("should display order summary on checkout", async ({ page }) => {
+  test("should display order summary on checkout", async ({ page, productFactory }) => {
+    const product = await productFactory.createProduct();
     // Add product and go to checkout
-    await page.goto("/products/the-nuzzle");
+    await page.goto(`/products/${product.handle}`);
     await page.waitForLoadState("domcontentloaded");
-    await expect(page.getByRole("heading", { name: "The Nuzzle" })).toBeVisible({ timeout: 30000 });
+    await expect(page.getByRole("heading", { name: product.title })).toBeVisible({ timeout: 30000 });
     await page
       .getByRole("button", { name: /hang it up|add to cart/i })
       .click();
@@ -189,11 +199,12 @@ test.describe("Guest Checkout Flow", () => {
 });
 
 test.describe("Cart Persistence", () => {
-  test("should persist cart across page reloads", async ({ page }) => {
+  test("should persist cart across page reloads", async ({ page, productFactory }) => {
+    const product = await productFactory.createProduct();
     // Navigate to product page
-    await page.goto("/products/the-nuzzle");
+    await page.goto(`/products/${product.handle}`);
     await page.waitForLoadState("domcontentloaded");
-    await expect(page.getByRole("heading", { name: "The Nuzzle" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: product.title })).toBeVisible();
     
     // Add product to cart
     await page.getByRole("button", { name: /hang it up|add to cart/i }).click();

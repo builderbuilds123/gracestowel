@@ -32,13 +32,16 @@ export class OrderFactory {
       || region.countries?.[0]?.iso_2 
       || "us";
 
-    // 2. Get Sales Channel
-    const salesChannelsInput = await apiRequest<{ sales_channels: any[] }>({
-      request: this.request,
-      method: "GET",
-      url: "/admin/sales-channels",
-    });
-    const salesChannelId = salesChannelsInput.sales_channels?.[0]?.id;
+    // 2. Get Sales Channel (Prefer one associated with the product)
+    let salesChannelId = (product as any).sales_channel_id;
+    if (!salesChannelId) {
+      const salesChannelsInput = await apiRequest<{ sales_channels: any[] }>({
+        request: this.request,
+        method: "GET",
+        url: "/admin/sales-channels",
+      });
+      salesChannelId = salesChannelsInput.sales_channels?.[0]?.id;
+    }
 
     // 3. Create Cart with region and sales channel
     const cartResponse = await apiRequest<{ cart: { id: string } }>({

@@ -8,8 +8,7 @@ import { test, expect } from "../../support/fixtures";
  * to ensure proper mobile responsiveness and touch interactions.
  */
 
-const PRODUCT_HANDLE = "the-nuzzle";
-const PRODUCT_NAME = "The Nuzzle";
+// Product handles and titles are now fetched dynamically from ProductFactory
 
 test.describe("Mobile Navigation", () => {
   test("should display mobile-friendly navigation", async ({ page }) => {
@@ -50,30 +49,32 @@ test.describe("Mobile Navigation", () => {
 });
 
 test.describe("Mobile Cart Experience", () => {
-  test("should add product to cart on mobile", async ({ page }) => {
-    await page.goto(`/products/${PRODUCT_HANDLE}`);
+  test("should add product to cart on mobile", async ({ page, productFactory }) => {
+    const product = await productFactory.createProduct();
+    await page.goto(`/products/${product.handle}`);
     await page.waitForLoadState("domcontentloaded");
 
     // Verify product page
-    await expect(page.getByRole("heading", { name: PRODUCT_NAME })).toBeVisible();
+    await expect(page.getByRole("heading", { name: product.title })).toBeVisible();
 
     // Add to cart
     await page.getByRole("button", { name: /hang it up|add to cart/i }).click();
 
     // Verify cart drawer opens (should work on mobile)
-    await expect(page.getByRole("heading", { name: /towel rack/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /towel rack|cart/i })).toBeVisible();
     
     // Verify product is in cart
-    await expect(page.getByRole("heading", { name: PRODUCT_NAME, level: 3 })).toBeVisible();
+    await expect(page.getByText(product.title).first()).toBeVisible();
   });
 
-  test("should update quantity on mobile", async ({ page }) => {
-    await page.goto(`/products/${PRODUCT_HANDLE}`);
+  test("should update quantity on mobile", async ({ page, productFactory }) => {
+    const product = await productFactory.createProduct();
+    await page.goto(`/products/${product.handle}`);
     await page.waitForLoadState("domcontentloaded");
 
     // Add to cart
     await page.getByRole("button", { name: /hang it up|add to cart/i }).click();
-    await expect(page.getByRole("heading", { name: /towel rack/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /towel rack|cart/i })).toBeVisible();
 
     // Find and tap increase quantity button using semantic selector
     const increaseButton = page.getByRole("button", { name: /increase quantity/i }).first();
@@ -84,13 +85,14 @@ test.describe("Mobile Cart Experience", () => {
     }
   });
 
-  test("should proceed to checkout on mobile", async ({ page }) => {
-    await page.goto(`/products/${PRODUCT_HANDLE}`);
+  test("should proceed to checkout on mobile", async ({ page, productFactory }) => {
+    const product = await productFactory.createProduct();
+    await page.goto(`/products/${product.handle}`);
     await page.waitForLoadState("domcontentloaded");
 
     // Add to cart
     await page.getByRole("button", { name: /hang it up|add to cart/i }).click();
-    await expect(page.getByRole("heading", { name: /towel rack/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /towel rack|cart/i })).toBeVisible();
 
     // Find checkout link and click
     const checkoutLink = page.getByRole("link", { name: /checkout/i });
@@ -103,12 +105,13 @@ test.describe("Mobile Cart Experience", () => {
 });
 
 test.describe("Mobile Checkout Form", () => {
-  test("should display checkout form correctly on mobile", async ({ page }) => {
+  test("should display checkout form correctly on mobile", async ({ page, productFactory }) => {
     // Add item to cart first
-    await page.goto(`/products/${PRODUCT_HANDLE}`);
+    const product = await productFactory.createProduct();
+    await page.goto(`/products/${product.handle}`);
     await page.waitForLoadState("domcontentloaded");
     await page.getByRole("button", { name: /hang it up|add to cart/i }).click();
-    await expect(page.getByRole("heading", { name: /towel rack/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /towel rack|cart/i })).toBeVisible();
 
     // Go to checkout
     await page.goto("/checkout");

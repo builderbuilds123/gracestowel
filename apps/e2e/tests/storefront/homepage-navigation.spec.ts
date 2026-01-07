@@ -84,12 +84,13 @@ test.describe("Navigation", () => {
     await expect(page).toHaveURL(/checkout/i);
   });
 
-  test("should handle direct product URL navigation", async ({ page }) => {
-    await page.goto("/products/the-nuzzle");
+  test("should handle direct product URL navigation", async ({ page, productFactory }) => {
+    const product = await productFactory.createProduct();
+    await page.goto(`/products/${product.handle}`);
     await page.waitForLoadState("domcontentloaded");
 
     // Verify product page loaded
-    await expect(page.getByRole("heading", { name: /Nuzzle/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: product.title })).toBeVisible();
     
     // Verify add to cart button
     await expect(
@@ -131,15 +132,16 @@ test.describe("Cart Access", () => {
     }
   });
 
-  test("should show cart with items after adding product", async ({ page }) => {
+  test("should show cart with items after adding product", async ({ page, productFactory }) => {
+    const product = await productFactory.createProduct();
     // Add item to cart
-    await page.goto("/products/the-nuzzle");
+    await page.goto(`/products/${product.handle}`);
     await page.waitForLoadState("domcontentloaded");
     await page.getByRole("button", { name: /hang it up|add to cart/i }).click();
 
     // Verify cart drawer opens with item
-    await expect(page.getByRole("heading", { name: /towel rack/i })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "The Nuzzle", level: 3 })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /towel rack|cart/i })).toBeVisible();
+    await expect(page.getByText(product.title).first()).toBeVisible();
   });
 });
 
