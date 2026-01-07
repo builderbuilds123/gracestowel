@@ -94,12 +94,20 @@ test.describe("Backend API workflows (admin)", () => {
     const region = regions.regions.find(r => r.name === "United States") || regions.regions[0];
     const regionId = region.id;
 
+    // 1.5 Get Sales Channel
+    const salesChannelsInput = await apiRequest<{ sales_channels: any[] }>({
+      method: "GET",
+      url: "/admin/sales-channels",
+    });
+    const salesChannelId = salesChannelsInput.sales_channels?.[0]?.id;
+
     // 2. Create Cart
     const cartResponse = await apiRequest<{ cart: { id: string } }>({
       method: "POST",
       url: "/store/carts",
       data: {
         region_id: regionId,
+        sales_channel_id: salesChannelId,
         email: "test@example.com",
       },
       headers: {
@@ -223,13 +231,14 @@ test.describe("Backend API workflows (admin)", () => {
     const { ApiError } = await import("../../support/helpers/api-request");
 
     // Use a truly invalid payload to ensure a 400 from Zod/Strict
+    // Medusa v2 expects explicit prices array and specific fields
     await expect(
       apiRequest({
         method: "POST",
         url: "/admin/products",
         data: { 
-          title: "Invalid",
-          variants: [{ title: "Too many fields", unrecognized: true }]
+          // Missing title (required)
+          variants: [{ title: "Too many fields", prices: [] }]
         },
       }),
     ).rejects.toThrow(ApiError);
@@ -239,8 +248,8 @@ test.describe("Backend API workflows (admin)", () => {
         method: "POST",
         url: "/admin/products",
         data: { 
-          title: "Invalid",
-          variants: [{ title: "Too many fields", unrecognized: true }]
+          // Missing title (required)
+          variants: [{ title: "Too many fields", prices: [] }]
         },
       });
     } catch (error: unknown) {

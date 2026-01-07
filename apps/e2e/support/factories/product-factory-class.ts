@@ -19,27 +19,34 @@ export class ProductFactory {
    */
   async createProduct(overrides: Partial<Product> = {}): Promise<Product> {
     // STRATEGY: Fetch from store API (published products only)
-    // This avoids issues with admin API and ensures products are purchasable
     try {
       const storeProducts = await apiRequest<{ products: any[] }>({
         request: this.request,
         method: 'GET',
-        url: '/store/products?limit=10',
+        url: '/store/products?limit=20',
+        headers: {
+          'x-publishable-api-key': process.env.MEDUSA_PUBLISHABLE_KEY || '',
+        },
       });
 
       if (storeProducts.products?.length > 0) {
+        // Log all available handles for debugging
+        console.log(`Available products handles: ${storeProducts.products.map(p => p.handle).join(', ')}`);
+
         // Prefer "The Nuzzle" product since tests reference it
         const nuzzle = storeProducts.products.find(p => 
           p.handle === 'the-nuzzle' || p.title?.includes('Nuzzle')
         );
         const product = nuzzle || storeProducts.products[0];
         
-        console.log(`Using seeded product: ${product.title} (${product.id})`);
+        console.log(`Using seeded product: ${product.title} (${product.id}, handle: ${product.handle})`);
         
         // Get the first variant with all its details
-        const variant = product.variants?.[0];
+        const variant = product.variants?.find((v: any) => v.inventory_quantity !== 0) || product.variants?.[0];
         if (!variant) {
-          console.warn('Product has no variants, looking for another product...');
+          console.warn(`Product ${product.id} has no variants!`);
+        } else {
+          console.log(`Using variant: ${variant.title} (${variant.id})`);
         }
         
         return {
@@ -61,7 +68,7 @@ export class ProductFactory {
       const adminProducts = await apiRequest<{ products: any[] }>({
         request: this.request,
         method: 'GET',
-        url: '/admin/products?status=published&limit=10',
+        url: '/admin/products?status=published&limit=20',
       });
 
       if (adminProducts.products?.length > 0) {
@@ -83,9 +90,8 @@ export class ProductFactory {
       console.warn('Could not fetch from admin API:', error);
     }
 
-    // If we can't find existing products, throw error instead of creating invalid ones
     throw new Error(
-      'No seeded products found. Please run the seed script first: pnpm --filter backend seed'
+      'No seeded published products found. Please ensure the backend is seeded and products are published.'
     );
   }
 

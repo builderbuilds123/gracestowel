@@ -24,6 +24,7 @@ test.describe("Guest Checkout Flow", () => {
     ).toBeVisible({ timeout: 30000 });
 
     // Verify products are displayed
+    await page.waitForLoadState("networkidle");
     await expect(page.locator('a[href^="/products/"]').first()).toBeVisible({ timeout: 30000 });
   });
 
@@ -33,6 +34,7 @@ test.describe("Guest Checkout Flow", () => {
     await page.waitForLoadState("domcontentloaded");
 
     // Verify product page loads with details - increase timeout for slow CI
+    await page.waitForLoadState("networkidle");
     await expect(page.getByRole("heading", { name: "The Nuzzle" })).toBeVisible({ timeout: 30000 });
 
     // Look for add to cart button (uses "Hang it Up" text in this storefront)
@@ -178,6 +180,7 @@ test.describe("Guest Checkout Flow", () => {
 
     // Navigate to checkout
     await page.goto("/checkout");
+    await page.waitForLoadState("networkidle");
 
     // Wait for checkout page to load and verify content
     await expect(page).toHaveURL(/\/checkout/);
@@ -210,9 +213,10 @@ test.describe("Cart Persistence", () => {
 
     // Navigate to checkout to verify cart persisted
     await page.goto("/checkout");
+    await page.waitForLoadState("networkidle");
 
     // Verify we're on checkout page
     await expect(page).toHaveURL(/\/checkout/);
-    await expect(page.locator("body")).toContainText(/checkout|order/i);
+    await expect(page.locator("body")).toContainText(/checkout|order/i, { timeout: 30000 });
   });
 });

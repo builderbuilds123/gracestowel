@@ -32,13 +32,25 @@ export class OrderFactory {
       || region.countries?.[0]?.iso_2 
       || "us";
 
-    // 2. Create Cart with region
+    // 2. Get Sales Channel
+    const salesChannelsInput = await apiRequest<{ sales_channels: any[] }>({
+      request: this.request,
+      method: "GET",
+      url: "/admin/sales-channels",
+    });
+    const salesChannelId = salesChannelsInput.sales_channels?.[0]?.id;
+
+    // 3. Create Cart with region and sales channel
     const cartResponse = await apiRequest<{ cart: { id: string } }>({
       request: this.request,
       method: "POST",
       url: "/store/carts",
       data: {
         region_id: regionId,
+        sales_channel_id: salesChannelId,
+      },
+      headers: {
+        "x-publishable-api-key": process.env.MEDUSA_PUBLISHABLE_KEY || "",
       },
     });
     const cartId = cartResponse.cart.id;
