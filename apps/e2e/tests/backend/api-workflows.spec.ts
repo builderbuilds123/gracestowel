@@ -193,7 +193,7 @@ test.describe("Backend API workflows (admin)", () => {
     });
 
     // 6. Add Shipping Method - use V2 endpoint /store/shipping-options?cart_id=:id
-    const cartShippingOptions = await apiRequest<{ shipping_options: { id: string; name: string }[] }>({
+    const cartShippingOptions = await apiRequest<{ shipping_options: { id: string; name: string; amount?: number }[] }>({
       method: "GET",
       url: `/store/shipping-options?cart_id=${cart.id}`,
       headers: {
@@ -201,7 +201,7 @@ test.describe("Backend API workflows (admin)", () => {
       },
     });
     
-    const shippingOptionId = cartShippingOptions.shipping_options?.[0]?.id;
+    const shippingOptionId = cartShippingOptions.shipping_options?.find(so => so.amount !== undefined && so.amount !== null)?.id;
     test.skip(!shippingOptionId, "No shipping options available for cart region");
     
     await apiRequest({

@@ -61,9 +61,15 @@ export class OrderFactory {
     console.log(`[OrderFactory] Selected Region: ${region.name} (${region.id}) for Sales Channel: ${salesChannelId}`);
 
     const regionId = region.id;
+    // Debug available countries
+    const availableCountries = region.countries?.map((c: any) => c.iso_2) || [];
+    console.log(`[OrderFactory] Region ${region.name} supports countries: ${availableCountries.join(", ")}`);
+
     const countryCode = region.countries?.find((c: any) => c.iso_2 === "us")?.iso_2 
       || region.countries?.[0]?.iso_2 
       || "us";
+    
+    console.log(`[OrderFactory] Selected Country Code: ${countryCode}`);
 
     // 3. Create Cart with region and sales channel
     const cartResponse = await apiRequest<{ cart: { id: string } }>({
@@ -108,13 +114,13 @@ export class OrderFactory {
 
     // 5. Add Shipping Method
     // Use /store/shipping-options?cart_id=:id to get options valid for this cart's region (V2 API)
-    const shippingOptionsResponse = await apiRequest<{ shipping_options: { id: string; name: string }[] }>({
+    const shippingOptionsResponse = await apiRequest<{ shipping_options: { id: string; name: string; amount?: number }[] }>({
       request: this.request,
       method: "GET",
       url: `/store/shipping-options?cart_id=${cartId}`,
     });
 
-    const shippingOptionId = shippingOptionsResponse.shipping_options?.[0]?.id;
+    const shippingOptionId = shippingOptionsResponse.shipping_options?.find(so => so.amount !== undefined && so.amount !== null)?.id;
     if (!shippingOptionId) {
       throw new Error(
         `No shipping options available for cart ${cartId}. Seeded data may not have shipping for this region.`
