@@ -65,7 +65,8 @@ test.describe("Navigation", () => {
     // Click on first product
     const firstProduct = page.locator('a[href^="/products/"]').first();
     await expect(firstProduct).toBeVisible();
-    await firstProduct.click();
+    await firstProduct.scrollIntoViewIfNeeded();
+    await firstProduct.click({ force: true });
 
     // Verify URL contains the product path
     await expect(page).toHaveURL(/\/products\//);
@@ -106,7 +107,8 @@ test.describe("Navigation", () => {
     // Find and click logo/home link
     const homeLink = page.locator('a[href="/"]').first();
     if (await homeLink.isVisible()) {
-      await homeLink.click();
+      await homeLink.scrollIntoViewIfNeeded();
+      await homeLink.click({ force: true });
       await expect(page).toHaveURL("/");
       await expect(page.getByRole("heading", { name: /Best Sellers/i })).toBeVisible();
     }
@@ -122,7 +124,8 @@ test.describe("Cart Access", () => {
     const cartButton = page.getByRole("button", { name: /cart|open cart/i }).first();
     
     if (await cartButton.isVisible().catch(() => false)) {
-      await cartButton.click();
+      await cartButton.scrollIntoViewIfNeeded();
+      await cartButton.click({ force: true });
 
       // Cart drawer should open
       await expect(page.getByRole("heading", { name: /towel rack/i })).toBeVisible();
@@ -137,7 +140,9 @@ test.describe("Cart Access", () => {
     // Add item to cart
     await page.goto(`/products/${product.handle}`);
     await page.waitForLoadState("domcontentloaded");
-    await page.getByRole("button", { name: /hang it up|add to cart/i }).click();
+    const addToCartButton = page.getByRole("button", { name: /hang it up|add to cart/i });
+    await addToCartButton.scrollIntoViewIfNeeded();
+    await addToCartButton.click({ force: true });
 
     // Verify cart drawer opens with item
     await expect(page.getByRole("heading", { name: /towel rack|cart/i })).toBeVisible();

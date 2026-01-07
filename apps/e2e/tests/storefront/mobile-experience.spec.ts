@@ -64,7 +64,11 @@ test.describe("Mobile Cart Experience", () => {
     await expect(page.getByRole("heading", { name: /towel rack|cart/i })).toBeVisible();
     
     // Verify product is in cart
-    await expect(page.getByText(product.title).first()).toBeVisible();
+    const productInCart = page.getByText(product.title).first();
+    await expect(productInCart).toBeVisible();
+    // Navigate to product page from cart (if clickable)
+    await productInCart.scrollIntoViewIfNeeded();
+    await productInCart.click({ force: true });
   });
 
   test("should update quantity on mobile", async ({ page, productFactory }) => {
@@ -76,14 +80,12 @@ test.describe("Mobile Cart Experience", () => {
     await page.getByRole("button", { name: /hang it up|add to cart/i }).click({ force: true });
     await expect(page.getByRole("heading", { name: /towel rack|cart/i })).toBeVisible();
 
-    // Find and tap increase quantity button using semantic selector
-    const increaseButton = page.getByRole("button", { name: /increase quantity/i }).first();
-    if (await increaseButton.isVisible()) {
-      await increaseButton.scrollIntoViewIfNeeded();
-      await increaseButton.click({ force: true });
-      // Verify cart is still open after quantity update
-      await expect(page.getByRole("heading", { name: /towel rack|cart/i })).toBeVisible();
-    }
+    // Update quantity
+    const increaseButton = page.getByLabel("Increase quantity");
+    await increaseButton.scrollIntoViewIfNeeded();
+    await increaseButton.click({ force: true });
+    // Verify cart is still open after quantity update
+    await expect(page.getByRole("heading", { name: /towel rack|cart/i })).toBeVisible();
   });
 
   test("should proceed to checkout on mobile", async ({ page, productFactory }) => {

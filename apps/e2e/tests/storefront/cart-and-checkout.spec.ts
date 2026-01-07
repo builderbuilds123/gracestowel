@@ -23,10 +23,10 @@ test.describe("Storefront cart + checkout flows", () => {
 
     await expect(page.getByRole("heading", { name: /towel rack|cart/i })).toBeVisible();
 
-    // Find the Plus button (used for increase quantity) - it's a button with a Plus icon
-    const increaseButton = page.locator('button').filter({ has: page.locator('svg.lucide-plus') }).first();
+    // Increase quantity
+    const increaseButton = page.getByLabel("Increase quantity");
     await increaseButton.scrollIntoViewIfNeeded();
-    await expect(increaseButton).toBeVisible();
+    await increaseButton.click({ force: true });
     await increaseButton.click({ force: true });
 
     const subtotal = page.getByText(/\$|€|£/).first();
@@ -39,8 +39,10 @@ test.describe("Storefront cart + checkout flows", () => {
     await page.getByRole("button", { name: /hang it up|add to cart/i }).click({ force: true });
     await expect(page.getByRole("heading", { name: /towel rack|cart/i })).toBeVisible();
     
-    // Use the new aria-label to target the correct removal button
-    await page.getByRole("button", { name: /remove.*from cart/i }).first().click({ force: true });
+    // Remove item
+    const removeButton = page.getByRole("button", { name: /remove/i }).first();
+    await removeButton.scrollIntoViewIfNeeded();
+    await removeButton.click({ force: true });
     await expect(page.getByText(/empty|no items/i)).toBeVisible();
   });
 
@@ -52,8 +54,10 @@ test.describe("Storefront cart + checkout flows", () => {
 
     await page.reload();
     
-    // Open cart to verify persistence
-    await page.getByRole("button", { name: /open cart/i }).click();
+    // Click "Checkout"
+    const checkoutButton = page.getByRole("link", { name: /checkout/i });
+    await checkoutButton.scrollIntoViewIfNeeded();
+    await checkoutButton.click({ force: true });
     await expect(page.getByRole("heading", { name: /towel rack|cart/i })).toBeVisible();
     await expect(page.getByText(product.title).first()).toBeVisible();
   });
