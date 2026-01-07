@@ -176,10 +176,11 @@ export default async function seedDemoData({ container }: ExecArgs) {
   logger.info("Finished seeding regions.");
   
   if (regionUS || regionCA || regionEU) {
+    // Link Regions to Sales Channel using 'id' as key to match standard link definition
     const links: any[] = [];
-    if (regionUS) links.push({ [Modules.REGION]: { region_id: regionUS.id }, [Modules.SALES_CHANNEL]: { sales_channel_id: defaultSalesChannel[0].id } });
-    if (regionCA) links.push({ [Modules.REGION]: { region_id: regionCA.id }, [Modules.SALES_CHANNEL]: { sales_channel_id: defaultSalesChannel[0].id } });
-    if (regionEU) links.push({ [Modules.REGION]: { region_id: regionEU.id }, [Modules.SALES_CHANNEL]: { sales_channel_id: defaultSalesChannel[0].id } });
+    if (regionUS) links.push({ [Modules.REGION]: { id: regionUS.id }, [Modules.SALES_CHANNEL]: { id: defaultSalesChannel[0].id } });
+    if (regionCA) links.push({ [Modules.REGION]: { id: regionCA.id }, [Modules.SALES_CHANNEL]: { id: defaultSalesChannel[0].id } });
+    if (regionEU) links.push({ [Modules.REGION]: { id: regionEU.id }, [Modules.SALES_CHANNEL]: { id: defaultSalesChannel[0].id } });
     
     await link.create(links);
     logger.info("Linked regions to Default Sales Channel.");
