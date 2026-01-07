@@ -176,7 +176,7 @@ export default async function seedDemoData({ container }: ExecArgs) {
   logger.info("Finished seeding regions.");
   
   if (regionUS || regionCA || regionEU) {
-    const links = [];
+    const links: any[] = [];
     if (regionUS) links.push({ [Modules.REGION]: { region_id: regionUS.id }, [Modules.SALES_CHANNEL]: { sales_channel_id: defaultSalesChannel[0].id } });
     if (regionCA) links.push({ [Modules.REGION]: { region_id: regionCA.id }, [Modules.SALES_CHANNEL]: { sales_channel_id: defaultSalesChannel[0].id } });
     if (regionEU) links.push({ [Modules.REGION]: { region_id: regionEU.id }, [Modules.SALES_CHANNEL]: { sales_channel_id: defaultSalesChannel[0].id } });
