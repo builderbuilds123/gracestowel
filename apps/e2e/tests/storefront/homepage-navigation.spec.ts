@@ -1,4 +1,11 @@
 import { test, expect } from "../../support/fixtures";
+import { ensureTheNuzzleExists } from "../../support/helpers/seed-helpers";
+
+test.beforeAll(async ({ request }) => {
+  // SELF-HEALING: Ensure "The Nuzzle" hardcoded in the homepage exists
+  await ensureTheNuzzleExists(request);
+});
+
 
 /**
  * Homepage and Navigation Tests
@@ -58,9 +65,9 @@ test.describe("Homepage", () => {
 });
 
 test.describe("Navigation", () => {
-  test("should navigate from homepage to product page", async ({ page, productFactory }) => {
-    // Ensure at least one product exists
-    await productFactory.createProduct();
+  test("should navigate from homepage to product page", async ({ page }) => {
+    // Rely on "The Nuzzle" created in beforeAll
+
     await page.goto("/");
     await page.waitForLoadState("domcontentloaded");
 
