@@ -163,23 +163,26 @@ test.describe("Guest Checkout Flow", () => {
     const product = await productFactory.createProduct();
     await page.goto(`/products/${product.handle}`);
     await page.waitForLoadState("domcontentloaded");
+    await expect(page.getByRole("heading", { name: product.title })).toBeVisible({ timeout: 30000 });
+    
     const addToCartButton = page.getByRole("button", { name: /hang it up|add to cart/i }).first();
     await addToCartButton.scrollIntoViewIfNeeded();
     await page.waitForTimeout(1000); // Wait for hydration
     await addToCartButton.click({ force: true });
     
-    // Allow cart to update then navigate
-    await page.waitForTimeout(1000);
+    // Wait for cart drawer to confirm item was added
+    await expect(page.getByText(product.title).first()).toBeVisible({ timeout: 30000 });
     
     // Navigate directly to checkout page
     await page.goto("/checkout");
+    await page.waitForLoadState("networkidle");
 
     // Wait for checkout page to load
     await expect(page).toHaveURL(/\/checkout/);
 
-    // Fill shipping form
+    // Fill shipping form - increase timeout significantly
     const firstNameInput = page.getByLabel(/first name/i);
-    await expect(firstNameInput).toBeVisible();
+    await expect(firstNameInput).toBeVisible({ timeout: 30000 });
 
     await firstNameInput.fill("Test");
     await page.getByLabel(/last name/i).fill("User");
