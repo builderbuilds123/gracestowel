@@ -64,7 +64,7 @@ test.describe("Guest Checkout Flow", () => {
 
     // Verify cart drawer opens with the item - increased timeout for API call
     await expect(
-      page.getByText(product.title),
+      page.getByText(product.title).first(),
     ).toBeVisible({ timeout: 30000 });
 
     // Verify item is in cart (use first match since product name appears multiple places)
@@ -84,7 +84,7 @@ test.describe("Guest Checkout Flow", () => {
 
     // Wait for cart drawer to open
     await expect(
-      page.getByText(product.title),
+      page.getByText(product.title).first(),
     ).toBeVisible({ timeout: 30000 });
 
     // Find and click increase quantity button (+ button)
@@ -98,7 +98,7 @@ test.describe("Guest Checkout Flow", () => {
 
     // Verify cart drawer still visible (update completed)
     await expect(
-      page.getByText(product.title),
+      page.getByText(product.title).first(),
     ).toBeVisible({ timeout: 30000 });
   });
 
@@ -115,7 +115,7 @@ test.describe("Guest Checkout Flow", () => {
 
     // Wait for cart drawer to open
     await expect(
-      page.getByText(product.title),
+      page.getByText(product.title).first(),
     ).toBeVisible({ timeout: 30000 });
 
     // Find and click remove button (trash icon or "Remove" text)
@@ -146,7 +146,7 @@ test.describe("Guest Checkout Flow", () => {
 
     // Wait for cart drawer
     await expect(
-      page.getByText(product.title),
+      page.getByText(product.title).first(),
     ).toBeVisible({ timeout: 30000 });
 
     // Click checkout button/link
@@ -227,7 +227,7 @@ test.describe("Cart Persistence", () => {
     await page.waitForTimeout(1000); // Wait for hydration
     await addToCartButton.click({ force: true });
     
-    await expect(page.getByText(product.title)).toBeVisible({ timeout: 30000 });
+    await expect(page.getByText(product.title).first()).toBeVisible({ timeout: 30000 });
 
     // Verify cart is in local storage (storefront uses client-side cart for now)
     await expect.poll(async () => {
