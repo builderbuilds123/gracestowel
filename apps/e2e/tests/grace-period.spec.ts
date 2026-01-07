@@ -273,6 +273,8 @@ test.describe("AC2 & AC3: Magic Link & Cookie Persistence", () => {
     } catch (e) {
       console.log("DEBUG: Link Expired check failed. Page content dump:");
       console.log(await page.content());
+      // Diagnostic check: Is it 401 Unauthorized?
+      await expect(page.getByText(/Unauthorized/i)).toBeVisible({ timeout: 5000 }).catch(() => console.log("DEBUG: 'Unauthorized' text NOT found."));
       throw e;
     }
 

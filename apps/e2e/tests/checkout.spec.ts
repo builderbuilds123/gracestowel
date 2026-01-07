@@ -94,7 +94,7 @@ test.describe("Guest Checkout Flow", () => {
     await increaseBtn.click({ force: true });
 
     // Wait for UI to reflect the change
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(1000);
 
     // Verify cart drawer still visible (update completed)
     await expect(
@@ -158,7 +158,19 @@ test.describe("Guest Checkout Flow", () => {
     await expect(page).toHaveURL(/\/checkout/);
   });
 
-  test("should fill shipping information", async ({ page }) => {
+  test("should fill shipping information", async ({ page, productFactory }) => {
+    // Setup: Add product to cart first
+    const product = await productFactory.createProduct();
+    await page.goto(`/products/${product.handle}`);
+    await page.waitForLoadState("domcontentloaded");
+    const addToCartButton = page.getByRole("button", { name: /hang it up|add to cart/i }).first();
+    await addToCartButton.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(1000); // Wait for hydration
+    await addToCartButton.click({ force: true });
+    
+    // Allow cart to update then navigate
+    await page.waitForTimeout(1000);
+    
     // Navigate directly to checkout page
     await page.goto("/checkout");
 

@@ -64,7 +64,8 @@ test.describe("Navigation", () => {
 
     // Click on first product
     // Use a more robust locator and wait for hydration
-    const productCard = page.locator('a[href*="/products/"]').first();
+    // Use a more robust locator and wait for hydration
+    const productCard = page.locator('a[href*="/products/"]:has(img)').first();
     await expect(productCard).toBeVisible({ timeout: 30000 }); // Ensure the new locator finds something
     await productCard.scrollIntoViewIfNeeded();
     await page.waitForTimeout(1000); // Wait for hydration
