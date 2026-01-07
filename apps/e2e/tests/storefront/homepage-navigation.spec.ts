@@ -58,7 +58,9 @@ test.describe("Homepage", () => {
 });
 
 test.describe("Navigation", () => {
-  test("should navigate from homepage to product page", async ({ page }) => {
+  test("should navigate from homepage to product page", async ({ page, productFactory }) => {
+    // Ensure at least one product exists
+    await productFactory.createProduct();
     await page.goto("/");
     await page.waitForLoadState("domcontentloaded");
 

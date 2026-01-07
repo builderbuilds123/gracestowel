@@ -106,7 +106,7 @@ services:
       API_URL: http://backend:8080
       CI: "true"
       MEDUSA_PUBLISHABLE_KEY: ${MEDUSA_PUBLISHABLE_KEY}
-      JWT_SECRET: ${JWT_SECRET}
+      JWT_SECRET: test-secret-must-be-at-least-32-characters-long-for-security
       ADMIN_TOKEN: ${ADMIN_TOKEN}
     volumes:
       - ./apps/e2e:/app
