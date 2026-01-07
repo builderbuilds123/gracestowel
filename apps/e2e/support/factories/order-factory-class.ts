@@ -64,15 +64,25 @@ export class OrderFactory {
     });
 
     // 5. Add Shipping Method
-    const { ShippingFactory } = await import("./shipping-factory-class");
-    const shippingFactory = new ShippingFactory(this.request);
-    // Use North America service zone if we are in US region, otherwise let factory use its default
-    const shipping = await shippingFactory.createShippingOption();
+    // Use /store/carts/:id/shipping-options to get options valid for this cart's region
+    const shippingOptionsResponse = await apiRequest<{ shipping_options: { id: string; name: string }[] }>({
+      request: this.request,
+      method: "GET",
+      url: `/store/carts/${cartId}/shipping-options`,
+    });
+
+    const shippingOptionId = shippingOptionsResponse.shipping_options?.[0]?.id;
+    if (!shippingOptionId) {
+      throw new Error(
+        `No shipping options available for cart ${cartId}. Seeded data may not have shipping for this region.`
+      );
+    }
+
     await apiRequest({
       request: this.request,
       method: "POST",
       url: `/store/carts/${cartId}/shipping-methods`,
-      data: { option_id: shipping.id },
+      data: { option_id: shippingOptionId },
     });
 
     // 6. Initialize Payment Collection and Session

@@ -79,7 +79,6 @@ test.describe("Backend API workflows (admin)", () => {
     apiRequest,
     productFactory,
     discountFactory,
-    shippingFactory,
     paymentFactory,
   }) => {
     const product = await productFactory.createProduct();
@@ -161,14 +160,22 @@ test.describe("Backend API workflows (admin)", () => {
       },
     });
 
-    // 6. Add Shipping Method
-    const shipping = await shippingFactory.createShippingOption({ region_id: regionId });
-    test.skip(!shipping.id, "Shipping option API unavailable");
+    // 6. Add Shipping Method - use cart's shipping options to get one with valid region pricing
+    const cartShippingOptions = await apiRequest<{ shipping_options: { id: string; name: string }[] }>({
+      method: "GET",
+      url: `/store/carts/${cart.id}/shipping-options`,
+      headers: {
+        "x-publishable-api-key": process.env.MEDUSA_PUBLISHABLE_KEY!,
+      },
+    });
+    
+    const shippingOptionId = cartShippingOptions.shipping_options?.[0]?.id;
+    test.skip(!shippingOptionId, "No shipping options available for cart region");
     
     await apiRequest({
       method: "POST",
       url: `/store/carts/${cart.id}/shipping-methods`,
-      data: { option_id: shipping.id },
+      data: { option_id: shippingOptionId },
       headers: {
         "x-publishable-api-key": process.env.MEDUSA_PUBLISHABLE_KEY!,
       },
