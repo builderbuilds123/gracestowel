@@ -50,7 +50,7 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
   const provider_id = body.provider_id || "pp_stripe";
   
   // Validate provider_id format (Medusa uses pp_ prefix for payment providers)
-  if (provider_id && (!provider_id.startsWith("pp_") || provider_id.length < 5)) {
+  if (!provider_id.startsWith("pp_") || provider_id.length < 5) {
     logger.error("Invalid provider ID format", undefined, { provider_id });
     return data({ error: "Invalid provider ID format", traceId }, { status: 400 });
   }

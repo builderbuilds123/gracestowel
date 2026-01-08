@@ -263,8 +263,19 @@ export async function action({ request, context }: ActionFunctionArgs) {
     let calculatedAmount = 0;
 
     if (cartId) {
+        // Type safe cart interface
+        interface MedusaCart {
+            id?: string;
+            total?: number;
+            items?: Array<{ id: string }>;
+            summary?: {
+                current_order_total?: number;
+            };
+        }
+
         // Fetch cart from Medusa
-        const cartResponse = await monitoredFetch(`${medusaBackendUrl}/store/carts/${cartId}`, {
+        const cartUrl = `${medusaBackendUrl}/store/carts/${cartId}`;
+        const cartResponse = await monitoredFetch(cartUrl, {
             headers: {
                 "x-publishable-api-key": publishableKey,
             },
@@ -273,20 +284,29 @@ export async function action({ request, context }: ActionFunctionArgs) {
         });
 
         if (!cartResponse.ok) {
-            logger.error("Failed to fetch Medusa cart", new Error("Cart not found or error"), { cartId });
+            const errorBody = await cartResponse.text();
+            logger.error("Failed to fetch Medusa cart", new Error("Cart not found or error"), { 
+                cartId, 
+                status: cartResponse.status,
+                statusText: cartResponse.statusText,
+                errorBody: errorBody.substring(0, 500),
+            });
             return data({ message: "Invalid cart", traceId }, { status: 400 });
         }
 
-        // Type safe cart interface
-        interface MedusaCart {
-            id?: string;
-            total?: number;
-            summary?: {
-                current_order_total?: number;
-            };
-        }
+        const cartData = await cartResponse.json() as { cart: MedusaCart };
+        const cart = cartData.cart;
 
-        const { cart } = await cartResponse.json() as { cart: MedusaCart };
+        // Check if cart has items
+        const itemCount = cart?.items?.length ?? 0;
+
+        logger.info("Medusa cart data received", {
+            cartId,
+            hasTotal: cart?.total !== undefined,
+            totalValue: cart?.total,
+            itemCount,
+            hasSummary: !!cart?.summary,
+        });
 
         if (cart && (cart.total !== undefined || cart.summary?.current_order_total !== undefined)) {
             // Prefer summary.current_order_total if available (Medusa v2 pattern)

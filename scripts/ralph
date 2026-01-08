@@ -1,0 +1,28 @@
+#!/bin/bash
+set -e
+
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+RALPH_DIR="$REPO_ROOT/tools/ralph-orchestrator"
+VENV_DIR="$RALPH_DIR/.venv"
+
+# Check if ralph-orchestrator submodule exists
+if [ ! -d "$RALPH_DIR" ]; then
+    echo "❌ ralph-orchestrator submodule not found at $RALPH_DIR" >&2
+    echo "   Run: git submodule update --init --recursive" >&2
+    exit 1
+fi
+
+# Check if virtual environment exists
+if [ ! -d "$VENV_DIR" ]; then
+    echo "❌ Python virtual environment not found at $VENV_DIR" >&2
+    echo "   Run: cd $RALPH_DIR && uv sync --python /opt/homebrew/opt/python@3.13/bin/python3.13" >&2
+    exit 1
+fi
+
+# Activate virtual environment and run ralph
+cd "$RALPH_DIR"
+source "$VENV_DIR/bin/activate"
+exec python -m ralph_orchestrator "$@"
+

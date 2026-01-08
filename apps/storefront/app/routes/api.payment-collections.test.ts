@@ -154,7 +154,7 @@ describe('Payment Collections API', () => {
         const { data, status } = await unwrap(response);
 
         expect(status).toBe(200);
-        expect(data.payment_collections[0].id).toBe(existingCollectionId);
+        expect(data.payment_collection.id).toBe(existingCollectionId);
         
         // Verify both calls were made
         expect(fetchSpy).toHaveBeenCalledTimes(2);

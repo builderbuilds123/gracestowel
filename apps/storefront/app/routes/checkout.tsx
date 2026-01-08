@@ -182,7 +182,6 @@ export default function Checkout() {
                 body: JSON.stringify({ cartId }),
                 signal: controller.signal,
                 label: "create-payment-collection",
-                cloudflareEnv: (window as any).ENV // Access client-side env if needed, or rely on internal fetch
             });
 
             if (!colRes.ok) {
@@ -373,7 +372,7 @@ export default function Checkout() {
         if (isDevelopment) {
           console.log('[Checkout] Step 2 SUCCESS - Cart updated');
         }
-        // Mark cart as synced - payment intent can now fetch correct totals
+        // Mark cart as synced ONLY if update succeeded
         setIsCartSynced(true);
       } else {
         // No items to sync, but cart exists - still mark as synced

@@ -89,8 +89,25 @@ export async function action({ request, context }: ActionFunctionArgs) {
         
         if (existingResponse.ok) {
           const existingData = await existingResponse.json();
-          logger.info("Payment collection already exists, returning existing", { cartId });
-          return data(existingData);
+          
+          // Validate that the response contains at least one payment collection and
+          // normalize the shape to match the POST /store/payment-collections response.
+          const paymentCollections = (existingData as { payment_collections?: unknown[] })?.payment_collections;
+          const existingPaymentCollection = Array.isArray(paymentCollections) && paymentCollections.length > 0
+            ? paymentCollections[0]
+            : undefined;
+
+          if (existingPaymentCollection) {
+            logger.info("Payment collection already exists, returning existing", { cartId });
+            return data({ payment_collection: existingPaymentCollection });
+          }
+
+          // If the structure is not as expected, log and fall through to generic error handling.
+          logger.error(
+            "Existing payment collection fetch returned unexpected structure",
+            undefined,
+            { cartId, existingData }
+          );
         }
       }
       
