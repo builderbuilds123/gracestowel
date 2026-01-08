@@ -62,7 +62,20 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
 
     // Sync items if provided
     if (items && items.length > 0) {
+      // Log incoming items for debugging
+      console.log(`[Cart Sync] Received ${items.length} items:`, items.map(i => ({ 
+        id: i.id, 
+        variantId: i.variantId, 
+        title: i.title,
+        isValidMedusaId: i.variantId ? isMedusaId(i.variantId) : false 
+      })));
+      
       const validItems = items.filter(item => item.variantId && isMedusaId(item.variantId));
+      
+      if (validItems.length !== items.length) {
+        console.warn(`[Cart Sync] Filtered out ${items.length - validItems.length} items with invalid variantIds`);
+      }
+      
       await service.syncCartItems(cartId, validItems);
       result.items_synced = validItems.length;
       console.log(`Synced ${validItems.length} items to cart ${cartId}`);
