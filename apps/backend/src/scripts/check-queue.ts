@@ -15,7 +15,8 @@ async function checkQueue() {
   const counts = await queue.getJobCounts();
   console.log("Job Counts:", counts);
 
-  const specificJobId = "capture-order_01KCT8TAZD9TNC6BD53ZFQQSK3";
+  /*
+  const specificJobId = "job_id_placeholder"; 
   const job = await queue.getJob(specificJobId);
 
   if (job) {
@@ -30,6 +31,7 @@ async function checkQueue() {
   } else {
       console.log(`Job ${specificJobId} not found.`);
   }
+  */
 
   /*
   const jobs = await queue.getJobs(["waiting", "active", "delayed", "failed", "completed"]);
