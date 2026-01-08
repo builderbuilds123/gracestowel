@@ -24,8 +24,8 @@ const mockPaymentSessionResponse = {
                 id: 'ps_123',
                 provider_id: 'pp_stripe',
                 data: {
-                    client_secret: 'pi_test_secret_abc123',
-                    id: 'pi_test123',
+                    client_secret: 'mock_secret_abc123',
+                    id: 'mock_pi_123',
                 },
             },
         ],
@@ -85,8 +85,8 @@ describe('usePaymentSession', () => {
         });
 
         await waitFor(() => {
-            expect(result.current.clientSecret).toBe('pi_test_secret_abc123');
-            expect(result.current.paymentIntentId).toBe('pi_test123');
+            expect(result.current.clientSecret).toBe('mock_secret_abc123');
+            expect(result.current.paymentIntentId).toBe('mock_pi_123');
             expect(result.current.isLoading).toBe(false);
             expect(result.current.error).toBeNull();
         });
