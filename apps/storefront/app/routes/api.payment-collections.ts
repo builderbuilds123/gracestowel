@@ -35,7 +35,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
   // Validate cartId format (Medusa uses cart_ prefix)
   if (!cartId.startsWith("cart_") || cartId.length < 10) {
-    logger.error("Invalid cart ID format", { cartId });
+    logger.error("Invalid cart ID format", undefined, { cartId });
     return data({ error: "Invalid cart ID format", traceId }, { status: 400 });
   }
 

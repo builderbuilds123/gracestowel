@@ -27,7 +27,7 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
 
   // Validate collectionId format (Medusa uses paycol_ prefix)
   if (!collectionId.startsWith("paycol_") || collectionId.length < 10) {
-    logger.error("Invalid collection ID format", { collectionId });
+    logger.error("Invalid collection ID format", undefined, { collectionId });
     return data({ error: "Invalid collection ID format", traceId }, { status: 400 });
   }
 
@@ -38,7 +38,7 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
        try {
          body = JSON.parse(raw);
        } catch (parseError) {
-         logger.error("Invalid JSON body", { error: parseError });
+         logger.error("Invalid JSON body", parseError instanceof Error ? parseError : new Error(String(parseError)));
          return data({ error: "Invalid JSON body", traceId }, { status: 400 });
        }
      }
@@ -51,7 +51,7 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
   
   // Validate provider_id format (Medusa uses pp_ prefix for payment providers)
   if (provider_id && (!provider_id.startsWith("pp_") || provider_id.length < 5)) {
-    logger.error("Invalid provider ID format", { provider_id });
+    logger.error("Invalid provider ID format", undefined, { provider_id });
     return data({ error: "Invalid provider ID format", traceId }, { status: 400 });
   }
 
