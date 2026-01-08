@@ -41,7 +41,8 @@
   },
   "pnpm": {
     "overrides": {
-      "jws": "3.2.3"
+      "jws": "3.2.3",
+      "preact": "10.27.3"
     }
   },
   "devDependencies": {
