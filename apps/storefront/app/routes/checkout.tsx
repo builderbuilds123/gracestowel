@@ -49,6 +49,7 @@ export default function Checkout() {
 
   // Payment state
   const [clientSecret, setClientSecret] = useState("");
+  const [paymentCollectionId, setPaymentCollectionId] = useState<string | null>(null);
   const [paymentIntentId, setPaymentIntentId] = useState<string | null>(null);
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [lastTraceId, setLastTraceId] = useState<string | null>(null);
@@ -75,6 +76,7 @@ export default function Checkout() {
     useState<ShippingOption | null>(null);
   const [isCalculatingShipping, setIsCalculatingShipping] = useState(false);
   const [shippingAddress, setShippingAddress] = useState<any>(undefined);
+  const [isCartSynced, setIsCartSynced] = useState(false); // Track when cart items are synced to Medusa
 
   // SHP-01: Shipping persistence hook
   const { 
@@ -156,114 +158,116 @@ export default function Checkout() {
     }
   }, [cartTotal, items, currency]);
 
-  // PaymentIntent management: Create once when shipping is selected, update on changes
-  // CRITICAL: Wait for selectedShipping to prevent racing CREATE calls with different metadata
+  // PaymentIntent management: Create once, update on changes
+  // CRITICAL: Wait for isCartSynced to ensure cart items exist in Medusa before fetching totals
+  // Payment Collection & Session Management (Medusa v2)
   useEffect(() => {
     if (cartTotal <= 0) return;
-    if (!selectedShipping) return; // Wait for shipping selection before creating PI
     if (!cartId) return; // Wait for cart to be created
+    if (!isCartSynced) return; // Wait for cart items to be synced to Medusa
 
     const controller = new AbortController();
 
-    const managePaymentIntent = async () => {
+    const managePayment = async () => {
       try {
         setPaymentError(null);
 
-        const requestData = {
-          amount: cartTotal,
-          currency: currency.toLowerCase(),
-          shipping: selectedShipping.amount ?? 0,
-          customerId: isAuthenticated ? customer?.id : undefined,
-          customerEmail: isAuthenticated ? customer?.email : (guestEmail || undefined),
-          cartItems: items.map((item) => ({
-            id: item.id,
-            variantId: item.variantId,
-            sku: item.sku,
-            title: item.title,
-            price: item.price,
-            quantity: item.quantity,
-            color: item.color,
-          })),
-          paymentIntentId: paymentIntentId,
-          cartId: cartId,
-        };
+        // Step 1: Initialize Payment Collection if needed
+        let currentCollectionId = paymentCollectionId;
+        if (!currentCollectionId) {
+            if (isDevelopment) console.log("[Checkout] Creating Payment Collection...");
+            const colRes = await monitoredFetch("/api/payment-collections", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ cartId }),
+                signal: controller.signal,
+                label: "create-payment-collection",
+                cloudflareEnv: (window as any).ENV // Access client-side env if needed, or rely on internal fetch
+            });
 
-        if (isDevelopment) {
-          console.log("[Checkout] Payment intent request:", {
-            operation: paymentIntentId ? "update" : "create",
-            amount: requestData.amount,
-            currency: requestData.currency,
-            shipping: requestData.shipping,
-            itemCount: requestData.cartItems.length,
-            paymentIntentId,
-            traceId: sessionTraceId.current,
-          });
+            if (!colRes.ok) {
+                 const error = await colRes.json();
+                 console.error("Payment Collection Error:", error);
+                 throw new Error("Failed to initialize payment collection");
+            }
+            
+            const colData = await colRes.json() as { payment_collection: { id: string } };
+            currentCollectionId = colData.payment_collection.id;
+            setPaymentCollectionId(currentCollectionId);
         }
 
-        const response = await monitoredFetch("/api/payment-intent", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-trace-id": sessionTraceId.current,
-          },
-          signal: controller.signal,
-          body: JSON.stringify(requestData),
-          label: paymentIntentId ? 'update-payment-intent' : 'create-payment-intent',
+        // Step 2: Create/Sync Payment Session
+        // This ensures the Stripe PaymentIntent is created/updated with the correct amount from the cart
+        if (isDevelopment) console.log("[Checkout] Creating/Syncing Payment Session...");
+        
+        const sessionRes = await monitoredFetch(`/api/payment-collections/${currentCollectionId}/sessions`, {
+            method: "POST",
+             headers: { "Content-Type": "application/json" },
+             body: JSON.stringify({ provider_id: "pp_stripe" }),
+             signal: controller.signal,
+             label: "create-payment-session"
         });
 
-        if (!response.ok) {
-          const error = (await response.json()) as {
-            message?: string;
-            debugInfo?: string;
-            stripeErrorCode?: string;
-            traceId?: string;
-          };
-          
-          const errorMessage = error.debugInfo || error.message || "Payment initialization failed";
-          setPaymentError(errorMessage);
-          setLastTraceId(error.traceId || null);
-          
-          if (isDevelopment) {
-            console.error("[Checkout] Payment initialization error:", error);
-          }
-          return;
+        if (!sessionRes.ok) {
+            const error = await sessionRes.json();
+            console.error("Payment Session Error:", error);
+            throw new Error("Failed to create payment session");
         }
 
-        const data = (await response.json()) as {
-          clientSecret: string;
-          paymentIntentId: string;
-          traceId?: string;
+        const sessionData = await sessionRes.json() as { 
+            payment_collection?: { 
+                payment_sessions?: Array<{ 
+                    id: string, 
+                    provider_id: string, 
+                    data?: { 
+                        client_secret?: string;
+                        id?: string;
+                        [key: string]: unknown;
+                    } 
+                }> 
+            } 
         };
+        // Extract client_secret from the stripe session
+        // Structure: payment_collection.payment_sessions[{ provider_id: 'pp_stripe', data: { client_secret } }]
+        // Note: data.id is the PaymentIntent ID from Stripe, not the session ID
+        const sessions = sessionData.payment_collection?.payment_sessions;
 
-        if (isDevelopment) {
-          console.log("[Checkout] Payment intent response:", {
-            operation: paymentIntentId ? "updated" : "created",
-            paymentIntentId: data.paymentIntentId,
-            hasClientSecret: !!data.clientSecret,
-            isFirstInitialization: !isInitialized.current,
-          });
+        if (!sessions || sessions.length === 0) {
+            throw new Error("No payment sessions found in response");
         }
 
-        // CRITICAL: Only set clientSecret on FIRST call - changing it breaks Stripe Elements
+        const stripeSession = sessions.find(s => s.provider_id === 'pp_stripe');
+        
+        if (!stripeSession) {
+            throw new Error("Stripe payment session not found in response");
+        }
+        
+        if (!stripeSession.data?.client_secret) {
+            throw new Error("Client secret not found in payment session data");
+        }
+        
         if (!isInitialized.current) {
-          setClientSecret(data.clientSecret);
-          isInitialized.current = true;
+            setClientSecret(stripeSession.data.client_secret);
+            isInitialized.current = true;
+        }
+        
+        // data.id is the PaymentIntent ID from Stripe (not the session ID)
+        if (stripeSession.data.id) {
+            setPaymentIntentId(stripeSession.data.id);
         }
 
-        setPaymentIntentId(data.paymentIntentId);
-        if (data.traceId) setLastTraceId(data.traceId);
       } catch (error) {
         if ((error as Error).name !== "AbortError") {
           if (isDevelopment) {
-            console.error("[Checkout] PaymentIntent error:", error);
+            console.error("[Checkout] Payment Error:", error);
           }
-          setPaymentError("Failed to initialize payment");
+          setPaymentError("Failed to initialize payment. Please try refreshing the page.");
         }
       }
     };
 
     // Debounce to prevent API thrashing
-    const debounceTimer = setTimeout(managePaymentIntent, 300);
+    const debounceTimer = setTimeout(managePayment, 300);
 
     return () => {
       clearTimeout(debounceTimer);
@@ -271,15 +275,12 @@ export default function Checkout() {
     };
   }, [
     cartTotal,
-    currency,
-    items,
     cartId,
-    selectedShipping,
-    isAuthenticated,
-    customer?.id,
-    customer?.email,
-    guestEmail,
-    paymentIntentId,
+    isCartSynced,
+    paymentCollectionId, // Dependency to continue flow after Step 1
+    selectedShipping?.id, // Re-sync on shipping change
+    selectedShipping?.amount,
+    currency
   ]);
 
   // Fetch shipping rates using new RESTful cart endpoints
@@ -325,6 +326,7 @@ export default function Checkout() {
         const { cart_id } = await createResponse.json() as { cart_id: string };
         currentCartId = cart_id;
         setCartId(cart_id);
+        setIsCartSynced(false); // Reset sync state for new cart
         if (isDevelopment) {
           console.log('[Checkout] Step 1 SUCCESS - Cart created:', cart_id);
         }
@@ -371,6 +373,11 @@ export default function Checkout() {
         if (isDevelopment) {
           console.log('[Checkout] Step 2 SUCCESS - Cart updated');
         }
+        // Mark cart as synced - payment intent can now fetch correct totals
+        setIsCartSynced(true);
+      } else {
+        // No items to sync, but cart exists - still mark as synced
+        setIsCartSynced(true);
       }
 
       // Step 3: Get shipping options (cacheable GET request)
@@ -399,16 +406,13 @@ export default function Checkout() {
 
       setShippingOptions(shipping_options);
 
-      if (shipping_options.length > 0) {
-        // SHP-01: Auto-select and persist shipping method
-        // Use existing selection if it's still valid, otherwise pick first option
-        const found = shipping_options.find(o => o.id === selectedShipping?.id);
-        const optionToSelect = found || shipping_options[0];
-        
-        // Only call handleShippingSelect if we're changing the selection
-        // or if this is the first selection (to ensure it gets persisted)
-        if (!selectedShipping || optionToSelect.id !== selectedShipping.id) {
-          handleShippingSelect(optionToSelect);
+      // If user has an existing valid selection, keep it
+      // Do NOT auto-select - user must explicitly choose shipping method
+      if (selectedShipping && shipping_options.length > 0) {
+        const found = shipping_options.find(o => o.id === selectedShipping.id);
+        if (!found) {
+          // Current selection is no longer valid, clear it
+          setSelectedShipping(null);
         }
       }
 

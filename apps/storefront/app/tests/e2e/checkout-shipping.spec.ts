@@ -60,11 +60,23 @@ describe("Checkout Integration", () => {
 it.skip("should fetch shipping rates when address is entered", async () => {
     // Setup mocks for new RESTful cart endpoints
     mockMonitoredFetch.mockImplementation((url) => {
-      if (url === "/api/payment-intent") {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve({ clientSecret: "pi_secret", paymentIntentId: "pi_123" }),
-        });
+      if (url === "/api/payment-collections") {
+         return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ payment_collection: { id: "paycol_123" } })
+         });
+      }
+      if (url.includes("/sessions")) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ 
+                payment_collection: { 
+                    payment_sessions: [
+                        { provider_id: 'pp_stripe', data: { client_secret: "pi_secret", id: "sess_1" } }
+                    ]
+                }
+            })
+          });
       }
       // Step 1: POST /api/carts - Create cart
       if (url === "/api/carts") {

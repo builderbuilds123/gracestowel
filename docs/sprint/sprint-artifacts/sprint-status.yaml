@@ -407,9 +407,7 @@ development_status:
     completed: "2025-12-30"
     depends_on: []
     blocks: ["RET-01", "TAX-01"]
-  fix-CHK-01-canonical-checkout:
-    path: docs/sprint/sprint-artifacts/fix-CHK-01-canonical-checkout.md
-    status: done
+
   fix-SHP-01-shipping-option-persistence:
     path: docs/sprint/sprint-artifacts/fix-SHP-01-shipping-option-persistence.md
     status: done
@@ -463,4 +461,24 @@ development_status:
   fix-RET-02-payment-intent-order-link:
     path: docs/sprint/sprint-artifacts/fix-RET-02-payment-intent-order-link.md
     status: ready-for-dev
+  fix-CHK-02-A-backend-payment-collection:
+    path: docs/sprint/sprint-artifacts/fix-CHK-02-A-backend-payment-collection.md
+    status: done
+    meta: "Backend APIs for Payment Collection initialization. Code review fixes: input validation, error format standardization, JSDoc headers. Adversarial review fixes: removed sensitive error leakage, added idempotency handling (409 conflicts), fixed JSON parse errors, added provider_id validation, fixed type assertions in checkout, added null checks for unexpected response structures. 14/14 tests passing."
+    completed: "2026-01-08"
+    code_review_completed: "2026-01-08"
+    depends_on: ["PAY-01", "SHP-01"]
+    blocks: ["CHK-02-B", "CHK-02-C"]
+  fix-CHK-02-B-storefront-payment-ui:
+    path: docs/sprint/sprint-artifacts/fix-CHK-02-B-storefront-payment-ui.md
+    status: ready-for-dev
+    meta: "Storefront UI integration (Validated 2026-01-07)"
+    depends_on: ["CHK-02-A"]
+    blocks: ["CHK-02-C"]
+  fix-CHK-02-C-order-completion-flow:
+    path: docs/sprint/sprint-artifacts/fix-CHK-02-C-order-completion-flow.md
+    status: ready-for-dev
+    meta: "Completion flow standardisation (Validated 2026-01-07)"
+    depends_on: ["CHK-02-A", "CHK-02-B"]
+    blocks: ["RET-02"]
   audit-epic-1-retrospective: optional
