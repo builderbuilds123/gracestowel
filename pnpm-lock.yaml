@@ -20,6 +20,9 @@ importers:
       posthog-react-native:
         specifier: ^4.17.1
         version: 4.17.1(@react-native-async-storage/async-storage@2.2.0(react-native@0.83.1(@babel/core@7.28.5)(@types/react@19.2.7)(react@19.2.0)))(react-native-device-info@15.0.1(react-native@0.83.1(@babel/core@7.28.5)(@types/react@19.2.7)(react@19.2.0)))(react-native-localize@3.6.1(react-native@0.83.1(@babel/core@7.28.5)(@types/react@19.2.7)(react@19.2.0))(react@19.2.0))(react-native-svg@15.15.1(react-native@0.83.1(@babel/core@7.28.5)(@types/react@19.2.7)(react@19.2.0))(react@19.2.0))
+      preact:
+        specifier: 10.27.3
+        version: 10.27.3
       qs:
         specifier: 6.14.1
         version: 6.14.1
@@ -8145,6 +8148,9 @@ packages:
 
   preact@10.27.2:
     resolution: {integrity: sha512-5SYSgFKSyhCbk6SrXyMpqjb5+MQBgfvEKE/OC+PujcY34sOpqtr+0AZQtPYx5IA6VxynQ7rUPCtKzyovpj9Bpg==}
+
+  preact@10.27.3:
+    resolution: {integrity: sha512-ZieIP3zQHiQsNF3BA+SNVS8dcuRIg/nsxlkFbCMBLS2L1Ww4Bkxd9n6Md2A1crfTZsEbQPADV0neYmh/EElgeQ==}
 
   prettier@3.7.4:
     resolution: {integrity: sha512-v6UNi1+3hSlVvv8fSaoUbggEM5VErKmmpGA7Pl3HF8V6uKY7rvClBOJlH6yNwQtfTueNkGVpOv/mtWL9L4bgRA==}
@@ -19552,6 +19558,8 @@ snapshots:
       react-native-localize: 3.6.1(react-native@0.83.1(@babel/core@7.28.5)(@types/react@19.2.7)(react@19.2.0))(react@19.2.0)
 
   preact@10.27.2: {}
+
+  preact@10.27.3: {}
 
   prettier@3.7.4: {}
 
