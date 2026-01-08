@@ -14,6 +14,8 @@ import { parsePrice } from "../lib/price";
 import { generateTraceId } from "../lib/logger";
 import { generateCartHash } from "../utils/cart-hash";
 import { useShippingPersistence } from "../hooks/useShippingPersistence";
+import { usePaymentCollection } from "../hooks/usePaymentCollection";
+import { usePaymentSession } from "../hooks/usePaymentSession";
 import { monitoredFetch } from "../utils/monitored-fetch";
 
 
@@ -47,16 +49,10 @@ export default function Checkout() {
   const { currency } = useLocale(); // Verify currency is obtained here
   const { customer, isAuthenticated } = useCustomer();
 
-  // Payment state
-  const [clientSecret, setClientSecret] = useState("");
-  const [paymentCollectionId, setPaymentCollectionId] = useState<string | null>(null);
-  const [paymentIntentId, setPaymentIntentId] = useState<string | null>(null);
-  const [paymentError, setPaymentError] = useState<string | null>(null);
-  const [lastTraceId, setLastTraceId] = useState<string | null>(null);
+  // Guest email state
   const [guestEmail, setGuestEmail] = useState<string | undefined>(undefined);
 
-  // Track initialization to prevent clientSecret changes after first set
-  const isInitialized = useRef(false);
+  // Session trace ID for logging
   const sessionTraceId = useRef(generateTraceId());
 
   // Caching mechanism for shipping rates
@@ -158,129 +154,24 @@ export default function Checkout() {
     }
   }, [cartTotal, items, currency]);
 
-  // PaymentIntent management: Create once, update on changes
-  // CRITICAL: Wait for isCartSynced to ensure cart items exist in Medusa before fetching totals
-  // Payment Collection & Session Management (Medusa v2)
-  useEffect(() => {
-    if (cartTotal <= 0) return;
-    if (!cartId) return; // Wait for cart to be created
-    if (!isCartSynced) return; // Wait for cart items to be synced to Medusa
+  // CHK-02-B M1 FIX: Payment hooks with race condition protection
+  // Step 1: Create PaymentCollection (once per cart, with request ID pattern)
+  const { 
+    paymentCollectionId, 
+    isCreating: isCreatingCollection, 
+    error: collectionError 
+  } = usePaymentCollection(cartId, isCartSynced);
 
-    const controller = new AbortController();
+  // Step 2: Create/sync PaymentSession (triggered when collection is ready)
+  const { 
+    clientSecret, 
+    paymentIntentId, 
+    isLoading: isLoadingSession, 
+    error: sessionError 
+  } = usePaymentSession(paymentCollectionId, cartTotal, selectedShipping, currency);
 
-    const managePayment = async () => {
-      try {
-        setPaymentError(null);
-
-        // Step 1: Initialize Payment Collection if needed
-        let currentCollectionId = paymentCollectionId;
-        if (!currentCollectionId) {
-            if (isDevelopment) console.log("[Checkout] Creating Payment Collection...");
-            const colRes = await monitoredFetch("/api/payment-collections", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ cartId }),
-                signal: controller.signal,
-                label: "create-payment-collection",
-            });
-
-            if (!colRes.ok) {
-                 const error = await colRes.json();
-                 console.error("Payment Collection Error:", error);
-                 throw new Error("Failed to initialize payment collection");
-            }
-            
-            const colData = await colRes.json() as { payment_collection: { id: string } };
-            currentCollectionId = colData.payment_collection.id;
-            setPaymentCollectionId(currentCollectionId);
-        }
-
-        // Step 2: Create/Sync Payment Session
-        // This ensures the Stripe PaymentIntent is created/updated with the correct amount from the cart
-        if (isDevelopment) console.log("[Checkout] Creating/Syncing Payment Session...");
-        
-        const sessionRes = await monitoredFetch(`/api/payment-collections/${currentCollectionId}/sessions`, {
-            method: "POST",
-             headers: { "Content-Type": "application/json" },
-             body: JSON.stringify({ provider_id: "pp_stripe" }),
-             signal: controller.signal,
-             label: "create-payment-session"
-        });
-
-        if (!sessionRes.ok) {
-            const error = await sessionRes.json();
-            console.error("Payment Session Error:", error);
-            throw new Error("Failed to create payment session");
-        }
-
-        const sessionData = await sessionRes.json() as { 
-            payment_collection?: { 
-                payment_sessions?: Array<{ 
-                    id: string, 
-                    provider_id: string, 
-                    data?: { 
-                        client_secret?: string;
-                        id?: string;
-                        [key: string]: unknown;
-                    } 
-                }> 
-            } 
-        };
-        // Extract client_secret from the stripe session
-        // Structure: payment_collection.payment_sessions[{ provider_id: 'pp_stripe', data: { client_secret } }]
-        // Note: data.id is the PaymentIntent ID from Stripe, not the session ID
-        const sessions = sessionData.payment_collection?.payment_sessions;
-
-        if (!sessions || sessions.length === 0) {
-            throw new Error("No payment sessions found in response");
-        }
-
-        const stripeSession = sessions.find(s => s.provider_id === 'pp_stripe');
-        
-        if (!stripeSession) {
-            throw new Error("Stripe payment session not found in response");
-        }
-        
-        if (!stripeSession.data?.client_secret) {
-            throw new Error("Client secret not found in payment session data");
-        }
-        
-        if (!isInitialized.current) {
-            setClientSecret(stripeSession.data.client_secret);
-            isInitialized.current = true;
-        }
-        
-        // data.id is the PaymentIntent ID from Stripe (not the session ID)
-        if (stripeSession.data.id) {
-            setPaymentIntentId(stripeSession.data.id);
-        }
-
-      } catch (error) {
-        if ((error as Error).name !== "AbortError") {
-          if (isDevelopment) {
-            console.error("[Checkout] Payment Error:", error);
-          }
-          setPaymentError("Failed to initialize payment. Please try refreshing the page.");
-        }
-      }
-    };
-
-    // Debounce to prevent API thrashing
-    const debounceTimer = setTimeout(managePayment, 300);
-
-    return () => {
-      clearTimeout(debounceTimer);
-      controller.abort();
-    };
-  }, [
-    cartTotal,
-    cartId,
-    isCartSynced,
-    paymentCollectionId, // Dependency to continue flow after Step 1
-    selectedShipping?.id, // Re-sync on shipping change
-    selectedShipping?.amount,
-    currency
-  ]);
+  // Combine payment errors for display
+  const paymentError = collectionError || sessionError;
 
   // Fetch shipping rates using new RESTful cart endpoints
   const fetchShippingRates = useCallback(async (currentItems: typeof items, address: any, currentTotal: number) => {
@@ -372,6 +263,7 @@ export default function Checkout() {
         if (isDevelopment) {
           console.log('[Checkout] Step 2 SUCCESS - Cart updated');
         }
+
         // Mark cart as synced ONLY if update succeeded
         setIsCartSynced(true);
       } else {
@@ -537,11 +429,6 @@ export default function Checkout() {
         {paymentError && (
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
             <p>{paymentError}</p>
-            {lastTraceId && (
-              <p className="text-xs mt-2 text-red-500">
-                Reference: {lastTraceId}
-              </p>
-            )}
           </div>
         )}
 

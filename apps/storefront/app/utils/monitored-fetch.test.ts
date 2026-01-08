@@ -202,7 +202,7 @@ describe('Monitored Fetch (Story 4.3)', () => {
         clone: () => ({ json: () => Promise.resolve({}) }),
       });
 
-      await monitoredFetch('/api/payment-intent', { 
+      await monitoredFetch('/api/payment-collections', { 
         method: 'POST',
         label: 'create-payment-intent' 
       });
@@ -241,11 +241,11 @@ describe('Monitored Fetch (Story 4.3)', () => {
       });
 
       const body = { amount: 1000, currency: 'usd' };
-      await monitoredPost('/api/payment-intent', body);
+      await monitoredPost('/api/payment-collections', body);
 
       await flushMicrotasks();
 
-      expect(mockFetch).toHaveBeenCalledWith('/api/payment-intent', expect.objectContaining({
+      expect(mockFetch).toHaveBeenCalledWith('/api/payment-collections', expect.objectContaining({
         method: 'POST',
         body: JSON.stringify(body),
         headers: expect.objectContaining({

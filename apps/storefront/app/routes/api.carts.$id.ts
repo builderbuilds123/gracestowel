@@ -76,7 +76,7 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
         console.warn(`[Cart Sync] Filtered out ${items.length - validItems.length} items with invalid variantIds`);
       }
       
-      await service.syncCartItems(cartId, validItems);
+      const updatedCart = await service.syncCartItems(cartId, validItems);
       result.items_synced = validItems.length;
       console.log(`Synced ${validItems.length} items to cart ${cartId}`);
     }

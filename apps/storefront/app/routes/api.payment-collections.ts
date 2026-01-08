@@ -57,6 +57,29 @@ export async function action({ request, context }: ActionFunctionArgs) {
   logger.info("Creating Payment Collection", { cartId });
 
   try {
+    // Solution B: Check for existing payment collection first (Idempotency)
+    const existingCheckResponse = await monitoredFetch(`${medusaBackendUrl}/store/payment-collections?cart_id=${cartId}`, {
+      method: "GET",
+      headers: {
+        "x-publishable-api-key": publishableKey,
+      },
+      label: "check-existing-payment-collection",
+      cloudflareEnv: env,
+    });
+
+    if (existingCheckResponse.ok) {
+      const existingData = await existingCheckResponse.json();
+      const paymentCollections = (existingData as { payment_collections?: unknown[] })?.payment_collections;
+      const existingPaymentCollection = Array.isArray(paymentCollections) && paymentCollections.length > 0
+        ? paymentCollections[0]
+        : undefined;
+
+      if (existingPaymentCollection) {
+        logger.info("Found existing payment collection, skipping creation", { cartId });
+        return data({ payment_collection: existingPaymentCollection });
+      }
+    }
+
     const response = await monitoredFetch(`${medusaBackendUrl}/store/payment-collections`, {
       method: "POST",
       headers: {

@@ -249,7 +249,7 @@ function parseUrl(url: string): { host: string; path: string } {
  * 
  * @example
  * ```ts
- * const response = await monitoredFetch('/api/payment-intent', {
+ * const response = await monitoredFetch('/api/payment-collections', {
  *   method: 'POST',
  *   body: JSON.stringify(data),
  *   label: 'create-payment-intent'

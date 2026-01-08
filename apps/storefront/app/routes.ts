@@ -15,7 +15,6 @@ export default [
     route("account/login", "routes/account.login.tsx"),
     route("account/register", "routes/account.register.tsx"),
     route("order/status/:id", "routes/order_.status.$id.tsx"),
-    route("api/payment-intent", "routes/api.payment-intent.ts"),
     route("api/shipping-rates", "routes/api.shipping-rates.ts"),
     route("api/checkout-session", "routes/api.checkout-session.ts"),
     // Cart API routes
@@ -24,6 +23,9 @@ export default [
     route("api/carts/:id/shipping-options", "routes/api.carts.$id.shipping-options.ts"),
     route("api/carts/:id/shipping-methods", "routes/api.carts.$id.shipping-methods.ts"),
     route("api/carts/:id/complete", "routes/api.carts.$id.complete.ts"),
+    // Payment Collection routes
+    route("api/payment-collections", "routes/api.payment-collections.ts"),
+    route("api/payment-collections/:id/sessions", "routes/api.payment-collections.$id.sessions.ts"),
     // Utility routes
     route("api/health", "routes/api.health.ts"),
     route("blog/:id", "routes/blog.$id.tsx"),

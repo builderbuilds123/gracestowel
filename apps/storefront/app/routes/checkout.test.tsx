@@ -85,9 +85,9 @@ describe('Checkout Route', () => {
             removeFromCart: vi.fn(),
         });
 
-        // Mock fetch for payment-intent
+        // Mock fetch for payment-collections API (Medusa v2 payment flow)
         vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({
-            json: () => Promise.resolve({ clientSecret: 'test_secret' }),
+            json: () => Promise.resolve({ payment_collection: { id: 'paycol_test', payment_sessions: [{ provider_id: 'pp_stripe', data: { client_secret: 'test_secret' } }] } }),
         } as any)));
     });
 
@@ -153,5 +153,250 @@ describe('Checkout Route', () => {
         // Should NOT fire again
         await waitFor(() => {}, { timeout: 100 });
         expect(mockPostHog.capture).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('Checkout Payment Collection Flow', () => {
+    const mockFetch = vi.fn();
+    
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.stubGlobal('fetch', mockFetch);
+        
+        // Mock sessionStorage
+        const sessionStorageMock = {
+            getItem: vi.fn(() => 'cart_01HTEST123'),
+            setItem: vi.fn(),
+            removeItem: vi.fn(),
+        };
+        vi.stubGlobal('sessionStorage', sessionStorageMock);
+    });
+
+    it('should call payment-collections API when cart is synced', async () => {
+        // Setup: Valid cart with items
+        mockUseCart.mockReturnValue({
+            items: [{ id: '1', title: 'Towel', price: 1000, quantity: 1 }],
+            cartTotal: 1000,
+            updateQuantity: vi.fn(),
+            removeFromCart: vi.fn(),
+        });
+
+        // Mock the payment collection flow responses
+        // Mock cart sync API calls (Update, Options) followed by Payment Collection/Session
+        mockFetch
+            .mockResolvedValueOnce({
+                ok: true,
+                json: () => Promise.resolve({ cart_id: 'cart_01HTEST123' }),
+            })
+            .mockResolvedValueOnce({
+                ok: true,
+                json: () => Promise.resolve({ 
+                    shipping_options: [],
+                    cart_id: 'cart_01HTEST123'
+                }),
+            })
+            .mockResolvedValueOnce({
+                ok: true,
+                json: () => Promise.resolve({ payment_collection: { id: 'paycol_test123' } }),
+            })
+            .mockResolvedValueOnce({
+                ok: true,
+                json: () => Promise.resolve({
+                    payment_collection: {
+                        payment_sessions: [{
+                            provider_id: 'pp_stripe',
+                            data: { client_secret: 'pi_test_secret', id: 'pi_test123' }
+                        }]
+                    }
+                }),
+            });
+
+        render(<Checkout />);
+
+        // Payment collections should be called (after debounce)
+        await waitFor(() => {
+            const calls = mockFetch.mock.calls;
+            const paymentCollectionCall = calls.find((call: any) => 
+                call[0]?.includes?.('/api/payment-collections') || 
+                (typeof call[0] === 'string' && call[0].includes('/api/payment-collections'))
+            );
+            // The API may not be called immediately due to isCartSynced state
+            expect(paymentCollectionCall).toBeDefined();
+        }, { timeout: 2000 });
+    });
+
+    it('should handle payment collection creation failure gracefully', async () => {
+        mockUseCart.mockReturnValue({
+            items: [{ id: '1', title: 'Towel', price: 1000, quantity: 1 }],
+            cartTotal: 1000,
+            updateQuantity: vi.fn(),
+            removeFromCart: vi.fn(),
+        });
+
+        // Mock failed payment collection creation
+        mockFetch.mockResolvedValueOnce({
+            ok: false,
+            status: 500,
+            json: () => Promise.resolve({ error: 'Internal server error' }),
+        });
+
+        const { container } = render(<Checkout />);
+
+        // Should render without crashing
+        expect(container).toBeTruthy();
+    });
+
+    it('should handle payment session creation failure gracefully', async () => {
+        mockUseCart.mockReturnValue({
+            items: [{ id: '1', title: 'Towel', price: 1000, quantity: 1 }],
+            cartTotal: 1000,
+            updateQuantity: vi.fn(),
+            removeFromCart: vi.fn(),
+        });
+
+        // Mock successful collection, failed session
+        mockFetch
+            .mockResolvedValueOnce({
+                ok: true,
+                json: () => Promise.resolve({ payment_collection: { id: 'paycol_test123' } }),
+            })
+            .mockResolvedValueOnce({
+                ok: false,
+                status: 500,
+                json: () => Promise.resolve({ error: 'Session creation failed' }),
+            });
+
+        const { container } = render(<Checkout />);
+
+        // Should render without crashing
+        expect(container).toBeTruthy();
+    });
+});
+
+describe('Express Checkout with Payment Collections', () => {
+    const mockFetch = vi.fn();
+    
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.stubGlobal('fetch', mockFetch);
+        
+        // Mock sessionStorage
+        const sessionStorageMock = {
+            getItem: vi.fn(() => 'cart_01HTEST123'),
+            setItem: vi.fn(),
+            removeItem: vi.fn(),
+        };
+        vi.stubGlobal('sessionStorage', sessionStorageMock);
+    });
+
+    it('should initialize Payment Collection before Express Checkout can be used', async () => {
+        mockUseCart.mockReturnValue({
+            items: [{ id: '1', title: 'Towel', price: 1000, quantity: 1 }],
+            cartTotal: 1000,
+            updateQuantity: vi.fn(),
+            removeFromCart: vi.fn(),
+        });
+
+        // Mock cart sync API calls (happens first)
+        // Mock cart sync API calls (Updated: Create Cart skipped due to session)
+        mockFetch
+            .mockResolvedValueOnce({
+                ok: true,
+                json: () => Promise.resolve({ cart_id: 'cart_01HTEST123' }),
+            })
+            .mockResolvedValueOnce({
+                ok: true,
+                json: () => Promise.resolve({ 
+                    shipping_options: [],
+                    cart_id: 'cart_01HTEST123'
+                }),
+            })
+            // Mock successful payment collection and session creation
+            .mockResolvedValueOnce({
+                ok: true,
+                json: () => Promise.resolve({ 
+                    payment_collection: { id: 'paycol_test123' } 
+                }),
+            })
+            .mockResolvedValueOnce({
+                ok: true,
+                json: () => Promise.resolve({
+                    payment_collection: {
+                        payment_sessions: [{
+                            provider_id: 'pp_stripe',
+                            data: { 
+                                client_secret: 'pi_test_secret_123',
+                                id: 'pi_test123'
+                            }
+                        }]
+                    }
+                }),
+            });
+
+        render(<Checkout />);
+
+        // Wait for payment collection to be initialized
+        await waitFor(() => {
+            const calls = mockFetch.mock.calls;
+            const paymentCollectionCall = calls.find((call: any) => {
+                const url = typeof call[0] === 'string' ? call[0] : (call[0]?.url || call[0]?.[0] || '');
+                const method = call[0]?.method || call[1]?.method || 'GET';
+                return url.includes('/api/payment-collections') && 
+                       !url.includes('/sessions') &&
+                       method === 'POST';
+            });
+            expect(paymentCollectionCall).toBeDefined();
+        }, { timeout: 2000 });
+
+        // Verify payment session was created
+        await waitFor(() => {
+            const calls = mockFetch.mock.calls;
+            const sessionCall = calls.find((call: any) => {
+                const url = typeof call[0] === 'string' ? call[0] : (call[0]?.url || call[0]?.[0] || '');
+                const method = call[0]?.method || call[1]?.method || 'GET';
+                return url.includes('/api/payment-collections') && 
+                       url.includes('/sessions') &&
+                       method === 'POST';
+            });
+            expect(sessionCall).toBeDefined();
+        }, { timeout: 2000 });
+    });
+
+    it('should handle Express Checkout when Payment Collection initialization fails', async () => {
+        mockUseCart.mockReturnValue({
+            items: [{ id: '1', title: 'Towel', price: 1000, quantity: 1 }],
+            cartTotal: 1000,
+            updateQuantity: vi.fn(),
+            removeFromCart: vi.fn(),
+        });
+
+        // Mock cart sync API calls
+        // Mock cart sync API calls (Updated: Create Cart skipped due to session)
+        mockFetch
+            .mockResolvedValueOnce({
+                ok: true,
+                json: () => Promise.resolve({ cart_id: 'cart_01HTEST123' }),
+            })
+            .mockResolvedValueOnce({
+                ok: true,
+                json: () => Promise.resolve({ 
+                    shipping_options: [],
+                    cart_id: 'cart_01HTEST123'
+                }),
+            })
+            // Mock payment collection creation failure
+            .mockResolvedValueOnce({
+                ok: false,
+                status: 500,
+                json: () => Promise.resolve({ error: 'Payment collection creation failed' }),
+            });
+
+        const { container } = render(<Checkout />);
+
+        // Should render without crashing even if payment collection fails
+        // Express Checkout should still be available (it will handle its own initialization)
+        await waitFor(() => {
+            expect(container).toBeTruthy();
+        }, { timeout: 2000 });
     });
 });
