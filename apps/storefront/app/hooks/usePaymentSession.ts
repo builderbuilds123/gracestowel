@@ -119,7 +119,7 @@ export function usePaymentSession(
           let errorBody: unknown = null;
 
           try {
-            const contentType = response.headers.get("content-type");
+            const contentType = response.headers?.get("content-type");
             if (contentType && contentType.includes("application/json")) {
               const errorData = (await response.json()) as { error?: string };
               errorBody = errorData;

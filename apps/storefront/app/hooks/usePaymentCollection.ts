@@ -84,7 +84,7 @@ export function usePaymentCollection(
           let errorMessage = "Failed to create payment collection";
 
           try {
-            const contentType = response.headers.get("content-type") || "";
+            const contentType = response.headers?.get("content-type") || "";
 
             if (contentType.includes("application/json")) {
               const errorData = await response.json() as { error?: string };
