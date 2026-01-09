@@ -95,6 +95,7 @@ describe('usePaymentSession', () => {
     it('should handle API failure gracefully', async () => {
         mockFetch.mockResolvedValue({
             ok: false,
+            headers: { get: () => 'application/json' },
             json: async () => ({ error: 'Payment collection not found' }),
         });
 

@@ -67,6 +67,7 @@ describe('usePaymentCollection', () => {
     it('should handle API failure gracefully', async () => {
         mockFetch.mockResolvedValue({
             ok: false,
+            headers: { get: () => 'application/json' },
             json: async () => ({ error: 'Cart not found' }),
         });
 
