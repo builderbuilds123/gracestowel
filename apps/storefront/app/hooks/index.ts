@@ -11,3 +11,8 @@ export { useNavigationTracking } from "./useNavigationTracking";
 export { useScrollTracking } from "./useScrollTracking";
 export { useEngagementTracking } from "./useEngagementTracking";
 export { useFormTracking } from "./useFormTracking";
+
+// Payment hooks (CHK-02-B Race Condition Fix)
+export { usePaymentCollection } from "./usePaymentCollection";
+export { usePaymentSession } from "./usePaymentSession";
+

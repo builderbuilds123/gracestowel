@@ -143,8 +143,9 @@ describe("Checkout Integration", () => {
 
     // Wait for payment intent to load (client secret set)
 
-    // Simulate address change
-    const addressInput = await screen.findByTestId("address-input");
+    // Wait for payment flow to complete (payment collection + session creation)
+    // Then find the address input rendered by Stripe Elements
+    const addressInput = await screen.findByTestId("address-input", {}, { timeout: 3000 });
     fireEvent.change(addressInput, { target: { value: 'trigger' } });
 
     // Verify cart creation (Step 1)
