@@ -115,9 +115,30 @@ export function usePaymentSession(
         }
 
         if (!response.ok) {
-          const errorData = await response.json() as { error?: string };
-          console.error("[usePaymentSession] API Error:", errorData);
-          throw new Error(errorData.error || "Failed to create payment session");
+          let errorMessage = "Failed to create payment session";
+          let errorBody: unknown = null;
+
+          try {
+            const contentType = response.headers.get("content-type");
+            if (contentType && contentType.includes("application/json")) {
+              const errorData = (await response.json()) as { error?: string };
+              errorBody = errorData;
+              if (errorData && typeof errorData.error === "string") {
+                errorMessage = errorData.error;
+              }
+            } else {
+              // Fallback for non-JSON error responses
+              errorBody = await response.text();
+            }
+          } catch (parseError) {
+            console.error(
+              "[usePaymentSession] Failed to parse error response",
+              parseError
+            );
+          }
+
+          console.error("[usePaymentSession] API Error:", errorBody);
+          throw new Error(errorMessage);
         }
 
         const data = (await response.json()) as PaymentSessionResponse;

@@ -158,15 +158,12 @@ export default function Checkout() {
   // Step 1: Create PaymentCollection (once per cart, with request ID pattern)
   const { 
     paymentCollectionId, 
-    isCreating: isCreatingCollection, 
     error: collectionError 
   } = usePaymentCollection(cartId, isCartSynced);
 
   // Step 2: Create/sync PaymentSession (triggered when collection is ready)
   const { 
     clientSecret, 
-    paymentIntentId, 
-    isLoading: isLoadingSession, 
     error: sessionError 
   } = usePaymentSession(paymentCollectionId, cartTotal, selectedShipping, currency);
 

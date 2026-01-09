@@ -81,9 +81,30 @@ export function usePaymentCollection(
         }
 
         if (!response.ok) {
-          const errorData = await response.json() as { error?: string };
-          console.error("[usePaymentCollection] API Error:", errorData);
-          throw new Error(errorData.error || "Failed to create payment collection");
+          let errorMessage = "Failed to create payment collection";
+
+          try {
+            const contentType = response.headers.get("content-type") || "";
+
+            if (contentType.includes("application/json")) {
+              const errorData = await response.json() as { error?: string };
+              console.error("[usePaymentCollection] API Error:", errorData);
+              if (errorData && typeof errorData.error === "string" && errorData.error.trim()) {
+                errorMessage = errorData.error;
+              }
+            } else {
+              const errorText = await response.text().catch(() => "");
+              console.error("[usePaymentCollection] Non-JSON API Error Response:", {
+                status: response.status,
+                statusText: response.statusText,
+                body: errorText,
+              });
+            }
+          } catch (parseError) {
+            console.error("[usePaymentCollection] Failed to parse error response:", parseError);
+          }
+
+          throw new Error(errorMessage);
         }
 
         const data = await response.json() as { payment_collection: { id: string } };
