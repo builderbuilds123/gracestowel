@@ -42,7 +42,8 @@
   "pnpm": {
     "overrides": {
       "jws": "3.2.3",
-      "preact": "10.27.3"
+      "preact": "10.27.3",
+      "@remix-run/router": "1.23.2"
     }
   },
   "devDependencies": {
