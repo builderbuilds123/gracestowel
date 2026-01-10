@@ -67,7 +67,6 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
 
         return data({
             success: true,
-            success: true,
             orderId: resourceId,
             orderNumber: displayId,
         }, { status: 200 });
