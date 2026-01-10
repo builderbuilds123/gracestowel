@@ -99,8 +99,19 @@ export async function GET(
                                 );
                                 if (hasPC) {
                                     foundOrderId = order.id;
-                                    lookupMethod = "payment_collection";
-                                    break;
+                                    const status = orderWithPC[0].status;
+                                    logger.info("by-payment-intent", "Order found via payment collection", {
+                                        orderId: foundOrderId,
+                                        status,
+                                        paymentIntentId: paymentIntentId.substring(0, 10) + "...",
+                                    });
+                                    res.status(200).json({
+                                        order: {
+                                            id: foundOrderId,
+                                            status: status,
+                                        },
+                                    });
+                                    return;
                                 }
                             }
                         }
@@ -135,32 +146,12 @@ export async function GET(
             });
 
             if (ordersFromMetadata.length > 0) {
-                foundOrderId = ordersFromMetadata[0].id;
-                lookupMethod = "metadata";
-            }
-        }
-
-        // ==========================================
-        // Return result
-        // ==========================================
-        if (foundOrderId) {
-            // Fetch order status if not already known
-            const { data: foundOrders } = await query.graph({
-                entity: "order",
-                fields: ["id", "status"],
-                filters: { id: foundOrderId },
-            });
-
-            if (foundOrders.length > 0) {
-                const order = foundOrders[0] as { id: string; status: string };
-                logger.info("by-payment-intent", "Order lookup by payment intent", {
+                const order = ordersFromMetadata[0];
+                logger.info("by-payment-intent", "Order found via metadata", {
                     orderId: order.id,
-                    orderStatus: order.status,
+                    status: order.status,
                     paymentIntentId: paymentIntentId.substring(0, 10) + "...",
-                    found: true,
-                    method: lookupMethod,
                 });
-
                 res.status(200).json({
                     order: {
                         id: order.id,
@@ -170,6 +161,7 @@ export async function GET(
                 return;
             }
         }
+
 
         // Not found
         logger.info("by-payment-intent", "Order lookup by payment intent - not found", {
