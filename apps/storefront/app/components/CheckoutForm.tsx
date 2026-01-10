@@ -363,7 +363,7 @@ export function CheckoutForm({
         try {
             const { error: submitError } = await elements.submit();
             if (submitError) {
-                logger.warn('Express submit validation failed', undefined, { message: submitError.message });
+                logger.warn('Express submit validation failed', { message: submitError.message });
                 setMessage('Please check your payment information.');
                 return;
             }
