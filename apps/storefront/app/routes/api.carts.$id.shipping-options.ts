@@ -25,7 +25,7 @@ export async function loader({ params, context }: LoaderFunctionArgs) {
     // Get shipping options for the cart
     const shippingOptions = await service.getShippingOptions(cartId);
 
-    console.log(`Fetched ${shippingOptions.length} shipping options for cart ${cartId}`);
+    console.log(`Fetched ${shippingOptions.length} shipping options for cart ${cartId} (Total: ${cart.total})`);
 
     // Format response - amounts are in dollars from Medusa
     const formattedOptions = shippingOptions.map(opt => ({

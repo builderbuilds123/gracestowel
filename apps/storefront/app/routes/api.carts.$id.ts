@@ -16,6 +16,21 @@ interface UpdateCartRequest {
     province?: string;
     phone?: string;
   };
+  billing_address?: Partial<{
+    first_name: string;
+    last_name: string;
+    address_1: string;
+    address_2?: string;
+    city: string;
+    country_code: string;
+    postal_code: string;
+    province?: string;
+    phone?: string;
+  }>;
+  email?: string;
+  region_id?: string;
+  sales_channel_id?: string;
+  metadata?: Record<string, any>;
 }
 
 /**
@@ -39,10 +54,10 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
     return data({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { items, shipping_address } = body;
+  const { items, shipping_address, billing_address, email, region_id, sales_channel_id, metadata } = body;
 
-  if (!items && !shipping_address) {
-    return data({ error: "At least one of 'items' or 'shipping_address' is required" }, { status: 400 });
+  if (!items && !shipping_address && !billing_address && !email && !region_id && !sales_channel_id && !metadata) {
+    return data({ error: "No update fields provided" }, { status: 400 });
   }
 
   const service = new MedusaCartService(context);
@@ -81,11 +96,18 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
       console.log(`Synced ${validItems.length} items to cart ${cartId}`);
     }
 
-    // Update shipping address if provided
-    if (shipping_address) {
-      await service.updateShippingAddress(cartId, shipping_address);
-      result.address_updated = true;
-      console.log(`Updated shipping address for cart ${cartId}`);
+    // Update cart details
+    if (shipping_address || billing_address || email || region_id || sales_channel_id || metadata) {
+      await service.updateCart(cartId, {
+          shipping_address,
+          billing_address,
+          email,
+          region_id,
+          sales_channel_id,
+          metadata
+      });
+      if (shipping_address) result.address_updated = true;
+      console.log(`Updated cart ${cartId} properties`);
     }
 
     return data(result, { status: 200 });

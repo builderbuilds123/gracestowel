@@ -63,7 +63,18 @@ export default async function orderPlacedHandler({
           "items.unit_price",
           "items.variant.title",
           "items.variant.product.title",
-          "payment_collections.payments.data"
+          "items.variant.product.title",
+          "payment_collections.payments.data",
+          "shipping_address.first_name",
+          "shipping_address.last_name",
+          "shipping_address.address_1",
+          "shipping_address.address_2",
+          "shipping_address.city",
+          "shipping_address.country_code",
+          "shipping_address.postal_code",
+          "shipping_address.province",
+          "shipping_address.phone",
+          "shipping_address.company"
         ],
         filters: { id: data.id },
     })
@@ -71,6 +82,77 @@ export default async function orderPlacedHandler({
     if (orders.length > 0) {
         const order = orders[0]
         const isGuest = !order.customer_id
+        
+        // CUST-02 FIX: Sync Customer Name & Address from Order
+        // Guest customers created by Medusa often lack names and addresses. We backfill them here.
+        if (order.customer_id && order.shipping_address) {
+            try {
+                const customerModule = container.resolve("customer");
+                
+                // Fetch customer with addresses to check for duplicates
+                const customer = await customerModule.retrieveCustomer(order.customer_id, {
+                    relations: ["addresses"]
+                });
+                
+                // 1. Sync Name & Phone if missing
+                const updatePayload: any = {};
+                let validationLog = "";
+
+                if (!customer.first_name && order.shipping_address.first_name) {
+                   updatePayload.first_name = order.shipping_address.first_name;
+                   updatePayload.last_name = order.shipping_address.last_name || "";
+                   validationLog += " [Name]";
+                }
+
+                if (!customer.phone && order.shipping_address.phone) {
+                   updatePayload.phone = order.shipping_address.phone;
+                   validationLog += " [Phone]";
+                }
+
+                if (Object.keys(updatePayload).length > 0) {
+                    logger.info(`[CUSTOMER] Syncing missing data for customer ${order.customer_id}:${validationLog}`);
+                    await customerModule.updateCustomers(order.customer_id, updatePayload);
+                }
+
+                // 2. Sync Address (Create new if not exists)
+                // Detailed logging for debugging
+                 logger.info(`[CUSTOMER] Checking addresses for ${order.customer_id}. Found ${customer.addresses?.length || 0} existing.`);
+
+                // Basic duplicate check based on address_1 and postal_code
+                const addressExists = customer.addresses?.some(addr => {
+                    const match = addr.address_1 === order.shipping_address.address_1 &&
+                                  addr.postal_code === order.shipping_address.postal_code;
+                    logger.info(`[CUSTOMER] Comparing: Order(${order.shipping_address.address_1}, ${order.shipping_address.postal_code}) vs Existing(${addr.address_1}, ${addr.postal_code}) => Match: ${match}`);
+                    return match;
+                });
+
+                logger.info(`[CUSTOMER] Address exist check result: ${addressExists ? "EXISTS" : "NEW"}`);
+
+                if (!addressExists) {
+                    logger.info(`[CUSTOMER] Saving new address for customer ${order.customer_id}`);
+                    const newAddresses = await customerModule.createCustomerAddresses([
+                        {
+                            customer_id: order.customer_id,
+                            first_name: order.shipping_address.first_name,
+                            last_name: order.shipping_address.last_name,
+                            address_1: order.shipping_address.address_1,
+                            address_2: order.shipping_address.address_2,
+                            city: order.shipping_address.city,
+                            country_code: order.shipping_address.country_code,
+                            postal_code: order.shipping_address.postal_code,
+                            province: order.shipping_address.province,
+                            phone: order.shipping_address.phone,
+                            company: order.shipping_address.company,
+                            metadata: { source: "guest_checkout_order" }
+                        }
+                    ]);
+                    logger.info(`[CUSTOMER] Successfully created ${newAddresses.length} new addresses.`);
+                }
+
+            } catch (custErr) {
+                logger.warn(`[CUSTOMER] Failed to sync customer data: ${custErr.message}`);
+            }
+        }
 
         // Generate magic link for guests only
         let magicLink: string | null = null
@@ -164,22 +246,51 @@ export default async function orderPlacedHandler({
 
   // Schedule payment capture after 1-hour modification window
   try {
-    // Get the payment intent ID from the order metadata
+    // Get the payment intent ID from order - check payment collections first, then metadata
     const query = container.resolve("query")
     const { data: orders } = await query.graph({
       entity: "order",
-      fields: ["id", "metadata", "customer_id", "total", "currency_code", "items.product_id", "items.title", "items.quantity", "items.unit_price"],
+      fields: [
+        "id", 
+        "metadata", 
+        "customer_id", 
+        "total", 
+        "currency_code", 
+        "items.product_id", 
+        "items.title", 
+        "items.quantity", 
+        "items.unit_price",
+        // CHK-02-B FIX: Include payment collections to find payment_intent_id
+        "payment_collections.payments.data"
+      ],
       filters: { id: data.id },
     })
 
     if (orders.length > 0) {
       const order = orders[0]
-      const rawPaymentIntentId = order.metadata?.stripe_payment_intent_id
       
-      // L1: Validate payment intent ID is a non-empty string
-      const paymentIntentId = typeof rawPaymentIntentId === "string" && rawPaymentIntentId.startsWith("pi_")
-        ? rawPaymentIntentId
-        : undefined
+      // CHK-02-B FIX: Look for payment_intent_id in multiple places:
+      // 1. Payment collections (preferred - set by Medusa)
+      // 2. Order metadata (fallback - set by custom workflows)
+      
+      // Primary: Get from payment_collections.payments.data.id
+      const paymentCollection = order.payment_collections?.[0]
+      const payment = paymentCollection?.payments?.[0]
+      const paymentData = payment?.data as any
+      const paymentIntentIdFromPayment = 
+        typeof paymentData?.id === "string" && paymentData.id.startsWith("pi_")
+          ? paymentData.id
+          : undefined
+      
+      // Fallback: Get from metadata
+      const rawPaymentIntentId = order.metadata?.stripe_payment_intent_id
+      const paymentIntentIdFromMetadata = 
+        typeof rawPaymentIntentId === "string" && rawPaymentIntentId.startsWith("pi_")
+          ? rawPaymentIntentId
+          : undefined
+      
+      // Use payment collection source first (more reliable), then metadata fallback
+      const paymentIntentId = paymentIntentIdFromPayment || paymentIntentIdFromMetadata
 
       if (paymentIntentId) {
         try {
@@ -234,14 +345,14 @@ export default async function orderPlacedHandler({
               })) || [],
             },
           })
-          console.log(`[PostHog] order_placed event tracked for order ${data.id}`)
+          logger.info(`[PostHog] order_placed event tracked for order ${data.id}`)
         }
       } catch (error) {
-        console.error('[PostHog] Failed to track order_placed event:', error)
+        logger.error(`[PostHog] Failed to track order_placed event for order ${data.id}`, error)
       }
     }
   } catch (error) {
-    console.error("Failed to schedule payment capture:", error)
+    logger.error(`Failed to schedule payment capture for order ${data.id}`, error)
   }
 }
 

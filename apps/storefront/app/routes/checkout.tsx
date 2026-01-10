@@ -58,6 +58,9 @@ export default function Checkout() {
   // Caching mechanism for shipping rates
   const shippingCache = useRef<Map<string, { options: ShippingOption[], cartId: string | undefined }>>(new Map());
 
+  // AbortController for cancelling stale shipping requests
+  const abortControllerRef = useRef<AbortController | null>(null);
+
   // Shipping & Cart state
   // Initialize cartId from sessionStorage if available (client-side only)
   const [cartId, setCartId] = useState<string | undefined>(() => {
@@ -84,15 +87,12 @@ export default function Checkout() {
   } = useShippingPersistence(cartId, sessionTraceId.current);
 
   /**
-   * SHP-01: Handle shipping selection validation and persistence
+   * SHP-01: Handle shipping selection (LOCAL ONLY)
+   * Decoupled from persistence to prevent PaymentElement reload
    */
-  const handleShippingSelect = useCallback(async (option: ShippingOption) => {
-    // Update local state immediately for responsive UI
+  const handleShippingSelect = useCallback((option: ShippingOption) => {
     setSelectedShipping(option);
-    
-    // Delegate persistence to hook
-    await persistShippingOption(option);
-  }, [persistShippingOption]);
+  }, []);
 
   // Handle cart expiration logic which was previously inside the inline function
   // We need to watch for specific error messages that indicate expiration
@@ -161,17 +161,31 @@ export default function Checkout() {
     error: collectionError 
   } = usePaymentCollection(cartId, isCartSynced);
 
-  // Step 2: Create/sync PaymentSession (triggered when collection is ready)
+  // Step 2: Create PaymentSession (Create ONCE when cart is synced)
+  // UX-FIX: We only create the initial session when cart is synced.
+  // We intentionally do NOT refresh immediately after shipping selection because
+  // changing the clientSecret causes Elements to remount and lose user input.
+  // The shipping persistence will happen during handleSubmit.
+  const shouldCreateSession = isCartSynced;
   const { 
     clientSecret, 
     error: sessionError 
-  } = usePaymentSession(paymentCollectionId, cartTotal, selectedShipping, currency);
+  } = usePaymentSession(paymentCollectionId, shouldCreateSession);
 
   // Combine payment errors for display
   const paymentError = collectionError || sessionError;
 
   // Fetch shipping rates using new RESTful cart endpoints
   const fetchShippingRates = useCallback(async (currentItems: typeof items, address: any, currentTotal: number) => {
+    // 1. Cancel previous pending request if exists
+    if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+    }
+
+    // 2. Create new controller for this request
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     setIsCalculatingShipping(true);
 
     const cacheKey = generateCartHash(currentItems, address ? {
@@ -179,6 +193,7 @@ export default function Checkout() {
         province: address.address?.state,
         postal_code: address.address?.postal_code
     } : undefined, currency, currentTotal);
+    
     if (shippingCache.current.has(cacheKey)) {
         const cached = shippingCache.current.get(cacheKey)!;
         setShippingOptions(cached.options);
@@ -202,6 +217,7 @@ export default function Checkout() {
             country_code: address?.address?.country,
           }),
           label: 'create-cart',
+          signal: controller.signal,
         });
 
         if (!createResponse.ok) {
@@ -220,7 +236,7 @@ export default function Checkout() {
       }
 
       // Step 2: Update cart with items and address
-      if (currentItems.length > 0 || address) {
+      if (currentItems.length > 0 || address || guestEmail) {
         if (isDevelopment) {
           console.log('[Checkout] Step 2: Updating cart items/address...');
         }
@@ -240,8 +256,10 @@ export default function Checkout() {
               province: address.address?.state,
               phone: address.phone,
             } : undefined,
+            email: guestEmail, // CUST-01 FIX: Sync email to cart
           }),
           label: 'update-cart',
+          signal: controller.signal,
         });
 
         if (!updateResponse.ok) {
@@ -275,6 +293,7 @@ export default function Checkout() {
       const optionsResponse = await monitoredFetch(`/api/carts/${currentCartId}/shipping-options`, {
         method: "GET",
         label: 'get-shipping-options',
+        signal: controller.signal,
       });
 
       if (!optionsResponse.ok) {
@@ -301,18 +320,29 @@ export default function Checkout() {
         if (!found) {
           // Current selection is no longer valid, clear it
           setSelectedShipping(null);
+        } else {
+            // FORCE UPDATE: Ensure we have the latest price/data even if ID is same
+            setSelectedShipping(found);
         }
       }
 
       // Cache results
       shippingCache.current.set(cacheKey, { options: shipping_options, cartId: currentCartId });
 
-    } catch (error) {
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+          // Ignore abort errors as they are expected when typing fast
+          return;
+      }
       console.error("[Checkout] Shipping rates error:", error);
     } finally {
-      setIsCalculatingShipping(false);
+      // Only turn off loading if THIS was the latest request
+      // (Though with abort controller, effectively only one finishes)
+      if (abortControllerRef.current === controller) {
+         setIsCalculatingShipping(false);
+      }
     }
-  }, [currency, cartId, selectedShipping, handleShippingSelect]);
+  }, [currency, cartId, selectedShipping, handleShippingSelect, guestEmail]);
 
   // Effect to trigger shipping fetch when items or address change
   // Uses direct setTimeout architecture for robust debouncing
@@ -325,7 +355,7 @@ export default function Checkout() {
     }, 600);
 
     return () => clearTimeout(timer);
-  }, [items, shippingAddress, cartTotal, fetchShippingRates]);
+  }, [items, shippingAddress, cartTotal, fetchShippingRates, guestEmail]);
 
   // Handler for address changes from Stripe Address Element
   const handleAddressChange = async (event: StripeAddressElementChangeEvent) => {
@@ -336,7 +366,25 @@ export default function Checkout() {
     }
 
     const addressValue = event.value;
-    setShippingAddress(addressValue);
+    
+    // Parse name into first/last name for Medusa
+    let firstName = '';
+    let lastName = '';
+    if (addressValue.name) {
+        const parts = addressValue.name.split(' ');
+        firstName = parts[0];
+        lastName = parts.slice(1).join(' ');
+        // Fallback if only one name provided
+        if (!lastName) {
+           lastName = firstName; // or keep empty, but some backends require last name
+        }
+    }
+
+    setShippingAddress({
+        ...addressValue,
+        firstName,
+        lastName
+    });
   };
 
   // Stripe Elements options - use clientSecret when available for full functionality
@@ -441,7 +489,7 @@ export default function Checkout() {
           {/* Checkout Form */}
           <div className="lg:col-span-7 space-y-8">
             {clientSecret && options ? (
-              <Elements options={options} stripe={getStripe()} key={clientSecret}>
+              <Elements options={options} stripe={getStripe()} key={paymentCollectionId}>
                 <div className="bg-white p-6 lg:p-8 rounded-lg shadow-sm border border-card-earthy/20">
                   <CheckoutForm
                     items={items}
@@ -452,7 +500,11 @@ export default function Checkout() {
                     selectedShipping={selectedShipping}
                     setSelectedShipping={handleShippingSelect}
                     isCalculatingShipping={isCalculatingShipping}
-                    isShippingPersisted={isShippingPersisted || !selectedShipping}
+                    persistShippingOption={persistShippingOption}
+                    isShippingPersisted={isShippingPersisted}
+                    paymentCollectionId={paymentCollectionId}
+                    guestEmail={guestEmail}
+                    cartId={cartId || ""}
                     customerData={
                       isAuthenticated && customer
                         ? {

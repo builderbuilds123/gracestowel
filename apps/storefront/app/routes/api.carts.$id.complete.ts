@@ -46,13 +46,30 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
             }, { status: response.status });
         }
 
-        const { data: completedCart } = await response.json() as { data: any };
-        console.log(`Cart ${cartId} completed successfully. Order ID: ${completedCart.id}`);
+        const result = await response.json() as any;
+        console.log(`[Medusa Complete Cart Response]`, JSON.stringify(result, null, 2));
+
+        // Medusa v2 response handling
+        // Response can be { type: "order", order: ... } or { type: "cart", cart: ... }
+        // or sometimes just { order: ... }
+        const completedOrder = result.order || (result.type === 'order' ? result.order : undefined);
+        const completedCart = result.cart || (result.type === 'cart' ? result.cart : undefined) || (result.data ? result.data : undefined);
+
+        const resourceId = completedOrder?.id || completedCart?.id;
+        const displayId = completedOrder?.display_id || completedCart?.display_id;
+
+        if (!resourceId) {
+             console.error(`Failed to extract ID from completion response for cart ${cartId}`);
+             throw new Error("Invalid completion response from Medusa");
+        }
+
+        console.log(`Cart ${cartId} completed successfully. Resource ID: ${resourceId}`);
 
         return data({
             success: true,
-            orderId: completedCart.id,
-            orderNumber: completedCart.display_id,
+            success: true,
+            orderId: resourceId,
+            orderNumber: displayId,
         }, { status: 200 });
 
     } catch (error: any) {

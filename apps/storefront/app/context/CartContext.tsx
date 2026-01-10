@@ -11,7 +11,7 @@ interface CartContextType {
     isOpen: boolean;
     addToCart: (item: Omit<CartItem, 'quantity'> & { quantity?: number }) => void;
     removeFromCart: (id: ProductId, color?: string) => void;
-    updateQuantity: (id: ProductId, quantity: number) => void;
+    updateQuantity: (id: ProductId, quantity: number, color?: string) => void;
     toggleCart: () => void;
     clearCart: () => void;
     cartTotal: number;
@@ -92,15 +92,16 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         }));
     };
 
-    const updateQuantity = (id: ProductId, quantity: number) => {
+    const updateQuantity = (id: ProductId, quantity: number, color?: string) => {
         if (quantity < 1) {
-            removeFromCart(id);
+            removeFromCart(id, color);
             return;
         }
         setItems(prevItems =>
-            prevItems.map(item =>
-                productIdsEqual(item.id, id) ? { ...item, quantity } : item
-            )
+            prevItems.map(item => {
+                const isMatch = productIdsEqual(item.id, id) && (color === undefined || item.color === color);
+                return isMatch ? { ...item, quantity } : item;
+            })
         );
     };
 

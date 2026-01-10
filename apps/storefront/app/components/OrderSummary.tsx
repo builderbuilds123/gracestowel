@@ -11,7 +11,7 @@ export interface OrderSummaryProps {
     selectedShipping: ShippingOption | null;
     shippingCost: number;
     finalTotal: number;
-    onUpdateQuantity: (id: ProductId, quantity: number) => void;
+    onUpdateQuantity: (id: ProductId, quantity: number, color?: string) => void;
     onRemoveFromCart: (id: ProductId, color?: string) => void;
 }
 
@@ -89,7 +89,7 @@ export function OrderSummary({
 
 interface OrderItemProps {
     item: CartItem;
-    onUpdateQuantity: (id: ProductId, quantity: number) => void;
+    onUpdateQuantity: (id: ProductId, quantity: number, color?: string) => void;
     onRemove: (id: ProductId, color?: string) => void;
 }
 
@@ -118,14 +118,14 @@ function OrderItem({ item, onUpdateQuantity, onRemove }: OrderItemProps) {
                 <div className="flex justify-between items-end mt-2">
                     <div className="flex items-center gap-3">
                         <button
-                            onClick={() => onUpdateQuantity(item.id, item.quantity - 1)}
+                            onClick={() => onUpdateQuantity(item.id, item.quantity - 1, item.color)}
                             className="p-1 rounded-full hover:bg-gray-100 border border-gray-200 transition-colors cursor-pointer"
                         >
                             <Minus className="w-3 h-3" />
                         </button>
                         <span className="w-4 text-center text-sm">{item.quantity}</span>
                         <button
-                            onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
+                            onClick={() => onUpdateQuantity(item.id, item.quantity + 1, item.color)}
                             className="p-1 rounded-full hover:bg-gray-100 border border-gray-200 transition-colors cursor-pointer"
                         >
                             <Plus className="w-3 h-3" />

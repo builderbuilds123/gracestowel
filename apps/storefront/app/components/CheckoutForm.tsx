@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import {
     PaymentElement,
     useStripe,
@@ -16,6 +16,7 @@ import type {
 } from '@stripe/stripe-js';
 import type { CartItem } from '../context/CartContext';
 import { createLogger } from '../lib/logger';
+import { monitoredFetch } from '../utils/monitored-fetch';
 
 export interface ShippingOption {
     id: string;
@@ -51,7 +52,11 @@ export interface CheckoutFormProps {
     setSelectedShipping: (option: ShippingOption) => void;
     customerData?: CustomerData;
     isCalculatingShipping?: boolean;
-    isShippingPersisted?: boolean; // SHP-01 Review Fix (Issue 3): Block checkout until shipping is persisted
+    isShippingPersisted?: boolean; 
+    persistShippingOption: (option: ShippingOption) => Promise<void>;
+    paymentCollectionId: string | null;
+    guestEmail?: string;
+    cartId: string;
 }
 
 export function CheckoutForm({
@@ -64,22 +69,73 @@ export function CheckoutForm({
     setSelectedShipping,
     customerData,
     isCalculatingShipping = false,
-    isShippingPersisted = true, // SHP-01 Review Fix (Issue 3): Default to true for backward compatibility
+    isShippingPersisted = true,
+    persistShippingOption,
+    paymentCollectionId,
+    guestEmail,
+    cartId
 }: CheckoutFormProps) {
     const stripe = useStripe();
     const elements = useElements();
     const [message, setMessage] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
     const logger = createLogger();
+
+    // Refs for scrolling to errors
+    const emailRef = useRef<HTMLDivElement>(null);
+    const addressRef = useRef<HTMLDivElement>(null);
+    const shippingRef = useRef<HTMLDivElement>(null);
+    const paymentRef = useRef<HTMLDivElement>(null);
+
+    // Track component completeness
+    // Initialize based on customerData if available (for returning customers)
+    const [isEmailComplete, setIsEmailComplete] = useState(!!customerData?.email);
+    const [isAddressComplete, setIsAddressComplete] = useState(
+        !!(customerData?.address?.line1 && 
+           customerData?.address?.city && 
+           customerData?.address?.state && 
+           customerData?.address?.postal_code && 
+           customerData?.address?.country)
+    );
+    const [isPaymentComplete, setIsPaymentComplete] = useState(false);
+
+    // Track latest email value locally for atomic sync (even if incomplete or parent update lags)
+    const currentEmailRef = useRef<string>("");
 
     const handleEmailChange = useCallback(
         (event: StripeLinkAuthenticationElementChangeEvent) => {
+            setIsEmailComplete(event.complete);
             const email = event.value?.email;
+            
+            // Always update local ref for latest value
+            if (email) {
+                currentEmailRef.current = email;
+            }
+
             if (event.complete && email && onEmailChange) {
                 onEmailChange(email);
             }
+            // Clear error if now complete
+            if (event.complete) {
+                setValidationErrors(prev => ({ ...prev, email: '' }));
+            }
         },
         [onEmailChange]
+    );
+
+    const handleAddressInternalChange = useCallback(
+        (event: StripeAddressElementChangeEvent) => {
+            setIsAddressComplete(event.complete);
+            if (onAddressChange) {
+                onAddressChange(event);
+            }
+            // Clear error if now complete
+            if (event.complete) {
+                setValidationErrors(prev => ({ ...prev, address: '' }));
+            }
+        },
+        [onAddressChange]
     );
 
     // SEC-05: Use sessionStorage instead of localStorage for ephemeral checkout data
@@ -117,28 +173,163 @@ export function CheckoutForm({
             return;
         }
 
-        setIsLoading(true);
-
-        // Persist order details for success page
-        saveOrderToSessionStorage();
-
-        const { error } = await stripe.confirmPayment({
-            elements,
-            confirmParams: {
-                return_url: `${window.location.origin}/checkout/success`,
-            },
-        });
-
-        if (error) {
-            if (error.type === 'card_error' || error.type === 'validation_error') {
-                setMessage(error.message || 'An unexpected error occurred.');
-            } else {
-                setMessage('An unexpected error occurred.');
-            }
+        // 1. Validate all sections
+        const errors: Record<string, string> = {};
+        
+        if (!isEmailComplete) {
+            errors.email = 'Please enter your email address.';
+        }
+        
+        if (!isAddressComplete) {
+            errors.address = 'Please complete your shipping address.';
+        }
+        
+        if (!selectedShipping) {
+            errors.shipping = 'Please select a shipping method.';
         }
 
-        setIsLoading(false);
+        // Check if PaymentElement is complete (Stripe validation)
+        const { error: submitError } = await elements.submit();
+        if (submitError) {
+            // Stripe handles showing its own errors, but we track it for scrolling
+            errors.payment = submitError.message || 'Please check your payment details.';
+        }
+
+        if (Object.keys(errors).length > 0) {
+            setValidationErrors(errors);
+            
+            // Scroll to the first error
+            let scrollTarget: React.RefObject<HTMLDivElement> | null = null;
+            if (errors.email) scrollTarget = emailRef;
+            else if (errors.address) scrollTarget = addressRef;
+            else if (errors.shipping) scrollTarget = shippingRef;
+            else if (errors.payment) scrollTarget = paymentRef;
+
+            if (scrollTarget?.current) {
+                scrollTarget.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+            
+            return;
+        }
+
+        setIsLoading(true);
+        setMessage(null);
+
+        try {
+            // 2. Persist shipping to Medusa (updates cart total)
+            if (selectedShipping) {
+                await persistShippingOption(selectedShipping);
+            }
+
+            // ATOMIC FIX: Explicitly sync email and address to cart before payment
+            // This ensures no race conditions with the parent's debounced sync
+            // ATOMIC FIX: Explicitly sync email and address to cart before payment
+            // REFACTOR: Use local ref for email and direct Element value for address to ensure we have LATEST input
+            // ignoring parent state lag or "complete" event filters.
+            
+            if (cartId) {
+                const latestEmail = currentEmailRef.current || guestEmail || customerData?.email;
+                
+                // Get fully validated address directly from Stripe Element
+                const addressElement = elements.getElement(AddressElement);
+                let latestAddressPayload = undefined;
+                
+                if (addressElement) {
+                    const addressResult = await addressElement.getValue();
+                    if (addressResult.complete && addressResult.value) {
+                         const addr = addressResult.value;
+                         
+                         // Parse name logic (same as checkout.tsx)
+                        let firstName = '';
+                        let lastName = '';
+                        if (addr.name) {
+                            const parts = addr.name.split(' ');
+                            firstName = parts[0];
+                            lastName = parts.slice(1).join(' ');
+                            if (!lastName) lastName = firstName;
+                        }
+
+                         latestAddressPayload = {
+                            first_name: firstName,
+                            last_name: lastName,
+                            address_1: addr.address.line1,
+                            address_2: addr.address.line2,
+                            city: addr.address.city,
+                            country_code: addr.address.country,
+                            postal_code: addr.address.postal_code,
+                            province: addr.address.state,
+                            phone: addr.phone,
+                         };
+                    }
+                }
+
+                if (latestEmail) {
+                    await monitoredFetch(`/api/carts/${cartId}`, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            email: latestEmail,
+                            shipping_address: latestAddressPayload // Sync address too if available
+                        }),
+                        label: 'atomic-email-sync'
+                    });
+                }
+            }
+
+            // 3. Re-fetch PaymentSession to get the new PI/clientSecret
+            // We use the same API endpoint that usePaymentSession uses
+            const sessionResponse = await monitoredFetch(
+                `/api/payment-collections/${paymentCollectionId}/sessions`,
+                {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ provider_id: "pp_stripe" }),
+                    label: "refresh-session-on-submit",
+                }
+            );
+
+            if (!sessionResponse.ok) {
+                throw new Error('Failed to refresh payment session');
+            }
+
+            const sessionData = await sessionResponse.json() as any;
+            const updatedClientSecret = sessionData.payment_collection?.payment_sessions?.find(
+                (s: any) => s.provider_id === "pp_stripe"
+            )?.data?.client_secret;
+
+            if (!updatedClientSecret) {
+                throw new Error('New client secret not found');
+            }
+
+            // Persist order details for success page
+            saveOrderToSessionStorage();
+
+            // 4. Confirm payment with the NEW clientSecret
+            const { error } = await stripe.confirmPayment({
+                elements,
+                clientSecret: updatedClientSecret, // CRITICAL: Use the new secret matching the updated PI
+                confirmParams: {
+                    return_url: `${window.location.origin}/checkout/success`,
+                },
+            });
+
+            if (error) {
+                logger.error('Payment confirmation failed', undefined, {
+                    errorType: error.type,
+                    errorCode: error.code,
+                    errorMessage: error.message,
+                });
+                setMessage(error.message || 'An unexpected error occurred.');
+            }
+        } catch (err: any) {
+            logger.error('Atomic submission failed', err);
+            setMessage(err.message || 'Submission failed. Please try again.');
+        } finally {
+            setIsLoading(false);
+        }
     };
+
+
 
     // Handle shipping address change in Express Checkout (GPay/Apple Pay)
     // This provides shipping options to the wallet UI
@@ -251,17 +442,26 @@ export function CheckoutForm({
             </div>
 
             {/* Contact Section */}
-            <div>
+            <div 
+                ref={emailRef} 
+                className={`p-4 rounded-lg transition-all ${validationErrors.email ? 'border-2 border-red-500 bg-red-50' : 'border border-transparent'}`}
+            >
                 <h2 className="text-lg font-medium mb-4">Contact</h2>
                 <LinkAuthenticationElement
                     id="link-authentication-element"
                     options={customerData?.email ? { defaultValues: { email: customerData.email } } : undefined}
                     onChange={handleEmailChange}
                 />
+                {validationErrors.email && (
+                    <p className="text-red-600 text-sm mt-2">{validationErrors.email}</p>
+                )}
             </div>
 
             {/* Delivery Section */}
-            <div>
+            <div 
+                ref={addressRef}
+                className={`p-4 rounded-lg transition-all ${validationErrors.address ? 'border-2 border-red-500 bg-red-50' : 'border border-transparent'}`}
+            >
                 <h2 className="text-lg font-medium mb-4">Delivery</h2>
                 <AddressElement
                     id="address-element"
@@ -282,38 +482,64 @@ export function CheckoutForm({
                             } : undefined,
                         } : undefined,
                     }}
-                    onChange={onAddressChange}
+                    onChange={handleAddressInternalChange}
                 />
+                {validationErrors.address && (
+                    <p className="text-red-600 text-sm mt-2">{validationErrors.address}</p>
+                )}
+            </div>
 
-                {/* Shipping Method Selection */}
+            {/* Shipping Method Section */}
+            <div 
+                ref={shippingRef}
+                className={`p-4 rounded-lg transition-all ${validationErrors.shipping ? 'border-2 border-red-500 bg-red-50' : 'border border-transparent'}`}
+            >
                 {isCalculatingShipping ? (
                     <div className="mt-6 text-sm text-gray-500">
                         Calculating shipping rates...
                     </div>
-                ) : shippingOptions.length > 0 && (
-                    <ShippingMethodSelector
-                        options={shippingOptions}
-                        selected={selectedShipping}
-                        onSelect={setSelectedShipping}
-                    />
+                ) : shippingOptions.length > 0 ? (
+                    <>
+                        <ShippingMethodSelector
+                            options={shippingOptions}
+                            selected={selectedShipping}
+                            onSelect={(option) => {
+                                setSelectedShipping(option);
+                                setValidationErrors(prev => ({ ...prev, shipping: '' }));
+                            }}
+                        />
+                        <div className="text-xs text-gray-300 mt-2 font-mono">
+                            Debug: Cart Total used for Shipping: ${(cartTotal).toFixed(2)}
+                        </div>
+                    </>
+                ) : (
+                    <p className="text-gray-500 text-sm italic">Please enter your address to see shipping options.</p>
+                )}
+                {validationErrors.shipping && (
+                    <p className="text-red-600 text-sm mt-2">{validationErrors.shipping}</p>
                 )}
             </div>
 
             {/* Payment Section */}
-            <div>
+            <div 
+                ref={paymentRef}
+                className={`p-4 rounded-lg transition-all ${validationErrors.payment ? 'border-2 border-red-500 bg-red-50' : 'border border-transparent'}`}
+            >
                 <h2 className="text-lg font-medium mb-4">Payment</h2>
                 <PaymentElement id="payment-element" options={{ layout: 'tabs' }} />
+                {validationErrors.payment && (
+                    <p className="text-red-600 text-sm mt-2">{validationErrors.payment}</p>
+                )}
             </div>
 
             {/* Submit Button */}
             <button
-                disabled={isLoading || !stripe || !elements || !isShippingPersisted}
+                disabled={isLoading || !stripe || !elements}
                 id="submit"
-                className="w-full bg-accent-earthy hover:bg-accent-earthy/90 text-white font-medium py-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                title={!isShippingPersisted ? 'Please wait for shipping method to be saved' : undefined}
+                className="w-full bg-accent-earthy hover:bg-accent-earthy/90 text-white font-medium py-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-md active:scale-[0.98] transform"
             >
                 <span id="button-text">
-                    {isLoading ? 'Processing...' : !isShippingPersisted ? 'Saving shipping...' : 'Pay now'}
+                    {isLoading ? 'Processing...' : 'Pay now'}
                 </span>
             </button>
 
