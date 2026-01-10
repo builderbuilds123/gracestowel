@@ -15,7 +15,7 @@ describe('usePaymentCollection', () => {
         // Default success response
         mockFetch.mockResolvedValue({
             ok: true,
-            json: async () => ({ payment_collection: { id: 'paycol_123' } }),
+            json: async () => ({ payment_collection: { id: 'pay_col_123' } }),
         });
     });
 
@@ -58,7 +58,7 @@ describe('usePaymentCollection', () => {
         });
 
         await waitFor(() => {
-            expect(result.current.paymentCollectionId).toBe('paycol_123');
+            expect(result.current.paymentCollectionId).toBe('pay_col_123');
             expect(result.current.isCreating).toBe(false);
             expect(result.current.error).toBeNull();
         });
@@ -86,7 +86,7 @@ describe('usePaymentCollection', () => {
         );
 
         await waitFor(() => {
-            expect(result.current.paymentCollectionId).toBe('paycol_123');
+            expect(result.current.paymentCollectionId).toBe('pay_col_123');
         });
 
         expect(mockFetch).toHaveBeenCalledTimes(1);
@@ -106,20 +106,20 @@ describe('usePaymentCollection', () => {
         );
 
         await waitFor(() => {
-            expect(result.current.paymentCollectionId).toBe('paycol_123');
+            expect(result.current.paymentCollectionId).toBe('pay_col_123');
         });
 
         // Change to different cart
         mockFetch.mockResolvedValue({
             ok: true,
-            json: async () => ({ payment_collection: { id: 'paycol_456' } }),
+            json: async () => ({ payment_collection: { id: 'pay_col_456' } }),
         });
 
         rerender({ cartId: 'cart_456', synced: true });
 
         // Should eventually get new collection
         await waitFor(() => {
-            expect(result.current.paymentCollectionId).toBe('paycol_456');
+            expect(result.current.paymentCollectionId).toBe('pay_col_456');
         });
     });
 
