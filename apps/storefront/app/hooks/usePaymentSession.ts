@@ -167,7 +167,7 @@ export function usePaymentSession(
         if (isDevelopment) {
           console.log("[usePaymentSession] clientSecret updated", {
             isRefresh,
-            secretPrefix: stripeSession.data.client_secret.substring(0, 20) + "...",
+            secretPrefix: stripeSession.data.client_secret.substring(0, 8) + "****",
           });
         }
 

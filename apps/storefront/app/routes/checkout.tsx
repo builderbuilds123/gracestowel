@@ -322,7 +322,7 @@ export default function Checkout() {
           setSelectedShipping(null);
         } else {
             // FORCE UPDATE: Ensure we have the latest price/data even if ID is same
-            setSelectedShipping(found);
+            setSelectedShipping({ ...found });
         }
       }
 
@@ -371,13 +371,10 @@ export default function Checkout() {
     let firstName = '';
     let lastName = '';
     if (addressValue.name) {
-        const parts = addressValue.name.split(' ');
-        firstName = parts[0];
-        lastName = parts.slice(1).join(' ');
-        // Fallback if only one name provided
-        if (!lastName) {
-           lastName = firstName; // or keep empty, but some backends require last name
-        }
+        const trimmedName = addressValue.name.trim();
+        const parts = trimmedName.split(' ');
+        firstName = parts[0] || '';
+        lastName = parts.length > 1 ? parts.slice(1).join(' ') : '';
     }
 
     setShippingAddress({

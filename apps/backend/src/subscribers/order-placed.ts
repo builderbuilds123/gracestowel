@@ -94,7 +94,12 @@ export default async function orderPlacedHandler({
                 });
                 
                 // 1. Sync Name & Phone if missing
-                const updatePayload: any = {};
+                interface CustomerUpdatePayload {
+                    first_name?: string;
+                    last_name?: string;
+                    phone?: string;
+                }
+                const updatePayload: CustomerUpdatePayload = {};
                 let validationLog = "";
 
                 if (!customer.first_name && order.shipping_address.first_name) {
@@ -109,47 +114,48 @@ export default async function orderPlacedHandler({
                 }
 
                 if (Object.keys(updatePayload).length > 0) {
-                    logger.info(`[CUSTOMER] Syncing missing data for customer ${order.customer_id}:${validationLog}`);
+                    logger.info(`[CUSTOMER][SYSTEM] Syncing missing data for customer ${order.customer_id}:${validationLog}`);
                     await customerModule.updateCustomers(order.customer_id, updatePayload);
                 }
 
                 // 2. Sync Address (Create new if not exists)
-                // Detailed logging for debugging
-                 logger.info(`[CUSTOMER] Checking addresses for ${order.customer_id}. Found ${customer.addresses?.length || 0} existing.`);
+                // Detailed logging for debugging (sanitized)
+                 logger.info(`[CUSTOMER][SYSTEM] Checking addresses for ${order.customer_id}. Found ${customer.addresses?.length || 0} existing.`);
 
                 // Basic duplicate check based on address_1 and postal_code
                 const addressExists = customer.addresses?.some(addr => {
                     const match = addr.address_1 === order.shipping_address.address_1 &&
                                   addr.postal_code === order.shipping_address.postal_code;
-                    logger.info(`[CUSTOMER] Comparing: Order(${order.shipping_address.address_1}, ${order.shipping_address.postal_code}) vs Existing(${addr.address_1}, ${addr.postal_code}) => Match: ${match}`);
+                    // SEC-02: Do not log PII (address_1, postal_code) in plaintext
                     return match;
                 });
 
-                logger.info(`[CUSTOMER] Address exist check result: ${addressExists ? "EXISTS" : "NEW"}`);
+                logger.info(`[CUSTOMER][SYSTEM] Address exist check result: ${addressExists ? "EXISTS" : "NEW"}`);
 
-                if (!addressExists) {
-                    logger.info(`[CUSTOMER] Saving new address for customer ${order.customer_id}`);
+                const sa = order.shipping_address;
+                if (!addressExists && sa.address_1 && sa.postal_code) {
+                    logger.info(`[CUSTOMER][SYSTEM] Saving new address for customer ${order.customer_id}`);
                     const newAddresses = await customerModule.createCustomerAddresses([
                         {
                             customer_id: order.customer_id,
-                            first_name: order.shipping_address.first_name,
-                            last_name: order.shipping_address.last_name,
-                            address_1: order.shipping_address.address_1,
-                            address_2: order.shipping_address.address_2,
-                            city: order.shipping_address.city,
-                            country_code: order.shipping_address.country_code,
-                            postal_code: order.shipping_address.postal_code,
-                            province: order.shipping_address.province,
-                            phone: order.shipping_address.phone,
-                            company: order.shipping_address.company,
+                            first_name: sa.first_name,
+                            last_name: sa.last_name,
+                            address_1: sa.address_1,
+                            address_2: sa.address_2,
+                            city: sa.city,
+                            country_code: sa.country_code,
+                            postal_code: sa.postal_code,
+                            province: sa.province,
+                            phone: sa.phone,
+                            company: sa.company,
                             metadata: { source: "guest_checkout_order" }
                         }
                     ]);
-                    logger.info(`[CUSTOMER] Successfully created ${newAddresses.length} new addresses.`);
+                    logger.info(`[CUSTOMER][SYSTEM] Successfully created ${newAddresses.length} new addresses.`);
                 }
 
-            } catch (custErr) {
-                logger.warn(`[CUSTOMER] Failed to sync customer data: ${custErr.message}`);
+            } catch (custErr: any) {
+                logger.error(`[CUSTOMER][SYSTEM] Failed to sync customer data for order ${order.id}`, custErr);
             }
         }
 

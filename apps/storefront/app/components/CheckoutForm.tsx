@@ -216,89 +216,70 @@ export function CheckoutForm({
         setMessage(null);
 
         try {
-            // 2. Persist shipping to Medusa (updates cart total)
-            if (selectedShipping) {
-                await persistShippingOption(selectedShipping);
+            // ATOMIC FIX: Consolidate all preparation steps into a single backend orchestration call
+            // This prevents race conditions and ensures cart totals match the PaymentIntent
+            if (!cartId || !paymentCollectionId || !selectedShipping) {
+                throw new Error("Checkout state is incomplete. Please refresh and try again.");
             }
 
-            // ATOMIC FIX: Explicitly sync email and address to cart before payment
-            // This ensures no race conditions with the parent's debounced sync
-            // ATOMIC FIX: Explicitly sync email and address to cart before payment
-            // REFACTOR: Use local ref for email and direct Element value for address to ensure we have LATEST input
-            // ignoring parent state lag or "complete" event filters.
+            const latestEmail = currentEmailRef.current || guestEmail || customerData?.email;
             
-            if (cartId) {
-                const latestEmail = currentEmailRef.current || guestEmail || customerData?.email;
-                
-                // Get fully validated address directly from Stripe Element
-                const addressElement = elements.getElement(AddressElement);
-                let latestAddressPayload = undefined;
-                
-                if (addressElement) {
-                    const addressResult = await addressElement.getValue();
-                    if (addressResult.complete && addressResult.value) {
-                         const addr = addressResult.value;
-                         
-                         // Parse name logic (same as checkout.tsx)
-                        let firstName = '';
-                        let lastName = '';
-                        if (addr.name) {
-                            const parts = addr.name.split(' ');
-                            firstName = parts[0];
-                            lastName = parts.slice(1).join(' ');
-                            if (!lastName) lastName = firstName;
-                        }
+            // Get fully validated address directly from Stripe Element
+            const addressElement = elements.getElement(AddressElement);
+            let latestAddressPayload = undefined;
+            
+            if (addressElement) {
+                const addressResult = await addressElement.getValue();
+                if (addressResult.complete && addressResult.value) {
+                    const addr = addressResult.value;
+                    
+                    // Standardized Name Parsing (consistent with checkout.tsx and order-placed.ts)
+                    const trimmedName = addr.name.trim();
+                    const parts = trimmedName.split(' ');
+                    const firstName = parts[0] || '';
+                    const lastName = parts.length > 1 ? parts.slice(1).join(' ') : '';
 
-                         latestAddressPayload = {
-                            first_name: firstName,
-                            last_name: lastName,
-                            address_1: addr.address.line1,
-                            address_2: addr.address.line2,
-                            city: addr.address.city,
-                            country_code: addr.address.country,
-                            postal_code: addr.address.postal_code,
-                            province: addr.address.state,
-                            phone: addr.phone,
-                         };
-                    }
-                }
-
-                if (latestEmail) {
-                    await monitoredFetch(`/api/carts/${cartId}`, {
-                        method: "PATCH",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                            email: latestEmail,
-                            shipping_address: latestAddressPayload // Sync address too if available
-                        }),
-                        label: 'atomic-email-sync'
-                    });
+                    latestAddressPayload = {
+                        first_name: firstName,
+                        last_name: lastName,
+                        address_1: addr.address.line1,
+                        address_2: addr.address.line2,
+                        city: addr.address.city,
+                        country_code: addr.address.country,
+                        postal_code: addr.address.postal_code,
+                        province: addr.address.state,
+                        phone: addr.phone,
+                    };
                 }
             }
 
-            // 3. Re-fetch PaymentSession to get the new PI/clientSecret
-            // We use the same API endpoint that usePaymentSession uses
-            const sessionResponse = await monitoredFetch(
-                `/api/payment-collections/${paymentCollectionId}/sessions`,
-                {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ provider_id: "pp_stripe" }),
-                    label: "refresh-session-on-submit",
-                }
-            );
-
-            if (!sessionResponse.ok) {
-                throw new Error('Failed to refresh payment session');
+            if (!latestEmail || !latestAddressPayload) {
+                throw new Error("Missing contact or delivery information.");
             }
 
-            const sessionData = await sessionResponse.json() as any;
-            const updatedClientSecret = sessionData.payment_collection?.payment_sessions?.find(
-                (s: any) => s.provider_id === "pp_stripe"
-            )?.data?.client_secret;
+            // Call orchestration endpoint
+            const prepareResponse = await monitoredFetch(`/api/carts/${cartId}/prepare-for-payment`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    shipping_option_id: selectedShipping.id,
+                    email: latestEmail,
+                    shipping_address: latestAddressPayload,
+                    payment_collection_id: paymentCollectionId
+                }),
+                label: 'prepare-for-payment-orchestration'
+            });
+
+            if (!prepareResponse.ok) {
+                const errorData = await prepareResponse.json() as { message?: string };
+                logger.error('Preparation failed', undefined, errorData);
+                throw new Error(errorData.message || 'Payment service is temporarily unavailable.');
+            }
+
+            const { client_secret: updatedClientSecret } = await prepareResponse.json() as { client_secret: string };
 
             if (!updatedClientSecret) {
-                throw new Error('New client secret not found');
+                throw new Error('Payment token could not be refreshed.');
             }
 
             // Persist order details for success page
@@ -317,13 +298,15 @@ export function CheckoutForm({
                 logger.error('Payment confirmation failed', undefined, {
                     errorType: error.type,
                     errorCode: error.code,
-                    errorMessage: error.message,
+                    errorMessage: error.message, // Log for internal debugging
                 });
-                setMessage(error.message || 'An unexpected error occurred.');
+                // Sanitize message for user
+                setMessage(error.message || 'Payment failed. Please check your details and try again.');
             }
-        } catch (err: any) {
-            logger.error('Atomic submission failed', err);
-            setMessage(err.message || 'Submission failed. Please try again.');
+        } catch (err: unknown) {
+            const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred';
+            logger.error('Atomic submission failed', undefined, { error: errorMessage });
+            setMessage('Checkout could not be completed. Please try again or contact support.');
         } finally {
             setIsLoading(false);
         }
@@ -380,7 +363,8 @@ export function CheckoutForm({
         try {
             const { error: submitError } = await elements.submit();
             if (submitError) {
-                setMessage(submitError.message || 'Submission failed');
+                logger.warn('Express submit validation failed', undefined, { message: submitError.message });
+                setMessage('Please check your payment information.');
                 return;
             }
 
@@ -406,11 +390,8 @@ export function CheckoutForm({
             });
 
             if (error) {
-                if (error.type === 'card_error' || error.type === 'validation_error') {
-                    setMessage(error.message || 'An unexpected error occurred.');
-                } else {
-                    setMessage('An unexpected error occurred.');
-                }
+                logger.error('Express payment confirmation failed', undefined, { error });
+                setMessage('The payment was not successful. Please try again.');
             }
         } finally {
             setIsLoading(false);

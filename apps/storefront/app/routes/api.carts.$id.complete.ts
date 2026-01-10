@@ -47,7 +47,6 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
         }
 
         const result = await response.json() as any;
-        console.log(`[Medusa Complete Cart Response]`, JSON.stringify(result, null, 2));
 
         // Medusa v2 response handling
         // Response can be { type: "order", order: ... } or { type: "cart", cart: ... }

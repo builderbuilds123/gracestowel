@@ -98,16 +98,17 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
 
     // Update cart details
     if (shipping_address || billing_address || email || region_id || sales_channel_id || metadata) {
-      await service.updateCart(cartId, {
-          shipping_address,
-          billing_address,
-          email,
-          region_id,
-          sales_channel_id,
-          metadata
-      });
+      const updateData: any = {};
+      if (shipping_address)    updateData.shipping_address = shipping_address;
+      if (billing_address)     updateData.billing_address = billing_address;
+      if (email)               updateData.email = email;
+      if (region_id)           updateData.region_id = region_id;
+      if (sales_channel_id)    updateData.sales_channel_id = sales_channel_id;
+      if (metadata)            updateData.metadata = metadata;
+      
+      await service.updateCart(cartId, updateData);
       if (shipping_address) result.address_updated = true;
-      console.log(`Updated cart ${cartId} properties`);
+      console.log(`Updated cart ${cartId} properties:`, Object.keys(updateData));
     }
 
     return data(result, { status: 200 });

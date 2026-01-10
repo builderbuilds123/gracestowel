@@ -28,11 +28,8 @@ vi.mock('../utils/monitored-fetch', () => ({
         return {
             ok: true,
             json: () => Promise.resolve({
-                payment_collection: {
-                    payment_sessions: [
-                        { provider_id: 'pp_stripe', data: { client_secret: 'new_secret' } }
-                    ]
-                }
+                success: true,
+                client_secret: 'new_secret'
             }),
         };
     }),
@@ -58,7 +55,22 @@ describe('CheckoutForm', () => {
         confirmPayment: vi.fn(),
     };
     const mockElements = {
-        getElement: vi.fn(),
+        getElement: vi.fn().mockReturnValue({
+            getValue: vi.fn().mockResolvedValue({
+                complete: true,
+                value: {
+                    name: 'John Doe',
+                    address: {
+                        line1: '123 Test St',
+                        city: 'Test City',
+                        state: 'TS',
+                        postal_code: '12345',
+                        country: 'US'
+                    },
+                    phone: '1234567890'
+                }
+            })
+        }),
         submit: vi.fn().mockResolvedValue({ error: null }),
     };
 
@@ -251,7 +263,7 @@ describe('CheckoutForm', () => {
         fireEvent.click(expressButton);
 
         await waitFor(() => {
-            expect(screen.getByText('Express payment declined.')).toBeInTheDocument();
+            expect(screen.getByText('The payment was not successful. Please try again.')).toBeInTheDocument();
         });
     });
 
@@ -266,7 +278,7 @@ describe('CheckoutForm', () => {
         fireEvent.click(expressButton);
 
         await waitFor(() => {
-            expect(screen.getByText('Validation failed')).toBeInTheDocument();
+            expect(screen.getByText('Please check your payment information.')).toBeInTheDocument();
         });
         expect(mockStripe.confirmPayment).not.toHaveBeenCalled();
     });

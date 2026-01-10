@@ -93,6 +93,16 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     };
 
     const updateQuantity = (id: ProductId, quantity: number, color?: string) => {
+        // Guard: Verify item exists (Qodo suggestion)
+        const itemExists = items.some(item => 
+            productIdsEqual(item.id, id) && (color === undefined || item.color === color)
+        );
+
+        if (!itemExists) {
+            console.warn(`[CartContext] Attempted to update quantity for an item not in cart: ${JSON.stringify({ id, color })}`);
+            return;
+        }
+
         if (quantity < 1) {
             removeFromCart(id, color);
             return;
