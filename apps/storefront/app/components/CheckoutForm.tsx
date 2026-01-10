@@ -199,7 +199,7 @@ export function CheckoutForm({
             setValidationErrors(errors);
             
             // Scroll to the first error
-            let scrollTarget: React.RefObject<HTMLDivElement> | null = null;
+            let scrollTarget: any = null;
             if (errors.email) scrollTarget = emailRef;
             else if (errors.address) scrollTarget = addressRef;
             else if (errors.shipping) scrollTarget = shippingRef;

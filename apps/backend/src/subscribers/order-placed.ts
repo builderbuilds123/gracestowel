@@ -63,7 +63,6 @@ export default async function orderPlacedHandler({
           "items.unit_price",
           "items.variant.title",
           "items.variant.product.title",
-          "items.variant.product.title",
           "payment_collections.payments.data",
           "shipping_address.first_name",
           "shipping_address.last_name",
