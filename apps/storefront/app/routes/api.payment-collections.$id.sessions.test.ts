@@ -50,7 +50,7 @@ describe('Payment Sessions API', () => {
     });
 
     it('should create payment session for valid collection ID', async () => {
-        const collectionId = 'paycol_01HTEST1234567';
+        const collectionId = 'pay_col_01HTEST1234567';
         const sessionId = 'payses_456';
 
         // Mock Medusa response
@@ -96,7 +96,7 @@ describe('Payment Sessions API', () => {
     });
 
     it('should default provider_id to pp_stripe', async () => {
-        const collectionId = 'paycol_01HTEST1234567';
+        const collectionId = 'pay_col_01HTEST1234567';
         
         fetchSpy.mockResolvedValueOnce({
             ok: true,
@@ -146,7 +146,7 @@ describe('Payment Sessions API', () => {
     });
 
     it('should return 400 for invalid provider_id format', async () => {
-        const collectionId = 'paycol_01HTEST1234567';
+        const collectionId = 'pay_col_01HTEST1234567';
         const request = new Request(`http://localhost:3000/api/payment-collections/${collectionId}/sessions`, {
             method: 'POST',
             body: JSON.stringify({ provider_id: 'invalid_provider' }),
@@ -160,7 +160,7 @@ describe('Payment Sessions API', () => {
     });
 
     it('should return 400 for invalid JSON body', async () => {
-        const collectionId = 'paycol_01HTEST1234567';
+        const collectionId = 'pay_col_01HTEST1234567';
         const request = new Request(`http://localhost:3000/api/payment-collections/${collectionId}/sessions`, {
             method: 'POST',
             body: 'invalid json{',
@@ -175,7 +175,7 @@ describe('Payment Sessions API', () => {
     });
 
     it('should handle unexpected Medusa response structure (missing payment_sessions)', async () => {
-        const collectionId = 'paycol_01HTEST1234567';
+        const collectionId = 'pay_col_01HTEST1234567';
         
         fetchSpy.mockResolvedValueOnce({
             ok: true,
@@ -202,7 +202,7 @@ describe('Payment Sessions API', () => {
     });
 
     it('should handle Medusa 404 errors (collection not found)', async () => {
-        const collectionId = 'paycol_01HTEST1234567';
+        const collectionId = 'pay_col_01HTEST1234567';
         
         fetchSpy.mockResolvedValueOnce({
             ok: false,

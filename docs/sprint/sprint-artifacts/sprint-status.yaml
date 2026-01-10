@@ -471,14 +471,16 @@ development_status:
     blocks: ["CHK-02-B", "CHK-02-C"]
   fix-CHK-02-B-storefront-payment-ui:
     path: docs/sprint/sprint-artifacts/fix-CHK-02-B-storefront-payment-ui.md
-    status: ready-for-dev
-    meta: "Storefront UI integration (Validated 2026-01-07)"
+    status: done
+    meta: "Storefront UI integration complete. All ACs satisfied, 16 hook tests passing, adversarial review fixes applied."
+    completed: "2026-01-08"
     depends_on: ["CHK-02-A"]
     blocks: ["CHK-02-C"]
   fix-CHK-02-C-order-completion-flow:
     path: docs/sprint/sprint-artifacts/fix-CHK-02-C-order-completion-flow.md
-    status: ready-for-dev
-    meta: "Completion flow standardisation (Validated 2026-01-07)"
+    status: done
+    meta: "Order completion flow verified. AC1 rewritten to match webhook architecture. All ACs satisfied."
+    completed: "2026-01-09"
     depends_on: ["CHK-02-A", "CHK-02-B"]
     blocks: ["RET-02"]
   audit-epic-1-retrospective: optional

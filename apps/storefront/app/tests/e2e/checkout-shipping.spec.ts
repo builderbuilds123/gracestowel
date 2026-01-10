@@ -64,7 +64,7 @@ describe("Checkout Integration", () => {
       if (url === "/api/payment-collections") {
          return Promise.resolve({
             ok: true,
-            json: () => Promise.resolve({ payment_collection: { id: "paycol_123" } })
+            json: () => Promise.resolve({ payment_collection: { id: "pay_col_123" } })
          });
       }
       if (url.includes("/sessions")) {

@@ -4,7 +4,7 @@ import { action, loader } from "./api.carts.$id";
 // Mock functions
 const mockGetCart = vi.fn();
 const mockSyncCartItems = vi.fn();
-const mockUpdateShippingAddress = vi.fn();
+const mockUpdateCart = vi.fn();
 
 // Mock MedusaCartService
 vi.mock("../services/medusa-cart", () => ({
@@ -12,7 +12,7 @@ vi.mock("../services/medusa-cart", () => ({
     constructor() {}
     getCart = mockGetCart;
     syncCartItems = mockSyncCartItems;
-    updateShippingAddress = mockUpdateShippingAddress;
+    updateCart = mockUpdateCart;
   },
 }));
 
@@ -68,14 +68,14 @@ describe("API Carts - PATCH /api/carts/:id", () => {
     });
 
     mockGetCart.mockResolvedValue({ id: "cart_123", items: [] });
-    mockUpdateShippingAddress.mockResolvedValue({ id: "cart_123" });
+    mockUpdateCart.mockResolvedValue({ id: "cart_123" });
 
     const response = await action({ request, params: { id: "cart_123" }, context });
     const data = (response as any).data;
     
     expect(data.success).toBe(true);
     expect(data.address_updated).toBe(true);
-    expect(mockUpdateShippingAddress).toHaveBeenCalled();
+    expect(mockUpdateCart).toHaveBeenCalled();
   });
 
   it("should update both items and address", async () => {
@@ -96,7 +96,7 @@ describe("API Carts - PATCH /api/carts/:id", () => {
 
     mockGetCart.mockResolvedValue({ id: "cart_123", items: [] });
     mockSyncCartItems.mockResolvedValue({});
-    mockUpdateShippingAddress.mockResolvedValue({});
+    mockUpdateCart.mockResolvedValue({});
 
     const response = await action({ request, params: { id: "cart_123" }, context });
     const data = (response as any).data;
@@ -140,7 +140,7 @@ describe("API Carts - PATCH /api/carts/:id", () => {
 
     const response = await action({ request, params: { id: "cart_123" }, context });
     const data = (response as any).data;
-    expect(data.error).toBe("At least one of 'items' or 'shipping_address' is required");
+    expect(data.error).toBe("No update fields provided");
   });
 
   it("should return 405 for non-PATCH requests", async () => {

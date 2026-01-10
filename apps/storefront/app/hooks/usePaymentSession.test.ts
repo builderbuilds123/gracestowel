@@ -62,7 +62,7 @@ describe('usePaymentSession', () => {
     });
 
     it('should not create session if cart total is zero', async () => {
-        renderHook(() => usePaymentSession('paycol_123', 0, mockShippingOption, 'usd'));
+        renderHook(() => usePaymentSession('pay_col_123', 0, mockShippingOption, 'usd'));
         
         await new Promise(r => setTimeout(r, 500));
 
@@ -71,12 +71,12 @@ describe('usePaymentSession', () => {
 
     it('should create payment session when all params are valid', async () => {
         const { result } = renderHook(() => 
-            usePaymentSession('paycol_123', 5000, mockShippingOption, 'usd')
+            usePaymentSession('pay_col_123', 5000, mockShippingOption, 'usd')
         );
 
         await waitFor(() => {
             expect(mockFetch).toHaveBeenCalledWith(
-                '/api/payment-collections/paycol_123/sessions',
+                '/api/payment-collections/pay_col_123/sessions',
                 expect.objectContaining({
                     method: 'POST',
                     body: JSON.stringify({ provider_id: 'pp_stripe' }),
@@ -122,7 +122,7 @@ describe('usePaymentSession', () => {
         });
 
         const { result } = renderHook(() => 
-            usePaymentSession('paycol_123', 5000, mockShippingOption, 'usd')
+            usePaymentSession('pay_col_123', 5000, mockShippingOption, 'usd')
         );
 
         await waitFor(() => {
@@ -143,7 +143,7 @@ describe('usePaymentSession', () => {
         });
 
         const { result } = renderHook(() => 
-            usePaymentSession('paycol_123', 5000, mockShippingOption, 'usd')
+            usePaymentSession('pay_col_123', 5000, mockShippingOption, 'usd')
         );
 
         await waitFor(() => {
@@ -155,7 +155,7 @@ describe('usePaymentSession', () => {
         mockFetch.mockRejectedValue(new Error('Network error'));
 
         const { result } = renderHook(() => 
-            usePaymentSession('paycol_123', 5000, mockShippingOption, 'usd')
+            usePaymentSession('pay_col_123', 5000, mockShippingOption, 'usd')
         );
 
         await waitFor(() => {

@@ -57,6 +57,9 @@ services:
       NODE_ENV: production
       DATABASE_SSL: "false"
       DISABLE_MEDUSA_ADMIN: "true"
+      # Stripe test mode keys - use sk_test_ prefix for test environment
+      STRIPE_SECRET_KEY: sk_test_placeholder_for_ci_testing
+      STRIPE_WEBHOOK_SECRET: whsec_test_placeholder_for_ci
     ports:
       - "9001:8080"
     healthcheck:
@@ -117,7 +120,12 @@ services:
     working_dir: /app
     # Use pnpm for consistency with project (enable via corepack)
     # Install dependencies and run tests
-    command: ["sh", "-c", "corepack enable && corepack prepare pnpm@9.15.2 --activate && pnpm install && pnpm exec playwright test --project=chromium --reporter=html"]
+    command:
+      [
+        "sh",
+        "-c",
+        "corepack enable && corepack prepare pnpm@9.15.2 --activate && pnpm install && pnpm exec playwright test --project=chromium --reporter=html",
+      ]
 
 networks:
   default:

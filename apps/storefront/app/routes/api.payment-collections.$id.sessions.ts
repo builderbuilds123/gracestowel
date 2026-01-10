@@ -25,8 +25,8 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
     return data({ error: "Collection ID is required", traceId }, { status: 400 });
   }
 
-  // Validate collectionId format (Medusa uses paycol_ prefix)
-  if (!collectionId.startsWith("paycol_") || collectionId.length < 10) {
+  // Validate collectionId format (Medusa uses pay_col_ or paycol_ prefix)
+  if (!(collectionId.startsWith("pay_col_") || collectionId.startsWith("paycol_")) || collectionId.length < 10) {
     logger.error("Invalid collection ID format", undefined, { collectionId });
     return data({ error: "Invalid collection ID format", traceId }, { status: 400 });
   }
@@ -69,11 +69,10 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
      return data({ error: "Configuration error", traceId }, { status: 500 });
   }
 
-  logger.info("Creating Payment Session", { collectionId, provider_id });
-
   try {
-    const url = `${medusaBackendUrl}/store/payment-collections/${collectionId}/payment-sessions`;
-    const response = await monitoredFetch(url, {
+    // 3. Create fresh session
+    const createUrl = `${medusaBackendUrl}/store/payment-collections/${collectionId}/payment-sessions`;
+    const response = await monitoredFetch(createUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

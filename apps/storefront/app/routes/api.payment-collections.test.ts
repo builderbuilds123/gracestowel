@@ -51,7 +51,7 @@ describe('Payment Collections API', () => {
 
     it('should create payment collection for valid cartId', async () => {
         const cartId = 'cart_01HTEST1234567890';
-        const paymentCollectionId = 'paycol_123';
+        const paymentCollectionId = 'pay_col_123';
 
         // First call: Idempotency check GET (no existing collection)
         fetchSpy.mockResolvedValueOnce({
@@ -146,7 +146,7 @@ describe('Payment Collections API', () => {
 
     it('should handle payment collection already exists (409) by returning existing collection', async () => {
         const cartId = 'cart_01HTEST1234567890';
-        const existingCollectionId = 'paycol_EXISTING123';
+        const existingCollectionId = 'pay_col_EXISTING123';
         
         // First call: Idempotency check GET (no existing collection found initially)
         fetchSpy.mockResolvedValueOnce({

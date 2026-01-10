@@ -210,6 +210,42 @@ export class MedusaCartService {
   }
 
   /**
+   * Generic cart update (email, address, etc.)
+   * Uses Medusa v2 SDK: client.store.cart.update()
+   */
+  async updateCart(cartId: string, data: { 
+    email?: string; 
+    shipping_address?: ShippingAddress;
+    billing_address?: Partial<ShippingAddress>;
+    region_id?: string;
+    sales_channel_id?: string;
+    metadata?: Record<string, any>;
+  }): Promise<Cart> {
+    return retry(async () => {
+        try {
+            const payload: any = { ...data };
+            
+            // Normalize country code if address is present
+            if (payload.shipping_address) {
+                payload.shipping_address = {
+                    ...payload.shipping_address,
+                    country_code: (payload.shipping_address.country_code || "").toLowerCase(),
+                };
+            }
+
+            const { cart } = await this.client.store.cart.update(cartId, payload);
+            return cart;
+        } catch (error: any) {
+            console.error("Error updating cart:", error);
+            if (error.response && import.meta.env.DEV) {
+                console.error("Upstream Medusa Error Data:", JSON.stringify(error.response.data || {}, null, 2));
+            }
+            throw error;
+        }
+    });
+  }
+
+  /**
    * Get shipping options for the cart
    * Uses Medusa v2 SDK: client.store.fulfillment.listCartOptions()
    * 

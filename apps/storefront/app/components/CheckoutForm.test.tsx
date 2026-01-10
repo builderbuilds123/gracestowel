@@ -1,12 +1,7 @@
 
-import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { CheckoutForm, CheckoutFormProps } from '../CheckoutForm';
-import { Elements } from '@stripe/react-stripe-js';
-import { loadStripe } from '@stripe/stripe-js';
 
-// Mock Stripe hooks and elements
+// 1. Declare ALL mocks at the very top
 vi.mock('@stripe/react-stripe-js', async () => {
     const actual = await vi.importActual('@stripe/react-stripe-js');
     return {
@@ -26,7 +21,20 @@ vi.mock('@stripe/react-stripe-js', async () => {
     };
 });
 
-// Mock Stripe.js load
+vi.mock('../utils/monitored-fetch', () => ({
+    monitoredFetch: vi.fn(async () => {
+        // Add a small delay to simulate network and ensure "Processing..." state is visible
+        await new Promise(resolve => setTimeout(resolve, 50));
+        return {
+            ok: true,
+            json: () => Promise.resolve({
+                success: true,
+                client_secret: 'new_secret'
+            }),
+        };
+    }),
+}));
+
 vi.mock('@stripe/stripe-js', () => ({
     loadStripe: vi.fn(() => Promise.resolve({
         elements: vi.fn(),
@@ -34,12 +42,35 @@ vi.mock('@stripe/stripe-js', () => ({
     })),
 }));
 
+// 2. ONLY THEN import React and components
+import React from 'react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { CheckoutForm } from './CheckoutForm';
+import type { CheckoutFormProps } from './CheckoutForm';
+import { loadStripe } from '@stripe/stripe-js';
+
+
 describe('CheckoutForm', () => {
     const mockStripe = {
         confirmPayment: vi.fn(),
     };
     const mockElements = {
-        getElement: vi.fn(),
+        getElement: vi.fn().mockReturnValue({
+            getValue: vi.fn().mockResolvedValue({
+                complete: true,
+                value: {
+                    name: 'John Doe',
+                    address: {
+                        line1: '123 Test St',
+                        city: 'Test City',
+                        state: 'TS',
+                        postal_code: '12345',
+                        country: 'US'
+                    },
+                    phone: '1234567890'
+                }
+            })
+        }),
         submit: vi.fn().mockResolvedValue({ error: null }),
     };
 
@@ -61,6 +92,21 @@ describe('CheckoutForm', () => {
         selectedShipping: { id: 'standard', displayName: 'Standard', amount: 5 },
         setSelectedShipping: vi.fn(),
         onAddressChange: vi.fn(),
+        persistShippingOption: vi.fn().mockResolvedValue(undefined),
+        cartId: 'cart_123',
+        paymentCollectionId: 'pay_col_123',
+        customerData: {
+            email: 'test@example.com',
+            firstName: 'John',
+            lastName: 'Doe',
+            address: {
+                line1: '123 Test St',
+                city: 'Test City',
+                state: 'TS',
+                postal_code: '12345',
+                country: 'US'
+            }
+        }
     };
 
     beforeEach(async () => {
@@ -137,7 +183,8 @@ describe('CheckoutForm', () => {
         const submitButton = screen.getByRole('button', { name: /pay now/i });
         fireEvent.click(submitButton);
 
-        expect(screen.getByText('Processing...')).toBeInTheDocument();
+        // Use findByText to wait for the state transition
+        expect(await screen.findByText('Processing...')).toBeInTheDocument();
         
         await waitFor(() => {
             expect(mockStripe.confirmPayment).toHaveBeenCalledWith(expect.objectContaining({
@@ -216,7 +263,7 @@ describe('CheckoutForm', () => {
         fireEvent.click(expressButton);
 
         await waitFor(() => {
-            expect(screen.getByText('Express payment declined.')).toBeInTheDocument();
+            expect(screen.getByText('The payment was not successful. Please try again.')).toBeInTheDocument();
         });
     });
 
@@ -231,7 +278,7 @@ describe('CheckoutForm', () => {
         fireEvent.click(expressButton);
 
         await waitFor(() => {
-            expect(screen.getByText('Validation failed')).toBeInTheDocument();
+            expect(screen.getByText('Please check your payment information.')).toBeInTheDocument();
         });
         expect(mockStripe.confirmPayment).not.toHaveBeenCalled();
     });

@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect } from "react";
 import { monitoredFetch } from "../utils/monitored-fetch";
-import type { ShippingOption } from "../components/CheckoutForm";
 
 // Check if in development mode
 const isDevelopment = import.meta.env.MODE === 'development';
@@ -31,34 +30,27 @@ interface PaymentSessionResponse {
 /**
  * Hook to manage PaymentSession creation and synchronization.
  * 
- * Creates/syncs PaymentSession when payment collection is available.
- * Uses request ID pattern to handle cart total and shipping changes
- * without race conditions.
- * 
- * Important: clientSecret is set only once per session to satisfy
- * Stripe Elements requirement that it doesn't change mid-lifecycle.
+ * CHK-02-B FIX: Two-phase approach:
+ * 1. Create session initially (for Stripe Elements to render)
+ * 2. After shipping is persisted, refresh to get the updated session that Medusa created
  * 
  * @param paymentCollectionId - The Medusa payment collection ID
- * @param cartTotal - Current cart total (triggers re-sync when changed)
- * @param selectedShipping - Selected shipping option
- * @param currency - Cart currency
+ * @param shouldCreateSession - Whether to create/refresh the session
  * @returns PaymentSession state (clientSecret, paymentIntentId, loading, error)
  */
 export function usePaymentSession(
   paymentCollectionId: string | null,
-  cartTotal: number,
-  selectedShipping: ShippingOption | null,
-  currency: string
+  shouldCreateSession: boolean
 ): PaymentSessionResult {
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [paymentIntentId, setPaymentIntentId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Track if we've created the initial session (to avoid re-creating)
+  const hasCreatedSession = useRef(false);
   // Request ID pattern: ensures only the latest request's result is applied
   const requestIdRef = useRef(0);
-  // Track if we've set the initial clientSecret (should only be set once)
-  const isInitialized = useRef(false);
 
   useEffect(() => {
     // Early exit: Need a payment collection to create a session
@@ -66,13 +58,16 @@ export function usePaymentSession(
       return;
     }
 
-    // Early exit: Don't sync if cart is empty
-    if (cartTotal <= 0) {
+    // Early exit: Don't run if not ready to create
+    if (!shouldCreateSession) {
       return;
     }
 
     const controller = new AbortController();
     const currentRequestId = ++requestIdRef.current;
+    
+    // Determine if we should create a new session or refresh existing
+    const isRefresh = hasCreatedSession.current;
 
     const syncPaymentSession = async () => {
       // Safety check: ensure we're still the latest request
@@ -85,13 +80,13 @@ export function usePaymentSession(
 
       try {
         if (isDevelopment) {
-          console.log("[usePaymentSession] Creating/syncing Payment Session...", {
+          console.log("[usePaymentSession] Syncing Payment Session...", {
             paymentCollectionId,
-            cartTotal,
-            shippingId: selectedShipping?.id,
+            isRefresh,
           });
         }
 
+        // Always POST to create/update session - Medusa will handle idempotency
         const response = await monitoredFetch(
           `/api/payment-collections/${paymentCollectionId}/sessions`,
           {
@@ -99,7 +94,7 @@ export function usePaymentSession(
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ provider_id: "pp_stripe" }),
             signal: controller.signal,
-            label: "create-payment-session",
+            label: isRefresh ? "refresh-payment-session" : "create-payment-session",
           }
         );
 
@@ -115,7 +110,7 @@ export function usePaymentSession(
         }
 
         if (!response.ok) {
-          let errorMessage = "Failed to create payment session";
+          let errorMessage = "Failed to sync payment session";
           let errorBody: unknown = null;
 
           try {
@@ -163,15 +158,17 @@ export function usePaymentSession(
           throw new Error("Client secret not found in payment session data");
         }
 
-        // Set clientSecret only on first initialization
-        // Stripe Elements requires the clientSecret to remain stable
-        if (!isInitialized.current) {
-          setClientSecret(stripeSession.data.client_secret);
-          isInitialized.current = true;
-          
-          if (isDevelopment) {
-            console.log("[usePaymentSession] Initial clientSecret set");
-          }
+        // Mark that we've created a session
+        hasCreatedSession.current = true;
+
+        // Update clientSecret
+        setClientSecret(stripeSession.data.client_secret);
+        
+        if (isDevelopment) {
+          console.log("[usePaymentSession] clientSecret updated", {
+            isRefresh,
+            secretPrefix: stripeSession.data.client_secret.substring(0, 8) + "****",
+          });
         }
 
         // PaymentIntent ID can be updated (for reference/logging)
@@ -204,15 +201,13 @@ export function usePaymentSession(
       }
     };
 
-    // Debounce to batch rapid cart total / shipping changes
-    const DEBOUNCE_MS = 300;
-    const timer = setTimeout(syncPaymentSession, DEBOUNCE_MS);
+    // Sync session when ready
+    syncPaymentSession();
 
     return () => {
-      clearTimeout(timer);
       controller.abort();
     };
-  }, [paymentCollectionId, cartTotal, selectedShipping?.id, selectedShipping?.amount, currency]);
+  }, [paymentCollectionId, shouldCreateSession]);
 
   return {
     clientSecret,
