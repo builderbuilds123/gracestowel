@@ -87,6 +87,9 @@ async function moveToDLQDirectly(
   }
 }
 
+import fs from 'fs';
+import path from 'path';
+
 /**
  * Starts the email worker to process email jobs from the queue.
  *
@@ -120,14 +123,14 @@ export function startEmailWorker(container: MedusaContainer): Worker {
       }
 
       try {
-        const notifications = await notificationService.createNotifications({
+        const notification = await notificationService.createNotifications({
           to: recipient,
           channel: "email",
           template: template,
           data: data as Record<string, unknown>,
         });
-
-        const notificationId = notifications?.[0]?.id || "sent";
+        
+        const notificationId = notification?.id || "sent";
 
         logger.info(`[EMAIL][SENT] Sent ${template} to ${maskedRecipient} for order ${orderId}. ID: ${notificationId}`);
         logger.info(`[METRIC] email_sent template=${template} order=${orderId}`);
