@@ -1,5 +1,5 @@
 import { Worker, Job } from "bullmq";
-import { MedusaContainer } from "@medusajs/framework/types";
+import { MedusaContainer, INotificationModuleService } from "@medusajs/framework/types";
 import { getRedisConnection } from "../lib/redis";
 import { EmailJobPayload } from "../lib/email-queue";
 import { maskEmail } from "../utils/email-masking";
@@ -11,11 +11,6 @@ const DLQ_KEY = "email:dlq";
 
 let emailWorker: Worker | null = null;
 let dlqRedis: Redis | null = null;
-
-// Define a minimal interface for the Resend service to satisfy type checking
-interface ResendService {
-  send(notification: { to: string; template: string; data: unknown }): Promise<{ id: string } | undefined>;
-}
 
 /**
  * Checks if an error is retryable (transient) or permanent.
@@ -104,7 +99,7 @@ export function startEmailWorker(container: MedusaContainer): Worker {
   }
 
   const logger = container.resolve("logger");
-  const resendService = container.resolve("resendNotificationProviderService") as ResendService;
+  const notificationService = container.resolve("notification") as INotificationModuleService;
 
   // Create a separate Redis connection for DLQ operations
   if (!dlqRedis) {
@@ -125,13 +120,16 @@ export function startEmailWorker(container: MedusaContainer): Worker {
       }
 
       try {
-        await resendService.send({
+        const notifications = await notificationService.createNotifications({
           to: recipient,
+          channel: "email",
           template: template,
-          data: data,
+          data: data as Record<string, unknown>,
         });
 
-        logger.info(`[EMAIL][SENT] Sent ${template} to ${maskedRecipient} for order ${orderId}`);
+        const notificationId = notifications?.[0]?.id || "sent";
+
+        logger.info(`[EMAIL][SENT] Sent ${template} to ${maskedRecipient} for order ${orderId}. ID: ${notificationId}`);
         console.log(`[EMAIL][SENT] Sent ${template} to ${maskedRecipient} for order ${orderId}`); // Added for visibility
         logger.info(`[METRIC] email_sent template=${template} order=${orderId}`);
       } catch (error: any) {
