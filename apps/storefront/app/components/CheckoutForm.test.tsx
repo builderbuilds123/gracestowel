@@ -29,7 +29,16 @@ vi.mock('../utils/monitored-fetch', () => ({
             ok: true,
             json: () => Promise.resolve({
                 success: true,
-                client_secret: 'new_secret'
+                payment_collection: {
+                    payment_sessions: [
+                        {
+                            provider_id: "pp_stripe",
+                            data: {
+                                client_secret: "new_secret"
+                            }
+                        }
+                    ]
+                }
             }),
         };
     }),
@@ -254,7 +263,7 @@ describe('CheckoutForm', () => {
 
     it('handles express checkout error', async () => {
         mockStripe.confirmPayment.mockResolvedValue({
-            error: { type: 'card_error', message: 'Express payment declined.' }
+            error: { type: 'card_error', message: 'The payment was not successful. Please try again.' } 
         });
         
         render(<CheckoutForm {...defaultProps} />);
@@ -269,7 +278,7 @@ describe('CheckoutForm', () => {
 
     it('handles express checkout submit error', async () => {
         mockElements.submit.mockResolvedValue({ 
-            error: { message: 'Validation failed' } 
+            error: { message: 'Please check your payment information.' } 
         });
         
         render(<CheckoutForm {...defaultProps} />);

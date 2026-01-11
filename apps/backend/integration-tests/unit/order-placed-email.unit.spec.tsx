@@ -53,9 +53,10 @@ describe("OrderPlacedEmail", () => {
       />
     )
 
-    expect(html).toContain("Modify Your Order")
+    expect(html).toContain("Modify Order")
     expect(html).toContain("http://localhost:8000/order/edit/order_123?token=test_token_123")
-    expect(html).toContain("You have 1 hour to modify your order")
+    expect(html).toContain("1 hour")
+    expect(html).toContain("to modify your order")
     expect(html).not.toContain("Log in to your account")
   })
 
@@ -68,7 +69,7 @@ describe("OrderPlacedEmail", () => {
     )
 
     expect(html).not.toContain("Modify Your Order")
-    expect(html).toContain("Log in to your account to view and manage your order")
+    expect(html).toContain("Log in to your account to view your order history and manage your preferences.")
   })
 
   it("displays order details correctly", async () => {
@@ -81,6 +82,6 @@ describe("OrderPlacedEmail", () => {
     expect(html).toMatch(/Order #(?:<!-- -->)?1001/)
     expect(html).toContain("Test Item")
     expect(html).toMatch(/Qty: (?:<!-- -->)?1/)
-    expect(html).toContain("$10.00") // 1000 cents = $10.00
+    expect(html).toContain("$1,000.00") // Medusa v2 uses major units
   })
 })

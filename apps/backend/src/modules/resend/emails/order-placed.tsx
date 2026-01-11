@@ -228,6 +228,11 @@ export const OrderPlacedEmailComponent = ({ order, modification_token }: OrderPl
 
           {/* Footer */}
           <Section style={footerSection}>
+            {!modification_token && (
+              <Text style={footerText}>
+                Log in to your account to view your order history and manage your preferences.
+              </Text>
+            )}
             <Text style={footerText}>
               Questions about your order? Reply to this email or contact us at{' '}
               <Link href="mailto:hello@gracestowel.com" style={footerLink}>

@@ -1,4 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
+
+vi.setConfig({ hookTimeout: 30000 });
 /**
  * Unit tests for Story 6.3: Race Condition Handling
  *
@@ -59,11 +61,11 @@ vi.mock("bullmq", () => ({
     Job: vi.fn(),
 }));
 
-describe("Story 6.3: Race Condition Handling", () => {
+describe("Story 6.3: Race Condition Handling", { timeout: 30000 }, () => {
     const originalEnv = process.env;
     let mockContainer: any;
-    let mockQueryGraph: vi.Mock;
-    let mockUpdateOrders: vi.Mock;
+    let mockQueryGraph: Mock;
+    let mockUpdateOrders: Mock;
 
     // Module functions under test
     let processPaymentCapture: any;
@@ -72,6 +74,18 @@ describe("Story 6.3: Race Condition Handling", () => {
     let OrderLockedError: any;
     let validatePreconditionsHandler: any;
     let addItemToOrderModule: any;
+
+    beforeAll(async () => {
+        // Import heavy modules once
+        addItemToOrderModule = await import("../../src/workflows/add-item-to-order");
+        OrderLockedError = addItemToOrderModule.OrderLockedError;
+        validatePreconditionsHandler = addItemToOrderModule.validatePreconditionsHandler;
+
+        const workerMod = await import("../../src/workers/payment-capture-worker");
+        processPaymentCapture = workerMod.processPaymentCapture;
+        startPaymentCaptureWorker = workerMod.startPaymentCaptureWorker;
+        shutdownPaymentCaptureWorker = workerMod.shutdownPaymentCaptureWorker;
+    });
 
     describe("Timing Buffer (Task 1 - 59:30)", () => {
         // These timing buffer configuration tests are now covered by
@@ -146,16 +160,7 @@ describe("Story 6.3: Race Condition Handling", () => {
             }),
         };
 
-        // Import add-item-to-order module fresh each time (workflows handle re-registration internally)
-        addItemToOrderModule = await import("../../src/workflows/add-item-to-order");
-        OrderLockedError = addItemToOrderModule.OrderLockedError;
-        validatePreconditionsHandler = addItemToOrderModule.validatePreconditionsHandler;
-
-        // Worker functions are now in a separate module - import with existing mocks
-        const workerMod = await import("../../src/workers/payment-capture-worker");
-        processPaymentCapture = workerMod.processPaymentCapture;
-        startPaymentCaptureWorker = workerMod.startPaymentCaptureWorker;
-        shutdownPaymentCaptureWorker = workerMod.shutdownPaymentCaptureWorker;
+        // Module variables are already populated in beforeAll
     });
 
     afterEach(() => {

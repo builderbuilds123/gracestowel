@@ -192,7 +192,7 @@ export function CheckoutForm({
         const { error: submitError } = await elements.submit();
         if (submitError) {
             // Stripe handles showing its own errors, but we track it for scrolling
-            errors.payment = submitError.message || 'Please check your payment details.';
+            errors.payment = submitError.message || 'Please check your payment information.';
         }
 
         if (Object.keys(errors).length > 0) {
@@ -409,7 +409,7 @@ export function CheckoutForm({
                 if (error.type === 'card_error' || error.type === 'validation_error') {
                     setMessage(error.message || 'An unexpected error occurred.');
                 } else {
-                    setMessage('An unexpected error occurred.');
+                    setMessage('The payment was not successful. Please try again.');
                 }
             }
         } finally {
