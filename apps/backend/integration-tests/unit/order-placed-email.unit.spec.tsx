@@ -3,6 +3,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import React from "react"
 import { OrderPlacedEmailComponent } from "../../src/modules/resend/emails/order-placed"
 import { render } from "@react-email/render"
+import { formatModificationWindow } from "../../src/lib/payment-capture-queue"
 
 describe("OrderPlacedEmail", () => {
   const mockOrder = {
@@ -53,9 +54,10 @@ describe("OrderPlacedEmail", () => {
       />
     )
 
+    const expectedWindow = formatModificationWindow()
     expect(html).toContain("Modify Order")
     expect(html).toContain("http://localhost:8000/order/edit/order_123?token=test_token_123")
-    expect(html).toContain("1 hour")
+    expect(html).toContain(expectedWindow)
     expect(html).toContain("to modify your order")
     expect(html).not.toContain("Log in to your account")
   })

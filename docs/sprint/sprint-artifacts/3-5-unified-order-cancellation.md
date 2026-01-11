@@ -170,7 +170,12 @@ Backend implementation completed. Tasks 1-4 are done. Frontend (Task 5) and E2E 
 - Added new test for "refund path" when `isWithinGracePeriod: false`
 
 ### Completion Notes
-Backend Tasks 1-4 completed. All 38 unit tests passing.
+Backend Tasks 1-4 completed. All unit tests passing (366 passed, 1 skipped).
+
+### Code Review Fixes Applied
+- **CR-1/CR-2**: Fixed `modification-token.unit.spec.ts` to use `getModificationWindowSeconds()` instead of hardcoded 3600
+- **CR-3**: Fixed `order-placed-email.unit.spec.tsx` to use `formatModificationWindow()` instead of hardcoded "1 hour"
+- **CR-8**: Fixed `order-placed-subscriber.unit.spec.ts` mock to include `PAYMENT_CAPTURE_DELAY_MS` export
 
 ## File List
 
@@ -179,6 +184,12 @@ Backend Tasks 1-4 completed. All 38 unit tests passing.
 | `apps/backend/src/api/store/orders/[id]/cancel/route.ts` | Modified | Removed WINDOW_EXPIRED check, added isWithinGracePeriod, added OrderShippedError handler |
 | `apps/backend/src/workflows/cancel-order-with-refund.ts` | Modified | Added OrderShippedError, checkFulfillmentStatusStep, voidOrRefundPaymentStep, reAddPaymentCaptureJobHandler, updated lockOrderHandler with isWithinGracePeriod branching |
 | `apps/backend/integration-tests/unit/cancel-order-workflow.unit.spec.ts` | Modified | Updated tests for isWithinGracePeriod, added new refund path test |
+| `apps/storefront/app/components/order/CancelRejectedModal.tsx` | Created | Modal for shipped order cancellation rejection (AC6) |
+| `apps/storefront/app/components/order/__tests__/CancelRejectedModal.test.tsx` | Created | Unit tests for CancelRejectedModal |
+| `apps/storefront/app/components/order/__tests__/OrderModificationDialogs.test.tsx` | Modified | Added test for order_shipped error handling |
+| `apps/backend/integration-tests/unit/modification-token.unit.spec.ts` | Modified | [CR] Updated to use configurable PAYMENT_CAPTURE_DELAY_MS instead of hardcoded 3600 |
+| `apps/backend/integration-tests/unit/order-placed-email.unit.spec.tsx` | Modified | [CR] Updated to use formatModificationWindow() instead of hardcoded "1 hour" |
+| `apps/backend/integration-tests/unit/order-placed-subscriber.unit.spec.ts` | Modified | [CR] Fixed mock to include PAYMENT_CAPTURE_DELAY_MS export |
 
 ## Change Log
 
@@ -189,3 +200,4 @@ Backend Tasks 1-4 completed. All 38 unit tests passing.
 | 2026-01-11 | Completed Tasks 1-4: Route refactor, fulfillment check, refund logic, compensation logic | Dev Agent |
 | 2026-01-11 | Completed Tasks 5-6: Storefront UI and Workflow unit tests | Dev Agent |
 | 2026-01-11 | Story marked as DONE | Dev Agent |
+| 2026-01-11 | [CR] Fixed 3 test failures: updated tests to use configurable PAYMENT_CAPTURE_DELAY_MS instead of hardcoded values | Code Review |

@@ -6,9 +6,13 @@ vi.mock("../../src/lib/email-queue", () => ({
   enqueueEmail: vi.fn(),
 }));
 
-vi.mock("../../src/lib/payment-capture-queue", () => ({
-  schedulePaymentCapture: vi.fn(),
-}));
+vi.mock("../../src/lib/payment-capture-queue", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/lib/payment-capture-queue")>();
+  return {
+    ...actual,
+    schedulePaymentCapture: vi.fn(),
+  };
+});
 
 vi.mock("../../src/utils/posthog", () => ({
   getPostHog: vi.fn().mockReturnValue(null),
