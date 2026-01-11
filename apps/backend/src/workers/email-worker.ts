@@ -130,7 +130,6 @@ export function startEmailWorker(container: MedusaContainer): Worker {
         const notificationId = notifications?.[0]?.id || "sent";
 
         logger.info(`[EMAIL][SENT] Sent ${template} to ${maskedRecipient} for order ${orderId}. ID: ${notificationId}`);
-        console.log(`[EMAIL][SENT] Sent ${template} to ${maskedRecipient} for order ${orderId}`); // Added for visibility
         logger.info(`[METRIC] email_sent template=${template} order=${orderId}`);
       } catch (error: any) {
         // Check if error is retryable
@@ -145,7 +144,6 @@ export function startEmailWorker(container: MedusaContainer): Worker {
         }
 
         logger.error(`[EMAIL][FAILED] Failed ${template} for order ${orderId} (attempt ${attemptNum}/3): ${error.message}`);
-        console.log(`[EMAIL][FAILED] Failed ${template} for order ${orderId} (attempt ${attemptNum}/3): ${error.message}`); // Added for visibility
         logger.info(`[METRIC] email_failed template=${template} order=${orderId} error=${error.code || "unknown"}`);
         throw error; // Re-throw to trigger BullMQ retry
       }
