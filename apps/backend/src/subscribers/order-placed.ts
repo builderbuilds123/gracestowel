@@ -6,7 +6,7 @@ import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
 // import { sendOrderConfirmationWorkflow } from "../workflows/send-order-confirmation" // DEPRECATED - Replaced by BullMQ
 import { schedulePaymentCapture } from "../lib/payment-capture-queue"
 import { getPostHog } from "../utils/posthog"
-import { enqueueEmail, initEmailQueue } from "../lib/email-queue"
+import { enqueueEmail } from "../lib/email-queue"
 import type { ModificationTokenService } from "../services/modification-token"
 import { ensureStripeWorkerStarted } from "../loaders/stripe-event-worker"
 import { startPaymentCaptureWorker } from "../workers/payment-capture-worker"
@@ -26,7 +26,6 @@ export default async function orderPlacedHandler({
 
   // Ensure Email worker is running (lazy init)
   // This fixes the issue where emails queue up but don't send because loader ignored
-  initEmailQueue(container)
   if (process.env.REDIS_URL) {
     startEmailWorker(container)
   }

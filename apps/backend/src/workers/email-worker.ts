@@ -96,10 +96,25 @@ import path from 'path';
  * @param container - The Medusa container to resolve services
  * @returns The started worker instance
  */
+import { initEmailQueue } from "../lib/email-queue";
+
+let shutdownHandler: (() => Promise<void>) | null = null;
+
+// ... existing code ...
+
+/**
+ * Starts the email worker to process email jobs from the queue.
+ *
+ * @param container - The Medusa container to resolve services
+ * @returns The started worker instance
+ */
 export function startEmailWorker(container: MedusaContainer): Worker {
   if (emailWorker) {
     return emailWorker;
   }
+
+  // Ensure queue logger is initialized (matches payment worker not exposing init logic)
+  initEmailQueue(container);
 
   const logger = container.resolve("logger");
   const notificationService = container.resolve("notification") as INotificationModuleService;
@@ -112,6 +127,7 @@ export function startEmailWorker(container: MedusaContainer): Worker {
   emailWorker = new Worker(
     QUEUE_NAME,
     async (job: Job<EmailJobPayload>) => {
+      // ... existing processor logic ...
       const { orderId, template, recipient, data } = job.data;
       const maskedRecipient = maskEmail(recipient);
       const attemptNum = job.attemptsMade + 1;
@@ -206,6 +222,20 @@ export function startEmailWorker(container: MedusaContainer): Worker {
   });
 
   console.log("[EMAIL] Email worker started");
+
+  // Graceful shutdown (register once)
+  if (!shutdownHandler) {
+      shutdownHandler = async () => {
+          console.log("[EMAIL] Shutting down email worker...");
+          await emailWorker?.close();
+          if (dlqRedis) {
+              await dlqRedis.quit();
+              dlqRedis = null;
+          }
+      };
+      process.on("SIGTERM", shutdownHandler);
+      process.on("SIGINT", shutdownHandler);
+  }
 
   return emailWorker;
 }
