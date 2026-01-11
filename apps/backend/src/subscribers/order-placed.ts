@@ -63,13 +63,19 @@ export default async function orderPlacedHandler({
           "metadata",
           "currency_code",
           "total",
+          "subtotal",
+          "shipping_total",
+          "tax_total",
           "customer_id",
           "created_at",
-          "items.title",
+          // In Medusa V2: order.items = order_item table
+          // order.items.item = order_line_item table (has title, unit_price, variant info)
           "items.quantity",
           "items.unit_price",
-          "items.variant.title",
-          "items.variant.product.title",
+          "items.item.title",
+          "items.item.product_title",
+          "items.item.variant_title",
+          "items.item.unit_price",
           "payment_collections.payments.data",
           "shipping_address.first_name",
           "shipping_address.last_name",
@@ -218,6 +224,7 @@ export default async function orderPlacedHandler({
 
         // Prepare email payload matching OrderPlacedEmailProps interface
         // Template must be "order-placed" to match Templates.ORDER_PLACED enum
+        // Note: Medusa v2 stores prices in MAJOR currency units (e.g., $34.00 not 3400 cents)
         const emailPayload = {
             orderId: order.id,
             template: "order-placed" as const,
@@ -229,12 +236,31 @@ export default async function orderPlacedHandler({
                 email: order.email || undefined,
                 currency_code: order.currency_code,
                 total: order.total,
-                items: (order.items || []).map((item: any) => ({
-                  title: item.variant?.product?.title || item.title,
-                  variant_title: item.variant?.title,
-                  quantity: item.quantity,
-                  unit_price: item.unit_price,
-                })),
+                subtotal: order.subtotal,
+                shipping_total: order.shipping_total,
+                tax_total: order.tax_total,
+                // In Medusa V2: items = order_item, items.item = order_line_item
+                // quantity is on order_item, title/unit_price are on order_line_item
+                items: (order.items || []).map((orderItem: any) => {
+                  const lineItem = orderItem.item || {};
+                  return {
+                    title: lineItem.product_title || lineItem.title || 'Unknown Product',
+                    variant_title: lineItem.variant_title,
+                    quantity: Number(orderItem.quantity) || 1,
+                    // Use order_item.unit_price if available, otherwise fall back to line_item.unit_price
+                    unit_price: Number(orderItem.unit_price) || Number(lineItem.unit_price) || 0,
+                  };
+                }),
+                shipping_address: order.shipping_address ? {
+                  first_name: order.shipping_address.first_name ?? undefined,
+                  last_name: order.shipping_address.last_name ?? undefined,
+                  address_1: order.shipping_address.address_1 ?? undefined,
+                  address_2: order.shipping_address.address_2 ?? undefined,
+                  city: order.shipping_address.city ?? undefined,
+                  province: order.shipping_address.province ?? undefined,
+                  postal_code: order.shipping_address.postal_code ?? undefined,
+                  country_code: order.shipping_address.country_code ?? undefined,
+                } : undefined,
               },
               modification_token: magicLink ? magicLink.split('token=')[1] : undefined,
             },
