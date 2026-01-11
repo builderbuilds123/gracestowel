@@ -184,7 +184,7 @@ development_status:
     status: done
   pi-epic-2-retrospective: optional
 
-  pi-epic-3: backlog
+  pi-epic-3: in-progress
   3-1-storefront-timer-edit-ui:
     path: docs/sprint/sprint-artifacts/3-1-storefront-timer-edit-ui.md
     status: done
@@ -195,6 +195,10 @@ development_status:
   3-4-order-cancellation-during-grace-period:
     path: docs/sprint/sprint-artifacts/3-4-order-cancellation-during-grace-period.md
     status: done
+  3-5-unified-order-cancellation:
+    path: docs/sprint/sprint-artifacts/3-5-unified-order-cancellation.md
+    status: done
+    meta: "Implementation started 2026-01-11. Unified cancellation supporting grace period (void) and post-capture (refund) flows."
   pi-epic-3-retrospective: optional
 
   pi-epic-4: backlog

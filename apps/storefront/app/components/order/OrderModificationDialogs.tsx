@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useFetcher } from "react-router";
 import { CancelOrderDialog } from "../CancelOrderDialog";
+import { CancelRejectedModal } from "./CancelRejectedModal";
 import { EditAddressDialog } from "../EditAddressDialog";
 import { AddItemsDialog } from "../AddItemsDialog";
 import { EditItemsDialog } from "./EditItemsDialog";
@@ -22,6 +23,7 @@ interface ActionData {
     success: boolean;
     action?: string;
     error?: string;
+    errorCode?: string;
     address?: Address;
     new_total?: number;
     // Story 6.4: Payment error handling
@@ -71,6 +73,7 @@ export function OrderModificationDialogs({
     onOrderCanceled,
 }: OrderModificationDialogsProps) {
     const [showCancelDialog, setShowCancelDialog] = useState(false);
+    const [showCancelRejectedModal, setShowCancelRejectedModal] = useState(false);
     const [showEditAddressDialog, setShowEditAddressDialog] = useState(false);
     const [showAddItemsDialog, setShowAddItemsDialog] = useState(false);
     const [showEditItemsDialog, setShowEditItemsDialog] = useState(false);
@@ -101,7 +104,15 @@ export function OrderModificationDialogs({
                     onOrderUpdated(fetcher.data.new_total);
                 }
             } else if (fetcher.data.error) {
-                setError(fetcher.data.error);
+                // Story 3.5: Handle order_shipped error specifically with a modal
+                if (fetcher.data.errorCode === "order_shipped") {
+                    setShowCancelDialog(false);
+                    setShowCancelRejectedModal(true);
+                    setError(null);
+                } else {
+                    setError(fetcher.data.error);
+                }
+                
                 // Story 6.4: Track retryable state for UX
                 setIsRetryable(fetcher.data.retryable ?? false);
                 setIsPaymentError(fetcher.data.errorType === "payment_error");
@@ -204,6 +215,11 @@ export function OrderModificationDialogs({
                 onClose={() => setShowCancelDialog(false)}
                 onConfirm={handleCancelOrder}
                 orderNumber={orderNumber}
+            />
+
+            <CancelRejectedModal
+                isOpen={showCancelRejectedModal}
+                onClose={() => setShowCancelRejectedModal(false)}
             />
 
             <EditAddressDialog

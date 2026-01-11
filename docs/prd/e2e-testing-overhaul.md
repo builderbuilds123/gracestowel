@@ -122,7 +122,8 @@ This PRD defines the requirements for overhauling the Grace Stowel E2E testing s
 | R5 | Visual Regression Testing | P2 (deferred) |
 | R6 | Test Execution and Reporting | P0 |
 | R7 | Cross-Browser and Device Testing | P1 |
-| R8 | Grace Period Feature Testing | P0 |
+| R8 | Grace Period & Post-Capture Cancellation | P0 |
+| R8a | Test logic for canceling order AFTER capture (Refund flow) | P0 |
 | R9 | Stripe Payment Integration Testing | P0 |
 | R10 | Playwright MCP Integration | P1 |
 | R11 | Test Stability and Flakiness Prevention | P0 |

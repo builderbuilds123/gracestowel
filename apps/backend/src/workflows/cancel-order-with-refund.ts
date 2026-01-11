@@ -9,7 +9,7 @@ import { updateInventoryLevelsStep } from "@medusajs/core-flows";
 import type { UpdateInventoryLevelInput, MedusaContainer } from "@medusajs/types";
 import Stripe from "stripe";
 import { getStripeClient } from "../utils/stripe";
-import { cancelPaymentCaptureJob, JobActiveError } from "../lib/payment-capture-queue";
+import { cancelPaymentCaptureJob, schedulePaymentCapture, JobActiveError } from "../lib/payment-capture-queue";
 import {
     PaymentCollectionStatus,
     validatePaymentCollectionStatus,
@@ -63,12 +63,26 @@ export class OrderNotFoundError extends Error {
 }
 
 /**
+ * Story 3.5: Error for orders that have been shipped
+ */
+export class OrderShippedError extends Error {
+    code = "ORDER_SHIPPED";
+    constructor(orderId: string, fulfillmentStatus: string) {
+        super(`This order has already been processed for shipping and can no longer be canceled.`);
+        this.name = "OrderShippedError";
+    }
+}
+
+/**
  * Input for the cancel order workflow
+ * Story 3.5: Added isWithinGracePeriod for branching logic
  */
 export interface CancelOrderWithRefundInput {
     orderId: string;
     paymentIntentId: string;
     reason?: string;
+    /** Story 3.5: True if within modification window (void), false if expired (refund) */
+    isWithinGracePeriod: boolean;
 }
 
 // Stripe client imported from ../utils/stripe
@@ -177,7 +191,10 @@ interface LockOrderResult {
     previousStatus: string;
 }
 
-export const lockOrderHandler = async (input: { orderId: string; paymentIntentId: string }, container: MedusaContainer): Promise<LockOrderResult> => {
+export const lockOrderHandler = async (
+    input: { orderId: string; paymentIntentId: string; isWithinGracePeriod?: boolean },
+    container: MedusaContainer
+): Promise<LockOrderResult> => {
     console.log(`[CancelOrder] Locking order ${input.orderId} for cancellation`);
     
     const query = container.resolve("query");
@@ -269,10 +286,17 @@ export const lockOrderHandler = async (input: { orderId: string; paymentIntentId
     // Explicit handling for all PaymentCollection statuses
     // This ensures no status is accidentally allowed when it shouldn't be
     
-    // Terminal states - cannot cancel
+    // Terminal states handling
+    // Story 3.5: If within grace period, captured = error; if post-grace, captured = allowed (refund path)
     if (paymentStatus === PaymentCollectionStatus.COMPLETED) {
-        console.log(`[CancelOrder] Order ${input.orderId} payment already captured (status: completed) - too late to cancel`);
-        throw new LateCancelError();
+        if (input.isWithinGracePeriod) {
+            // Within grace period but payment captured = race condition, too late
+            console.log(`[CancelOrder] Order ${input.orderId} payment already captured (status: completed) - too late to cancel via void`);
+            throw new LateCancelError();
+        } else {
+            // Post-grace period: captured is expected, proceed with refund
+            console.log(`[CancelOrder][Story 3.5] Order ${input.orderId} payment captured (status: completed) - will proceed with refund`);
+        }
     }
     
     if (paymentStatus === PaymentCollectionStatus.PARTIALLY_CAPTURED) {
@@ -309,12 +333,18 @@ export const lockOrderHandler = async (input: { orderId: string; paymentIntentId
     
     // Step 3b: Verify Stripe PaymentIntent status
     const paymentIntent = await stripe.paymentIntents.retrieve(input.paymentIntentId);
-    
+
     if (paymentIntent.status === "succeeded") {
-        console.log(`[CancelOrder] Stripe PaymentIntent ${input.paymentIntentId} is succeeded - too late to cancel`);
-        throw new LateCancelError();
+        if (input.isWithinGracePeriod) {
+            // Within grace period but Stripe shows succeeded = race condition
+            console.log(`[CancelOrder] Stripe PaymentIntent ${input.paymentIntentId} is succeeded - too late to cancel via void`);
+            throw new LateCancelError();
+        } else {
+            // Post-grace period: succeeded is expected for refund path
+            console.log(`[CancelOrder][Story 3.5] Stripe PaymentIntent ${input.paymentIntentId} is succeeded - will proceed with refund`);
+        }
     }
-    
+
     if (paymentIntent.status === "requires_capture" && paymentIntent.amount_received && paymentIntent.amount_received > 0) {
         console.log(`[CancelOrder] Stripe PaymentIntent ${input.paymentIntentId} is partially captured`);
         throw new PartialCaptureError();
@@ -329,7 +359,7 @@ export const lockOrderHandler = async (input: { orderId: string; paymentIntentId
 
 const lockOrderStep = createStep(
     "lock-order-for-cancel",
-    async (input: { orderId: string; paymentIntentId: string }, { container }) => {
+    async (input: { orderId: string; paymentIntentId: string; isWithinGracePeriod?: boolean }, { container }) => {
         const result = await lockOrderHandler(input, container);
         return new StepResponse(result);
     }
@@ -395,6 +425,198 @@ const voidPaymentWithCompensationStep = createStep(
     }
 );
 
+
+/**
+ * Story 3.5: Fulfillment statuses that block cancellation
+ */
+const SHIPPED_FULFILLMENT_STATUSES = [
+    "partially_fulfilled",
+    "shipped",
+    "partially_shipped",
+    "delivered",
+    "partially_delivered",
+];
+
+/**
+ * Story 3.5: Check fulfillment status step
+ * Rejects cancellation if order has been shipped
+ */
+interface CheckFulfillmentResult {
+    orderId: string;
+    fulfillmentStatus: string;
+    canCancel: boolean;
+}
+
+export const checkFulfillmentStatusHandler = async (
+    input: { orderId: string },
+    container: MedusaContainer
+): Promise<CheckFulfillmentResult> => {
+    const query = container.resolve("query");
+
+    // Query order with fulfillments to determine status
+    const { data: orders } = await query.graph({
+        entity: "order",
+        fields: ["id", "fulfillments.id", "fulfillments.packed_at", "fulfillments.shipped_at", "fulfillments.delivered_at"],
+        filters: { id: input.orderId },
+    });
+
+    if (!orders.length) {
+        throw new OrderNotFoundError(input.orderId);
+    }
+
+    const order = orders[0] as any;
+
+    // Determine fulfillment status based on fulfillments
+    // Medusa v2 doesn't have a top-level fulfillment_status, we derive it from fulfillments
+    let fulfillmentStatus = "not_fulfilled";
+    const fulfillments = order.fulfillments || [];
+
+    if (fulfillments.length > 0) {
+        const hasShipped = fulfillments.some((f: any) => f.shipped_at);
+        const hasDelivered = fulfillments.some((f: any) => f.delivered_at);
+        const hasPacked = fulfillments.some((f: any) => f.packed_at);
+
+        if (hasDelivered) {
+            fulfillmentStatus = "delivered";
+        } else if (hasShipped) {
+            fulfillmentStatus = "shipped";
+        } else if (hasPacked) {
+            fulfillmentStatus = "partially_fulfilled";
+        }
+    }
+
+    console.log(`[CancelOrder][Story 3.5] Order ${input.orderId} fulfillment_status: ${fulfillmentStatus}`);
+
+    if (SHIPPED_FULFILLMENT_STATUSES.includes(fulfillmentStatus)) {
+        console.log(`[CancelOrder][Story 3.5] Order ${input.orderId} has been shipped (${fulfillmentStatus}) - REJECTING cancellation`);
+        throw new OrderShippedError(input.orderId, fulfillmentStatus);
+    }
+
+    return {
+        orderId: input.orderId,
+        fulfillmentStatus,
+        canCancel: true,
+    };
+};
+
+const checkFulfillmentStatusStep = createStep(
+    "check-fulfillment-status",
+    async (input: { orderId: string }, { container }) => {
+        const result = await checkFulfillmentStatusHandler(input, container);
+        return new StepResponse(result);
+    }
+);
+
+/**
+ * Story 3.5: Refund payment step for captured payments (post-grace period)
+ * Issues a full refund via Stripe
+ */
+export const refundPaymentHandler = async (
+    input: { paymentIntentId: string; orderId: string }
+): Promise<PaymentCancellationResult> => {
+    const stripe = getStripeClient();
+
+    console.log(`[CancelOrder][Story 3.5] Issuing refund for PaymentIntent ${input.paymentIntentId}`);
+
+    try {
+        const paymentIntent = await stripe.paymentIntents.retrieve(input.paymentIntentId);
+
+        if (paymentIntent.status === "succeeded") {
+            // Payment was captured - issue refund
+            const refund = await stripe.refunds.create({
+                payment_intent: input.paymentIntentId,
+                // Full refund - no amount specified means refund entire amount
+            });
+
+            console.log(`[CancelOrder][Story 3.5] Refund created: ${refund.id} for order ${input.orderId}`);
+            console.log(`[METRIC] cancel_refund_created order=${input.orderId} pi=${input.paymentIntentId} refund=${refund.id}`);
+
+            return {
+                action: "refunded" as const,
+                paymentIntentId: input.paymentIntentId,
+                status: refund.status || "succeeded",
+                refundId: refund.id,
+            };
+        } else if (paymentIntent.status === "requires_capture") {
+            // Payment not captured yet - void instead of refund
+            console.log(`[CancelOrder][Story 3.5] PaymentIntent ${input.paymentIntentId} not captured, voiding instead`);
+            const canceled = await stripe.paymentIntents.cancel(input.paymentIntentId);
+            return {
+                action: "voided",
+                paymentIntentId: input.paymentIntentId,
+                status: canceled.status,
+                message: "Payment was not captured, voided instead of refunded",
+            };
+        } else if (paymentIntent.status === "canceled") {
+            // Already canceled - idempotent success
+            return {
+                action: "voided",
+                paymentIntentId: input.paymentIntentId,
+                status: "canceled",
+                message: "Payment was already canceled",
+            };
+        } else {
+            // Unexpected state
+            console.warn(`[CancelOrder][Story 3.5] Payment ${input.paymentIntentId} in unexpected state: ${paymentIntent.status}`);
+            return {
+                action: "none",
+                paymentIntentId: input.paymentIntentId,
+                status: paymentIntent.status,
+                message: `Payment in state: ${paymentIntent.status}`,
+            };
+        }
+    } catch (error) {
+        // Refund failed - log critical alert
+        console.error(
+            `[CancelOrder][CRITICAL] Order ${input.orderId}: Canceled but Refund Failed. Manual Refund Required!`,
+            error
+        );
+        console.log(`[METRIC] cancel_refund_failed order=${input.orderId} pi=${input.paymentIntentId}`);
+
+        return {
+            action: "none",
+            paymentIntentId: input.paymentIntentId,
+            status: "refund_failed",
+            message: "Order canceled but Stripe refund failed - manual intervention required",
+            voidFailed: true, // Reusing this flag for refund failures
+        };
+    }
+};
+
+const refundPaymentStep = createStep(
+    "refund-payment",
+    async (input: { paymentIntentId: string; orderId: string }): Promise<StepResponse<PaymentCancellationResult>> => {
+        const result = await refundPaymentHandler(input);
+        return new StepResponse(result);
+    }
+);
+
+/**
+ * Story 3.5: Re-add capture job compensation step
+ * Called when cancellation fails after job was removed - prevents revenue loss
+ */
+export const reAddPaymentCaptureJobHandler = async (
+    input: { orderId: string; paymentIntentId: string }
+): Promise<{ reAdded: boolean; orderId: string }> => {
+    console.log(`[CancelOrder][Story 3.5][COMPENSATION] Re-adding capture job for order ${input.orderId}`);
+
+    try {
+        // Re-add with immediate execution (0 delay) since we're past the original schedule
+        // Note: If payment is already captured, the worker will detect this and no-op
+        await schedulePaymentCapture(input.orderId, input.paymentIntentId, 0);
+        console.log(`[CancelOrder][Story 3.5][COMPENSATION] Capture job re-added for order ${input.orderId}`);
+        console.log(`[METRIC] cancel_compensation_job_readded order=${input.orderId}`);
+        return { reAdded: true, orderId: input.orderId };
+    } catch (error) {
+        // Log but don't throw - compensation is best-effort
+        console.error(
+            `[CancelOrder][Story 3.5][COMPENSATION][CRITICAL] Failed to re-add capture job for order ${input.orderId}:`,
+            error
+        );
+        console.log(`[METRIC] cancel_compensation_job_failed order=${input.orderId}`);
+        return { reAdded: false, orderId: input.orderId };
+    }
+};
 
 /**
  * Step to emit an event
@@ -506,31 +728,126 @@ const cancelMedusaOrderStep = createStep(
 );
 
 /**
- * Story 3.4: Enhanced workflow with CAS transaction pattern
- * 
- * This workflow implements a Serializable Transaction per AC:
- * - Step 1 (Pre-Check): Token & Grace Period verification (in API route)
- * - Step 2 (Queue Stop): Remove capture job from BullMQ
- * - Step 3 (DB Lock): Validate order state and lock
- * - Step 4 (DB Update): Set order status to canceled
- * - Post-Commit Actions:
- *   - Void Payment (with compensation pattern for zombie case)
- *   - Restock Inventory
- * - Emit order.canceled event
+ * Story 3.5: Unified void/refund step
+ * Determines whether to void or refund based on PaymentIntent status
+ */
+const voidOrRefundPaymentStep = createStep(
+    "void-or-refund-payment",
+    async (input: { paymentIntentId: string; orderId: string; isWithinGracePeriod: boolean }): Promise<StepResponse<PaymentCancellationResult>> => {
+        const stripe = getStripeClient();
+
+        try {
+            const paymentIntent = await stripe.paymentIntents.retrieve(input.paymentIntentId);
+
+            // Determine action based on PaymentIntent status (not grace period flag)
+            // The actual Stripe status is the source of truth
+            if (paymentIntent.status === "requires_capture") {
+                // Not captured yet - void the authorization
+                console.log(`[CancelOrder][Story 3.5] Voiding PaymentIntent ${input.paymentIntentId}`);
+                const canceled = await stripe.paymentIntents.cancel(input.paymentIntentId);
+                return new StepResponse<PaymentCancellationResult>({
+                    action: "voided",
+                    paymentIntentId: input.paymentIntentId,
+                    status: canceled.status,
+                });
+            } else if (paymentIntent.status === "succeeded") {
+                // Already captured - issue refund
+                console.log(`[CancelOrder][Story 3.5] Payment captured, issuing refund for ${input.paymentIntentId}`);
+                const refund = await stripe.refunds.create({
+                    payment_intent: input.paymentIntentId,
+                });
+
+                console.log(`[CancelOrder][Story 3.5] Refund created: ${refund.id}`);
+                console.log(`[METRIC] cancel_refund_created order=${input.orderId} pi=${input.paymentIntentId} refund=${refund.id}`);
+
+                return new StepResponse({
+                    action: "refunded" as const,
+                    paymentIntentId: input.paymentIntentId,
+                    status: refund.status || "succeeded",
+                    refundId: refund.id,
+                });
+            } else if (paymentIntent.status === "canceled") {
+                // Already canceled - idempotent success
+                return new StepResponse<PaymentCancellationResult>({
+                    action: "voided",
+                    paymentIntentId: input.paymentIntentId,
+                    status: "canceled",
+                    message: "Payment was already canceled",
+                });
+            } else {
+                // Unexpected state
+                console.warn(`[CancelOrder][Story 3.5] Payment ${input.paymentIntentId} in unexpected state: ${paymentIntent.status}`);
+                return new StepResponse<PaymentCancellationResult>({
+                    action: "none",
+                    paymentIntentId: input.paymentIntentId,
+                    status: paymentIntent.status,
+                    message: `Payment in state: ${paymentIntent.status}`,
+                });
+            }
+        } catch (error) {
+            // Payment operation failed - log critical alert
+            console.error(
+                `[CancelOrder][CRITICAL] Order ${input.orderId}: Payment operation failed. Manual intervention required!`,
+                error
+            );
+            console.log(`[METRIC] cancel_payment_failed order=${input.orderId} pi=${input.paymentIntentId}`);
+
+            return new StepResponse<PaymentCancellationResult>({
+                action: "none",
+                paymentIntentId: input.paymentIntentId,
+                status: "payment_failed",
+                message: "Order canceled but payment operation failed - manual intervention required",
+                voidFailed: true,
+            });
+        }
+    }
+);
+
+/**
+ * Story 3.5: Unified Order Cancellation Workflow
+ *
+ * This workflow implements:
+ * - Grace Period Cancellation (within modification window): Void authorization
+ * - Post-Grace Cancellation (after modification window): Refund captured payment
+ * - Fulfillment check: Reject if order shipped
+ * - Compensation: Re-add capture job if cancellation fails after job removal
+ *
+ * Note: The modification window duration is configured via PAYMENT_CAPTURE_DELAY_MS
+ *
+ * Flow:
+ * 1. Check fulfillment status (reject if shipped) - Story 3.5 AC3
+ * 2. Remove capture job from queue (with compensation on failure) - Story 3.4
+ * 3. Validate order state (PAY-01)
+ * 4. Cancel order in Medusa
+ * 5. Process payment:
+ *    - Within modification window: Void authorization
+ *    - After modification window: Issue refund
+ * 6. Restock inventory
+ * 7. Emit order.canceled event
  */
 export const cancelOrderWithRefundWorkflow = createWorkflow(
     "cancel-order-with-refund",
     (input: CancelOrderWithRefundInput) => {
+        // Step 1 (Story 3.5 AC3): Check fulfillment status first
+        // Reject if order has been shipped
+        const fulfillmentInput = transform({ input }, (data) => ({
+            orderId: data.input.orderId,
+        }));
+        checkFulfillmentStatusStep(fulfillmentInput);
+
         // Step 2 (AC): Queue Stop - Attempt to remove capture job
+        // Story 3.5 AC4: Compensation will re-add job if later steps fail
         const removeJobInput = transform({ input }, (data) => ({
             orderId: data.input.orderId,
         }));
-        removeCaptureJobStep(removeJobInput);
+        const removeJobResult = removeCaptureJobStep(removeJobInput);
 
         // Step 3 (AC): DB Lock - Validate order state before proceeding
+        // Story 3.5: Modified to allow captured payments (for refund path)
         const lockInput = transform({ input }, (data) => ({
             orderId: data.input.orderId,
             paymentIntentId: data.input.paymentIntentId,
+            isWithinGracePeriod: data.input.isWithinGracePeriod,
         }));
         lockOrderStep(lockInput);
 
@@ -540,14 +857,19 @@ export const cancelOrderWithRefundWorkflow = createWorkflow(
         }));
         cancelMedusaOrderStep(cancelInput);
 
-        // Post-Commit Action 1: Void Payment (with zombie compensation)
-        const voidInput = transform({ input }, (data) => ({
+        // Step 5: Process payment based on grace period status
+        // Story 3.5: Branching logic - void vs refund
+        const paymentInput = transform({ input }, (data) => ({
             paymentIntentId: data.input.paymentIntentId,
             orderId: data.input.orderId,
+            isWithinGracePeriod: data.input.isWithinGracePeriod,
         }));
-        const paymentResult = voidPaymentWithCompensationStep(voidInput);
 
-        // Post-Commit Action 2: Prepare inventory restocking
+        // Use void step for grace period, refund step for post-grace
+        // Note: Due to Medusa workflow limitations, we use a unified step that checks internally
+        const paymentResult = voidOrRefundPaymentStep(paymentInput);
+
+        // Step 6: Prepare inventory restocking
         const restockInput = transform({ input }, (data) => ({
             orderId: data.input.orderId,
         }));
@@ -567,7 +889,7 @@ export const cancelOrderWithRefundWorkflow = createWorkflow(
 
         updateInventoryLevelsStep(adjustedInventory);
 
-        // Emit order.canceled event
+        // Step 7: Emit order.canceled event
         const eventData = transform({ input }, (data) => ({
             eventName: "order.canceled" as const,
             data: {
@@ -577,14 +899,14 @@ export const cancelOrderWithRefundWorkflow = createWorkflow(
         }));
         emitEventStep(eventData);
 
-        // Return result with Story 3.4 response schema
+        // Return result with Story 3.5 response schema
         const result = transform({ input, paymentResult, shouldRestock }, (data) => ({
             order_id: data.input.orderId,
             status: "canceled" as const,
-            payment_action: data.paymentResult.action === "voided" ? "voided" : 
-                           data.paymentResult.voidFailed ? "void_failed" : "none",
+            payment_action: data.paymentResult.action,
             inventoryRestocked: data.shouldRestock,
             voidFailed: data.paymentResult.voidFailed || false,
+            ...(data.paymentResult.refundId && { refund_id: data.paymentResult.refundId }),
         }));
 
         return new WorkflowResponse(result);

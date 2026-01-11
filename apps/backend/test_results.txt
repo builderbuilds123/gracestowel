@@ -1,0 +1,524 @@
+
+ RUN  v2.1.9 /Users/leonliang/Github Repo/gracestowel/apps/backend
+
+ ✓ integration-tests/unit/stripe-event-queue.unit.spec.ts (18 tests) 387ms
+stdout | Console.mockCall (file:/Users/leonliang/Github%20Repo/gracestowel/node_modules/.pnpm/@vitest+spy@2.1.9/node_modules/@vitest/spy/dist/index.js:61:17)
+[StripeEventQueue] Shutting down worker...
+[StripeEventQueue] Shutting down worker...
+
+stdout | integration-tests/unit/by-payment-intent-endpoint.unit.spec.ts > GET /store/orders/by-payment-intent - SEC-02 Security Tests > SEC-02-AC1: PII Protection > should NOT return shipping_address in response
+{"timestamp":"2026-01-11T17:43:24.178Z","level":"info","component":"by-payment-intent","message":"Order found via metadata","orderId":"order_123","status":"pending","paymentIntentId":"pi_1234567..."}
+
+stderr | integration-tests/unit/by-payment-intent-endpoint.unit.spec.ts > GET /store/orders/by-payment-intent - SEC-02 Security Tests > SEC-02-AC1: PII Protection > should NOT return shipping_address in response
+{"timestamp":"2026-01-11T17:43:24.175Z","level":"warn","component":"by-payment-intent","message":"Payment module lookup failed","error":"Unknown service: payment"}
+[PostHog] API key not configured. Server-side tracking disabled.
+
+stdout | integration-tests/unit/by-payment-intent-endpoint.unit.spec.ts > GET /store/orders/by-payment-intent - SEC-02 Security Tests > SEC-02-AC1: PII Protection > should NOT return customer details in response
+{"timestamp":"2026-01-11T17:43:24.184Z","level":"info","component":"by-payment-intent","message":"Order found via metadata","orderId":"order_456","status":"completed","paymentIntentId":"pi_2345678..."}
+
+stderr | integration-tests/unit/by-payment-intent-endpoint.unit.spec.ts > GET /store/orders/by-payment-intent - SEC-02 Security Tests > SEC-02-AC1: PII Protection > should NOT return customer details in response
+{"timestamp":"2026-01-11T17:43:24.183Z","level":"warn","component":"by-payment-intent","message":"Payment module lookup failed","error":"Unknown service: payment"}
+[PostHog] API key not configured. Server-side tracking disabled.
+
+stdout | integration-tests/unit/by-payment-intent-endpoint.unit.spec.ts > GET /store/orders/by-payment-intent - SEC-02 Security Tests > SEC-02-AC1: PII Protection > should NOT return line items details
+{"timestamp":"2026-01-11T17:43:24.184Z","level":"info","component":"by-payment-intent","message":"Order found via metadata","orderId":"order_789","status":"pending","paymentIntentId":"pi_3456789..."}
+
+stderr | integration-tests/unit/by-payment-intent-endpoint.unit.spec.ts > GET /store/orders/by-payment-intent - SEC-02 Security Tests > SEC-02-AC1: PII Protection > should NOT return line items details
+{"timestamp":"2026-01-11T17:43:24.184Z","level":"warn","component":"by-payment-intent","message":"Payment module lookup failed","error":"Unknown service: payment"}
+[PostHog] API key not configured. Server-side tracking disabled.
+
+stdout | integration-tests/unit/by-payment-intent-endpoint.unit.spec.ts > GET /store/orders/by-payment-intent - SEC-02 Security Tests > SEC-02-AC2: Security Headers > should set Cache-Control: no-store, private header
+{"timestamp":"2026-01-11T17:43:24.185Z","level":"info","component":"by-payment-intent","message":"Order found via metadata","orderId":"order_123","status":"pending","paymentIntentId":"pi_1234567..."}
+
+stderr | integration-tests/unit/by-payment-intent-endpoint.unit.spec.ts > GET /store/orders/by-payment-intent - SEC-02 Security Tests > SEC-02-AC2: Security Headers > should set Cache-Control: no-store, private header
+{"timestamp":"2026-01-11T17:43:24.185Z","level":"warn","component":"by-payment-intent","message":"Payment module lookup failed","error":"Unknown service: payment"}
+[PostHog] API key not configured. Server-side tracking disabled.
+
+stdout | integration-tests/unit/by-payment-intent-endpoint.unit.spec.ts > GET /store/orders/by-payment-intent - SEC-02 Security Tests > SEC-02-AC2: Security Headers > should set X-Content-Type-Options: nosniff header
+{"timestamp":"2026-01-11T17:43:24.187Z","level":"info","component":"by-payment-intent","message":"Order found via metadata","orderId":"order_123","status":"pending","paymentIntentId":"pi_1234567..."}
+
+stderr | integration-tests/unit/by-payment-intent-endpoint.unit.spec.ts > GET /store/orders/by-payment-intent - SEC-02 Security Tests > SEC-02-AC2: Security Headers > should set X-Content-Type-Options: nosniff header
+{"timestamp":"2026-01-11T17:43:24.186Z","level":"warn","component":"by-payment-intent","message":"Payment module lookup failed","error":"Unknown service: payment"}
+[PostHog] API key not configured. Server-side tracking disabled.
+
+stderr | integration-tests/unit/by-payment-intent-endpoint.unit.spec.ts > GET /store/orders/by-payment-intent - SEC-02 Security Tests > SEC-02-AC2: Security Headers > should set security headers even on error responses
+{"timestamp":"2026-01-11T17:43:24.218Z","level":"warn","component":"by-payment-intent","message":"Payment module lookup failed","error":"Unknown service: payment"}
+[PostHog] API key not configured. Server-side tracking disabled.
+{"timestamp":"2026-01-11T17:43:24.219Z","level":"error","component":"by-payment-intent","message":"Failed to fetch order by payment intent","paymentIntentId":"pi_123456789012345678901234","errorName":"Error","errorMessage":"Database error","error":{"name":"Error","message":"Database error","stack":"Error: Database error\n    at /Users/leonliang/Github Repo/gracestowel/apps/backend/integration-tests/unit/by-payment-intent-endpoint.unit.spec.ts:159:41\n    at file:///Users/leonliang/Github%20Repo/gracestowel/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:146:14\n    at file:///Users/leonliang/Github%20Repo/gracestowel/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:533:11\n    at runWithTimeout (file:///Users/leonliang/Github%20Repo/gracestowel/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:39:7)"}}
+[PostHog] API key not configured. Server-side tracking disabled.
+
+stdout | integration-tests/unit/by-payment-intent-endpoint.unit.spec.ts > GET /store/orders/by-payment-intent - SEC-02 Security Tests > SEC-02-AC3: Query Optimization > should only fetch minimal fields (id, status, created_at, metadata)
+{"timestamp":"2026-01-11T17:43:24.349Z","level":"info","component":"by-payment-intent","message":"Order lookup by payment intent - not found","paymentIntentId":"pi_1234567...","found":false}
+
+stderr | integration-tests/unit/by-payment-intent-endpoint.unit.spec.ts > GET /store/orders/by-payment-intent - SEC-02 Security Tests > SEC-02-AC3: Query Optimization > should only fetch minimal fields (id, status, created_at, metadata)
+{"timestamp":"2026-01-11T17:43:24.349Z","level":"warn","component":"by-payment-intent","message":"Payment module lookup failed","error":"Unknown service: payment"}
+[PostHog] API key not configured. Server-side tracking disabled.
+
+stdout | integration-tests/unit/by-payment-intent-endpoint.unit.spec.ts > GET /store/orders/by-payment-intent - SEC-02 Security Tests > SEC-02-AC3: Query Optimization > should filter to orders within last 24 hours
+{"timestamp":"2026-01-11T17:43:24.351Z","level":"info","component":"by-payment-intent","message":"Order found via metadata","orderId":"recent_order","status":"pending","paymentIntentId":"pi_1234567..."}
+
+stderr | integration-tests/unit/by-payment-intent-endpoint.unit.spec.ts > GET /store/orders/by-payment-intent - SEC-02 Security Tests > SEC-02-AC3: Query Optimization > should filter to orders within last 24 hours
+{"timestamp":"2026-01-11T17:43:24.351Z","level":"warn","component":"by-payment-intent","message":"Payment module lookup failed","error":"Unknown service: payment"}
+[PostHog] API key not configured. Server-side tracking disabled.
+
+stdout | integration-tests/unit/by-payment-intent-endpoint.unit.spec.ts > GET /store/orders/by-payment-intent - SEC-02 Security Tests > SEC-02-AC3: Query Optimization > should return 404 if only old orders exist (>24h)
+{"timestamp":"2026-01-11T17:43:24.352Z","level":"info","component":"by-payment-intent","message":"Order lookup by payment intent - not found","paymentIntentId":"pi_4567890...","found":false}
+
+stderr | integration-tests/unit/by-payment-intent-endpoint.unit.spec.ts > GET /store/orders/by-payment-intent - SEC-02 Security Tests > SEC-02-AC3: Query Optimization > should return 404 if only old orders exist (>24h)
+{"timestamp":"2026-01-11T17:43:24.352Z","level":"warn","component":"by-payment-intent","message":"Payment module lookup failed","error":"Unknown service: payment"}
+[PostHog] API key not configured. Server-side tracking disabled.
+
+stderr | integration-tests/unit/by-payment-intent-endpoint.unit.spec.ts > GET /store/orders/by-payment-intent - SEC-02 Security Tests > Error Handling > should return 400 if payment_intent_id has invalid format
+{"timestamp":"2026-01-11T17:43:24.353Z","level":"warn","component":"by-payment-intent","message":"Invalid payment_intent_id format","paymentIntentId":"invalid_fo...","length":14}
+[PostHog] API key not configured. Server-side tracking disabled.
+
+stderr | integration-tests/unit/by-payment-intent-endpoint.unit.spec.ts > GET /store/orders/by-payment-intent - SEC-02 Security Tests > Error Handling > should return 400 if payment_intent_id is too short
+{"timestamp":"2026-01-11T17:43:24.353Z","level":"warn","component":"by-payment-intent","message":"Invalid payment_intent_id format","paymentIntentId":"pi_123...","length":6}
+[PostHog] API key not configured. Server-side tracking disabled.
+
+stderr | integration-tests/unit/by-payment-intent-endpoint.unit.spec.ts > GET /store/orders/by-payment-intent - SEC-02 Security Tests > Error Handling > should return 400 if payment_intent_id doesn't start with pi_
+{"timestamp":"2026-01-11T17:43:24.354Z","level":"warn","component":"by-payment-intent","message":"Invalid payment_intent_id format","paymentIntentId":"pm_1234567...","length":27}
+[PostHog] API key not configured. Server-side tracking disabled.
+
+stdout | integration-tests/unit/by-payment-intent-endpoint.unit.spec.ts > GET /store/orders/by-payment-intent - SEC-02 Security Tests > Error Handling > should return 404 if no matching order found
+{"timestamp":"2026-01-11T17:43:24.354Z","level":"info","component":"by-payment-intent","message":"Order lookup by payment intent - not found","paymentIntentId":"pi_5678901...","found":false}
+
+stderr | integration-tests/unit/by-payment-intent-endpoint.unit.spec.ts > GET /store/orders/by-payment-intent - SEC-02 Security Tests > Error Handling > should return 404 if no matching order found
+{"timestamp":"2026-01-11T17:43:24.354Z","level":"warn","component":"by-payment-intent","message":"Payment module lookup failed","error":"Unknown service: payment"}
+[PostHog] API key not configured. Server-side tracking disabled.
+
+stderr | integration-tests/unit/by-payment-intent-endpoint.unit.spec.ts > GET /store/orders/by-payment-intent - SEC-02 Security Tests > Error Handling > should return 500 on database error
+{"timestamp":"2026-01-11T17:43:24.370Z","level":"warn","component":"by-payment-intent","message":"Payment module lookup failed","error":"Unknown service: payment"}
+[PostHog] API key not configured. Server-side tracking disabled.
+{"timestamp":"2026-01-11T17:43:24.371Z","level":"error","component":"by-payment-intent","message":"Failed to fetch order by payment intent","paymentIntentId":"pi_123456789012345678901234","errorName":"Error","errorMessage":"Database connection failed","error":{"name":"Error","message":"Database connection failed","stack":"Error: Database connection failed\n    at /Users/leonliang/Github Repo/gracestowel/apps/backend/integration-tests/unit/by-payment-intent-endpoint.unit.spec.ts:315:41\n    at file:///Users/leonliang/Github%20Repo/gracestowel/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:146:14\n    at file:///Users/leonliang/Github%20Repo/gracestowel/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:533:11\n    at runWithTimeout (file:///Users/leonliang/Github%20Repo/gracestowel/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:39:7)"}}
+[PostHog] API key not configured. Server-side tracking disabled.
+
+stdout | integration-tests/unit/by-payment-intent-endpoint.unit.spec.ts > GET /store/orders/by-payment-intent - SEC-02 Security Tests > Performance Tests > should handle multiple orders efficiently (filters in memory)
+{"timestamp":"2026-01-11T17:43:24.380Z","level":"info","component":"by-payment-intent","message":"Order found via metadata","orderId":"order_50","status":"pending","paymentIntentId":"pi_1234567..."}
+
+stderr | integration-tests/unit/by-payment-intent-endpoint.unit.spec.ts > GET /store/orders/by-payment-intent - SEC-02 Security Tests > Performance Tests > should handle multiple orders efficiently (filters in memory)
+{"timestamp":"2026-01-11T17:43:24.380Z","level":"warn","component":"by-payment-intent","message":"Payment module lookup failed","error":"Unknown service: payment"}
+[PostHog] API key not configured. Server-side tracking disabled.
+
+ ✓ integration-tests/unit/by-payment-intent-endpoint.unit.spec.ts (16 tests) 211ms
+ ✓ integration-tests/unit/fallback-capture.unit.spec.ts (11 tests) 6442ms
+   ✓ fallback-capture > should skip orders with already captured payments 5580ms
+(node:77593) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 SIGTERM listeners added to [process]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:77593) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 SIGINT listeners added to [process]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
+ ✓ integration-tests/unit/payment-capture-queue.unit.spec.ts (18 tests) 7099ms
+   ✓ payment-capture-queue > fetchOrderTotal (Story 2.3) > should throw error if container is not initialized 5769ms
+stdout | process.shutdownHandler (/Users/leonliang/Github Repo/gracestowel/apps/backend/src/workers/payment-capture-worker.ts:906:21)
+[PaymentCapture] Shutting down worker...
+[PaymentCapture] Shutting down worker...
+[PaymentCapture] Shutting down worker...
+[PaymentCapture] Shutting down worker...
+[PaymentCapture] Shutting down worker...
+[PaymentCapture] Shutting down worker...
+[PaymentCapture] Shutting down worker...
+[PaymentCapture] Shutting down worker...
+[PaymentCapture] Shutting down worker...
+[PaymentCapture] Shutting down worker...
+[PaymentCapture] Shutting down worker...
+[PaymentCapture] Shutting down worker...
+[PaymentCapture] Shutting down worker...
+[PaymentCapture] Shutting down worker...
+[PaymentCapture] Shutting down worker...
+[PaymentCapture] Shutting down worker...
+
+ ✓ integration-tests/unit/charge-refunded-webhook.unit.spec.ts (13 tests) 199ms
+stdout | integration-tests/unit/email-worker.unit.spec.ts > Email Worker > Core Functionality (Story 1.2) > processes job and calls Resend service
+[EMAIL] Email worker started
+
+stdout | integration-tests/unit/email-worker.unit.spec.ts > Email Worker > Core Functionality (Story 1.2) > logs success with masked email
+[EMAIL] Email worker started
+
+stdout | integration-tests/unit/email-worker.unit.spec.ts > Email Worker > Core Functionality (Story 1.2) > logs failure and throws on Resend error
+[EMAIL] Email worker started
+
+stdout | integration-tests/unit/email-worker.unit.spec.ts > Email Worker > Retry Logic (Story 2.1) > logs retry attempt when attemptsMade > 0
+[EMAIL] Email worker started
+
+stdout | integration-tests/unit/email-worker.unit.spec.ts > Email Worker > Failure Alerting (Story 4.3) > logs alert when job moves to DLQ via 'failed' event
+[EMAIL] Email worker started
+
+stdout | integration-tests/unit/email-worker.unit.spec.ts > Email Worker > Failure Alerting (Story 4.3) > alert log is parseable
+[EMAIL] Email worker started
+
+stdout | integration-tests/unit/email-worker.unit.spec.ts > Email Worker > Failure Alerting (Story 4.3) > logs alert when invalid email moves directly to DLQ
+[EMAIL] Email worker started
+
+stdout | integration-tests/unit/email-worker.unit.spec.ts > Email Worker > DLQ Storage (Story 2.2) > stores correct DLQ entry format with masked email
+[EMAIL] Email worker started
+
+stdout | integration-tests/unit/email-worker.unit.spec.ts > Email Worker > Invalid Email Handling (Story 2.3) > moves invalid email directly to DLQ without throwing
+[EMAIL] Email worker started
+
+ ❯ integration-tests/unit/email-worker.unit.spec.ts (12 tests | 6 failed) 994ms
+   × Email Worker > Core Functionality (Story 1.2) > processes job and calls Resend service 320ms
+     → Cannot read properties of null (reading 'createNotifications')
+   × Email Worker > Core Functionality (Story 1.2) > logs success with masked email 48ms
+     → Cannot read properties of null (reading 'createNotifications')
+   × Email Worker > Core Functionality (Story 1.2) > logs failure and throws on Resend error 116ms
+     → expected [Function] to throw error including 'Resend Error' but got 'Cannot read properties of null (readi…'
+   × Email Worker > Retry Logic (Story 2.1) > logs retry attempt when attemptsMade > 0 94ms
+     → Cannot read properties of null (reading 'createNotifications')
+   × Email Worker > Failure Alerting (Story 4.3) > logs alert when invalid email moves directly to DLQ 56ms
+     → Cannot read properties of null (reading 'createNotifications')
+   × Email Worker > Invalid Email Handling (Story 2.3) > moves invalid email directly to DLQ without throwing 58ms
+     → promise rejected "TypeError: Cannot read properties of null…" instead of resolving
+stdout | process.shutdownHandler (/Users/leonliang/Github Repo/gracestowel/apps/backend/src/workers/email-worker.ts:229:19)
+[EMAIL] Shutting down email worker...
+[EMAIL] Shutting down email worker...
+[EMAIL] Shutting down email worker...
+[EMAIL] Shutting down email worker...
+[EMAIL] Shutting down email worker...
+[EMAIL] Shutting down email worker...
+[EMAIL] Shutting down email worker...
+[EMAIL] Shutting down email worker...
+[EMAIL] Shutting down email worker...
+
+ ✓ integration-tests/unit/cancel-order-workflow.unit.spec.ts (34 tests) 119ms
+ ✓ integration-tests/unit/update-line-item-quantity.unit.spec.ts (22 tests | 1 skipped) 77ms
+ ✓ integration-tests/unit/add-item-to-order.unit.spec.ts (39 tests) 119ms
+ ❯ integration-tests/unit/race-condition-handling.unit.spec.ts (9 tests | 1 failed) 12139ms
+   × Story 6.3: Race Condition Handling > Timing Buffer (Task 1 - 59:30) > should use calculateCaptureDelayMs for default calculation 11278ms
+     → Hook timed out in 10000ms.
+If this is a long-running hook, pass a timeout value as the last argument or configure it globally with "hookTimeout".
+   ✓ Story 6.3: Race Condition Handling > Task 1: Optimistic Locking / State Management (AC 1, 3, 8) > should set edit_status to locked_for_capture before capture attempt (AC 1, 3) 644ms
+stdout | process.shutdownHandler (/Users/leonliang/Github Repo/gracestowel/apps/backend/src/workers/payment-capture-worker.ts:906:21)
+[PaymentCapture] Shutting down worker...
+
+ ✓ integration-tests/unit/guest-view.unit.spec.ts (12 tests) 61ms
+ ✓ integration-tests/unit/modification-token.unit.spec.ts (21 tests) 241ms
+ ❯ integration-tests/unit/increment-fallback-flow.unit.spec.ts (18 tests | 2 failed) 11615ms
+   × Story 6.4: Increment Fallback Flow > Task 1: Error Handling - Decline Code Mapping (AC 1-4) > should map insufficient_funds to user-friendly message 5177ms
+     → Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+   × Story 6.4: Increment Fallback Flow > Task 1: Error Handling - Decline Code Mapping (AC 1-4) > should map card_declined to user-friendly message 6139ms
+     → Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+stdout | integration-tests/unit/posthog-error-tracking.unit.spec.ts > Backend Error Tracking (Story 4.4) > captureBackendError > should capture backend_error event with error details (AC1)
+{"timestamp":"2026-01-11T17:43:38.398Z","level":"info","component":"posthog","message":"Server-side tracking initialized"}
+
+stdout | integration-tests/unit/posthog-error-tracking.unit.spec.ts > Backend Error Tracking (Story 4.4) > captureBackendError > should include stack trace (AC1)
+{"timestamp":"2026-01-11T17:43:38.503Z","level":"info","component":"posthog","message":"Server-side tracking initialized"}
+
+stdout | integration-tests/unit/posthog-error-tracking.unit.spec.ts > Backend Error Tracking (Story 4.4) > captureBackendError > should use userId as distinctId when provided
+{"timestamp":"2026-01-11T17:43:38.665Z","level":"info","component":"posthog","message":"Server-side tracking initialized"}
+
+stdout | integration-tests/unit/posthog-error-tracking.unit.spec.ts > Backend Error Tracking (Story 4.4) > captureBackendError > should use "system" as distinctId when no userId provided
+{"timestamp":"2026-01-11T17:43:38.820Z","level":"info","component":"posthog","message":"Server-side tracking initialized"}
+
+ ✓ integration-tests/unit/health-check.unit.spec.ts (8 tests) 724ms
+stdout | integration-tests/unit/posthog-error-tracking.unit.spec.ts > Backend Error Tracking (Story 4.4) > captureBackendError > should include business context (orderId, paymentIntentId)
+{"timestamp":"2026-01-11T17:43:38.995Z","level":"info","component":"posthog","message":"Server-side tracking initialized"}
+
+stdout | integration-tests/unit/posthog-error-tracking.unit.spec.ts > Backend Error Tracking (Story 4.4) > captureBackendError > should include environment and timestamp
+{"timestamp":"2026-01-11T17:43:39.049Z","level":"info","component":"posthog","message":"Server-side tracking initialized"}
+
+stdout | integration-tests/unit/posthog-error-tracking.unit.spec.ts > Backend Error Tracking (Story 4.4) > captureBusinessEvent > should capture custom business events (AC2)
+{"timestamp":"2026-01-11T17:43:39.296Z","level":"info","component":"posthog","message":"Server-side tracking initialized"}
+
+stdout | integration-tests/unit/posthog-error-tracking.unit.spec.ts > Backend Error Tracking (Story 4.4) > captureBusinessEvent > should use custom distinctId when provided
+{"timestamp":"2026-01-11T17:43:39.368Z","level":"info","component":"posthog","message":"Server-side tracking initialized"}
+
+ ✓ integration-tests/unit/posthog-error-tracking.unit.spec.ts (8 tests) 1100ms
+stdout | integration-tests/unit/posthog.unit.spec.ts > PostHog Utility (Story 2.1 - AC1) > initPostHog > should initialize PostHog client with API key and host
+{"timestamp":"2026-01-11T17:43:40.130Z","level":"info","component":"posthog","message":"Server-side tracking initialized"}
+
+stdout | integration-tests/unit/posthog.unit.spec.ts > PostHog Utility (Story 2.1 - AC1) > initPostHog > should use default host when POSTHOG_HOST not set
+{"timestamp":"2026-01-11T17:43:40.140Z","level":"info","component":"posthog","message":"Server-side tracking initialized"}
+
+stderr | integration-tests/unit/posthog.unit.spec.ts > PostHog Utility (Story 2.1 - AC1) > initPostHog > should return null and warn when API key not configured
+[PostHog] API key not configured. Server-side tracking disabled.
+
+stdout | integration-tests/unit/posthog.unit.spec.ts > PostHog Utility (Story 2.1 - AC1) > initPostHog > should return singleton instance on subsequent calls
+{"timestamp":"2026-01-11T17:43:40.156Z","level":"info","component":"posthog","message":"Server-side tracking initialized"}
+
+stderr | integration-tests/unit/webhooks/stripe/route.unit.spec.ts > Stripe Webhook POST - Story 6.1 > Signature Verification (AC 1-4) > should return 500 if STRIPE_WEBHOOK_SECRET is missing
+{"timestamp":"2026-01-11T17:43:40.193Z","level":"warn","component":"stripe-worker","message":"REDIS_URL not configured - worker not started"}
+[PostHog] API key not configured. Server-side tracking disabled.
+[PostHog] API key not configured. Server-side tracking disabled.
+
+stderr | integration-tests/unit/webhooks/stripe/route.unit.spec.ts > Stripe Webhook POST - Story 6.1 > Signature Verification (AC 1-4) > should return 400 if stripe-signature header is missing
+{"timestamp":"2026-01-11T17:43:40.199Z","level":"warn","component":"stripe-worker","message":"REDIS_URL not configured - worker not started"}
+[PostHog] API key not configured. Server-side tracking disabled.
+[PostHog] API key not configured. Server-side tracking disabled.
+
+stderr | integration-tests/unit/webhooks/stripe/route.unit.spec.ts > Stripe Webhook POST - Story 6.1 > Signature Verification (AC 1-4) > should return 400 if signature verification fails
+{"timestamp":"2026-01-11T17:43:40.201Z","level":"warn","component":"stripe-worker","message":"REDIS_URL not configured - worker not started"}
+[PostHog] API key not configured. Server-side tracking disabled.
+[PostHog] API key not configured. Server-side tracking disabled.
+
+stderr | integration-tests/unit/webhooks/stripe/route.unit.spec.ts > Stripe Webhook POST - Story 6.1 > Signature Verification (AC 1-4) > should verify signature using constructEvent with raw body
+{"timestamp":"2026-01-11T17:43:40.221Z","level":"warn","component":"stripe-worker","message":"REDIS_URL not configured - worker not started"}
+[PostHog] API key not configured. Server-side tracking disabled.
+
+stderr | integration-tests/unit/webhooks/stripe/route.unit.spec.ts > Stripe Webhook POST - Story 6.1 > Signature Verification (AC 1-4) > should verify signature using constructEvent with raw body
+[PostHog] API key not configured. Server-side tracking disabled.
+[PostHog] API key not configured. Server-side tracking disabled.
+[PostHog] API key not configured. Server-side tracking disabled.
+
+stdout | integration-tests/unit/posthog.unit.spec.ts > PostHog Utility (Story 2.1 - AC1) > initPostHog > should configure flushAt:1 for serverless/Railway environment
+{"timestamp":"2026-01-11T17:43:40.262Z","level":"info","component":"posthog","message":"Server-side tracking initialized"}
+
+stderr | integration-tests/unit/webhooks/stripe/route.unit.spec.ts > Stripe Webhook POST - Story 6.1 > Signature Verification (AC 1-4) > should return 400 for malformed JSON body (poison message)
+{"timestamp":"2026-01-11T17:43:40.261Z","level":"warn","component":"stripe-worker","message":"REDIS_URL not configured - worker not started"}
+[PostHog] API key not configured. Server-side tracking disabled.
+[PostHog] API key not configured. Server-side tracking disabled.
+
+stdout | integration-tests/unit/posthog.unit.spec.ts > PostHog Utility (Story 2.1 - AC1) > getPostHog > should return existing client if initialized
+{"timestamp":"2026-01-11T17:43:40.356Z","level":"info","component":"posthog","message":"Server-side tracking initialized"}
+
+stderr | integration-tests/unit/webhooks/stripe/route.unit.spec.ts > Stripe Webhook POST - Story 6.1 > Event Queueing (AC 5-7) > should queue valid events for async processing
+{"timestamp":"2026-01-11T17:43:40.308Z","level":"warn","component":"stripe-worker","message":"REDIS_URL not configured - worker not started"}
+[PostHog] API key not configured. Server-side tracking disabled.
+[PostHog] API key not configured. Server-side tracking disabled.
+[PostHog] API key not configured. Server-side tracking disabled.
+[PostHog] API key not configured. Server-side tracking disabled.
+
+stderr | integration-tests/unit/webhooks/stripe/route.unit.spec.ts > Stripe Webhook POST - Story 6.1 > Event Queueing (AC 5-7) > should return 500 if queueing fails to trigger Stripe retry (AC5-6)
+{"timestamp":"2026-01-11T17:43:40.369Z","level":"warn","component":"stripe-worker","message":"REDIS_URL not configured - worker not started"}
+[PostHog] API key not configured. Server-side tracking disabled.
+[PostHog] API key not configured. Server-side tracking disabled.
+[PostHog] API key not configured. Server-side tracking disabled.
+
+stderr | integration-tests/unit/webhooks/stripe/route.unit.spec.ts > Stripe Webhook POST - Story 6.1 > Event Queueing (AC 5-7) > should return 200 if job already exists (Stripe retry while pending)
+{"timestamp":"2026-01-11T17:43:40.390Z","level":"warn","component":"stripe-worker","message":"REDIS_URL not configured - worker not started"}
+[PostHog] API key not configured. Server-side tracking disabled.
+[PostHog] API key not configured. Server-side tracking disabled.
+[PostHog] API key not configured. Server-side tracking disabled.
+
+stderr | integration-tests/unit/webhooks/stripe/route.unit.spec.ts > Stripe Webhook POST - Story 6.1 > Event Queueing (AC 5-7) > should return 200 immediately without waiting for processing
+{"timestamp":"2026-01-11T17:43:40.399Z","level":"warn","component":"stripe-worker","message":"REDIS_URL not configured - worker not started"}
+[PostHog] API key not configured. Server-side tracking disabled.
+[PostHog] API key not configured. Server-side tracking disabled.
+[PostHog] API key not configured. Server-side tracking disabled.
+[PostHog] API key not configured. Server-side tracking disabled.
+
+stderr | integration-tests/unit/webhooks/stripe/route.unit.spec.ts > Stripe Webhook POST - Story 6.1 > Idempotency (AC 8) > should return 200 with duplicate flag for already processed events
+{"timestamp":"2026-01-11T17:43:40.427Z","level":"warn","component":"stripe-worker","message":"REDIS_URL not configured - worker not started"}
+[PostHog] API key not configured. Server-side tracking disabled.
+
+stdout | integration-tests/unit/posthog.unit.spec.ts > PostHog Utility (Story 2.1 - AC1) > getPostHog > should initialize client on first call if not initialized
+{"timestamp":"2026-01-11T17:43:40.428Z","level":"info","component":"posthog","message":"Server-side tracking initialized"}
+
+stdout | integration-tests/unit/posthog.unit.spec.ts > PostHog Utility (Story 2.1 - AC1) > shutdownPostHog > should call shutdown on client and clear singleton
+{"timestamp":"2026-01-11T17:43:40.473Z","level":"info","component":"posthog","message":"Server-side tracking initialized"}
+{"timestamp":"2026-01-11T17:43:40.473Z","level":"info","component":"posthog","message":"Client shutdown"}
+{"timestamp":"2026-01-11T17:43:40.473Z","level":"info","component":"posthog","message":"Server-side tracking initialized"}
+
+ ✓ integration-tests/unit/posthog.unit.spec.ts (9 tests) 365ms
+stderr | integration-tests/unit/webhooks/stripe/route.unit.spec.ts > Stripe Webhook POST - Story 6.1 > Idempotency (AC 8) > should return 200 with duplicate flag for already processed events
+[PostHog] API key not configured. Server-side tracking disabled.
+[PostHog] API key not configured. Server-side tracking disabled.
+
+stderr | integration-tests/unit/webhooks/stripe/route.unit.spec.ts > Stripe Webhook POST - Story 6.1 > Idempotency (AC 8) > should check idempotency before queueing
+{"timestamp":"2026-01-11T17:43:40.511Z","level":"warn","component":"stripe-worker","message":"REDIS_URL not configured - worker not started"}
+[PostHog] API key not configured. Server-side tracking disabled.
+[PostHog] API key not configured. Server-side tracking disabled.
+[PostHog] API key not configured. Server-side tracking disabled.
+[PostHog] API key not configured. Server-side tracking disabled.
+
+stderr | integration-tests/unit/webhooks/stripe/route.unit.spec.ts > Stripe Webhook POST - Story 6.1 > Idempotency (AC 8) > should handle null job return (already queued)
+{"timestamp":"2026-01-11T17:43:40.513Z","level":"warn","component":"stripe-worker","message":"REDIS_URL not configured - worker not started"}
+[PostHog] API key not configured. Server-side tracking disabled.
+[PostHog] API key not configured. Server-side tracking disabled.
+[PostHog] API key not configured. Server-side tracking disabled.
+[PostHog] API key not configured. Server-side tracking disabled.
+
+ ✓ integration-tests/unit/webhooks/stripe/route.unit.spec.ts (12 tests) 362ms
+ ✓ integration-tests/unit/payment-capture-config.unit.spec.ts (9 tests) 339ms
+ ✓ integration-tests/unit/payment-capture-worker.unit.spec.ts (8 tests) 10ms
+ ✓ integration-tests/unit/email-queue.unit.spec.ts (3 tests) 7ms
+ ✓ integration-tests/unit/cancel-order-api.unit.spec.ts (3 tests) 9ms
+ ✓ integration-tests/unit/atomic-inventory.unit.spec.ts (11 tests) 15ms
+ ✓ integration-tests/unit/email-masking.unit.spec.ts (9 tests) 8ms
+ ❯ integration-tests/unit/order-placed-email.unit.spec.tsx (3 tests | 2 failed) 261ms
+   × OrderPlacedEmail > renders with magic link for guests (modification token present) 179ms
+     → expected '<!DOCTYPE html PUBLIC "-//W3C//DTD XH…' to contain 'Modify Your Order'
+   × OrderPlacedEmail > renders with login message for registered users (no modification token) 56ms
+     → expected '<!DOCTYPE html PUBLIC "-//W3C//DTD XH…' to contain 'Log in to your account to view your o…'
+stderr | integration-tests/unit/add-item-to-order-line-items.unit.spec.ts > add-item-to-order workflow - Line Item & Inventory > Helper Functions > findNewlyCreatedItem > should log warning if logger provided and fallback triggered (no match)
+DEBUG: mockLogger.warn called with: findNewlyCreatedItem: No exact match found for variant. Returning default structure.
+
+stderr | integration-tests/unit/add-item-to-order-line-items.unit.spec.ts > add-item-to-order workflow - Line Item & Inventory > updateOrderValuesHandler - Duplicate Error Handling > should throw DuplicateLineItemError when createLineItems fails with duplicate message
+{"timestamp":"2026-01-11T17:43:46.718Z","level":"warn","component":"add-item-to-order","message":"Duplicate line item creation attempted","orderId":"ord_123","variantId":"var_123","quantity":1}
+[PostHog] API key not configured. Server-side tracking disabled.
+
+ ✓ integration-tests/unit/add-item-to-order-line-items.unit.spec.ts (11 tests) 56ms
+stderr | integration-tests/unit/order-placed-subscriber.unit.spec.ts > Order Placed Subscriber > generates magic link for guest orders with valid payment intent
+{"timestamp":"2026-01-11T17:43:46.908Z","level":"warn","component":"stripe-worker","message":"REDIS_URL not configured - worker not started"}
+
+stderr | integration-tests/unit/order-placed-subscriber.unit.spec.ts > Order Placed Subscriber > does NOT generate magic link for registered customers
+{"timestamp":"2026-01-11T17:43:46.914Z","level":"warn","component":"stripe-worker","message":"REDIS_URL not configured - worker not started"}
+
+stderr | integration-tests/unit/order-placed-subscriber.unit.spec.ts > Order Placed Subscriber > handles magic link generation failure gracefully and sanitizes PII
+{"timestamp":"2026-01-11T17:43:46.948Z","level":"warn","component":"stripe-worker","message":"REDIS_URL not configured - worker not started"}
+
+stderr | integration-tests/unit/order-placed-subscriber.unit.spec.ts > Order Placed Subscriber > skips magic link generation if payment intent ID is missing
+{"timestamp":"2026-01-11T17:43:46.951Z","level":"warn","component":"stripe-worker","message":"REDIS_URL not configured - worker not started"}
+
+stderr | integration-tests/unit/order-placed-subscriber.unit.spec.ts > Order Placed Subscriber > uses localhost fallback if STOREFRONT_URL is missing
+{"timestamp":"2026-01-11T17:43:46.953Z","level":"warn","component":"stripe-worker","message":"REDIS_URL not configured - worker not started"}
+
+stderr | integration-tests/unit/order-placed-subscriber.unit.spec.ts > Order Placed Subscriber > catches enqueueEmail errors and logs them without throwing
+{"timestamp":"2026-01-11T17:43:46.957Z","level":"warn","component":"stripe-worker","message":"REDIS_URL not configured - worker not started"}
+
+ ✓ integration-tests/unit/order-placed-subscriber.unit.spec.ts (6 tests) 105ms
+stdout | integration-tests/unit/modification-token-auth.unit.spec.ts > Modification Token Auth > API Consistency & Security > Address Update > should accept request when token is in header
+{"timestamp":"2026-01-11T17:43:47.293Z","level":"info","component":"order-address","message":"Address updated","orderId":"ord_123"}
+
+stderr | integration-tests/unit/modification-token-auth.unit.spec.ts > Modification Token Auth > API Consistency & Security > Update Line Item > should accept request when token is in header
+{"timestamp":"2026-01-11T17:43:47.674Z","level":"warn","component":"order-line-items-update","message":"Missing x-request-id header - using random UUID (not idempotent)","orderId":"ord_123","itemId":"itm_1","requestId":"2b42b5de-7df3-4ca9-9458-3c84a32da4db"}
+[PostHog] API key not configured. Server-side tracking disabled.
+
+stdout | integration-tests/unit/modification-token-auth.unit.spec.ts > Modification Token Auth > API Consistency & Security > Cancel Order > should accept request when token is in header
+[CancelOrder] Attempting to remove capture job for order ord_123
+
+stderr | integration-tests/unit/modification-token-auth.unit.spec.ts > Modification Token Auth > API Consistency & Security > Cancel Order > should accept request when token is in header
+[CancelOrder][ABORT] Redis error removing capture job for ord_123: RedisNotConfiguredError: REDIS_URL is not configured
+    at getRedisConnection (/Users/leonliang/Github Repo/gracestowel/apps/backend/src/lib/payment-capture-queue.ts:69:15)
+    at getPaymentCaptureQueue (/Users/leonliang/Github Repo/gracestowel/apps/backend/src/lib/payment-capture-queue.ts:88:28)
+    at Module.cancelPaymentCaptureJob (/Users/leonliang/Github Repo/gracestowel/apps/backend/src/lib/payment-capture-queue.ts:189:19)
+    at removeCaptureJobHandler (/Users/leonliang/Github Repo/gracestowel/apps/backend/src/workflows/cancel-order-with-refund.ts:111:27)
+    at Object.<anonymous> (/Users/leonliang/Github Repo/gracestowel/apps/backend/src/workflows/cancel-order-with-refund.ts:127:34)
+    at Object.invoke (/Users/leonliang/Github Repo/gracestowel/node_modules/.pnpm/@medusajs+workflows-sdk@2.12.3_@types+node@20.19.25_express@4.22.1/node_modules/@medusajs/workflows-sdk/src/utils/composer/helpers/create-step-handler.ts:91:67)
+    at processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at DistributedTransaction.handler (/Users/leonliang/Github Repo/gracestowel/node_modules/.pnpm/@medusajs+orchestration@2.12.3_@types+node@20.19.25_express@4.22.1/node_modules/@medusajs/orchestration/src/workflow/workflow-manager.ts:214:16)
+    at stepHandler (/Users/leonliang/Github Repo/gracestowel/node_modules/.pnpm/@medusajs+orchestration@2.12.3_@types+node@20.19.25_express@4.22.1/node_modules/@medusajs/orchestration/src/transaction/transaction-orchestrator.ts:1186:14)
+    at async Promise.allSettled (index 0)
+{"timestamp":"2026-01-11T17:43:47.888Z","level":"error","component":"order-cancel","message":"Error canceling order","orderId":"ord_123","error":{"name":"Error","message":"[object Object]","stack":"Error: [object Object]\n    at POST (/Users/leonliang/Github Repo/gracestowel/apps/backend/src/api/store/orders/[id]/cancel/route.ts:180:113)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at /Users/leonliang/Github Repo/gracestowel/apps/backend/integration-tests/unit/modification-token-auth.unit.spec.ts:180:11\n    at file:///Users/leonliang/Github%20Repo/gracestowel/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:533:5"}}
+[PostHog] API key not configured. Server-side tracking disabled.
+
+ ✓ integration-tests/unit/modification-token-auth.unit.spec.ts (12 tests) 10068ms
+   ✓ Modification Token Auth > API Consistency & Security > Address Update > should reject request when token is missing in header 9417ms
+ ✓ integration-tests/unit/create-order-locking.unit.spec.ts (2 tests) 87ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 11 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  integration-tests/unit/email-worker.unit.spec.ts > Email Worker > Core Functionality (Story 1.2) > processes job and calls Resend service
+TypeError: Cannot read properties of null (reading 'createNotifications')
+ ❯ src/workers/email-worker.ts:142:56
+    140| 
+    141|       try {
+    142|         const notification = await notificationService.createNotificat…
+       |                                                        ^
+    143|           to: recipient,
+    144|           channel: "email",
+ ❯ integration-tests/unit/email-worker.unit.spec.ts:102:13
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/11]⎯
+
+ FAIL  integration-tests/unit/email-worker.unit.spec.ts > Email Worker > Core Functionality (Story 1.2) > logs success with masked email
+TypeError: Cannot read properties of null (reading 'createNotifications')
+ ❯ src/workers/email-worker.ts:142:56
+    140| 
+    141|       try {
+    142|         const notification = await notificationService.createNotificat…
+       |                                                        ^
+    143|           to: recipient,
+    144|           channel: "email",
+ ❯ integration-tests/unit/email-worker.unit.spec.ts:127:13
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/11]⎯
+
+ FAIL  integration-tests/unit/email-worker.unit.spec.ts > Email Worker > Core Functionality (Story 1.2) > logs failure and throws on Resend error
+AssertionError: expected [Function] to throw error including 'Resend Error' but got 'Cannot read properties of null (readi…'
+
+Expected: "Resend Error"
+Received: "Cannot read properties of null (reading 'createNotifications')"
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/11]⎯
+
+ FAIL  integration-tests/unit/email-worker.unit.spec.ts > Email Worker > Retry Logic (Story 2.1) > logs retry attempt when attemptsMade > 0
+TypeError: Cannot read properties of null (reading 'createNotifications')
+ ❯ src/workers/email-worker.ts:142:56
+    140| 
+    141|       try {
+    142|         const notification = await notificationService.createNotificat…
+       |                                                        ^
+    143|           to: recipient,
+    144|           channel: "email",
+ ❯ integration-tests/unit/email-worker.unit.spec.ts:177:13
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/11]⎯
+
+ FAIL  integration-tests/unit/email-worker.unit.spec.ts > Email Worker > Failure Alerting (Story 4.3) > logs alert when invalid email moves directly to DLQ
+TypeError: Cannot read properties of null (reading 'createNotifications')
+ ❯ src/workers/email-worker.ts:142:56
+    140| 
+    141|       try {
+    142|         const notification = await notificationService.createNotificat…
+       |                                                        ^
+    143|           to: recipient,
+    144|           channel: "email",
+ ❯ integration-tests/unit/email-worker.unit.spec.ts:267:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/11]⎯
+
+ FAIL  integration-tests/unit/email-worker.unit.spec.ts > Email Worker > Invalid Email Handling (Story 2.3) > moves invalid email directly to DLQ without throwing
+AssertionError: promise rejected "TypeError: Cannot read properties of null…" instead of resolving
+ ❯ integration-tests/unit/email-worker.unit.spec.ts:357:38
+    355| 
+    356|       // Should resolve (not throw)
+    357|       await expect(processor(mockJob)).resolves.toBeUndefined();
+       |                                      ^
+    358| 
+    359|       // Check DLQ storage
+
+Caused by: TypeError: Cannot read properties of null (reading 'createNotifications')
+ ❯ src/workers/email-worker.ts:142:56
+ ❯ integration-tests/unit/email-worker.unit.spec.ts:357:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/11]⎯
+
+ FAIL  integration-tests/unit/increment-fallback-flow.unit.spec.ts > Story 6.4: Increment Fallback Flow > Task 1: Error Handling - Decline Code Mapping (AC 1-4) > should map insufficient_funds to user-friendly message
+ FAIL  integration-tests/unit/increment-fallback-flow.unit.spec.ts > Story 6.4: Increment Fallback Flow > Task 1: Error Handling - Decline Code Mapping (AC 1-4) > should map card_declined to user-friendly message
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/11]⎯
+
+ FAIL  integration-tests/unit/order-placed-email.unit.spec.tsx > OrderPlacedEmail > renders with magic link for guests (modification token present)
+AssertionError: expected '<!DOCTYPE html PUBLIC "-//W3C//DTD XH…' to contain 'Modify Your Order'
+
+Expected: "Modify Your Order"
+Received: "<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><!--$--><html dir="ltr" lang="en"><head><meta content="text/html; charset=UTF-8" http-equiv="Content-Type"/><meta name="x-apple-disable-message-reformatting"/></head><div style="display:none;overflow:hidden;line-height:1px;opacity:0;max-height:0;max-width:0" data-skip-in-text="true">Order Confirmed! #1001<div> ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿</div></div><body style="background-color:#f4f4f4"><table border="0" width="100%" cellPadding="0" cellSpacing="0" role="presentation" align="center"><tbody><tr><td style="background-color:#f4f4f4;font-family:-apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, Roboto, &quot;Helvetica Neue&quot;, Arial, sans-serif"><table align="center" width="100%" border="0" cellPadding="0" cellSpacing="0" role="presentation" style="max-width:600px;background-color:#ffffff;margin:40px auto;padding:0;border-radius:8px;box-shadow:0 2px 8px rgba(0, 0, 0, 0.05)"><tbody><tr style="width:100%"><td><table align="center" width="100%" border="0" cellPadding="0" cellSpacing="0" role="presentation" style="background-color:#1a1a1a;padding:32px 40px;border-radius:8px 8px 0 0;text-align:center"><tbody><tr><td><h1 style="color:#ffffff;font-size:28px;font-weight:600;letter-spacing:2px;margin:0 0 8px;text-transform:uppercase">Grace Stowel</h1><p style="font-size:13px;line-height:24px;color:#a0a0a0;letter-spacing:1px;margin:0;margin-top:0;margin-bottom:0;margin-left:0;margin-right:0">Premium Towels, Crafted with Care</p></td></tr></tbody></table><table align="center" width="100%" border="0" cellPadding="0" cellSpacing="0" role="presentation" style="background-color:#e8f5e9;padding:24px 40px;text-align:center"><tbody><tr><td><p style="font-size:32px;line-height:24px;color:#2e7d32;margin:0 0 8px;margin-top:0;margin-right:0;margin-bottom:8px;margin-left:0">✓</p><p style="font-size:24px;line-height:24px;color:#2e7d32;font-weight:600;margin:0 0 4px;margin-top:0;margin-right:0;margin-bottom:4px;margin-left:0">Order Confirmed!</p><p style="font-size:14px;line-height:24px;color:#4a4a4a;margin:0;margin-top:0;margin-bottom:0;margin-left:0;margin-right:0">Order #<!-- -->1001</p></td></tr></tbody></table><hr style="width:100%;border:none;border-top:1px solid #eaeaea;border-color:#e0e0e0;margin:0"/><p style="font-size:15px;line-height:24px;color:#333333;margin:0 0 16px;padding:0 40px;margin-top:0;margin-right:0;margin-bottom:16px;margin-left:0">Hi<!-- --> John<!-- -->,</p><p style="font-size:15px;line-height:24px;color:#333333;margin:0 0 16px;padding:0 40px;margin-top:0;margin-right:0;margin-bottom:16px;margin-left:0">Thank you for your order! We&#x27;ve received your purchase and are preparing it with care. You&#x27;ll receive a shipping confirmation email once your order is on its way.</p><table align="center" width="100%" border="0" cellPadding="0" cellSpacing="0" role="presentation" style="background-color:#fff8e1;border:1px solid #ffe082;border-radius:6px;padding:16px 24px;margin:24px 40px;text-align:center"><tbody><tr><td><p style="font-size:14px;line-height:24px;color:#5d4037;margin:0 0 12px;margin-top:0;margin-right:0;margin-bottom:12px;margin-left:0">Need to make changes? You have <strong>1 hour</strong> to modify your order.</p><a href="http://localhost:8000/order/edit/order_123?token=test_token_123" style="color:#ffffff;text-decoration-line:none;background-color:#1a1a1a;padding:12px 28px;border-radius:4px;font-size:14px;font-weight:500;text-decoration:none;display:inline-block" target="_blank">Modify Order →</a></td></tr></tbody></table><hr style="width:100%;border:none;border-top:1px solid #eaeaea;border-color:#e0e0e0;margin:0"/><h2 style="color:#1a1a1a;font-size:16px;font-weight:600;margin:24px 0 16px;padding:0 40px;text-transform:uppercase;letter-spacing:0.5px">Order Summary</h2><table align="center" width="100%" border="0" cellPadding="0" cellSpacing="0" role="presentation" style="padding:0 40px"><tbody><tr><td><table align="center" width="100%" border="0" cellPadding="0" cellSpacing="0" role="presentation" style="margin-bottom:16px"><tbody style="width:100%"><tr style="width:100%"><td data-id="__react-email-column" style="vertical-align:top"><p style="font-size:15px;line-height:24px;color:#1a1a1a;font-weight:500;margin:0 0 2px;margin-top:0;margin-right:0;margin-bottom:2px;margin-left:0">Test Item</p><p style="font-size:13px;line-height:24px;color:#666666;margin:0 0 2px;margin-top:0;margin-right:0;margin-bottom:2px;margin-left:0">Blue</p><p style="font-size:13px;line-height:24px;color:#888888;margin:0;margin-top:0;margin-bottom:0;margin-left:0;margin-right:0">Qty: <!-- -->1</p></td><td data-id="__react-email-column" style="text-align:right;vertical-align:top;width:100px"><p style="font-size:15px;line-height:24px;color:#1a1a1a;font-weight:500;margin:0;margin-top:0;margin-bottom:0;margin-left:0;margin-right:0">US$1,000.00</p></td></tr></tbody></table></td></tr></tbody></table><hr style="width:100%;border:none;border-top:1px solid #eaeaea;border-color:#f0f0f0;margin:16px 0"/><table align="center" width="100%" border="0" cellPadding="0" cellSpacing="0" role="presentation" style="padding:0 40px"><tbody><tr><td><table align="center" width="100%" border="0" cellPadding="0" cellSpacing="0" role="presentation" style="margin-bottom:8px"><tbody style="width:100%"><tr style="width:100%"><td data-id="__react-email-column"><p style="font-size:14px;line-height:24px;color:#666666;margin:0;margin-top:0;margin-bottom:0;margin-left:0;margin-right:0">Subtotal</p></td><td data-id="__react-email-column" style="text-align:right"><p style="font-size:14px;line-height:24px;color:#333333;margin:0;margin-top:0;margin-bottom:0;margin-left:0;margin-right:0">US$1,000.00</p></td></tr></tbody></table><table align="center" width="100%" border="0" cellPadding="0" cellSpacing="0" role="presentation" style="margin-bottom:8px"><tbody style="width:100%"><tr style="width:100%"><td data-id="__react-email-column"><p style="font-size:14px;line-height:24px;color:#666666;margin:0;margin-top:0;margin-bottom:0;margin-left:0;margin-right:0">Shipping</p></td><td data-id="__react-email-column" style="text-align:right"><p style="font-size:14px;line-height:24px;color:#333333;margin:0;margin-top:0;margin-bottom:0;margin-left:0;margin-right:0">Free</p></td></tr></tbody></table><hr style="width:100%;border:none;border-top:1px solid #eaeaea;border-color:#f0f0f0;margin:16px 0"/><table align="center" width="100%" border="0" cellPadding="0" cellSpacing="0" role="presentation" style="margin-top:8px"><tbody style="width:100%"><tr style="width:100%"><td data-id="__react-email-column"><p style="font-size:16px;line-height:24px;color:#1a1a1a;font-weight:600;margin:0;margin-top:0;margin-bottom:0;margin-left:0;margin-right:0">Total</p></td><td data-id="__react-email-column" style="text-align:right"><p style="font-size:18px;line-height:24px;color:#1a1a1a;font-weight:600;margin:0;margin-top:0;margin-bottom:0;margin-left:0;margin-right:0">US$1,000.00</p></td></tr></tbody></table></td></tr></tbody></table><hr style="width:100%;border:none;border-top:1px solid #eaeaea;border-color:#e0e0e0;margin:0"/><table align="center" width="100%" border="0" cellPadding="0" cellSpacing="0" role="presentation"><tbody><tr><td><h2 style="color:#1a1a1a;font-size:16px;font-weight:600;margin:24px 0 16px;padding:0 40px;text-transform:uppercase;letter-spacing:0.5px">Shipping To</h2><table align="center" width="100%" border="0" cellPadding="0" cellSpacing="0" role="presentation" style="background-color:#fafafa;border-radius:6px;padding:16px 20px;margin:0 40px"><tbody><tr><td><p style="font-size:15px;line-height:24px;color:#1a1a1a;font-weight:500;margin:0 0 4px;margin-top:0;margin-right:0;margin-bottom:4px;margin-left:0">John<!-- --> <!-- -->Doe</p><p style="font-size:14px;line-height:20px;color:#666666;margin:0;margin-top:0;margin-bottom:0;margin-left:0;margin-right:0">123 Main St</p><p style="font-size:14px;line-height:20px;color:#666666;margin:0;margin-top:0;margin-bottom:0;margin-left:0;margin-right:0">Test City<!-- -->, TS<!-- --> <!-- -->12345</p><p style="font-size:14px;line-height:20px;color:#666666;margin:0;margin-top:0;margin-bottom:0;margin-left:0;margin-right:0">US</p></td></tr></tbody></table></td></tr></tbody></table><table align="center" width="100%" border="0" cellPadding="0" cellSpacing="0" role="presentation" style="background-color:#f8f9fa;padding:16px 40px;margin:24px 0 0"><tbody><tr><td><p style="font-size:13px;line-height:24px;color:#666666;text-align:center;margin:0;margin-top:0;margin-bottom:0;margin-left:0;margin-right:0">A copy of this confirmation has been sent to <strong>test@example.com</strong></p></td></tr></tbody></table><hr style="width:100%;border:none;border-top:1px solid #eaeaea;border-color:#e0e0e0;margin:0"/><table align="center" width="100%" border="0" cellPadding="0" cellSpacing="0" role="presentation" style="padding:32px 40px;text-align:center"><tbody><tr><td><p style="font-size:14px;line-height:22px;color:#666666;margin:0 0 16px;margin-top:0;margin-right:0;margin-bottom:16px;margin-left:0">Questions about your order? Reply to this email or contact us at<!-- --> <a href="mailto:hello@gracestowel.com" style="color:#1a1a1a;text-decoration-line:none;text-decoration:underline" target="_blank">hello@gracestowel.com</a></p><p style="font-size:12px;line-height:24px;color:#999999;margin:4px 0 0;margin-top:4px;margin-right:0;margin-bottom:0;margin-left:0">© <!-- -->2026<!-- --> Grace Stowel. All rights reserved.</p><p style="font-size:12px;line-height:24px;color:#999999;margin:4px 0 0;margin-top:4px;margin-right:0;margin-bottom:0;margin-left:0">Toronto, Canada</p></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></body></html><!--/$-->"
+
+ ❯ integration-tests/unit/order-placed-email.unit.spec.tsx:56:18
+     54|     )
+     55| 
+     56|     expect(html).toContain("Modify Your Order")
+       |                  ^
+     57|     expect(html).toContain("http://localhost:8000/order/edit/order_123…
+     58|     expect(html).toContain("You have 1 hour to modify your order")
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/11]⎯
+
+ FAIL  integration-tests/unit/order-placed-email.unit.spec.tsx > OrderPlacedEmail > renders with login message for registered users (no modification token)
+AssertionError: expected '<!DOCTYPE html PUBLIC "-//W3C//DTD XH…' to contain 'Log in to your account to view your o…'
+
+Expected: "Log in to your account to view your order history and manage your preferences."
+Received: "<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><!--$--><html dir="ltr" lang="en"><head><meta content="text/html; charset=UTF-8" http-equiv="Content-Type"/><meta name="x-apple-disable-message-reformatting"/></head><div style="display:none;overflow:hidden;line-height:1px;opacity:0;max-height:0;max-width:0" data-skip-in-text="true">Order Confirmed! #1001<div> ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿</div></div><body style="background-color:#f4f4f4"><table border="0" width="100%" cellPadding="0" cellSpacing="0" role="presentation" align="center"><tbody><tr><td style="background-color:#f4f4f4;font-family:-apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, Roboto, &quot;Helvetica Neue&quot;, Arial, sans-serif"><table align="center" width="100%" border="0" cellPadding="0" cellSpacing="0" role="presentation" style="max-width:600px;background-color:#ffffff;margin:40px auto;padding:0;border-radius:8px;box-shadow:0 2px 8px rgba(0, 0, 0, 0.05)"><tbody><tr style="width:100%"><td><table align="center" width="100%" border="0" cellPadding="0" cellSpacing="0" role="presentation" style="background-color:#1a1a1a;padding:32px 40px;border-radius:8px 8px 0 0;text-align:center"><tbody><tr><td><h1 style="color:#ffffff;font-size:28px;font-weight:600;letter-spacing:2px;margin:0 0 8px;text-transform:uppercase">Grace Stowel</h1><p style="font-size:13px;line-height:24px;color:#a0a0a0;letter-spacing:1px;margin:0;margin-top:0;margin-bottom:0;margin-left:0;margin-right:0">Premium Towels, Crafted with Care</p></td></tr></tbody></table><table align="center" width="100%" border="0" cellPadding="0" cellSpacing="0" role="presentation" style="background-color:#e8f5e9;padding:24px 40px;text-align:center"><tbody><tr><td><p style="font-size:32px;line-height:24px;color:#2e7d32;margin:0 0 8px;margin-top:0;margin-right:0;margin-bottom:8px;margin-left:0">✓</p><p style="font-size:24px;line-height:24px;color:#2e7d32;font-weight:600;margin:0 0 4px;margin-top:0;margin-right:0;margin-bottom:4px;margin-left:0">Order Confirmed!</p><p style="font-size:14px;line-height:24px;color:#4a4a4a;margin:0;margin-top:0;margin-bottom:0;margin-left:0;margin-right:0">Order #<!-- -->1001</p></td></tr></tbody></table><hr style="width:100%;border:none;border-top:1px solid #eaeaea;border-color:#e0e0e0;margin:0"/><p style="font-size:15px;line-height:24px;color:#333333;margin:0 0 16px;padding:0 40px;margin-top:0;margin-right:0;margin-bottom:16px;margin-left:0">Hi<!-- --> John<!-- -->,</p><p style="font-size:15px;line-height:24px;color:#333333;margin:0 0 16px;padding:0 40px;margin-top:0;margin-right:0;margin-bottom:16px;margin-left:0">Thank you for your order! We&#x27;ve received your purchase and are preparing it with care. You&#x27;ll receive a shipping confirmation email once your order is on its way.</p><hr style="width:100%;border:none;border-top:1px solid #eaeaea;border-color:#e0e0e0;margin:0"/><h2 style="color:#1a1a1a;font-size:16px;font-weight:600;margin:24px 0 16px;padding:0 40px;text-transform:uppercase;letter-spacing:0.5px">Order Summary</h2><table align="center" width="100%" border="0" cellPadding="0" cellSpacing="0" role="presentation" style="padding:0 40px"><tbody><tr><td><table align="center" width="100%" border="0" cellPadding="0" cellSpacing="0" role="presentation" style="margin-bottom:16px"><tbody style="width:100%"><tr style="width:100%"><td data-id="__react-email-column" style="vertical-align:top"><p style="font-size:15px;line-height:24px;color:#1a1a1a;font-weight:500;margin:0 0 2px;margin-top:0;margin-right:0;margin-bottom:2px;margin-left:0">Test Item</p><p style="font-size:13px;line-height:24px;color:#666666;margin:0 0 2px;margin-top:0;margin-right:0;margin-bottom:2px;margin-left:0">Blue</p><p style="font-size:13px;line-height:24px;color:#888888;margin:0;margin-top:0;margin-bottom:0;margin-left:0;margin-right:0">Qty: <!-- -->1</p></td><td data-id="__react-email-column" style="text-align:right;vertical-align:top;width:100px"><p style="font-size:15px;line-height:24px;color:#1a1a1a;font-weight:500;margin:0;margin-top:0;margin-bottom:0;margin-left:0;margin-right:0">US$1,000.00</p></td></tr></tbody></table></td></tr></tbody></table><hr style="width:100%;border:none;border-top:1px solid #eaeaea;border-color:#f0f0f0;margin:16px 0"/><table align="center" width="100%" border="0" cellPadding="0" cellSpacing="0" role="presentation" style="padding:0 40px"><tbody><tr><td><table align="center" width="100%" border="0" cellPadding="0" cellSpacing="0" role="presentation" style="margin-bottom:8px"><tbody style="width:100%"><tr style="width:100%"><td data-id="__react-email-column"><p style="font-size:14px;line-height:24px;color:#666666;margin:0;margin-top:0;margin-bottom:0;margin-left:0;margin-right:0">Subtotal</p></td><td data-id="__react-email-column" style="text-align:right"><p style="font-size:14px;line-height:24px;color:#333333;margin:0;margin-top:0;margin-bottom:0;margin-left:0;margin-right:0">US$1,000.00</p></td></tr></tbody></table><table align="center" width="100%" border="0" cellPadding="0" cellSpacing="0" role="presentation" style="margin-bottom:8px"><tbody style="width:100%"><tr style="width:100%"><td data-id="__react-email-column"><p style="font-size:14px;line-height:24px;color:#666666;margin:0;margin-top:0;margin-bottom:0;margin-left:0;margin-right:0">Shipping</p></td><td data-id="__react-email-column" style="text-align:right"><p style="font-size:14px;line-height:24px;color:#333333;margin:0;margin-top:0;margin-bottom:0;margin-left:0;margin-right:0">Free</p></td></tr></tbody></table><hr style="width:100%;border:none;border-top:1px solid #eaeaea;border-color:#f0f0f0;margin:16px 0"/><table align="center" width="100%" border="0" cellPadding="0" cellSpacing="0" role="presentation" style="margin-top:8px"><tbody style="width:100%"><tr style="width:100%"><td data-id="__react-email-column"><p style="font-size:16px;line-height:24px;color:#1a1a1a;font-weight:600;margin:0;margin-top:0;margin-bottom:0;margin-left:0;margin-right:0">Total</p></td><td data-id="__react-email-column" style="text-align:right"><p style="font-size:18px;line-height:24px;color:#1a1a1a;font-weight:600;margin:0;margin-top:0;margin-bottom:0;margin-left:0;margin-right:0">US$1,000.00</p></td></tr></tbody></table></td></tr></tbody></table><hr style="width:100%;border:none;border-top:1px solid #eaeaea;border-color:#e0e0e0;margin:0"/><table align="center" width="100%" border="0" cellPadding="0" cellSpacing="0" role="presentation"><tbody><tr><td><h2 style="color:#1a1a1a;font-size:16px;font-weight:600;margin:24px 0 16px;padding:0 40px;text-transform:uppercase;letter-spacing:0.5px">Shipping To</h2><table align="center" width="100%" border="0" cellPadding="0" cellSpacing="0" role="presentation" style="background-color:#fafafa;border-radius:6px;padding:16px 20px;margin:0 40px"><tbody><tr><td><p style="font-size:15px;line-height:24px;color:#1a1a1a;font-weight:500;margin:0 0 4px;margin-top:0;margin-right:0;margin-bottom:4px;margin-left:0">John<!-- --> <!-- -->Doe</p><p style="font-size:14px;line-height:20px;color:#666666;margin:0;margin-top:0;margin-bottom:0;margin-left:0;margin-right:0">123 Main St</p><p style="font-size:14px;line-height:20px;color:#666666;margin:0;margin-top:0;margin-bottom:0;margin-left:0;margin-right:0">Test City<!-- -->, TS<!-- --> <!-- -->12345</p><p style="font-size:14px;line-height:20px;color:#666666;margin:0;margin-top:0;margin-bottom:0;margin-left:0;margin-right:0">US</p></td></tr></tbody></table></td></tr></tbody></table><table align="center" width="100%" border="0" cellPadding="0" cellSpacing="0" role="presentation" style="background-color:#f8f9fa;padding:16px 40px;margin:24px 0 0"><tbody><tr><td><p style="font-size:13px;line-height:24px;color:#666666;text-align:center;margin:0;margin-top:0;margin-bottom:0;margin-left:0;margin-right:0">A copy of this confirmation has been sent to <strong>test@example.com</strong></p></td></tr></tbody></table><hr style="width:100%;border:none;border-top:1px solid #eaeaea;border-color:#e0e0e0;margin:0"/><table align="center" width="100%" border="0" cellPadding="0" cellSpacing="0" role="presentation" style="padding:32px 40px;text-align:center"><tbody><tr><td><p style="font-size:14px;line-height:22px;color:#666666;margin:0 0 16px;margin-top:0;margin-right:0;margin-bottom:16px;margin-left:0">Questions about your order? Reply to this email or contact us at<!-- --> <a href="mailto:hello@gracestowel.com" style="color:#1a1a1a;text-decoration-line:none;text-decoration:underline" target="_blank">hello@gracestowel.com</a></p><p style="font-size:12px;line-height:24px;color:#999999;margin:4px 0 0;margin-top:4px;margin-right:0;margin-bottom:0;margin-left:0">© <!-- -->2026<!-- --> Grace Stowel. All rights reserved.</p><p style="font-size:12px;line-height:24px;color:#999999;margin:4px 0 0;margin-top:4px;margin-right:0;margin-bottom:0;margin-left:0">Toronto, Canada</p></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></body></html><!--/$-->"
+
+ ❯ integration-tests/unit/order-placed-email.unit.spec.tsx:71:18
+     69| 
+     70|     expect(html).not.toContain("Modify Your Order")
+     71|     expect(html).toContain("Log in to your account to view your order …
+       |                  ^
+     72|   })
+     73| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/11]⎯
+
+ FAIL  integration-tests/unit/race-condition-handling.unit.spec.ts > Story 6.3: Race Condition Handling > Timing Buffer (Task 1 - 59:30) > should use calculateCaptureDelayMs for default calculation
+Error: Hook timed out in 10000ms.
+If this is a long-running hook, pass a timeout value as the last argument or configure it globally with "hookTimeout".
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/11]⎯
+
+ Test Files  4 failed | 24 passed (28)
+      Tests  11 failed | 345 passed | 1 skipped (357)
+   Start at  09:43:20
+   Duration  28.22s (transform 6.20s, setup 0ms, collect 107.27s, tests 53.22s, environment 7ms, prepare 12.48s)
+

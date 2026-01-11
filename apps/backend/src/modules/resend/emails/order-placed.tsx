@@ -14,6 +14,7 @@ import {
   Row,
   Column,
 } from "@react-email/components"
+import { formatModificationWindow } from "../../../lib/payment-capture-queue"
 
 interface OrderItem {
   title: string
@@ -114,7 +115,7 @@ export const OrderPlacedEmailComponent = ({ order, modification_token }: OrderPl
           {modifyOrderUrl && (
             <Section style={modifyOrderSection}>
               <Text style={modifyOrderText}>
-                Need to make changes? You have <strong>1 hour</strong> to modify your order.
+                Need to make changes? You have <strong>{formatModificationWindow()}</strong> to modify your order.
               </Text>
               <Link href={modifyOrderUrl} style={modifyOrderButton}>
                 Modify Order →

@@ -22,7 +22,7 @@ import { logger } from "../../../../../utils/logger";
 /**
  * POST /store/orders/:id/line-items
  *
- * Add items to an order within the 1-hour modification window.
+ * Add items to an order within the modification window.
  * Handles incremental authorization for the additional amount.
  *
  * Headers:

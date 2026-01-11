@@ -4,7 +4,7 @@ import type {
 } from "@medusajs/framework"
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
 // import { sendOrderConfirmationWorkflow } from "../workflows/send-order-confirmation" // DEPRECATED - Replaced by BullMQ
-import { schedulePaymentCapture } from "../lib/payment-capture-queue"
+import { schedulePaymentCapture, formatModificationWindow } from "../lib/payment-capture-queue"
 import { getPostHog } from "../utils/posthog"
 import { enqueueEmail } from "../lib/email-queue"
 import type { ModificationTokenService } from "../services/modification-token"
@@ -282,7 +282,7 @@ export default async function orderPlacedHandler({
     logger.error(`[EMAIL][ERROR] Failed to queue confirmation for order ${data.id}: ${error.message}`)
   }
 
-  // Schedule payment capture after 1-hour modification window
+  // Schedule payment capture after modification window
   try {
     // Get the payment intent ID from order - check payment collections first, then metadata
     const query = container.resolve("query")
@@ -334,7 +334,7 @@ export default async function orderPlacedHandler({
         try {
           logger.info(`[CAPTURE_SCHEDULE] Attempting to schedule payment capture for order ${data.id}, PI: ${paymentIntentId}`)
           await schedulePaymentCapture(data.id, paymentIntentId)
-          logger.info(`[CAPTURE_SCHEDULE] ✅ Payment capture scheduled for order ${data.id} (1 hour delay), PI: ${paymentIntentId}`)
+          logger.info(`[CAPTURE_SCHEDULE] ✅ Payment capture scheduled for order ${data.id} (${formatModificationWindow()} delay), PI: ${paymentIntentId}`)
         } catch (scheduleError: any) {
           // Story 6.2: Handle Redis connection failures gracefully
           const isRedisError = ['ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND'].includes(scheduleError?.code)

@@ -40,6 +40,38 @@ export const PAYMENT_CAPTURE_DELAY_MS = parseInt(
     10
 );
 
+/**
+ * Get the modification window duration in seconds
+ * Derived from PAYMENT_CAPTURE_DELAY_MS
+ */
+export function getModificationWindowSeconds(): number {
+    return Math.floor(PAYMENT_CAPTURE_DELAY_MS / 1000);
+}
+
+/**
+ * Format the modification window duration for user-facing messages
+ * Returns human-readable string like "1 hour", "30 minutes", "10 seconds"
+ */
+export function formatModificationWindow(): string {
+    const totalSeconds = getModificationWindowSeconds();
+
+    if (totalSeconds >= 3600) {
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        if (minutes > 0) {
+            return hours === 1 ? `1 hour ${minutes} minutes` : `${hours} hours ${minutes} minutes`;
+        }
+        return hours === 1 ? "1 hour" : `${hours} hours`;
+    }
+
+    if (totalSeconds >= 60) {
+        const minutes = Math.floor(totalSeconds / 60);
+        return minutes === 1 ? "1 minute" : `${minutes} minutes`;
+    }
+
+    return totalSeconds === 1 ? "1 second" : `${totalSeconds} seconds`;
+}
+
 // Worker concurrency - configurable via env, defaults to 5
 export const PAYMENT_CAPTURE_WORKER_CONCURRENCY = parseInt(
     process.env.PAYMENT_CAPTURE_WORKER_CONCURRENCY || "5",

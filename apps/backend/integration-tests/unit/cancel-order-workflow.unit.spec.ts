@@ -14,6 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // Mock BullMQ before imports
 vi.mock("../../src/lib/payment-capture-queue", () => ({
     cancelPaymentCaptureJob: vi.fn(),
+    schedulePaymentCapture: vi.fn(),
     JobActiveError: class JobActiveError extends Error {
         code = "JOB_ACTIVE";
         constructor(orderId: string) {
@@ -34,8 +35,12 @@ import {
     OrderAlreadyCanceledError,
     QueueRemovalError,
     OrderNotFoundError,
+    OrderShippedError,
     removeCaptureJobHandler,
-    lockOrderHandler
+    lockOrderHandler,
+    checkFulfillmentStatusHandler,
+    refundPaymentHandler,
+    reAddPaymentCaptureJobHandler
 } from "../../src/workflows/cancel-order-with-refund";
 import { cancelPaymentCaptureJob, JobActiveError } from "../../src/lib/payment-capture-queue";
 import { MedusaContainer } from "@medusajs/framework/types";
@@ -155,7 +160,8 @@ describe("Cancel Order Workflow Steps", () => {
                 }]
             });
 
-            await expect(lockOrderHandler({ orderId: "ord_captured", paymentIntentId: "pi_1" }, container))
+            // Story 3.5: Within grace period, captured = error (LateCancelError)
+            await expect(lockOrderHandler({ orderId: "ord_captured", paymentIntentId: "pi_1", isWithinGracePeriod: true }, container))
                 .rejects.toThrow(LateCancelError);
         });
 
@@ -308,8 +314,27 @@ describe("Cancel Order Workflow Steps", () => {
                 status: "succeeded"
             });
 
-            await expect(lockOrderHandler({ orderId: "ord_1", paymentIntentId: "pi_1" }, container))
+            // Story 3.5: Within grace period, Stripe succeeded = error (LateCancelError)
+            await expect(lockOrderHandler({ orderId: "ord_1", paymentIntentId: "pi_1", isWithinGracePeriod: true }, container))
                 .rejects.toThrow(LateCancelError);
+        });
+
+        it("should allow Stripe succeeded status when NOT within grace period (refund path)", async () => {
+            queryMock.mockResolvedValue({
+                data: [{
+                    id: "ord_1",
+                    status: "pending",
+                    payment_collections: [{ id: "pc_1", status: PaymentCollectionStatus.COMPLETED }],
+                    metadata: {}
+                }]
+            });
+            stripeMock.paymentIntents.retrieve.mockResolvedValue({
+                status: "succeeded"
+            });
+
+            // Story 3.5: Post grace period, succeeded = allowed (refund path)
+            const result = await lockOrderHandler({ orderId: "ord_1", paymentIntentId: "pi_1", isWithinGracePeriod: false }, container);
+            expect(result.canCancel).toBe(true);
         });
 
         it("should throw error if PaymentCollection missing even when metadata.payment_captured_at is set", async () => {
@@ -340,6 +365,139 @@ describe("Cancel Order Workflow Steps", () => {
 
             await expect(lockOrderHandler({ orderId: "ord_already_canceled", paymentIntentId: "pi_1" }, container))
                 .rejects.toThrow(OrderAlreadyCanceledError);
+        });
+    });
+
+    describe("checkFulfillmentStatusHandler", () => {
+        let container: MedusaContainer;
+        let queryMock: vi.Mock;
+
+        beforeEach(() => {
+            queryMock = vi.fn();
+            container = {
+                resolve: vi.fn().mockReturnValue({
+                    graph: queryMock
+                })
+            } as any;
+        });
+
+        it("should allow cancellation when no fulfillments exist", async () => {
+            queryMock.mockResolvedValue({
+                data: [{ id: "ord_1", fulfillments: [] }]
+            });
+
+            const result = await checkFulfillmentStatusHandler({ orderId: "ord_1" }, container);
+            expect(result.canCancel).toBe(true);
+            expect(result.fulfillmentStatus).toBe("not_fulfilled");
+        });
+
+        it("should throw OrderShippedError if order is shipped", async () => {
+            queryMock.mockResolvedValue({
+                data: [{ 
+                    id: "ord_shipped", 
+                    fulfillments: [{ id: "ful_1", shipped_at: "2025-01-01" }] 
+                }]
+            });
+
+            await expect(checkFulfillmentStatusHandler({ orderId: "ord_shipped" }, container))
+                .rejects.toThrow(OrderShippedError);
+        });
+
+        it("should throw OrderShippedError if order is partially_fulfilled (packed)", async () => {
+            queryMock.mockResolvedValue({
+                data: [{ 
+                    id: "ord_packed", 
+                    fulfillments: [{ id: "ful_1", packed_at: "2025-01-01" }] 
+                }]
+            });
+
+            await expect(checkFulfillmentStatusHandler({ orderId: "ord_packed" }, container))
+                .rejects.toThrow(OrderShippedError);
+        });
+
+        it("should throw OrderShippedError if order is delivered", async () => {
+            queryMock.mockResolvedValue({
+                data: [{ 
+                    id: "ord_delivered", 
+                    fulfillments: [{ id: "ful_1", delivered_at: "2025-01-01" }] 
+                }]
+            });
+
+            await expect(checkFulfillmentStatusHandler({ orderId: "ord_delivered" }, container))
+                .rejects.toThrow(OrderShippedError);
+        });
+
+        it("should allow cancellation if fulfillments exist but are not packed/shipped/delivered", async () => {
+             queryMock.mockResolvedValue({
+                data: [{ 
+                    id: "ord_created", 
+                    fulfillments: [{ id: "ful_1", created_at: "2025-01-01" }] 
+                }]
+            });
+
+            const result = await checkFulfillmentStatusHandler({ orderId: "ord_created" }, container);
+            expect(result.canCancel).toBe(true);
+            expect(result.fulfillmentStatus).toBe("not_fulfilled");
+        });
+    });
+
+    describe("refundPaymentHandler", () => {
+        let stripeMock: any;
+
+        beforeEach(() => {
+            stripeMock = {
+                paymentIntents: {
+                    retrieve: vi.fn(),
+                    cancel: vi.fn()
+                },
+                refunds: {
+                    create: vi.fn()
+                }
+            };
+            (getStripeClient as any).mockReturnValue(stripeMock);
+        });
+
+        it("should issue refund when payment is succeeded", async () => {
+            stripeMock.paymentIntents.retrieve.mockResolvedValue({ status: "succeeded" });
+            stripeMock.refunds.create.mockResolvedValue({ id: "ref_1", status: "succeeded" });
+
+            const result = await refundPaymentHandler({ orderId: "ord_1", paymentIntentId: "pi_1" });
+            expect(result.action).toBe("refunded");
+            expect(result.refundId).toBe("ref_1");
+            expect(stripeMock.refunds.create).toHaveBeenCalledWith({ payment_intent: "pi_1" });
+        });
+
+        it("should void instead of refund if payment not captured (requires_capture)", async () => {
+            stripeMock.paymentIntents.retrieve.mockResolvedValue({ status: "requires_capture" });
+            stripeMock.paymentIntents.cancel.mockResolvedValue({ status: "canceled" });
+
+            const result = await refundPaymentHandler({ orderId: "ord_1", paymentIntentId: "pi_1" });
+            expect(result.action).toBe("voided");
+            expect(stripeMock.paymentIntents.cancel).toHaveBeenCalledWith("pi_1");
+        });
+
+        it("should handle refund failure by returning voidFailed=true", async () => {
+            stripeMock.paymentIntents.retrieve.mockResolvedValue({ status: "succeeded" });
+            stripeMock.refunds.create.mockRejectedValue(new Error("Stripe Error"));
+
+            const result = await refundPaymentHandler({ orderId: "ord_1", paymentIntentId: "pi_1" });
+            expect(result.action).toBe("none");
+            expect(result.voidFailed).toBe(true);
+            expect(result.status).toBe("refund_failed");
+        });
+    });
+
+    describe("reAddPaymentCaptureJobHandler (Compensation)", () => {
+        beforeEach(() => {
+            vi.clearAllMocks();
+        });
+
+        it("should call schedulePaymentCapture with 0 delay", async () => {
+            const { schedulePaymentCapture } = await import("../../src/lib/payment-capture-queue");
+            const result = await reAddPaymentCaptureJobHandler({ orderId: "ord_1", paymentIntentId: "pi_1" });
+            
+            expect(result.reAdded).toBe(true);
+            expect(schedulePaymentCapture).toHaveBeenCalledWith("ord_1", "pi_1", 0);
         });
     });
 
