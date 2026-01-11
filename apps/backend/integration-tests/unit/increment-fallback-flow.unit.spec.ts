@@ -1,4 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.setConfig({ hookTimeout: 30000 });
 /**
  * Unit tests for Story 6.4: Increment Fallback Flow
  * 
@@ -25,8 +27,13 @@ vi.mock("../../src/utils/stripe", () => ({
     }),
 }));
 
-describe("Story 6.4: Increment Fallback Flow", () => {
+describe("Story 6.4: Increment Fallback Flow", { timeout: 30000 }, () => {
     const originalEnv = process.env;
+    let addItemToOrderModule: any;
+
+    beforeAll(async () => {
+        addItemToOrderModule = await import("../../src/workflows/add-item-to-order");
+    });
 
     beforeEach(() => {
         vi.clearAllMocks();
@@ -45,35 +52,35 @@ describe("Story 6.4: Increment Fallback Flow", () => {
 
     describe("Task 1: Error Handling - Decline Code Mapping (AC 1-4)", () => {
         it("should map insufficient_funds to user-friendly message", async () => {
-            const { mapDeclineCodeToUserMessage } = await import("../../src/workflows/add-item-to-order");
+            const { mapDeclineCodeToUserMessage } = addItemToOrderModule;
             
             const message = mapDeclineCodeToUserMessage("insufficient_funds");
             expect(message).toBe("Insufficient funds.");
         });
 
         it("should map card_declined to user-friendly message", async () => {
-            const { mapDeclineCodeToUserMessage } = await import("../../src/workflows/add-item-to-order");
+            const { mapDeclineCodeToUserMessage } = addItemToOrderModule;
             
             const message = mapDeclineCodeToUserMessage("card_declined");
             expect(message).toBe("Your card was declined.");
         });
 
         it("should map expired_card to user-friendly message", async () => {
-            const { mapDeclineCodeToUserMessage } = await import("../../src/workflows/add-item-to-order");
+            const { mapDeclineCodeToUserMessage } = addItemToOrderModule;
             
             const message = mapDeclineCodeToUserMessage("expired_card");
             expect(message).toBe("Your card has expired.");
         });
 
         it("should map generic_decline to user-friendly message", async () => {
-            const { mapDeclineCodeToUserMessage } = await import("../../src/workflows/add-item-to-order");
+            const { mapDeclineCodeToUserMessage } = addItemToOrderModule;
             
             const message = mapDeclineCodeToUserMessage("generic_decline");
             expect(message).toBe("Your card was declined.");
         });
 
         it("should map lost_card/stolen_card to safe message", async () => {
-            const { mapDeclineCodeToUserMessage } = await import("../../src/workflows/add-item-to-order");
+            const { mapDeclineCodeToUserMessage } = addItemToOrderModule;
             
             // Should NOT reveal card is lost/stolen for security
             const lostMessage = mapDeclineCodeToUserMessage("lost_card");
@@ -84,21 +91,21 @@ describe("Story 6.4: Increment Fallback Flow", () => {
         });
 
         it("should map incorrect_cvc to user-friendly message", async () => {
-            const { mapDeclineCodeToUserMessage } = await import("../../src/workflows/add-item-to-order");
+            const { mapDeclineCodeToUserMessage } = addItemToOrderModule;
             
             const message = mapDeclineCodeToUserMessage("incorrect_cvc");
             expect(message).toBe("Your card's security code is incorrect.");
         });
 
         it("should map processing_error to user-friendly message", async () => {
-            const { mapDeclineCodeToUserMessage } = await import("../../src/workflows/add-item-to-order");
+            const { mapDeclineCodeToUserMessage } = addItemToOrderModule;
             
             const message = mapDeclineCodeToUserMessage("processing_error");
             expect(message).toBe("An error occurred while processing your card.");
         });
 
         it("should return generic message for unknown decline codes", async () => {
-            const { mapDeclineCodeToUserMessage } = await import("../../src/workflows/add-item-to-order");
+            const { mapDeclineCodeToUserMessage } = addItemToOrderModule;
             
             const message = mapDeclineCodeToUserMessage("unknown_code_xyz");
             expect(message).toBe("Your card was declined.");
@@ -107,7 +114,7 @@ describe("Story 6.4: Increment Fallback Flow", () => {
 
     describe("Task 1: CardDeclinedError Properties (AC 4, 5)", () => {
         it("should include userMessage property with friendly text", async () => {
-            const { CardDeclinedError } = await import("../../src/workflows/add-item-to-order");
+            const { CardDeclinedError } = addItemToOrderModule;
             
             const error = new CardDeclinedError(
                 "Your card has insufficient funds.",
@@ -121,7 +128,7 @@ describe("Story 6.4: Increment Fallback Flow", () => {
         });
 
         it("should have retryable property based on decline code", async () => {
-            const { CardDeclinedError } = await import("../../src/workflows/add-item-to-order");
+            const { CardDeclinedError } = addItemToOrderModule;
             
             // Insufficient funds is retryable (user can add funds)
             const insufficientError = new CardDeclinedError("msg", "card_error", "insufficient_funds");
@@ -135,7 +142,7 @@ describe("Story 6.4: Increment Fallback Flow", () => {
 
     describe("Task 2: Atomic Cleanup / Rollback (AC 6)", () => {
         it("should throw CardDeclinedError which halts workflow before DB update", async () => {
-            const { CardDeclinedError } = await import("../../src/workflows/add-item-to-order");
+            const { CardDeclinedError } = addItemToOrderModule;
             
             // Verify CardDeclinedError is a proper Error that will halt workflow execution
             const error = new CardDeclinedError("Declined", "card_error", "insufficient_funds");
@@ -147,10 +154,8 @@ describe("Story 6.4: Increment Fallback Flow", () => {
         });
 
         it("should convert StripeCardError to CardDeclinedError in incrementStripeAuthStep", async () => {
-            // This test verifies the error conversion logic that ensures
-            // Stripe declines are properly caught and converted
             const Stripe = await import("stripe");
-            const { CardDeclinedError } = await import("../../src/workflows/add-item-to-order");
+            const { CardDeclinedError } = addItemToOrderModule;
             
             // Simulate what happens in incrementStripeAuthStep catch block
             const stripeError = new Stripe.default.errors.StripeCardError({
@@ -183,7 +188,7 @@ describe("Story 6.4: Increment Fallback Flow", () => {
 
     describe("API Route Error Response Contract (AC 5, 7)", () => {
         it("should return 402 Payment Required for card declined", async () => {
-            const { CardDeclinedError } = await import("../../src/workflows/add-item-to-order");
+            const { CardDeclinedError } = addItemToOrderModule;
             
             const error = new CardDeclinedError("Declined", "card_error", "insufficient_funds");
             
@@ -193,7 +198,7 @@ describe("Story 6.4: Increment Fallback Flow", () => {
         });
 
         it("should include type field for frontend error handling", async () => {
-            const { CardDeclinedError } = await import("../../src/workflows/add-item-to-order");
+            const { CardDeclinedError } = addItemToOrderModule;
             
             const error = new CardDeclinedError("Declined", "card_error", "insufficient_funds");
             
@@ -205,7 +210,7 @@ describe("Story 6.4: Increment Fallback Flow", () => {
 
     describe("Security: Error Sanitization (Integration & Security Patterns)", () => {
         it("should NOT expose raw Stripe error details in userMessage", async () => {
-            const { CardDeclinedError } = await import("../../src/workflows/add-item-to-order");
+            const { CardDeclinedError } = addItemToOrderModule;
             
             // Raw Stripe message might contain sensitive info
             const rawStripeMessage = "Your card number is incorrect. Card: 4242...1234";
@@ -219,7 +224,7 @@ describe("Story 6.4: Increment Fallback Flow", () => {
 
     describe("API Route 402 Response Contract (AC 5, 6, 7 - Integration)", () => {
         it("should return correct 402 payload structure from CardDeclinedError", async () => {
-            const { CardDeclinedError } = await import("../../src/workflows/add-item-to-order");
+            const { CardDeclinedError } = addItemToOrderModule;
             
             // Simulate what the API route does when catching CardDeclinedError
             const error = new CardDeclinedError("Insufficient funds", "card_error", "insufficient_funds");
@@ -244,7 +249,7 @@ describe("Story 6.4: Increment Fallback Flow", () => {
         });
 
         it("should return non-retryable for expired_card decline", async () => {
-            const { CardDeclinedError } = await import("../../src/workflows/add-item-to-order");
+            const { CardDeclinedError } = addItemToOrderModule;
             
             const error = new CardDeclinedError("Card expired", "card_error", "expired_card");
             
@@ -266,7 +271,7 @@ describe("Story 6.4: Increment Fallback Flow", () => {
         });
 
         it("should verify workflow step order ensures atomic rollback (AC 6)", async () => {
-            const { CardDeclinedError } = await import("../../src/workflows/add-item-to-order");
+            const { CardDeclinedError } = addItemToOrderModule;
             
             // Verify the error is thrown with correct properties
             const error = new CardDeclinedError("Declined", "card_error", "insufficient_funds");

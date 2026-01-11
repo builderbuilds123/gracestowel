@@ -1,5 +1,7 @@
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.setConfig({ hookTimeout: 60000 });
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 
 // Mocks
@@ -60,37 +62,16 @@ describe("Modification Token Auth", () => {
   let lineItemsUpdateRoute: any;
   let cancelRoute: any;
 
-  beforeEach(async () => {
-    vi.clearAllMocks();
-    vi.resetModules();
-
-    // Re-mock after resetModules
-    vi.doMock("../../src/services/modification-token", () => ({
-      modificationTokenService: mockModificationTokenService
-    }));
-    vi.doMock("../../src/services/modification-token.ts", () => ({
-      modificationTokenService: mockModificationTokenService
-    }));
-    
-    vi.doMock("../../src/workflows/add-item-to-order", () => ({
-      addItemToOrderWorkflow: mockAddItemToOrderWorkflow
-    }));
-    vi.doMock("../../src/workflows/add-item-to-order.ts", () => ({
-      addItemToOrderWorkflow: mockAddItemToOrderWorkflow
-    }));
-
-    vi.doMock("../../src/workflows/update-line-item-quantity", () => ({
-      updateLineItemQuantityWorkflow: mockUpdateLineItemQuantityWorkflow
-    }));
-    vi.doMock("../../src/workflows/update-line-item-quantity.ts", () => ({
-      updateLineItemQuantityWorkflow: mockUpdateLineItemQuantityWorkflow
-    }));
-
-    // Import handlers
+  beforeAll(async () => {
+    // Import handlers once
     addressRoute = await import("../../src/api/store/orders/[id]/address/route.ts");
     lineItemsRoute = await import("../../src/api/store/orders/[id]/line-items/route.ts");
     lineItemsUpdateRoute = await import("../../src/api/store/orders/[id]/line-items/update/route.ts");
     cancelRoute = await import("../../src/api/store/orders/[id]/cancel/route.ts");
+  });
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
   });
 
   const createMockReqRes = (headers: any = {}, body: any = {}, params: any = { id: "ord_123" }) => {

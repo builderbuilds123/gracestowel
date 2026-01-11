@@ -1,5 +1,5 @@
 import { Worker, Job } from "bullmq";
-import { MedusaContainer } from "@medusajs/framework/types";
+import { MedusaContainer, INotificationModuleService } from "@medusajs/framework/types";
 import { getRedisConnection } from "../lib/redis";
 import { EmailJobPayload } from "../lib/email-queue";
 import { maskEmail } from "../utils/email-masking";
@@ -11,11 +11,6 @@ const DLQ_KEY = "email:dlq";
 
 let emailWorker: Worker | null = null;
 let dlqRedis: Redis | null = null;
-
-// Define a minimal interface for the Resend service to satisfy type checking
-interface ResendService {
-  send(notification: { to: string; template: string; data: unknown }): Promise<{ id: string } | undefined>;
-}
 
 /**
  * Checks if an error is retryable (transient) or permanent.
@@ -92,6 +87,21 @@ async function moveToDLQDirectly(
   }
 }
 
+import fs from 'fs';
+import path from 'path';
+
+/**
+ * Starts the email worker to process email jobs from the queue.
+ *
+ * @param container - The Medusa container to resolve services
+ * @returns The started worker instance
+ */
+import { initEmailQueue } from "../lib/email-queue";
+
+let shutdownHandler: (() => Promise<void>) | null = null;
+
+// ... existing code ...
+
 /**
  * Starts the email worker to process email jobs from the queue.
  *
@@ -103,8 +113,11 @@ export function startEmailWorker(container: MedusaContainer): Worker {
     return emailWorker;
   }
 
+  // Ensure queue logger is initialized (matches payment worker not exposing init logic)
+  initEmailQueue(container);
+
   const logger = container.resolve("logger");
-  const resendService = container.resolve("resendNotificationProviderService") as ResendService;
+  const notificationService = container.resolve("notification") as INotificationModuleService;
 
   // Create a separate Redis connection for DLQ operations
   if (!dlqRedis) {
@@ -114,6 +127,7 @@ export function startEmailWorker(container: MedusaContainer): Worker {
   emailWorker = new Worker(
     QUEUE_NAME,
     async (job: Job<EmailJobPayload>) => {
+      // ... existing processor logic ...
       const { orderId, template, recipient, data } = job.data;
       const maskedRecipient = maskEmail(recipient);
       const attemptNum = job.attemptsMade + 1;
@@ -125,13 +139,16 @@ export function startEmailWorker(container: MedusaContainer): Worker {
       }
 
       try {
-        await resendService.send({
+        const notification = await notificationService.createNotifications({
           to: recipient,
+          channel: "email",
           template: template,
-          data: data,
+          data: data as Record<string, unknown>,
         });
+        
+        const notificationId = notification?.id || "sent";
 
-        logger.info(`[EMAIL][SENT] Sent ${template} to ${maskedRecipient} for order ${orderId}`);
+        logger.info(`[EMAIL][SENT] Sent ${template} to ${maskedRecipient} for order ${orderId}. ID: ${notificationId}`);
         logger.info(`[METRIC] email_sent template=${template} order=${orderId}`);
       } catch (error: any) {
         // Check if error is retryable
@@ -205,6 +222,20 @@ export function startEmailWorker(container: MedusaContainer): Worker {
   });
 
   console.log("[EMAIL] Email worker started");
+
+  // Graceful shutdown (register once)
+  if (!shutdownHandler) {
+      shutdownHandler = async () => {
+          console.log("[EMAIL] Shutting down email worker...");
+          await emailWorker?.close();
+          if (dlqRedis) {
+              await dlqRedis.quit();
+              dlqRedis = null;
+          }
+      };
+      process.on("SIGTERM", shutdownHandler);
+      process.on("SIGINT", shutdownHandler);
+  }
 
   return emailWorker;
 }

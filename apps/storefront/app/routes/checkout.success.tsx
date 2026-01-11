@@ -170,6 +170,7 @@ export default function CheckoutSuccess() {
             try {
                 sessionStorage.removeItem('lastOrder');
                 sessionStorage.removeItem('orderId');
+                sessionStorage.removeItem('verifiedOrder'); // REFRESH FIX: Clear on navigation away
                 // MED-3 FIX: Also clean up cart ID to prevent lingering session data on navigate-away
                 sessionStorage.removeItem('medusa_cart_id');
             } catch (error) {
@@ -195,7 +196,26 @@ export default function CheckoutSuccess() {
 
         const fetchPaymentDetails = async () => {
             // SECURITY: Don't log sensitive payment data (paymentIntentId, clientSecret)
-            // Debug logs removed to prevent sensitive data exposure
+            // DEBUG REFRESH FIX: Check for stored verified order first
+            // This allows the success page to survive refreshes
+            try {
+                const storedVerifiedOrder = sessionStorage.getItem('verifiedOrder');
+                if (storedVerifiedOrder) {
+                    const { orderDetails: storedDetails, shippingAddress: storedShipping } = JSON.parse(storedVerifiedOrder);
+                    setOrderDetails(storedDetails);
+                    setShippingAddress(storedShipping);
+                    setPaymentStatus('success');
+                    // Restore orderId if available
+                    const storedOrderId = sessionStorage.getItem('orderId');
+                    if (storedOrderId) setOrderId(storedOrderId);
+                    logger.info('Restored verified order from sessionStorage');
+                    return;
+                }
+            } catch (error) {
+                // Non-critical: if parsing fails, continue with Stripe verification
+                logger.warn('Failed to restore verified order', { error: error instanceof Error ? error.message : String(error) });
+            }
+
             if (!paymentIntentClientSecret) {
                 setPaymentStatus("error");
                 setMessage("No payment intent found");
@@ -287,6 +307,18 @@ export default function CheckoutSuccess() {
                         
                         // RENDER SUCCESS IMMEDIATELY
                         setPaymentStatus('success');
+
+                        // REFRESH FIX: Store verified order data so success page survives refresh
+                        try {
+                            sessionStorage.setItem('verifiedOrder', JSON.stringify({
+                                orderDetails: orderData,
+                                shippingAddress: paymentIntent.shipping,
+                            }));
+                        } catch (error) {
+                            logger.warn('Failed to store verifiedOrder in sessionStorage', {
+                                error: error instanceof Error ? error.message : String(error),
+                            });
+                        }
 
                         // NON-BLOCKING: Geocode address in background
                         if (paymentIntent.shipping) {
@@ -400,19 +432,16 @@ export default function CheckoutSuccess() {
                         fetchOrderWithToken();
 
                         // Clear cart after a delay to ensure UI updates
+                        // NOTE: Do NOT clear verifiedOrder here - it's needed for page refresh
+                        // verifiedOrder will be cleared on unmount (navigation away)
                         setTimeout(() => {
                             clearCart();
-                            // SEC-05 AC2: Explicit cleanup of checkout data
-                            // Defense-in-depth: clear order data after successful checkout
-                            // (sessionStorage also clears on tab close, this is extra protection)
+                            // Clear checkout-related data but keep verifiedOrder for refresh
                             try {
                                 sessionStorage.removeItem('lastOrder');
-                                sessionStorage.removeItem('orderId');
                                 // MED-3 FIX: Also clean up cart ID to prevent lingering session data
                                 sessionStorage.removeItem('medusa_cart_id');
                             } catch (error) {
-                                // Non-critical: storage cleanup failures don't affect order processing
-                                // Errors can occur in private browsing mode or when storage is disabled
                                 logger.warn("Failed to cleanup sessionStorage", {
                                     error: error instanceof Error ? error.message : String(error),
                                 });

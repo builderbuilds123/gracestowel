@@ -45,7 +45,7 @@ vi.mock("../../src/utils/email-masking", () => ({
 describe("Email Worker", () => {
   let mockContainer: any;
   let mockLogger: any;
-  let mockResendService: any;
+  let mockNotificationService: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -56,14 +56,14 @@ describe("Email Worker", () => {
       warn: vi.fn(),
     };
 
-    mockResendService = {
-      send: vi.fn().mockResolvedValue({ id: "sent_123" }),
+    mockNotificationService = {
+      createNotifications: vi.fn().mockResolvedValue({ id: "sent_123" }),
     };
 
     mockContainer = {
       resolve: vi.fn((key) => {
         if (key === "logger") return mockLogger;
-        if (key === "resendNotificationProviderService") return mockResendService;
+        if (key === "notification") return mockNotificationService;
         return null;
       }),
     };
@@ -101,8 +101,9 @@ describe("Email Worker", () => {
 
       await processor(mockJob);
 
-      expect(mockResendService.send).toHaveBeenCalledWith({
+      expect(mockNotificationService.createNotifications).toHaveBeenCalledWith({
         to: "test@example.com",
+        channel: "email",
         template: "order_confirmation",
         data: { foo: "bar" },
       });
@@ -127,7 +128,7 @@ describe("Email Worker", () => {
       await processor(mockJob);
 
       expect(mockLogger.info).toHaveBeenCalledWith(
-        expect.stringContaining("[EMAIL][SENT] Sent order_confirmation to m***@test.com for order ord_success")
+        expect.stringContaining("[EMAIL][SENT] Sent order_confirmation to m***@test.com for order ord_success. ID: sent_123")
       );
     });
 
@@ -136,7 +137,7 @@ describe("Email Worker", () => {
       const worker = startEmailWorker(mockContainer) as any;
       const processor = worker.processor;
 
-      mockResendService.send.mockRejectedValue(new Error("Resend Error"));
+      mockNotificationService.createNotifications.mockRejectedValue(new Error("Resend Error"));
 
       const mockJob = {
         data: {
@@ -152,7 +153,7 @@ describe("Email Worker", () => {
       await expect(processor(mockJob)).rejects.toThrow("Resend Error");
 
       expect(mockLogger.error).toHaveBeenCalledWith(
-        expect.stringContaining("[EMAIL][FAILED] Failed order_confirmation for order ord_fail")
+        expect.stringContaining("[EMAIL][FAILED] Failed order_confirmation for order ord_fail (attempt 1/3): Resend Error")
       );
     });
   });
@@ -251,7 +252,7 @@ describe("Email Worker", () => {
         const worker = startEmailWorker(mockContainer) as any;
         const processor = worker.processor;
 
-        mockResendService.send.mockRejectedValue({ statusCode: 400, message: "Invalid email" });
+        mockNotificationService.createNotifications.mockRejectedValue({ statusCode: 400, message: "Invalid email" });
 
         const mockJob = {
           data: {
@@ -341,7 +342,7 @@ describe("Email Worker", () => {
       const worker = startEmailWorker(mockContainer) as any;
       const processor = worker.processor;
 
-      mockResendService.send.mockRejectedValue({ statusCode: 400, message: "Invalid email" });
+      mockNotificationService.createNotifications.mockRejectedValue({ statusCode: 400, message: "Invalid email" });
 
       const mockJob = {
         data: {
