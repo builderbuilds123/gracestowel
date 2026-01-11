@@ -76,6 +76,14 @@ interface ProductActionsProps {
         images: string[];
         colors: string[];
         disableEmbroidery: boolean;
+        variants: Array<{
+            id: string;
+            title: string;
+            sku?: string;
+            options?: Array<{
+                value: string;
+            }>;
+        }>;
     };
     selectedVariant?: {
         id: string;
@@ -84,7 +92,7 @@ interface ProductActionsProps {
     isOutOfStock: boolean;
 }
 
-export function ProductActions({ product, selectedVariant, isOutOfStock }: ProductActionsProps) {
+export function ProductActions({ product, selectedVariant: initialVariant, isOutOfStock }: ProductActionsProps) {
     const { addToCart } = useCart();
     const { t } = useLocale();
     
@@ -92,6 +100,18 @@ export function ProductActions({ product, selectedVariant, isOutOfStock }: Produ
     const [selectedColor, setSelectedColor] = useState(product.colors[0] || "");
     const [isEmbroideryOpen, setIsEmbroideryOpen] = useState(false);
     const [embroideryData, setEmbroideryData] = useState<EmbroideryData | null>(null);
+
+    // Find the actual variant for the selected color
+    const getSelectedVariantId = () => {
+        if (typeof window === 'undefined' && initialVariant) return initialVariant.id; // Fallback for SSR if needed
+
+        // Try to find a variant that has an option matching the selected color
+        const match = product.variants?.find(v => 
+            v.options?.some(o => o.value === selectedColor)
+        );
+
+        return match?.id || initialVariant?.id;
+    };
 
     const handleQuantityChange = (delta: number) => {
         setQuantity(prev => Math.max(1, prev + delta));
@@ -105,10 +125,12 @@ export function ProductActions({ product, selectedVariant, isOutOfStock }: Produ
     };
 
     const handleAddToCart = () => {
+        const variantId = getSelectedVariantId();
+        
         addToCart({
             id: product.id,
-            variantId: selectedVariant?.id,
-            sku: selectedVariant?.sku || undefined,
+            variantId: variantId,
+            sku: initialVariant?.sku || undefined, // Note: SKU might also differ per variant, but keeping change minimal for now
             title: product.title,
             price: product.formattedPrice,
             image: product.images[0],
@@ -127,7 +149,7 @@ export function ProductActions({ product, selectedVariant, isOutOfStock }: Produ
                     quantity,
                     color: selectedColor,
                     has_embroidery: !!embroideryData,
-                    variant_id: selectedVariant?.id,
+                    variant_id: variantId,
                 });
             });
         }

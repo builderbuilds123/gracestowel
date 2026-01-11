@@ -41,6 +41,7 @@ export default async function orderPlacedHandler({
   if (data.modification_token) {
     logger.info(`[ORDER_PLACED] Token received (masked): ****...${data.modification_token.slice(-8)}`)
   }
+  console.log(`[ORDER_PLACED] 🎯 Order placed event received: ${data.id}`); // Added for visibility
 
   // Send order confirmation email via BullMQ
   // Story 3.1: Replace workflow with enqueueEmail()
