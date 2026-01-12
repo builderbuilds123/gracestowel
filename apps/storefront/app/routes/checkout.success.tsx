@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useState, lazy, Suspense, useRef } from "react";
+import { useEffect, useLayoutEffect, useState, lazy, Suspense, useRef, useCallback } from "react";
 import { Link, useNavigate, useLoaderData, redirect } from "react-router";
 import type { LoaderFunctionArgs, MetaFunction } from "react-router";
 import { CheckCircle2, Package, Truck, MapPin, XCircle } from "lucide-react";
@@ -135,6 +135,26 @@ export default function CheckoutSuccess() {
     // Create logger once at component top for log correlation across component lifecycle
     const logger = createLogger();
 
+    // Add effect to log paymentStatus changes for debugging
+    useEffect(() => {
+        logger.info("Payment status changed", { paymentStatus });
+    }, [paymentStatus, logger]);
+
+    // Wrapper to prevent changing from 'success' to 'error' (once successful, it stays successful)
+    const setPaymentStatusSafe = useCallback((newStatus: 'loading' | 'success' | 'error' | 'canceled') => {
+        setPaymentStatus((prevStatus) => {
+            // Once status is 'success', never change it to 'error' (payment was verified successfully)
+            if (prevStatus === 'success' && newStatus === 'error') {
+                logger.warn("Attempted to change payment status from 'success' to 'error', ignoring", {
+                    previousStatus: prevStatus,
+                    attemptedStatus: newStatus,
+                });
+                return prevStatus;
+            }
+            return newStatus;
+        });
+    }, [logger]);
+
     // Initialize Stripe on mount (required for retrievePaymentIntent)
     useEffect(() => {
         if (stripePublishableKey) {
@@ -163,24 +183,10 @@ export default function CheckoutSuccess() {
         setUrlSanitized(true);
     }, []);
 
-    // MED-1 FIX: Cleanup checkout data when component unmounts (user navigates away)
-    useEffect(() => {
-        return () => {
-            // SEC-05 AC2: Clean up checkout data on unmount (navigation away from success page)
-            try {
-                sessionStorage.removeItem('lastOrder');
-                sessionStorage.removeItem('orderId');
-                // MED-3 FIX: Also clean up cart ID to prevent lingering session data on navigate-away
-                sessionStorage.removeItem('medusa_cart_id');
-            } catch (error) {
-                // Non-critical: storage cleanup failures don't affect navigation
-                // Errors can occur in private browsing mode or when storage is disabled
-                logger.warn("Failed to cleanup sessionStorage on unmount", {
-                    error: error instanceof Error ? error.message : String(error),
-                });
-            }
-        };
-    }, []);
+    // Note: We DON'T clear sessionStorage on unmount because:
+    // 1. sessionStorage automatically clears when the tab closes (desired behavior)
+    // 2. Clearing on unmount breaks page refresh (user loses order data on refresh)
+    // 3. It's safe to keep order data in sessionStorage until tab close
 
     useEffect(() => {
         if (!urlSanitized) return;
@@ -190,14 +196,60 @@ export default function CheckoutSuccess() {
 
         // Prevent double processing
         if (processedRef.current === paymentIntentId) {
+            logger.info("Payment intent already processed, skipping", {
+                hasPaymentIntentId: !!paymentIntentId,
+            });
             return;
         }
 
         const fetchPaymentDetails = async () => {
-            // SECURITY: Don't log sensitive payment data (paymentIntentId, clientSecret)
-            // Debug logs removed to prevent sensitive data exposure
+            // Handle refresh case: If no payment params but we have order data in sessionStorage,
+            // restore the success state instead of trying to verify payment again
+            if (!paymentIntentClientSecret && !redirectStatus && !paymentIntentId) {
+                logger.info("No payment params found (likely page refresh), checking sessionStorage for order data");
+                try {
+                    const savedOrder = migrateStorageItem('lastOrder', logger);
+                    const savedOrderId = migrateStorageItem('orderId', logger);
+                    
+                    if (savedOrder || savedOrderId) {
+                        logger.info("Found order data in sessionStorage, restoring success state");
+                        try {
+                            if (savedOrder) {
+                                const parsedOrder = JSON.parse(savedOrder);
+                                setOrderDetails(parsedOrder);
+                            }
+                            if (savedOrderId) {
+                                setOrderId(savedOrderId);
+                            }
+                            setPaymentStatusSafe('success');
+                            return; // Exit early - don't try to verify payment
+                        } catch (parseError) {
+                            logger.warn("Failed to parse saved order data", {
+                                error: parseError instanceof Error ? parseError.message : String(parseError),
+                            });
+                            // If parsing fails, continue to error path below
+                        }
+                    } else {
+                        logger.warn("No order data found in sessionStorage on refresh");
+                        // Continue to error path below
+                    }
+                } catch (storageError) {
+                    logger.warn("Failed to read sessionStorage on refresh", {
+                        error: storageError instanceof Error ? storageError.message : String(storageError),
+                    });
+                    // Continue to error path below
+                }
+            }
+            logger.info("Starting payment verification", {
+                hasRedirectStatus: !!redirectStatus,
+                redirectStatus: redirectStatus || 'missing',
+                hasPaymentIntentId: !!paymentIntentId,
+                hasClientSecret: !!paymentIntentClientSecret,
+            });
+
             if (!paymentIntentClientSecret) {
-                setPaymentStatus("error");
+                logger.error("Payment verification failed: No payment intent client secret", new Error("Missing payment intent client secret"));
+                setPaymentStatusSafe("error");
                 setMessage("No payment intent found");
                 return;
             }
@@ -205,12 +257,14 @@ export default function CheckoutSuccess() {
             // Fetch payment details
             const stripe = await getStripe();
             if (!stripe) {
-                setPaymentStatus("error");
+                logger.error("Payment verification failed: Stripe initialization failed", new Error("Stripe failed to initialize"));
+                setPaymentStatusSafe("error");
                 setMessage("Stripe failed to initialize");
                 return;
             }
 
             if (redirectStatus === 'succeeded' && paymentIntentId && paymentIntentClientSecret) {
+                logger.info("Redirect status is 'succeeded', proceeding with payment verification");
                 processedRef.current = paymentIntentId; // Mark as processed
 
                 try {
@@ -225,13 +279,18 @@ export default function CheckoutSuccess() {
                             // Don't include paymentIntentId or clientSecret
                         });
                         setMessage(`Stripe Error: ${error.message}`);
-                        setPaymentStatus('error');
+                        setPaymentStatusSafe('error');
                         return;
                     }
 
                     // With manual capture mode, status will be 'requires_capture' (authorized but not captured)
                     // or 'succeeded' (already captured after 1-hour window)
                     const validStatuses = ['succeeded', 'requires_capture'];
+                    logger.info("Retrieved payment intent from Stripe", {
+                        status: paymentIntent?.status,
+                        isValidStatus: paymentIntent ? validStatuses.includes(paymentIntent.status) : false,
+                    });
+
                     if (paymentIntent && validStatuses.includes(paymentIntent.status)) {
                         // Handle Order Details Logic (Persistence)
                         // SEC-05: Recover from sessionStorage (clears on tab close)
@@ -286,7 +345,8 @@ export default function CheckoutSuccess() {
                         }
                         
                         // RENDER SUCCESS IMMEDIATELY
-                        setPaymentStatus('success');
+                        logger.info("Payment verification successful, setting status to 'success'");
+                        setPaymentStatusSafe('success');
 
                         // NON-BLOCKING: Geocode address in background
                         if (paymentIntent.shipping) {
@@ -402,44 +462,46 @@ export default function CheckoutSuccess() {
                         // Clear cart after a delay to ensure UI updates
                         setTimeout(() => {
                             clearCart();
-                            // SEC-05 AC2: Explicit cleanup of checkout data
-                            // Defense-in-depth: clear order data after successful checkout
-                            // (sessionStorage also clears on tab close, this is extra protection)
+                            // MED-3 FIX: Clean up cart ID but keep order data for refresh support
+                            // Don't clear lastOrder and orderId - they're needed for page refresh
+                            // They will be cleared on tab close (sessionStorage behavior) or on unmount
                             try {
-                                sessionStorage.removeItem('lastOrder');
-                                sessionStorage.removeItem('orderId');
-                                // MED-3 FIX: Also clean up cart ID to prevent lingering session data
                                 sessionStorage.removeItem('medusa_cart_id');
                             } catch (error) {
                                 // Non-critical: storage cleanup failures don't affect order processing
                                 // Errors can occur in private browsing mode or when storage is disabled
-                                logger.warn("Failed to cleanup sessionStorage", {
+                                logger.warn("Failed to cleanup cart ID from sessionStorage", {
                                     error: error instanceof Error ? error.message : String(error),
                                 });
                             }
                         }, 500);
                     } else {
-                        logger.error("Payment status not valid", new Error(`Invalid status: ${paymentIntent?.status}`), {
+                        logger.error("Payment verification failed: Invalid payment intent status", new Error(`Invalid status: ${paymentIntent?.status}`), {
                             status: paymentIntent?.status,
+                            validStatuses,
                             // Don't include paymentIntentId
                         });
                         setMessage(`Payment status: ${paymentIntent?.status}`);
-                        setPaymentStatus('error');
+                        setPaymentStatusSafe('error');
                     }
                 } catch (error: any) {
-                    logger.error("Error fetching payment details", error instanceof Error ? error : new Error(String(error)), {
+                    logger.error("Payment verification failed: Exception during payment details fetch", error instanceof Error ? error : new Error(String(error)), {
                         redirectStatus,
+                        errorMessage: error?.message,
+                        errorName: error?.name,
                         // Don't include paymentIntentId or clientSecret
                     });
                     setMessage(`Error: ${error.message || "Payment processing failed"}`);
-                    setPaymentStatus('error');
+                    setPaymentStatusSafe('error');
                 }
             } else {
-                logger.error("Missing required params or redirect status not succeeded", new Error("Invalid payment params"), {
+                logger.error("Payment verification failed: Missing required params or redirect status not 'succeeded'", new Error("Invalid payment params"), {
                     redirectStatus,
+                    hasPaymentIntentId: !!paymentIntentId,
+                    hasClientSecret: !!paymentIntentClientSecret,
                     // Don't include paymentIntentId
                 });
-                setPaymentStatus('error');
+                setPaymentStatusSafe('error');
             }
         };
 
