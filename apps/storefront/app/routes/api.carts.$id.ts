@@ -91,9 +91,22 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
         console.warn(`[Cart Sync] Filtered out ${items.length - validItems.length} items with invalid variantIds`);
       }
       
-      await service.syncCartItems(cartId, validItems);
-      result.items_synced = validItems.length;
-      console.log(`Synced ${validItems.length} items to cart ${cartId}`);
+      try {
+        await service.syncCartItems(cartId, validItems);
+        result.items_synced = validItems.length;
+        console.log(`Synced ${validItems.length} items to cart ${cartId}`);
+      } catch (syncError: any) {
+        console.error("Cart sync failed:", syncError);
+        // Check for inventory errors
+        if (syncError.message?.includes("inventory") || syncError.type === "not_allowed") {
+           return data({ 
+             error: "Some items are out of stock", 
+             details: syncError.message,
+             code: "INVENTORY_ERROR"
+           }, { status: 422 });
+        }
+        throw syncError; // Re-throw to be caught by outer handler
+      }
     }
 
     // Update cart details

@@ -15,6 +15,7 @@ import {
 import { Modules } from "@medusajs/framework/utils";
 import { modificationTokenService } from "../services/modification-token";
 import { InsufficientStockError } from "./add-item-to-order";
+import { formatModificationWindow } from "../lib/payment-capture-queue";
 
 /**
  * Lock configuration constants for concurrent order creation prevention
@@ -258,7 +259,7 @@ const prepareInventoryAdjustmentsStep = createStep(
 
 /**
  * Step to generate modification token for the order
- * This token allows customers to modify their order within a 1-hour window
+ * This token allows customers to modify their order within the configured modification window
  */
 const generateModificationTokenStep = createStep(
     "generate-modification-token",
@@ -287,7 +288,7 @@ const logOrderCreatedStep = createStep(
         if (input.inventoryAdjusted) {
             console.log(`Inventory levels adjusted for order ${input.orderId}`);
         }
-        console.log(`Modification token generated (valid for 1 hour)`);
+        console.log(`Modification token generated (valid for ${formatModificationWindow()})`);
         return new StepResponse({ success: true, modificationToken: input.modificationToken });
     }
 );
@@ -458,7 +459,7 @@ const linkPaymentCollectionStep = createStep(
  * 3. Adjusts inventory levels (decrements stock)
  * 4. PAY-01: Creates PaymentCollection with Stripe PI data
  * 5. PAY-01: Links PaymentCollection to Order
- * 6. Generates a modification token for the 1-hour modification window
+ * 6. Generates a modification token for the modification window
  * 7. Logs the order creation
  * 8. Emits order.placed event (triggers email + payment capture scheduling)
  */
@@ -555,7 +556,7 @@ export const createOrderFromStripeWorkflow = createWorkflow(
         }));
         linkPaymentCollectionStep(linkInput);
 
-        // Step 7: Generate modification token for 1-hour window
+        // Step 7: Generate modification token for modification window
         const tokenInput = transform({ order, input }, (data) => ({
             orderId: data.order.id,
             paymentIntentId: data.input.paymentIntentId,

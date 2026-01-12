@@ -1,7 +1,6 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import '@testing-library/jest-dom';
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { OrderModificationDialogs } from "../OrderModificationDialogs";
 
@@ -10,6 +9,14 @@ vi.mock("../../CancelOrderDialog", () => ({
     CancelOrderDialog: ({ isOpen, onConfirm }: any) => isOpen ? (
         <div data-testid="cancel-dialog">
             <button onClick={onConfirm}>Confirm Cancel</button>
+        </div>
+    ) : null
+}));
+
+vi.mock("../CancelRejectedModal", () => ({
+    CancelRejectedModal: ({ isOpen }: any) => isOpen ? (
+        <div data-testid="cancel-rejected-modal">
+            Cannot Cancel Order
         </div>
     ) : null
 }));
@@ -30,16 +37,25 @@ vi.mock("../../AddItemsDialog", () => ({
     ) : null
 }));
 
-// Mock useFetcher since we can't easily test Remix actions in unit tests
+// Helper to create a mock fetcher
+const createMockFetcher = (data: any = null): any => ({
+    data,
+    state: "idle",
+    submit: vi.fn(),
+    formMethod: "POST",
+    formAction: "order/status",
+    formEncType: "application/x-www-form-urlencoded",
+    text: undefined,
+    formData: undefined,
+    json: undefined,
+    load: vi.fn(),
+});
+
 vi.mock("react-router", async () => {
     const actual = await vi.importActual("react-router");
     return {
         ...actual,
-        useFetcher: () => ({
-            data: null,
-            state: "idle",
-            submit: vi.fn(),
-        }),
+        useFetcher: vi.fn(() => createMockFetcher()),
     };
 });
 
@@ -48,7 +64,14 @@ describe("OrderModificationDialogs", () => {
         orderId: "order_123",
         orderNumber: "1001",
         currencyCode: "usd",
-        currentAddress: {},
+        currentAddress: {
+            first_name: "John",
+            last_name: "Doe",
+            address_1: "123 Main St",
+            city: "New York",
+            postal_code: "10001",
+            country_code: "us"
+        },
         onOrderUpdated: vi.fn(),
         onAddressUpdated: vi.fn(),
         onOrderCanceled: vi.fn(),
@@ -93,5 +116,20 @@ describe("OrderModificationDialogs", () => {
 
         fireEvent.click(screen.getByText("Edit Address"));
         expect(screen.getByTestId("edit-address-dialog")).toBeInTheDocument();
+    });
+
+    it("shows CancelRejectedModal when order_shipped error occurs", async () => {
+        const { useFetcher } = await import("react-router");
+        vi.mocked(useFetcher).mockReturnValue(createMockFetcher({
+            success: false,
+            error: "Order already shipped",
+            errorCode: "order_shipped"
+        }));
+
+        render(<OrderModificationDialogs {...mockProps} />);
+
+        // The modal should be visible because fetcher.data has the error
+        expect(screen.getByTestId("cancel-rejected-modal")).toBeInTheDocument();
+        expect(screen.getByText("Cannot Cancel Order")).toBeInTheDocument();
     });
 });

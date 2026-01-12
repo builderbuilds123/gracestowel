@@ -1,20 +1,26 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { modificationTokenService } from "../../../../../services/modification-token";
 import { logger } from "../../../../../utils/logger";
-import { 
+import {
     cancelOrderWithRefundWorkflow,
     LateCancelError,
     PartialCaptureError,
     OrderAlreadyCanceledError,
     QueueRemovalError,
     OrderNotFoundError,
+    OrderShippedError,
+    MissingPaymentCollectionError,
 } from "../../../../../workflows/cancel-order-with-refund";
 
+// Trigger rebuild
 /**
  * POST /store/orders/:id/cancel
  *
- * Cancel an order within the 1-hour modification window.
- * Handles payment void/refund and inventory restocking.
+ * Story 3.5: Unified Order Cancellation
+ * Cancel an order at any time before shipping.
+ * - Within modification window: Void authorization
+ * - After modification window: Issue refund (if not shipped)
+ * Note: Window duration is configured via PAYMENT_CAPTURE_DELAY_MS
  *
  * Headers:
  * - x-modification-token: JWT token from order creation (REQUIRED - must be in header, not body)
@@ -25,12 +31,12 @@ import {
  *
  * Error Codes:
  * - 400 TOKEN_REQUIRED: Missing x-modification-token header
- * - 401 TOKEN_EXPIRED: Token has expired
  * - 401 TOKEN_INVALID: Malformed or invalid token
  * - 403 TOKEN_MISMATCH: Token order_id doesn't match route parameter
  * - 404 ORDER_NOT_FOUND: Order does not exist
  * - 400 ALREADY_CANCELED: Order is already canceled (idempotent 200)
- * - 409 late_cancel: Payment already captured, cannot cancel
+ * - 409 late_cancel: Payment capture in progress, cannot cancel
+ * - 409 order_shipped: Order has been shipped, cannot cancel
  * - 422 partial_capture: Payment partially captured, manual refund required
  * - 503 service_unavailable: Queue service unavailable, retry later
  */
@@ -50,22 +56,22 @@ export async function POST(
         return;
     }
 
-    // Validate the token
+    // Validate the token - Story 3.5: Allow expired tokens for post-capture cancellation
     const validation = modificationTokenService.validateToken(token);
 
-    if (!validation.valid) {
+    // Story 3.5: Only reject truly invalid tokens (malformed, wrong signature)
+    // Expired tokens are now allowed - workflow will determine void vs refund path
+    if (!validation.valid && !validation.expired) {
         res.status(401).json({
-            code: validation.expired ? "TOKEN_EXPIRED" : "TOKEN_INVALID",
-            message: validation.expired
-                ? "The 1-hour modification window has expired. Please contact support for assistance."
-                : "Invalid modification token",
-            expired: validation.expired,
+            code: "TOKEN_INVALID",
+            message: "Invalid modification token",
         });
         return;
     }
 
-    // Verify the token is for this order
+    // Verify the token is for this order (check payload even if expired)
     if (validation.payload?.order_id !== id) {
+        console.warn(`[CancelOrder] Token mismatch. Token Order ID: ${validation.payload?.order_id}, Request Order ID: ${id}`);
         res.status(403).json({
             code: "TOKEN_MISMATCH",
             message: "Token does not match this order",
@@ -73,15 +79,9 @@ export async function POST(
         return;
     }
 
-    // Check if the order is still within the modification window
+    // Story 3.5: Determine if within grace period for workflow branching
     const remainingTime = modificationTokenService.getRemainingTime(token);
-    if (remainingTime <= 0) {
-        res.status(400).json({
-            code: "WINDOW_EXPIRED",
-            message: "The 1-hour modification window has expired. Please contact support for assistance.",
-        });
-        return;
-    }
+    const isWithinGracePeriod = remainingTime > 0;
 
     // Verify order exists and is not already canceled
     const query = req.scope.resolve("query");
@@ -109,31 +109,47 @@ export async function POST(
     }
 
     try {
-        // Run the cancellation workflow
+        // Run the cancellation workflow - Story 3.5: Pass grace period status for branching
         const { result } = await cancelOrderWithRefundWorkflow(req.scope).run({
             input: {
                 orderId: id,
                 paymentIntentId: validation.payload.payment_intent_id,
-                reason: reason || "Customer requested cancellation within modification window",
+                reason: reason || (isWithinGracePeriod
+                    ? "Customer requested cancellation within modification window"
+                    : "Customer requested cancellation after modification window"),
+                isWithinGracePeriod,
             },
         });
 
         // Story 3.4: Response schema per AC
         res.status(200).json({
-            order_id: result.order_id,
-            status: result.status,
-            payment_action: result.payment_action,
-            // Include warning if void failed (zombie case) for monitoring
-            ...(result.voidFailed && {
-                warning: "Order canceled but payment void failed. Manual intervention may be required.",
-            }),
+            order_id: result.orderId,
+            status: "canceled",
+            action: "canceled", // Add action for storefront compatibility
         });
     } catch (error) {
         // Story 3.4 AC #4: Race Condition Handling - 409 Conflict
         if (error instanceof LateCancelError) {
             res.status(409).json({
-                code: "late_cancel",
+                code: "CANCELLATION_LATE",
+                message: "Order is already being processed. Please contact support for refund.",
+            });
+            return;
+        }
+
+        // Story 3.5 AC3: Order Already Shipped - 409 Conflict
+        if (error instanceof OrderShippedError) {
+            res.status(409).json({
+                code: "ORDER_SHIPPED",
                 message: error.message,
+            });
+            return;
+        }
+
+        if (error instanceof MissingPaymentCollectionError) {
+            res.status(422).json({
+                code: "MISSING_PAYMENT_COLLECTION",
+                message: "Cannot cancel order: Missing payment information. Please contact support.",
             });
             return;
         }

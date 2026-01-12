@@ -14,10 +14,12 @@ import {
   Row,
   Column,
 } from "@react-email/components"
+import { formatModificationWindow } from "../../../lib/payment-capture-queue"
 
 interface OrderItem {
   title: string
   variant_title?: string
+  color?: string
   quantity: number
   unit_price: number
 }
@@ -58,10 +60,14 @@ interface OrderPlacedEmailProps {
  */
 const formatPrice = (amount: number | undefined, currency: string = "cad") => {
   if (amount === undefined || amount === null) return "-"
+  // Medusa V2 stores prices in CENTS (e.g. 3500 cents = $35.00)
+  // But usage in template might expect raw amount.
+  // Debugging confirmed database stores 3500 for $35.00.
+  // We divide by 100 to display properly.
   return new Intl.NumberFormat("en-CA", {
     style: "currency",
     currency: currency.toUpperCase(),
-  }).format(amount)
+  }).format(amount / 100)
 }
 
 export const OrderPlacedEmailComponent = ({ order, modification_token }: OrderPlacedEmailProps) => {
@@ -114,7 +120,7 @@ export const OrderPlacedEmailComponent = ({ order, modification_token }: OrderPl
           {modifyOrderUrl && (
             <Section style={modifyOrderSection}>
               <Text style={modifyOrderText}>
-                Need to make changes? You have <strong>1 hour</strong> to modify your order.
+                Need to make changes? You have <strong>{formatModificationWindow()}</strong> to modify your order.
               </Text>
               <Link href={modifyOrderUrl} style={modifyOrderButton}>
                 Modify Order →
@@ -133,8 +139,10 @@ export const OrderPlacedEmailComponent = ({ order, modification_token }: OrderPl
                 <Row key={index} style={itemRow}>
                   <Column style={itemDetailsColumn}>
                     <Text style={itemTitle}>{item.title}</Text>
-                    {item.variant_title && (
-                      <Text style={itemVariant}>{item.variant_title}</Text>
+                    {(item.variant_title || item.color) && (
+                      <Text style={itemVariant}>
+                        {[item.variant_title, item.color].filter(Boolean).join(" • ")}
+                      </Text>
                     )}
                     <Text style={itemQuantity}>Qty: {item.quantity}</Text>
                   </Column>

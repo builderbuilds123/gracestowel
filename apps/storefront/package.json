@@ -11,7 +11,7 @@
     "preview": "vite preview",
     "local": "pnpm run build && npx wrangler dev --config dist/server/wrangler.json --port 5174",
     "lint": "echo 'Lint not configured for storefront'",
-    "typecheck": "node -e \"process.env.CI ? null : require('child_process').execSync('npm run cf-typegen && react-router typegen', {stdio: 'inherit'})\" && tsc -b",
+    "typecheck": "npm run cf-typegen && react-router typegen && tsc -b",
     "typecheck:ci": "tsc -b",
     "test": "vitest",
     "test:ui": "vitest --ui",

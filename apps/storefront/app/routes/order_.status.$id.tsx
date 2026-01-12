@@ -146,7 +146,7 @@ export async function action({ params, request, context }: ActionFunctionArgs) {
             });
 
             if (!response.ok) {
-                const errorData = await response.json() as { message?: string };
+                const errorData = await response.json() as { message?: string; code?: string };
                 // Clear cookie on auth errors
                 if (response.status === 401 || response.status === 403) {
                     return data(
@@ -154,7 +154,7 @@ export async function action({ params, request, context }: ActionFunctionArgs) {
                         { status: response.status, headers: { "Set-Cookie": await clearGuestToken(id!) } }
                     );
                 }
-                return data({ success: false, error: errorData.message || "Failed to cancel order" }, { status: 400 });
+                return data({ success: false, error: errorData.message || "Failed to cancel order", errorCode: errorData.code }, { status: response.status === 409 ? 409 : 400 });
             }
 
             return data({ success: true, action: "canceled" });

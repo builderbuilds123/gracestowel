@@ -18,8 +18,11 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   /* Retry on CI only */
   retries: process.env.CI ? 2 : 0,
-  /* Use multiple workers in CI for faster execution, single worker locally to avoid overwhelming dev server */
-  workers: process.env.CI ? 4 : 1,
+  /* Optimized workers: More workers locally for faster execution, more in CI */
+  /* Use 50% of CPU cores locally (min 2, max 4), full capacity in CI */
+  workers: process.env.CI 
+    ? 4 
+    : Math.max(2, Math.min(4, Math.floor(require('os').cpus().length * 0.5))),
   /* Reporter to use */
   reporter: [
     ["html", { outputFolder: "playwright-report", open: "never" }],
@@ -39,42 +42,51 @@ export default defineConfig({
     video: "retain-on-failure",
     /* Ignore HTTPS errors for local development */
     ignoreHTTPSErrors: true,
-    /* Action timeout: 15 seconds (click, fill, etc.) */
-    actionTimeout: 15 * 1000,
-    /* Navigation timeout: 30 seconds (page.goto, page.reload) */
-    navigationTimeout: 30 * 1000,
+    /* Optimized timeouts: Reduced for faster failure detection */
+    actionTimeout: 10 * 1000, // Reduced from 15s to 10s
+    navigationTimeout: 20 * 1000, // Reduced from 30s to 20s
   },
 
   /* Configure projects for major browsers */
-  projects: [
-    {
-      name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
-    },
-    {
-      name: "firefox",
-      use: { ...devices["Desktop Firefox"] },
-    },
-    {
-      name: "webkit",
-      use: { ...devices["Desktop Safari"] },
-    },
-    /* Test against mobile viewports */
-    {
-      name: "Mobile Chrome",
-      use: { ...devices["Pixel 5"] },
-    },
-    {
-      name: "Mobile Safari",
-      use: { ...devices["iPhone 12"] },
-    },
-    /* Resilience tests project */
-    {
-      name: "resilience",
-      testDir: "./resilience",
-      use: { ...devices["Desktop Chrome"] },
-    },
-  ],
+  /* OPTIMIZATION: For faster local runs, use E2E_FAST=true to run only chromium */
+  projects: process.env.E2E_FAST === "true" 
+    ? [
+        // Fast mode: Only Chromium for quick feedback
+        {
+          name: "chromium",
+          use: { ...devices["Desktop Chrome"] },
+        },
+      ]
+    : [
+        // Full mode: All browsers (for CI and comprehensive testing)
+        {
+          name: "chromium",
+          use: { ...devices["Desktop Chrome"] },
+        },
+        {
+          name: "firefox",
+          use: { ...devices["Desktop Firefox"] },
+        },
+        {
+          name: "webkit",
+          use: { ...devices["Desktop Safari"] },
+        },
+        /* Test against mobile viewports */
+        {
+          name: "Mobile Chrome",
+          use: { ...devices["Pixel 5"] },
+        },
+        {
+          name: "Mobile Safari",
+          use: { ...devices["iPhone 12"] },
+        },
+        /* Resilience tests project */
+        {
+          name: "resilience",
+          testDir: "./resilience",
+          use: { ...devices["Desktop Chrome"] },
+        },
+      ],
 
   /* Run your local dev server before starting the tests */
   /* In CI, storefront is already running via Docker Compose, so we skip webServer */
@@ -88,12 +100,11 @@ export default defineConfig({
         timeout: 120 * 1000,
       },
 
-  /* Global timeout for each test: 60 seconds */
-  timeout: 60 * 1000,
+  /* Optimized timeouts: Reduced for faster feedback */
+  timeout: 45 * 1000, // Reduced from 60s to 45s
 
-  /* Expect timeout: 15 seconds (all assertions) */
+  /* Expect timeout: Reduced for faster failure detection */
   expect: {
-    timeout: 15 * 1000,
+    timeout: 10 * 1000, // Reduced from 15s to 10s
   },
 });
-

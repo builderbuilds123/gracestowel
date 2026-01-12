@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
+import { PAYMENT_CAPTURE_DELAY_MS } from "../lib/payment-capture-queue";
 
 /**
  * Payload structure for the modification token JWT
@@ -24,23 +25,21 @@ export interface TokenValidationResult {
 
 /**
  * Configuration for the modification token
+ * Uses PAYMENT_CAPTURE_DELAY_MS from environment for consistent window duration
  */
-const delayMs = parseInt(process.env.PAYMENT_CAPTURE_DELAY_MS || '', 10);
-const MODIFICATION_WINDOW_SECONDS = !isNaN(delayMs)
-    ? Math.floor(delayMs / 1000)
-    : 60 * 60; // 1 hour
+const MODIFICATION_WINDOW_SECONDS = Math.floor(PAYMENT_CAPTURE_DELAY_MS / 1000);
 
 /**
  * ModificationTokenService
- * 
+ *
  * Handles generation and validation of JWT tokens used for order modification
- * within the 1-hour window after purchase.
- * 
+ * within the configured modification window after purchase.
+ *
  * The token is:
  * - Generated at order creation time
  * - Embedded in the order success URL and confirmation email
  * - Required for all modification endpoints (cancel, edit address, add items)
- * - Expires exactly 1 hour after order creation
+ * - Expires based on PAYMENT_CAPTURE_DELAY_MS configuration
  */
 export class ModificationTokenService {
     private readonly secret: string;
@@ -135,9 +134,13 @@ export class ModificationTokenService {
             const errorMsg = error.message || "Unknown error";
             
             if (error instanceof jwt.TokenExpiredError) {
+                // Story 3.5: For expired tokens, decode without verification to get payload
+                // This allows post-capture cancellation to work with expired tokens
+                const decoded = jwt.decode(token) as ModificationTokenPayload | null;
                 return {
                     valid: false,
                     expired: true,
+                    payload: decoded || undefined,
                     error: "Modification window has expired",
                     originalError: errorMsg,
                 };

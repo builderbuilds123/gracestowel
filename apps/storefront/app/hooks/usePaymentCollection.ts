@@ -89,8 +89,12 @@ export function usePaymentCollection(
             if (contentType.includes("application/json")) {
               const errorData = await response.json() as { error?: string };
               console.error("[usePaymentCollection] API Error:", errorData);
-              if (errorData && typeof errorData.error === "string" && errorData.error.trim()) {
-                errorMessage = errorData.error;
+              if (errorData) {
+                if (typeof errorData.error === "string" && errorData.error.trim()) {
+                  errorMessage = errorData.error;
+                } else if (typeof (errorData as any).message === "string" && (errorData as any).message.trim()) {
+                  errorMessage = (errorData as any).message;
+                }
               }
             } else {
               const errorText = await response.text().catch(() => "");

@@ -3,6 +3,7 @@ import {
   modificationTokenService,
   ModificationTokenService,
 } from "../../src/services/modification-token";
+import { getModificationWindowSeconds } from "../../src/lib/payment-capture-queue";
 
 describe("ModificationTokenService", () => {
   const testOrderId = "order_test123";
@@ -83,9 +84,10 @@ describe("ModificationTokenService", () => {
       );
       const remaining = modificationTokenService.getRemainingTime(token);
 
-      // Token should be valid for about 1 hour (3600 seconds)
-      expect(remaining).toBeGreaterThan(3500);
-      expect(remaining).toBeLessThanOrEqual(3600);
+      // Token should be valid for configured modification window
+      const windowSeconds = getModificationWindowSeconds();
+      expect(remaining).toBeGreaterThan(windowSeconds - 100);
+      expect(remaining).toBeLessThanOrEqual(windowSeconds);
     });
 
     it("should return 0 for an invalid token", () => {
@@ -107,9 +109,28 @@ describe("ModificationTokenService", () => {
 
       expect(result.payload?.exp).toBeDefined();
       expect(result.payload?.iat).toBeDefined();
-      // exp should be ~1 hour after iat
+      // exp should be configured modification window after iat
       const diff = (result.payload?.exp || 0) - (result.payload?.iat || 0);
-      expect(diff).toBe(3600);
+      expect(diff).toBe(getModificationWindowSeconds());
+    });
+
+    it("should return payload even for expired tokens (Story 3.5)", () => {
+      // Create a service with a 1-second window to test expiration
+      const shortWindowService = new ModificationTokenService(undefined, 1);
+      const token = shortWindowService.generateToken(
+        testOrderId,
+        testPaymentIntentId,
+        new Date(Date.now() - 5000) // 5 seconds ago
+      );
+
+      const result = shortWindowService.validateToken(token);
+
+      expect(result.valid).toBe(false);
+      expect(result.expired).toBe(true);
+      // Story 3.5: Payload should be included for expired tokens
+      expect(result.payload).toBeDefined();
+      expect(result.payload?.order_id).toBe(testOrderId);
+      expect(result.payload?.payment_intent_id).toBe(testPaymentIntentId);
     });
   });
 

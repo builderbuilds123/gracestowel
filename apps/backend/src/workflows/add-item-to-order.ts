@@ -13,6 +13,7 @@ import { retryWithBackoff, isRetryableStripeError } from "../utils/stripe-retry"
 import { updateInventoryLevelsStep } from "@medusajs/core-flows";
 import type { UpdateInventoryLevelInput } from "@medusajs/types";
 import { logger } from "../utils/logger";
+import { formatModificationWindow } from "../lib/payment-capture-queue";
 
 // Type interface for inventory levels to improve type safety
 interface InventoryLevel {
@@ -379,7 +380,7 @@ export class TokenExpiredError extends Error {
     public readonly code = "TOKEN_EXPIRED" as const;
 
     constructor() {
-        super("The 1-hour modification window has expired");
+        super(`The ${formatModificationWindow()} modification window has expired`);
         this.name = "TokenExpiredError";
     }
 }

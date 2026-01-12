@@ -4,10 +4,10 @@ import { RedisNotConfiguredError } from "../lib/payment-capture-queue";
 
 /**
  * Loader to start the BullMQ payment capture worker when the Medusa server starts.
- * 
- * This worker processes delayed jobs that capture payments after the 1-hour
- * modification window expires.
- * 
+ *
+ * This worker processes delayed jobs that capture payments after the
+ * modification window expires (configured via PAYMENT_CAPTURE_DELAY_MS).
+ *
  * Story 2.3: Now passes the container to enable fetching fresh order totals.
  */
 export default async function paymentCaptureWorkerLoader(container: MedusaContainer) {

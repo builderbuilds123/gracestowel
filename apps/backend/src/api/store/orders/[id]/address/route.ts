@@ -1,11 +1,12 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { modificationTokenService } from "../../../../../services/modification-token";
 import { logger } from "../../../../../utils/logger";
+import { formatModificationWindow } from "../../../../../lib/payment-capture-queue";
 
 /**
  * POST /store/orders/:id/address
  *
- * Update the shipping address for an order within the 1-hour modification window.
+ * Update the shipping address for an order within the modification window.
  *
  * Headers:
  * - x-modification-token: JWT token from order creation (REQUIRED - must be in header, not body)
@@ -128,7 +129,7 @@ export async function POST(
         res.status(401).json({
             code: validation.expired ? "TOKEN_EXPIRED" : "TOKEN_INVALID",
             message: validation.expired
-                ? "The 1-hour modification window has expired. Please contact support for assistance."
+                ? `The ${formatModificationWindow()} modification window has expired. Please contact support for assistance.`
                 : "Invalid modification token",
             expired: validation.expired,
         });
@@ -149,7 +150,7 @@ export async function POST(
     if (remainingTime <= 0) {
         res.status(400).json({
             code: "WINDOW_EXPIRED",
-            message: "The 1-hour modification window has expired. Please contact support for assistance.",
+            message: `The ${formatModificationWindow()} modification window has expired. Please contact support for assistance.`,
         });
         return;
     }

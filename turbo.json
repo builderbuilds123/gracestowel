@@ -14,9 +14,30 @@
     },
     "test:e2e": {
       "dependsOn": ["^build"],
-      "inputs": ["$TURBO_DEFAULT$", ".env*"],
-      "outputs": ["test-results/**", "playwright-report/**"],
-      "env": ["CI", "STOREFRONT_URL", "MEDUSA_PUBLISHABLE_KEY", "ADMIN_TOKEN"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        ".env*",
+        "tests/**",
+        "support/**",
+        "playwright.config.ts"
+      ],
+      "outputs": [
+        "test-results/**",
+        "playwright-report/**",
+        ".playwright/**"
+      ],
+      "env": [
+        "CI",
+        "STOREFRONT_URL",
+        "MEDUSA_PUBLISHABLE_KEY",
+        "ADMIN_TOKEN",
+        "E2E_FAST"
+      ],
+      "cache": true,
+      "persistent": false
+    },
+    "test:all": {
+      "dependsOn": ["test", "test:e2e"],
       "cache": false,
       "persistent": false
     },

@@ -61,6 +61,9 @@ apps/**/pnpm-lock.yaml
 # Vite
 vite.config.ts.timestamp-*
 
+# React Router (auto-generated types)
+.react-router/types/
+
 # Medusa
 .medusa/
 

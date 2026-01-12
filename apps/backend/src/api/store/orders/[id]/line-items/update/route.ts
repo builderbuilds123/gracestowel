@@ -23,7 +23,7 @@ import { logger } from "../../../../../../utils/logger";
 /**
  * POST /store/orders/:id/line-items/update
  *
- * Update the quantity of an existing line item within the 1-hour modification window.
+ * Update the quantity of an existing line item within the modification window.
  * Handles incremental authorization if increasing quantity, refund if decreasing.
  *
  * Headers:

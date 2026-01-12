@@ -6,9 +6,13 @@ vi.mock("../../src/lib/email-queue", () => ({
   enqueueEmail: vi.fn(),
 }));
 
-vi.mock("../../src/lib/payment-capture-queue", () => ({
-  schedulePaymentCapture: vi.fn(),
-}));
+vi.mock("../../src/lib/payment-capture-queue", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/lib/payment-capture-queue")>();
+  return {
+    ...actual,
+    schedulePaymentCapture: vi.fn(),
+  };
+});
 
 vi.mock("../../src/utils/posthog", () => ({
   getPostHog: vi.fn().mockReturnValue(null),
@@ -284,6 +288,50 @@ describe("Order Placed Subscriber", () => {
     );
     expect(mockLogger.error).toHaveBeenCalledWith(
       expect.stringContaining("Queue full")
+    );
+  });
+
+  it("extracts color from metadata if present", async () => {
+    const orderWithMetadata = {
+      id: "order_color_1",
+      display_id: "1007",
+      email: "test@example.com",
+      currency_code: "cad",
+      total: 50.00,
+      customer_id: "cust_123",
+      items: [
+        {
+          item: {
+            title: "Towel",
+            product_title: "Grace Towel",
+            variant_title: "Large",
+            unit_price: 50.00,
+            metadata: { color: "Sand" }
+          },
+          quantity: 1,
+          unit_price: 50.00
+        }
+      ]
+    };
+    createQueryMock(orderWithMetadata);
+
+    const event = { data: { id: "order_color_1" } };
+    await orderPlacedHandler({ event, container: mockContainer } as any);
+
+    expect(enqueueEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          order: expect.objectContaining({
+            items: [
+              expect.objectContaining({
+                title: "Grace Towel",
+                variant_title: "Large",
+                color: "Sand"
+              })
+            ]
+          })
+        })
+      })
     );
   });
 });
