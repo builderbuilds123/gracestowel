@@ -113,6 +113,25 @@ describe("ModificationTokenService", () => {
       const diff = (result.payload?.exp || 0) - (result.payload?.iat || 0);
       expect(diff).toBe(getModificationWindowSeconds());
     });
+
+    it("should return payload even for expired tokens (Story 3.5)", () => {
+      // Create a service with a 1-second window to test expiration
+      const shortWindowService = new ModificationTokenService(undefined, 1);
+      const token = shortWindowService.generateToken(
+        testOrderId,
+        testPaymentIntentId,
+        new Date(Date.now() - 5000) // 5 seconds ago
+      );
+
+      const result = shortWindowService.validateToken(token);
+
+      expect(result.valid).toBe(false);
+      expect(result.expired).toBe(true);
+      // Story 3.5: Payload should be included for expired tokens
+      expect(result.payload).toBeDefined();
+      expect(result.payload?.order_id).toBe(testOrderId);
+      expect(result.payload?.payment_intent_id).toBe(testPaymentIntentId);
+    });
   });
 
   // Story 4.1 Security Tests

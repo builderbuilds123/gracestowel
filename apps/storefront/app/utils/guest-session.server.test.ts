@@ -106,24 +106,27 @@ describe('Guest Session Cookie Utilities', () => {
 
     describe('getGuestToken', () => {
         it('should read token from cookie FIRST before URL', async () => {
-            const request = new Request('https://example.com/order/status/order_123?token=url_token', {
-                headers: { 'Cookie': 'guest_order_order_123=cookie_token' }
+            const cookieToken = createTestToken('order_123', 3600);
+            const urlToken = createTestToken('order_123', 3600);
+            const request = new Request(`https://example.com/order/status/order_123?token=${urlToken}`, {
+                headers: { 'Cookie': `guest_order_order_123=${cookieToken}` }
             });
             
             const { token, source } = await getGuestToken(request, 'order_123');
             
-            expect(token).toBe('cookie_token');
+            expect(token).toBe(cookieToken);
             expect(source).toBe('cookie');
         });
 
         it('should fallback to URL param if cookie missing', async () => {
-            const request = new Request('https://example.com/order/status/order_123?token=url_token', {
+            const urlToken = createTestToken('order_123', 3600);
+            const request = new Request(`https://example.com/order/status/order_123?token=${urlToken}`, {
                 headers: {} // No cookie
             });
             
             const { token, source } = await getGuestToken(request, 'order_123');
             
-            expect(token).toBe('url_token');
+            expect(token).toBe(urlToken);
             expect(source).toBe('url');
         });
 
@@ -141,7 +144,7 @@ describe('Guest Session Cookie Utilities', () => {
 
     describe('setGuestToken', () => {
         it('should create cookie with correct name pattern', async () => {
-            const token = createTestToken(3600); // 1 hour from now
+            const token = createTestToken('order_456', 3600); // 1 hour from now
             
             const cookieHeader = await setGuestToken(token, 'order_456');
             
@@ -149,7 +152,7 @@ describe('Guest Session Cookie Utilities', () => {
         });
 
         it('should scope cookie path to order status route', async () => {
-            const token = createTestToken(3600);
+            const token = createTestToken('order_789', 3600);
             
             const cookieHeader = await setGuestToken(token, 'order_789');
             
@@ -157,7 +160,7 @@ describe('Guest Session Cookie Utilities', () => {
         });
 
         it('should set HttpOnly and SameSite=Strict', async () => {
-            const token = createTestToken(3600);
+            const token = createTestToken('order_123', 3600);
             
             const cookieHeader = await setGuestToken(token, 'order_123');
             
@@ -182,10 +185,10 @@ describe('Guest Session Cookie Utilities', () => {
 });
 
 // Helper to create test JWT tokens
-function createTestToken(secondsFromNow: number): string {
+function createTestToken(orderId: string, secondsFromNow: number): string {
     const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
     const payload = btoa(JSON.stringify({ 
-        order_id: 'order_123', 
+        order_id: orderId, 
         exp: Math.floor(Date.now() / 1000) + secondsFromNow 
     }));
     return `${header}.${payload}.fake_signature`;

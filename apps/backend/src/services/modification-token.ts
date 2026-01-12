@@ -134,9 +134,13 @@ export class ModificationTokenService {
             const errorMsg = error.message || "Unknown error";
             
             if (error instanceof jwt.TokenExpiredError) {
+                // Story 3.5: For expired tokens, decode without verification to get payload
+                // This allows post-capture cancellation to work with expired tokens
+                const decoded = jwt.decode(token) as ModificationTokenPayload | null;
                 return {
                     valid: false,
                     expired: true,
+                    payload: decoded || undefined,
                     error: "Modification window has expired",
                     originalError: errorMsg,
                 };

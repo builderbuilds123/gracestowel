@@ -39,7 +39,6 @@ import {
     removeCaptureJobHandler,
     lockOrderHandler,
     checkFulfillmentStatusHandler,
-    refundPaymentHandler,
     reAddPaymentCaptureJobHandler
 } from "../../src/workflows/cancel-order-with-refund";
 import { cancelPaymentCaptureJob, JobActiveError } from "../../src/lib/payment-capture-queue";
@@ -441,51 +440,8 @@ describe("Cancel Order Workflow Steps", () => {
         });
     });
 
-    describe("refundPaymentHandler", () => {
-        let stripeMock: any;
-
-        beforeEach(() => {
-            stripeMock = {
-                paymentIntents: {
-                    retrieve: vi.fn(),
-                    cancel: vi.fn()
-                },
-                refunds: {
-                    create: vi.fn()
-                }
-            };
-            (getStripeClient as any).mockReturnValue(stripeMock);
-        });
-
-        it("should issue refund when payment is succeeded", async () => {
-            stripeMock.paymentIntents.retrieve.mockResolvedValue({ status: "succeeded" });
-            stripeMock.refunds.create.mockResolvedValue({ id: "ref_1", status: "succeeded" });
-
-            const result = await refundPaymentHandler({ orderId: "ord_1", paymentIntentId: "pi_1" });
-            expect(result.action).toBe("refunded");
-            expect(result.refundId).toBe("ref_1");
-            expect(stripeMock.refunds.create).toHaveBeenCalledWith({ payment_intent: "pi_1" });
-        });
-
-        it("should void instead of refund if payment not captured (requires_capture)", async () => {
-            stripeMock.paymentIntents.retrieve.mockResolvedValue({ status: "requires_capture" });
-            stripeMock.paymentIntents.cancel.mockResolvedValue({ status: "canceled" });
-
-            const result = await refundPaymentHandler({ orderId: "ord_1", paymentIntentId: "pi_1" });
-            expect(result.action).toBe("voided");
-            expect(stripeMock.paymentIntents.cancel).toHaveBeenCalledWith("pi_1");
-        });
-
-        it("should handle refund failure by returning voidFailed=true", async () => {
-            stripeMock.paymentIntents.retrieve.mockResolvedValue({ status: "succeeded" });
-            stripeMock.refunds.create.mockRejectedValue(new Error("Stripe Error"));
-
-            const result = await refundPaymentHandler({ orderId: "ord_1", paymentIntentId: "pi_1" });
-            expect(result.action).toBe("none");
-            expect(result.voidFailed).toBe(true);
-            expect(result.status).toBe("refund_failed");
-        });
-    });
+    // NOTE: refundPaymentHandler was removed - refunds are now handled by Medusa's built-in cancelOrderWorkflow
+    // These tests are skipped as the functionality is now part of the Medusa framework
 
     describe("reAddPaymentCaptureJobHandler (Compensation)", () => {
         beforeEach(() => {

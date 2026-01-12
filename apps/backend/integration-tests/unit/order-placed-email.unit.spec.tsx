@@ -15,12 +15,12 @@ describe("OrderPlacedEmail", () => {
       {
         title: "Test Item",
         quantity: 1,
-        unit_price: 1000,
+        unit_price: 100000, // $1,000.00 in cents
         variant_title: "Blue",
       },
     ],
-    total: 1000,
-    subtotal: 1000,
+    total: 100000, // $1,000.00 in cents
+    subtotal: 100000, // $1,000.00 in cents
     shipping_total: 0,
     tax_total: 0,
     shipping_address: {
