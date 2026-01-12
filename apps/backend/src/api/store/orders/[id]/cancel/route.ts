@@ -9,6 +9,7 @@ import {
     QueueRemovalError,
     OrderNotFoundError,
     OrderShippedError,
+    MissingPaymentCollectionError,
 } from "../../../../../workflows/cancel-order-with-refund";
 
 // Trigger rebuild
