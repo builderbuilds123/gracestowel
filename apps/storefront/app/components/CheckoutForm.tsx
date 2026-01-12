@@ -216,8 +216,7 @@ export function CheckoutForm({
         setMessage(null);
 
         try {
-            // ATOMIC FIX: Consolidate all preparation steps into a single backend orchestration call
-            // This prevents race conditions and ensures cart totals match the PaymentIntent
+            // Multi-call checkout flow: Sequential API calls instead of atomic orchestration
             if (!cartId || !paymentCollectionId || !selectedShipping) {
                 throw new Error("Checkout state is incomplete. Please refresh and try again.");
             }
@@ -257,38 +256,91 @@ export function CheckoutForm({
                 throw new Error("Missing contact or delivery information.");
             }
 
-            // Call orchestration endpoint
-            const prepareResponse = await monitoredFetch(`/api/carts/${cartId}/prepare-for-payment`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    shipping_option_id: selectedShipping.id,
-                    email: latestEmail,
-                    shipping_address: latestAddressPayload,
-                    payment_collection_id: paymentCollectionId
-                }),
-                label: 'prepare-for-payment-orchestration'
+            logger.info('Starting multi-call checkout preparation', {
+                cartId,
+                paymentCollectionId,
+                shippingOptionId: selectedShipping.id
             });
 
-            if (!prepareResponse.ok) {
-                const errorData = await prepareResponse.json() as { message?: string };
-                logger.error('Preparation failed', undefined, errorData);
-                throw new Error(errorData.message || 'Payment service is temporarily unavailable.');
+            // Step 1: Add shipping method to cart
+            logger.info('Step 1: Adding shipping method to cart');
+            const shippingResponse = await monitoredFetch(`/api/carts/${cartId}/shipping-methods`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ option_id: selectedShipping.id }),
+                label: 'add-shipping-method',
+            });
+
+            if (!shippingResponse.ok) {
+                const errorData = await shippingResponse.json() as { error?: string; message?: string };
+                logger.error('Failed to add shipping method', undefined, { 
+                    error: errorData.error || errorData.message,
+                    cartId,
+                    shippingOptionId: selectedShipping.id
+                });
+                throw new Error(errorData.message || errorData.error || 'Failed to save shipping method.');
             }
 
-            const { client_secret: updatedClientSecret } = await prepareResponse.json() as { client_secret: string };
+            // Step 2: Update cart with email and shipping address
+            logger.info('Step 2: Updating cart with email and address');
+            const cartUpdateResponse = await monitoredFetch(`/api/carts/${cartId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email: latestEmail,
+                    shipping_address: latestAddressPayload,
+                }),
+                label: 'update-cart-checkout',
+            });
+
+            if (!cartUpdateResponse.ok) {
+                const errorData = await cartUpdateResponse.json() as { error?: string; message?: string };
+                logger.error('Failed to update cart', undefined, {
+                    error: errorData.error || errorData.message,
+                    cartId
+                });
+                throw new Error(errorData.message || errorData.error || 'Failed to update cart information.');
+            }
+
+            // Step 3: Refresh payment session to get updated client_secret
+            logger.info('Step 3: Refreshing payment session');
+            const sessionResponse = await monitoredFetch(`/api/payment-collections/${paymentCollectionId}/sessions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ provider_id: 'pp_stripe' }),
+                label: 'refresh-payment-session-checkout',
+            });
+
+            if (!sessionResponse.ok) {
+                const errorData = await sessionResponse.json() as { error?: string; message?: string };
+                logger.error('Failed to refresh payment session', undefined, {
+                    error: errorData.error || errorData.message,
+                    paymentCollectionId
+                });
+                throw new Error(errorData.message || errorData.error || 'Payment session refresh failed.');
+            }
+
+            const sessionData = await sessionResponse.json() as any;
+            const updatedClientSecret = sessionData.payment_collection?.payment_sessions?.find(
+                (s: any) => s.provider_id === 'pp_stripe'
+            )?.data?.client_secret;
 
             if (!updatedClientSecret) {
+                logger.error('Client secret missing after payment session refresh', new Error('Missing client_secret'), {
+                    paymentCollectionId
+                });
                 throw new Error('Payment token could not be refreshed.');
             }
+
+            logger.info('Checkout preparation complete', { cartId });
 
             // Persist order details for success page
             saveOrderToSessionStorage();
 
-            // 4. Confirm payment with the NEW clientSecret
+            // Step 4: Confirm payment with the updated clientSecret
             const { error } = await stripe.confirmPayment({
                 elements,
-                clientSecret: updatedClientSecret, // CRITICAL: Use the new secret matching the updated PI
+                clientSecret: updatedClientSecret,
                 confirmParams: {
                     return_url: `${window.location.origin}/checkout/success`,
                 },
@@ -298,14 +350,14 @@ export function CheckoutForm({
                 logger.error('Payment confirmation failed', undefined, {
                     errorType: error.type,
                     errorCode: error.code,
-                    errorMessage: error.message, // Log for internal debugging
+                    errorMessage: error.message,
                 });
                 // Sanitize message for user
                 setMessage(error.message || 'Payment failed. Please check your details and try again.');
             }
         } catch (err: unknown) {
             const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred';
-            logger.error('Atomic submission failed', undefined, { error: errorMessage });
+            logger.error('Checkout submission failed', err instanceof Error ? err : undefined, { error: errorMessage });
             setMessage('Checkout could not be completed. Please try again or contact support.');
         } finally {
             setIsLoading(false);

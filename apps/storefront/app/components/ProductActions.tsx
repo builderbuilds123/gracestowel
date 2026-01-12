@@ -77,6 +77,18 @@ interface ProductActionsProps {
         colors: string[];
         disableEmbroidery: boolean;
     };
+    variants: Array<{
+        id: string;
+        sku?: string | null;
+        inventory_quantity?: number;
+        options?: Array<{
+            id: string;
+            value: string;
+            option_id: string;
+        }>;
+    }>;
+    selectedColor: string;
+    onColorChange: (color: string) => void;
     selectedVariant?: {
         id: string;
         sku?: string | null;
@@ -84,14 +96,17 @@ interface ProductActionsProps {
     isOutOfStock: boolean;
 }
 
-export function ProductActions({ product, selectedVariant, isOutOfStock }: ProductActionsProps) {
+export function ProductActions({ product, variants, selectedColor, onColorChange, selectedVariant, isOutOfStock }: ProductActionsProps) {
     const { addToCart } = useCart();
     const { t } = useLocale();
     
     const [quantity, setQuantity] = useState(1);
-    const [selectedColor, setSelectedColor] = useState(product.colors[0] || "");
     const [isEmbroideryOpen, setIsEmbroideryOpen] = useState(false);
     const [embroideryData, setEmbroideryData] = useState<EmbroideryData | null>(null);
+    
+    const handleColorChange = (color: string) => {
+        onColorChange(color);
+    };
 
     const handleQuantityChange = (delta: number) => {
         setQuantity(prev => Math.max(1, prev + delta));
@@ -145,7 +160,7 @@ export function ProductActions({ product, selectedVariant, isOutOfStock }: Produ
                         {product.colors.map((color) => (
                             <button
                                 key={color}
-                                onClick={() => setSelectedColor(color)}
+                                onClick={() => handleColorChange(color)}
                                 className={`w-10 h-10 rounded-full border-2 transition-all cursor-pointer ${
                                     selectedColor === color
                                         ? "border-accent-earthy ring-2 ring-accent-earthy/20 ring-offset-2"

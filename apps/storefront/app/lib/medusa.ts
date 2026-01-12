@@ -37,6 +37,8 @@ export interface MedusaProduct {
             option_id: string;
         }>;
         inventory_quantity?: number;
+        allow_backorder?: boolean;
+        manage_inventory?: boolean;
     }>;
     options: Array<{
         id: string;
@@ -174,19 +176,34 @@ export type StockStatus = "in_stock" | "low_stock" | "out_of_stock";
  * Get stock status for a variant
  * @param inventoryQuantity - The inventory quantity of the variant
  * @param lowStockThreshold - Threshold below which to show "Low Stock" (default: 10)
+ * @param allowBackorder - Whether backorders are allowed for this variant (default: false)
+ * @param manageInventory - Whether inventory is managed for this variant (default: true)
  */
 export function getStockStatus(
     inventoryQuantity: number | undefined,
-    lowStockThreshold: number = 10
+    lowStockThreshold: number = 10,
+    allowBackorder: boolean = false,
+    manageInventory: boolean = true
 ): StockStatus {
+    // If inventory is not managed, always consider in stock
+    if (!manageInventory) {
+        return "in_stock";
+    }
+
+    // If no inventory quantity provided, assume in stock
     if (inventoryQuantity === undefined || inventoryQuantity === null) {
-        // If no inventory tracking, assume in stock
         return "in_stock";
     }
 
     // AC4 (INV-02): Clamp negative values to 0 for storefront display
     const clampedQuantity = clampAvailability(inventoryQuantity);
 
+    // If backorders are allowed, consider it in stock even if quantity is 0
+    if (allowBackorder && clampedQuantity <= 0) {
+        return "in_stock";
+    }
+
+    // If no backorders allowed and quantity is 0 or less, out of stock
     if (clampedQuantity <= 0) {
         return "out_of_stock";
     }

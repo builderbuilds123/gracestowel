@@ -53,6 +53,8 @@ export interface ProductVariant {
     title: string;
     sku?: string;
     inventory_quantity?: number;
+    allow_backorder?: boolean;
+    manage_inventory?: boolean;
     options?: Array<{
         id: string;
         value: string;

@@ -148,9 +148,20 @@ export default function ProductDetail({ loaderData }: Route.ComponentProps) {
     const [reviewSort, setReviewSort] = useState("newest");
     const [isSubmittingReview, setIsSubmittingReview] = useState(false);
 
-    // Get stock status for the first variant
-    const selectedVariant = product.variants?.[0];
-    const stockStatus = getStockStatus(selectedVariant?.inventory_quantity);
+    // State for selected color - will be managed by ProductActions
+    const [selectedColor, setSelectedColor] = useState(product.colors[0] || "");
+    
+    // Find variant that matches selected color
+    const selectedVariant = product.variants?.find(variant => 
+        variant.options?.some(option => option.value === selectedColor)
+    ) || product.variants?.[0];
+    
+    const stockStatus = getStockStatus(
+        selectedVariant?.inventory_quantity,
+        10, // lowStockThreshold
+        selectedVariant?.allow_backorder ?? false,
+        selectedVariant?.manage_inventory ?? true
+    );
     const isOutOfStock = stockStatus === "out_of_stock";
 
     // Track product view in PostHog
@@ -266,6 +277,9 @@ export default function ProductDetail({ loaderData }: Route.ComponentProps) {
 
                             <ProductActions
                                 product={product}
+                                variants={product.variants || []}
+                                selectedColor={selectedColor}
+                                onColorChange={setSelectedColor}
                                 selectedVariant={selectedVariant}
                                 isOutOfStock={isOutOfStock}
                             />

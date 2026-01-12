@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useState, lazy, Suspense, useRef, useCallback } from "react";
-import { Link, useNavigate, useLoaderData, redirect } from "react-router";
-import type { LoaderFunctionArgs, MetaFunction } from "react-router";
+import { Link, useNavigate, useLoaderData, redirect, data, useFetcher } from "react-router";
+import type { LoaderFunctionArgs, ActionFunctionArgs, MetaFunction } from "react-router";
 import { CheckCircle2, Package, Truck, MapPin, XCircle } from "lucide-react";
 import { useCart } from "../context/CartContext";
 import { posts } from "../data/blogPosts";
@@ -8,6 +8,9 @@ import { getStripe, initStripe } from "../lib/stripe";
 import { monitoredFetch } from "../utils/monitored-fetch";
 import { createLogger } from "../lib/logger";
 import { migrateStorageItem } from "../lib/storage-migration";
+import { OrderModificationDialogs } from "../components/order/OrderModificationDialogs";
+import { OrderTimer } from "../components/order/OrderTimer";
+import { getGuestToken, clearGuestToken } from "../utils/guest-session.server";
 
 // Lazy load Map component to avoid SSR issues with Leaflet
 const Map = lazy(() => import("../components/Map.client"));
@@ -22,6 +25,14 @@ interface OrderApiResponse {
     order: {
         id: string;
         status: string;
+        created_at: string;
+    };
+    modification_token?: string;
+    modification_window?: {
+        status: "active" | "expired";
+        expires_at: string;
+        server_time: string;
+        remaining_seconds: number;
     };
 }
 
@@ -117,6 +128,82 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
 }
 
 /**
+ * Story 3.5: Handle order cancellation from success page
+ */
+export async function action({ params, request, context }: ActionFunctionArgs) {
+    const env = context.cloudflare.env as any;
+    const medusaBackendUrl = env.MEDUSA_BACKEND_URL;
+    const medusaPublishableKey = env.MEDUSA_PUBLISHABLE_KEY;
+
+    const formData = await request.formData();
+    const intent = formData.get("intent") as string;
+    const orderId = formData.get("orderId") as string;
+
+    if (intent === "SET_MODIFICATION_TOKEN") {
+        const token = formData.get("token") as string;
+        if (!token) {
+            return data({ success: false, error: "Token is required" }, { status: 400 });
+        }
+        
+        try {
+            const { setGuestToken } = await import("../utils/guest-session.server");
+            const cookie = await setGuestToken(token, orderId);
+            return data({ success: true }, {
+                headers: { "Set-Cookie": cookie }
+            });
+        } catch (error) {
+            console.error("Failed to set guest token cookie:", error);
+            return data({ success: false, error: "Failed to set session" }, { status: 500 });
+        }
+    }
+
+    // Get token from HttpOnly cookie (scopeless if using specific orderId logic from status page)
+    const { token } = await getGuestToken(request, orderId);
+
+    if (!token) {
+        return data({ success: false, error: "Session expired or unauthorized" }, { status: 401 });
+    }
+
+    const headers = {
+        "Content-Type": "application/json",
+        "x-publishable-api-key": medusaPublishableKey,
+        "x-modification-token": token,
+    };
+
+    try {
+        if (intent === "CANCEL_ORDER") {
+            const reason = formData.get("reason") as string || "Customer requested cancellation from success page";
+            
+            const response = await monitoredFetch(`${medusaBackendUrl}/store/orders/${orderId}/cancel`, {
+                method: "POST",
+                headers,
+                body: JSON.stringify({ reason }),
+                label: "order-cancel-success",
+                cloudflareEnv: env,
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json() as { message?: string };
+                if (response.status === 401 || response.status === 403) {
+                    return data(
+                        { success: false, error: errorData.message || "Authorization failed" },
+                        { status: response.status, headers: { "Set-Cookie": await clearGuestToken(orderId) } }
+                    );
+                }
+                return data({ success: false, error: errorData.message || "Failed to cancel order" }, { status: 400 });
+            }
+
+            return data({ success: true, action: "canceled" });
+        }
+
+        return data({ success: false, error: "Unknown intent" }, { status: 400 });
+    } catch (error) {
+        console.error("Success page action error:", error instanceof Error ? error.message : "Unknown error");
+        return data({ success: false, error: "An unexpected error occurred" }, { status: 500 });
+    }
+}
+
+/**
  * SEC-04: Referrer Policy Meta Tag
  * 
  * Prevents payment_intent_client_secret from leaking via Referer header
@@ -130,6 +217,7 @@ export default function CheckoutSuccess() {
     const { stripePublishableKey, medusaBackendUrl, medusaPublishableKey, initialParams } = useLoaderData<LoaderData>();
     const navigate = useNavigate();
     const { clearCart, items } = useCart();
+    const fetcher = useFetcher();
     const [paymentStatus, setPaymentStatus] = useState<'loading' | 'success' | 'error' | 'canceled'>('loading');
 
     // Create logger once at component top for log correlation across component lifecycle
@@ -140,14 +228,32 @@ export default function CheckoutSuccess() {
         logger.info("Payment status changed", { paymentStatus });
     }, [paymentStatus, logger]);
 
-    // Wrapper to prevent changing from 'success' to 'error' (once successful, it stays successful)
+    /**
+     * Wrapper to prevent changing paymentStatus from 'success' to 'error'.
+     * 
+     * Rationale:
+     * - paymentStatus represents PAYMENT VERIFICATION status, not order processing status
+     * - Once Stripe PaymentIntent is verified as successful (status: 'succeeded' or 'requires_capture'),
+     *   the payment IS successful and should not be changed to 'error'
+     * - All error paths occur BEFORE payment verification succeeds (lines 341, 350, 371, 588, 598, 607)
+     * - After success is set (line 438), all operations are non-blocking and non-critical:
+     *   - Geocoding (silently fails if error)
+     *   - Order fetching (logs errors but doesn't change payment status)
+     *   - Cart completion (logs errors but doesn't change payment status)
+     * - Order cancellation uses 'canceled' status (allowed, not blocked)
+     * 
+     * If we need to show errors for order processing after payment verification succeeds,
+     * we should use a separate state variable (e.g., orderProcessingError), not paymentStatus.
+     */
     const setPaymentStatusSafe = useCallback((newStatus: 'loading' | 'success' | 'error' | 'canceled') => {
         setPaymentStatus((prevStatus) => {
-            // Once status is 'success', never change it to 'error' (payment was verified successfully)
+            // Once payment verification succeeds, never change it to 'error'
+            // (payment was verified successfully - subsequent non-critical errors shouldn't change this)
             if (prevStatus === 'success' && newStatus === 'error') {
-                logger.warn("Attempted to change payment status from 'success' to 'error', ignoring", {
+                logger.warn("Attempted to change payment verification status from 'success' to 'error', ignoring", {
                     previousStatus: prevStatus,
                     attemptedStatus: newStatus,
+                    note: "Payment verification succeeded - this status should not change. Use separate state for order processing errors.",
                 });
                 return prevStatus;
             }
@@ -165,6 +271,8 @@ export default function CheckoutSuccess() {
     const [orderDetails, setOrderDetails] = useState<any>(null);
     const [shippingAddress, setShippingAddress] = useState<any>(null);
     const [mapCoordinates, setMapCoordinates] = useState<[number, number] | null>(null);
+    const [modificationWindow, setModificationWindow] = useState<OrderApiResponse["modification_window"] | null>(null);
+    const [modificationToken, setModificationToken] = useState<string | null>(null);
 
     // Modification window state
     const [orderId, setOrderId] = useState<string | null>(null);
@@ -393,6 +501,21 @@ export default function CheckoutSuccess() {
                                 if (response.ok) {
                                     const data = await response.json() as OrderApiResponse;
                                     setOrderId(data.order.id);
+                                    
+                                    if (data.modification_token) {
+                                        setModificationToken(data.modification_token);
+                                        
+                                        // Story 3.5: Set cookie via action to authorize modifications
+                                        const formData = new FormData();
+                                        formData.append("intent", "SET_MODIFICATION_TOKEN");
+                                        formData.append("orderId", data.order.id);
+                                        formData.append("token", data.modification_token);
+
+                                        fetcher.submit(formData, { method: "POST" });
+                                    }
+                                    if (data.modification_window) {
+                                        setModificationWindow(data.modification_window);
+                                    }
 
                                     // SEC-05: Store in sessionStorage for ephemeral access (clears on tab close)
                                     try {
@@ -404,7 +527,6 @@ export default function CheckoutSuccess() {
                                             error: error instanceof Error ? error.message : String(error),
                                         });
                                     }
-
                                     // SECURITY: Don't log order IDs - removed debug log
                                 } else if (response.status === 404 && retries < maxRetries) {
                                     // Order not yet created, retry
@@ -588,6 +710,38 @@ export default function CheckoutSuccess() {
                     <h1 className="text-4xl font-serif text-text-earthy mb-2">Order Confirmed!</h1>
                     <p className="text-text-earthy/70 text-lg">Thank you for your purchase</p>
                 </div>
+
+                {/* Story 3.5: Modification Box on Success Page */}
+                {orderId && modificationWindow?.status === "active" && (
+                    <div className="bg-white rounded-lg shadow-lg p-4 mb-8 flex flex-col sm:flex-row items-center justify-between gap-4 border border-accent-earthy/20">
+                        <div className="flex items-center gap-3">
+                            <OrderTimer 
+                                expiresAt={modificationWindow.expires_at}
+                                serverTime={modificationWindow.server_time}
+                                onExpire={() => setModificationWindow(prev => prev ? { ...prev, status: "expired" } : null)}
+                            />
+                        </div>
+                        <OrderModificationDialogs 
+                            orderId={orderId}
+                            orderNumber={orderDetails?.orderNumber || ""}
+                            currencyCode={orderDetails?.currency_code || "USD"}
+                            items={orderDetails?.items || []}
+                            currentAddress={shippingAddress ? {
+                                first_name: shippingAddress.name?.split(' ')[0] || "",
+                                last_name: shippingAddress.name?.split(' ').slice(1).join(' ') || "",
+                                address_1: shippingAddress.address?.line1 || "",
+                                address_2: shippingAddress.address?.line2 || "",
+                                city: shippingAddress.address?.city || "",
+                                province: shippingAddress.address?.state || "",
+                                postal_code: shippingAddress.address?.postal_code || "",
+                                country_code: shippingAddress.address?.country || "",
+                            } : undefined}
+                            onOrderUpdated={() => {}}
+                            onAddressUpdated={() => {}}
+                            onOrderCanceled={() => setPaymentStatusSafe('canceled')}
+                        />
+                    </div>
+                )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                     {/* Order Details Card */}

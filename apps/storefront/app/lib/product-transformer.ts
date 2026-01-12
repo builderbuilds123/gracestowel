@@ -155,6 +155,8 @@ export function transformToDetail(
             sku: v.sku || undefined,
             // AC4 (INV-02): Clamp negative inventory to 0 for storefront display
             inventory_quantity: clampAvailability(v.inventory_quantity),
+            allow_backorder: v.allow_backorder,
+            manage_inventory: v.manage_inventory,
             options: v.options,
             prices: v.prices,
         })) || [],

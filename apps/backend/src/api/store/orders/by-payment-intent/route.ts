@@ -100,6 +100,16 @@ export async function GET(
                                 if (hasPC) {
                                     foundOrderId = order.id;
                                     const status = orderWithPC[0].status;
+                                    const createdAt = (orderWithPC[0] as any).created_at;
+                                    
+                                    // Generate modification token
+                                    const { modificationTokenService } = await import("../../../../services/modification-token");
+                                    const modificationToken = modificationTokenService.generateToken(
+                                        foundOrderId,
+                                        paymentIntentId,
+                                        createdAt
+                                    );
+
                                     logger.info("by-payment-intent", "Order found via payment collection", {
                                         orderId: foundOrderId,
                                         status,
@@ -109,7 +119,15 @@ export async function GET(
                                         order: {
                                             id: foundOrderId,
                                             status: status,
+                                            created_at: createdAt
                                         },
+                                        modification_token: modificationToken,
+                                        modification_window: {
+                                            status: modificationTokenService.isWithinModificationWindow(new Date(createdAt)) ? "active" : "expired",
+                                            expires_at: new Date(new Date(createdAt).getTime() + 3600 * 1000).toISOString(),
+                                            server_time: new Date().toISOString(),
+                                            remaining_seconds: modificationTokenService.getRemainingTime(modificationToken)
+                                        }
                                     });
                                     return;
                                 }
@@ -147,6 +165,15 @@ export async function GET(
 
             if (ordersFromMetadata.length > 0) {
                 const order = ordersFromMetadata[0];
+                
+                // Generate modification token
+                const { modificationTokenService } = await import("../../../../services/modification-token");
+                const modificationToken = modificationTokenService.generateToken(
+                    order.id,
+                    paymentIntentId,
+                    order.created_at
+                );
+
                 logger.info("by-payment-intent", "Order found via metadata", {
                     orderId: order.id,
                     status: order.status,
@@ -156,7 +183,15 @@ export async function GET(
                     order: {
                         id: order.id,
                         status: order.status,
+                        created_at: order.created_at
                     },
+                    modification_token: modificationToken,
+                    modification_window: {
+                        status: modificationTokenService.isWithinModificationWindow(new Date(order.created_at)) ? "active" : "expired",
+                        expires_at: new Date(new Date(order.created_at).getTime() + 3600 * 1000).toISOString(),
+                        server_time: new Date().toISOString(),
+                        remaining_seconds: modificationTokenService.getRemainingTime(modificationToken)
+                    }
                 });
                 return;
             }

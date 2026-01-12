@@ -11,16 +11,12 @@ import { initStripe, getStripe } from "../lib/stripe";
 import { CheckoutForm, type ShippingOption } from "../components/CheckoutForm";
 import { OrderSummary } from "../components/OrderSummary";
 import { parsePrice } from "../lib/price";
-import { generateTraceId } from "../lib/logger";
+import { generateTraceId, createLogger } from "../lib/logger";
 import { generateCartHash } from "../utils/cart-hash";
 import { useShippingPersistence } from "../hooks/useShippingPersistence";
 import { usePaymentCollection } from "../hooks/usePaymentCollection";
 import { usePaymentSession } from "../hooks/usePaymentSession";
 import { monitoredFetch } from "../utils/monitored-fetch";
-
-
-// Check if in development mode (consistent with codebase pattern)
-const isDevelopment = import.meta.env.MODE === 'development';
 
 interface LoaderData {
   stripePublishableKey: string;
@@ -54,6 +50,7 @@ export default function Checkout() {
 
   // Session trace ID for logging
   const sessionTraceId = useRef(generateTraceId());
+  const logger = createLogger({ traceId: sessionTraceId.current });
 
   // Caching mechanism for shipping rates
   const shippingCache = useRef<Map<string, { options: ShippingOption[], cartId: string | undefined }>>(new Map());
@@ -206,9 +203,7 @@ export default function Checkout() {
       // Step 1: Create or get cart
       let currentCartId = cartId;
       if (!currentCartId) {
-        if (isDevelopment) {
-          console.log('[Checkout] Step 1: Creating cart...');
-        }
+        logger.info('[Checkout] Step 1: Creating cart');
         const createResponse = await monitoredFetch("/api/carts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -222,7 +217,7 @@ export default function Checkout() {
 
         if (!createResponse.ok) {
           const error = await createResponse.json() as { error: string; details?: string };
-          console.error('[Checkout] Step 1 FAILED - Cart creation:', error);
+          logger.error('[Checkout] Step 1 FAILED - Cart creation', undefined, error);
           throw new Error(`Cart creation failed: ${error.error}`);
         }
 
@@ -230,16 +225,12 @@ export default function Checkout() {
         currentCartId = cart_id;
         setCartId(cart_id);
         setIsCartSynced(false); // Reset sync state for new cart
-        if (isDevelopment) {
-          console.log('[Checkout] Step 1 SUCCESS - Cart created:', cart_id);
-        }
+        logger.info('[Checkout] Step 1 SUCCESS - Cart created', { cartId: cart_id });
       }
 
       // Step 2: Update cart with items and address
       if (currentItems.length > 0 || address || guestEmail) {
-        if (isDevelopment) {
-          console.log('[Checkout] Step 2: Updating cart items/address...');
-        }
+        logger.info('[Checkout] Step 2: Updating cart items/address');
         const updateResponse = await monitoredFetch(`/api/carts/${currentCartId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -264,20 +255,18 @@ export default function Checkout() {
 
         if (!updateResponse.ok) {
           const error = await updateResponse.json() as { error: string; details?: string; code?: string };
-          console.error('[Checkout] Step 2 FAILED - Cart update:', error);
+          logger.error('[Checkout] Step 2 FAILED - Cart update', undefined, error);
           
           // Handle region mismatch - need to create new cart
           if (error.code === 'REGION_MISMATCH') {
-            console.log('[Checkout] Region mismatch detected, creating new cart...');
+            logger.info('[Checkout] Region mismatch detected, creating new cart');
             setCartId(undefined);
             // Retry with new cart on next call
             throw new Error(`Region mismatch: ${error.details}`);
           }
           throw new Error(`Cart update failed: ${error.error}`);
         }
-        if (isDevelopment) {
-          console.log('[Checkout] Step 2 SUCCESS - Cart updated');
-        }
+        logger.info('[Checkout] Step 2 SUCCESS - Cart updated');
 
         // Mark cart as synced ONLY if update succeeded
         setIsCartSynced(true);
@@ -287,9 +276,7 @@ export default function Checkout() {
       }
 
       // Step 3: Get shipping options (cacheable GET request)
-      if (isDevelopment) {
-        console.log('[Checkout] Step 3: Fetching shipping options...');
-      }
+      logger.info('[Checkout] Step 3: Fetching shipping options');
       const optionsResponse = await monitoredFetch(`/api/carts/${currentCartId}/shipping-options`, {
         method: "GET",
         label: 'get-shipping-options',
@@ -298,7 +285,7 @@ export default function Checkout() {
 
       if (!optionsResponse.ok) {
         const error = await optionsResponse.json() as { error: string; details?: string };
-        console.error('[Checkout] Step 3 FAILED - Fetching shipping options:', error);
+        logger.error('[Checkout] Step 3 FAILED - Fetching shipping options', undefined, error);
         throw new Error(`Shipping options fetch failed: ${error.error}`);
       }
 
@@ -307,9 +294,7 @@ export default function Checkout() {
         cart_id: string;
       };
       
-      if (isDevelopment) {
-        console.log('[Checkout] Step 3 SUCCESS - Got', shipping_options.length, 'shipping options');
-      }
+      logger.info('[Checkout] Step 3 SUCCESS - Got shipping options', { count: shipping_options.length });
 
       setShippingOptions(shipping_options);
 
@@ -334,7 +319,9 @@ export default function Checkout() {
           // Ignore abort errors as they are expected when typing fast
           return;
       }
-      console.error("[Checkout] Shipping rates error:", error);
+      logger.error("[Checkout] Shipping rates error", error instanceof Error ? error : undefined, {
+        message: error?.message || String(error)
+      });
     } finally {
       // Only turn off loading if THIS was the latest request
       // (Though with abort controller, effectively only one finishes)

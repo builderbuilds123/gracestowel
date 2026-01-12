@@ -2,6 +2,7 @@ import { type ActionFunctionArgs, type LoaderFunctionArgs, data } from "react-ro
 import { MedusaCartService } from "../services/medusa-cart";
 import type { CartItem } from "../types/product";
 import { isMedusaId } from "../types/product";
+import { createLogger, getTraceIdFromRequest } from "../lib/logger";
 
 interface UpdateCartRequest {
   items?: CartItem[];
@@ -61,6 +62,8 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
   }
 
   const service = new MedusaCartService(context);
+  const traceId = getTraceIdFromRequest(request);
+  const logger = createLogger({ traceId });
 
   try {
     // Verify cart exists
@@ -77,23 +80,28 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
 
     // Sync items if provided
     if (items && items.length > 0) {
-      // Log incoming items for debugging
-      console.log(`[Cart Sync] Received ${items.length} items:`, items.map(i => ({ 
-        id: i.id, 
-        variantId: i.variantId, 
-        title: i.title,
-        isValidMedusaId: i.variantId ? isMedusaId(i.variantId) : false 
-      })));
+      logger.info('[Cart Sync] Received items', { 
+        count: items.length,
+        items: items.map(i => ({ 
+          id: i.id, 
+          variantId: i.variantId, 
+          title: i.title,
+          isValidMedusaId: i.variantId ? isMedusaId(i.variantId) : false 
+        }))
+      });
       
       const validItems = items.filter(item => item.variantId && isMedusaId(item.variantId));
       
       if (validItems.length !== items.length) {
-        console.warn(`[Cart Sync] Filtered out ${items.length - validItems.length} items with invalid variantIds`);
+        logger.warn('[Cart Sync] Filtered out items with invalid variantIds', {
+          filtered: items.length - validItems.length,
+          total: items.length
+        });
       }
       
       await service.syncCartItems(cartId, validItems);
       result.items_synced = validItems.length;
-      console.log(`Synced ${validItems.length} items to cart ${cartId}`);
+      logger.info('[Cart Sync] Items synced to cart', { count: validItems.length, cartId });
     }
 
     // Update cart details
@@ -108,13 +116,19 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
       
       await service.updateCart(cartId, updateData);
       if (shipping_address) result.address_updated = true;
-      console.log(`Updated cart ${cartId} properties:`, Object.keys(updateData));
+      logger.info('[Cart Update] Updated cart properties', { 
+        cartId, 
+        properties: Object.keys(updateData) 
+      });
     }
 
     return data(result, { status: 200 });
 
   } catch (error: any) {
-    console.error(`Error updating cart ${cartId}:`, error);
+    logger.error(`Error updating cart ${cartId}`, error instanceof Error ? error : undefined, {
+      cartId,
+      message: error?.message || String(error)
+    });
     
     // Determine status code from upstream error
     const status = error.status || 500;
@@ -151,13 +165,15 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
  * GET /api/carts/:id
  * Get cart details
  */
-export async function loader({ params, context }: LoaderFunctionArgs) {
+export async function loader({ params, context, request }: LoaderFunctionArgs) {
   const cartId = params.id;
   if (!cartId) {
     return data({ error: "Cart ID is required" }, { status: 400 });
   }
 
   const service = new MedusaCartService(context);
+  const traceId = getTraceIdFromRequest(request);
+  const logger = createLogger({ traceId });
 
   try {
     const cart = await service.getCart(cartId);
@@ -173,7 +189,10 @@ export async function loader({ params, context }: LoaderFunctionArgs) {
     });
 
   } catch (error: any) {
-    console.error(`Error fetching cart ${cartId}:`, error);
+    logger.error(`Error fetching cart ${cartId}`, error instanceof Error ? error : undefined, {
+      cartId,
+      message: error?.message || String(error)
+    });
     return data({
       error: "Failed to fetch cart",
       details: error.message,
