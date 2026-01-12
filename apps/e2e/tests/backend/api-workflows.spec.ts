@@ -1,12 +1,11 @@
 import { expect, test } from "../../support/fixtures";
 import { Product } from "../../support/factories/product-factory";
 
-// Fail fast if MEDUSA_PUBLISHABLE_KEY is not configured
-if (!process.env.MEDUSA_PUBLISHABLE_KEY) {
-  throw new Error("MEDUSA_PUBLISHABLE_KEY environment variable is required for backend API tests");
-}
+// Skip tests if MEDUSA_PUBLISHABLE_KEY is not configured (e.g., local dev without full setup)
+const skipIfNoKey = !process.env.MEDUSA_PUBLISHABLE_KEY;
 
 test.describe("Backend API workflows (admin)", () => {
+  test.skip(skipIfNoKey, "MEDUSA_PUBLISHABLE_KEY environment variable is required for backend API tests");
 
   test("products catalog CRUD with publish/unpublish and pricing updates", async ({
     apiRequest,
