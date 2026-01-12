@@ -5,8 +5,8 @@ import {
     WorkflowResponse,
     transform,
 } from "@medusajs/framework/workflows-sdk";
-import { updateInventoryLevelsStep, cancelOrderWorkflow } from "@medusajs/core-flows";
-import type { UpdateInventoryLevelInput, MedusaContainer } from "@medusajs/types";
+import { cancelOrderWorkflow } from "@medusajs/core-flows";
+import type { MedusaContainer } from "@medusajs/types";
 import Stripe from "stripe";
 import { getStripeClient } from "../utils/stripe";
 import { cancelPaymentCaptureJob, schedulePaymentCapture, JobActiveError } from "../lib/payment-capture-queue";
@@ -504,35 +504,40 @@ export const cancelOrderWithRefundWorkflow = createWorkflow(
     "cancel-order-with-refund",
     (input: CancelOrderWithRefundInput) => {
         // Step 1 (Story 3.5 AC3): Check fulfillment status first
-        // Reject if order has been shipped
-        const fulfillmentInput = transform({ input }, (data) => ({
-            orderId: data.input.orderId,
-        }));
+        const fulfillmentInput = transform({ input }, (data) => {
+            console.log(`[CancelOrder][Workflow] Step 1: Checking fulfillment for ${data.input.orderId}`);
+            return { orderId: data.input.orderId };
+        });
         checkFulfillmentStatusStep(fulfillmentInput);
 
         // Step 2 (AC): Queue Stop - Attempt to remove capture job
-        // Story 3.5 AC4: Compensation is handled by the step itself
-        const removeJobInput = transform({ input }, (data) => ({
-            orderId: data.input.orderId,
-            paymentIntentId: data.input.paymentIntentId,
-        }));
+        const removeJobInput = transform({ input }, (data) => {
+            console.log(`[CancelOrder][Workflow] Step 2: Removing capture job for ${data.input.orderId}`);
+            return {
+                orderId: data.input.orderId,
+                paymentIntentId: data.input.paymentIntentId,
+            };
+        });
         removeCaptureJobStep(removeJobInput);
 
         // Step 3 (AC): DB Lock - Validate order state before proceeding
-        // Story 3.5: Modified to allow captured payments (for refund path)
-        const lockInput = transform({ input }, (data) => ({
-            orderId: data.input.orderId,
-            paymentIntentId: data.input.paymentIntentId,
-            isWithinGracePeriod: data.input.isWithinGracePeriod,
-        }));
+        const lockInput = transform({ input }, (data) => {
+            console.log(`[CancelOrder][Workflow] Step 3: Locking order ${data.input.orderId} (Grace: ${data.input.isWithinGracePeriod})`);
+            return {
+                orderId: data.input.orderId,
+                paymentIntentId: data.input.paymentIntentId,
+                isWithinGracePeriod: data.input.isWithinGracePeriod,
+            };
+        });
         lockOrderStep(lockInput);
 
         // Step 4 (FIX): Use Medusa Core Workflow for cancellation
-        // This ensures transactions, refunds, inventory, and activity logs are recorded correctly.
-        // It automatically handles voiding uncaptured payments and refunding captured ones.
-        const coreCancelInput = transform({ input }, (data) => ({
-            order_id: data.input.orderId,
-        }));
+        const coreCancelInput = transform({ input }, (data) => {
+            console.log(`[CancelOrder][Workflow] Step 4: Running core cancelOrderWorkflow for ${data.input.orderId}`);
+            return {
+                order_id: data.input.orderId,
+            };
+        });
         cancelOrderWorkflow.runAsStep({ input: coreCancelInput });
 
         return new WorkflowResponse({

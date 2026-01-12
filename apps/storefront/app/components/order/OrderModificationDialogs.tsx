@@ -176,30 +176,43 @@ export function OrderModificationDialogs({
 
             {/* Buttons Row */}
             <div className="flex flex-wrap gap-2">
-                <button
-                    onClick={() => setShowAddItemsDialog(true)}
-                    disabled={isSubmitting}
-                    className="px-4 py-2 text-accent-earthy border border-accent-earthy rounded-lg hover:bg-accent-earthy/10 transition-colors text-sm font-medium flex items-center gap-2 disabled:opacity-50"
-                >
-                    <Plus className="w-4 h-4" />
-                    Add Items
-                </button>
-                <button
-                    onClick={() => setShowEditItemsDialog(true)}
-                    disabled={isSubmitting || items.length === 0}
-                    className="px-4 py-2 text-accent-earthy border border-accent-earthy rounded-lg hover:bg-accent-earthy/10 transition-colors text-sm font-medium flex items-center gap-2 disabled:opacity-50"
-                >
-                    <ShoppingBag className="w-4 h-4" />
-                    Edit Quantities
-                </button>
-                <button
-                    onClick={() => setShowEditAddressDialog(true)}
-                    disabled={isSubmitting}
-                    className="px-4 py-2 text-accent-earthy border border-accent-earthy rounded-lg hover:bg-accent-earthy/10 transition-colors text-sm font-medium flex items-center gap-2 disabled:opacity-50"
-                >
-                    <Pencil className="w-4 h-4" />
-                    Edit Address
-                </button>
+                <div className="relative group">
+                    <button
+                        disabled={isSubmitting}
+                        className="px-4 py-2 bg-accent-earthy text-white rounded-lg hover:bg-accent-earthy/90 transition-colors text-sm font-medium flex items-center gap-2 disabled:opacity-50"
+                    >
+                        <Pencil className="w-4 h-4" />
+                        Modify Order
+                    </button>
+                    {/* Shadowy dropdown or grouped items revealed on hover/click */}
+                    <div className="absolute left-0 mt-2 w-48 bg-white border border-gray-100 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10 p-1">
+                        <button
+                            onClick={() => setShowAddItemsDialog(true)}
+                            disabled={isSubmitting}
+                            className="w-full text-left px-3 py-2 text-sm text-text-earthy hover:bg-gray-50 rounded flex items-center gap-2 disabled:opacity-50"
+                        >
+                            <Plus className="w-4 h-4" />
+                            Add Items
+                        </button>
+                        <button
+                            onClick={() => setShowEditItemsDialog(true)}
+                            disabled={isSubmitting || items.length === 0}
+                            className="w-full text-left px-3 py-2 text-sm text-text-earthy hover:bg-gray-50 rounded flex items-center gap-2 disabled:opacity-50"
+                        >
+                            <ShoppingBag className="w-4 h-4" />
+                            Edit Quantities
+                        </button>
+                        <button
+                            onClick={() => setShowEditAddressDialog(true)}
+                            disabled={isSubmitting}
+                            className="w-full text-left px-3 py-2 text-sm text-text-earthy hover:bg-gray-50 rounded flex items-center gap-2 disabled:opacity-50"
+                        >
+                            <Pencil className="w-4 h-4" />
+                            Edit Address
+                        </button>
+                    </div>
+                </div>
+
                 <button
                     onClick={() => setShowCancelDialog(true)}
                     disabled={isSubmitting}

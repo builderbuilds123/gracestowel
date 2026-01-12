@@ -10,8 +10,8 @@ import Stripe from "stripe";
 import { getStripeClient } from "../utils/stripe";
 import { modificationTokenService } from "../services/modification-token";
 import { retryWithBackoff, isRetryableStripeError } from "../utils/stripe-retry";
-import { updateInventoryLevelsStep } from "@medusajs/core-flows";
-import type { UpdateInventoryLevelInput } from "@medusajs/types";
+import { updateInventoryLevelsStep, createReservationsStep } from "@medusajs/core-flows";
+import type { UpdateInventoryLevelInput, InventoryTypes } from "@medusajs/types";
 import { logger } from "../utils/logger";
 import { formatModificationWindow } from "../lib/payment-capture-queue";
 
@@ -524,7 +524,7 @@ function generateIdempotencyKey(orderId: string, variantId: string, quantity: nu
 export async function validatePreconditionsHandler(
     input: { orderId: string; modificationToken: string; variantId: string; quantity: number },
     context: { container: any }
-): Promise<ValidationResult> {
+): Promise<ValidationResult & { inventoryItemId?: string; locationId?: string }> {
     const { container } = context;
     const query = container.resolve("query");
 
@@ -630,31 +630,35 @@ export async function validatePreconditionsHandler(
             locationCount: inventoryLevels.length,
             requested: input.quantity
         });
+
+        logger.info("add-item-to-order", "Preconditions validated", { orderId: input.orderId });
+
+        return {
+            valid: true,
+            orderId: input.orderId,
+            paymentIntentId,
+            paymentCollectionId: paymentCollection?.id, // Return ID if found
+            inventoryItemId, // Story 7.1: Return for reservation
+            locationId: inventoryLevels[0]?.location_id, // Story 7.1: Return for reservation (use first for now)
+            order: {
+                id: order.id,
+                status: order.status,
+                total: order.total,
+                tax_total: order.tax_total || 0,
+                subtotal: order.subtotal || 0,
+                currency_code: order.currency_code,
+                metadata: order.metadata || {},
+                items: order.items || [],
+            },
+            paymentIntent: {
+                id: paymentIntent.id,
+                status: paymentIntent.status,
+                amount: paymentIntent.amount,
+            },
+        };
     }
 
-    logger.info("add-item-to-order", "Preconditions validated", { orderId: input.orderId });
-
-    return {
-        valid: true,
-        orderId: input.orderId,
-        paymentIntentId,
-        paymentCollectionId: paymentCollection?.id, // Return ID if found
-        order: {
-            id: order.id,
-            status: order.status,
-            total: order.total,
-            tax_total: order.tax_total || 0,
-            subtotal: order.subtotal || 0,
-            currency_code: order.currency_code,
-            metadata: order.metadata || {},
-            items: order.items || [],
-        },
-        paymentIntent: {
-            id: paymentIntent.id,
-            status: paymentIntent.status,
-            amount: paymentIntent.amount,
-        },
-    };
+    throw new Error(`Variant ${input.variantId} has no inventory items`);
 }
 
 const validatePreconditionsStep = createStep(
@@ -1052,7 +1056,7 @@ export async function updateOrderValuesHandler(
         currentOrderMetadata: Record<string, any>;
     },
     context: { container: any }
-): Promise<{ success: boolean; orderId: string; orderWithItems?: any }> {
+): Promise<{ success: boolean; orderId: string; orderWithItems?: any; newLineItemId?: string }> {
     const { container } = context;
     const orderService = container.resolve("order");
     // const inventoryService = container.resolve("inventoryService"); // If needed later
@@ -1173,6 +1177,13 @@ export async function updateOrderValuesHandler(
             relations: ["items"],
         });
 
+        const items = updatedOrder?.items || [];
+        const foundItem = findNewlyCreatedItem(
+            items,
+            input.variantId,
+            input.quantity
+        );
+
         logger.info("add-item-to-order", "TAX-01: Order updated with line item", {
             orderId: input.orderId,
             variantId: input.variantId,
@@ -1185,6 +1196,7 @@ export async function updateOrderValuesHandler(
             success: true,
             orderId: input.orderId,
             orderWithItems: updatedOrder,
+            newLineItemId: foundItem?.id, // Story 7.1: Return ID for native reservation link
         };
     } catch (error) {
         if (input.stripeIncrementSucceeded) {
@@ -1227,7 +1239,7 @@ const updateOrderValuesStep = createStep(
             currentOrderMetadata: Record<string, any>;
         },
         { container }
-    ): Promise<StepResponse<{ success: boolean; orderId: string }>> => {
+    ): Promise<StepResponse<{ success: boolean; orderId: string; newLineItemId?: string }>> => {
         const result = await updateOrderValuesHandler(input, { container });
         return new StepResponse(result);
     }
@@ -1295,18 +1307,6 @@ export const addItemToOrderWorkflow = createWorkflow(
         }));
         const stripeResult = incrementStripeAuthStep(stripeInput);
 
-        // TAX-01: Prepare inventory adjustments
-        // We do this here as we are about to commit the changes.
-        // ORD-01: Explicitly reserve inventory
-        const inventoryInput = transform({ input }, (data) => ({
-            variantId: data.input.variantId,
-            quantity: data.input.quantity,
-        }));
-        const inventoryAdjustments = prepareInventoryAdjustmentsStep(inventoryInput);
-        
-        // Update inventory levels
-        updateInventoryLevelsStep(inventoryAdjustments);
-
         // PAY-01: Update Payment Collection amount to match Order.total (source of truth)
         // PaymentCollection is Medusa's canonical payment record and must match Order.total
         const pcInput = transform({ validation, totals }, (data) => ({
@@ -1332,6 +1332,31 @@ export const addItemToOrderWorkflow = createWorkflow(
             currentOrderMetadata: data.validation.order.metadata,
         }));
         const updateResult = updateOrderValuesStep(updateInput);
+
+        // Story 7.1: Native reservations
+        const reservationsInput = transform({ validation, input, updateResult }, (data) => {
+            if (!data.validation.inventoryItemId || !data.validation.locationId || !data.updateResult.newLineItemId) {
+                logger.warn("add-item-to-order", "Missing data for reservation creation", {
+                    inventoryItemId: data.validation.inventoryItemId,
+                    locationId: data.validation.locationId,
+                    newLineItemId: data.updateResult.newLineItemId
+                });
+                return [];
+            }
+
+            return [{
+                inventory_item_id: data.validation.inventoryItemId,
+                location_id: data.validation.locationId,
+                quantity: data.input.quantity,
+                line_item_id: data.updateResult.newLineItemId,
+                metadata: {
+                    order_id: data.input.orderId,
+                    created_via: "add-item-workflow"
+                }
+            }];
+        });
+
+        createReservationsStep(reservationsInput);
 
         const result = transform(
             { validation, totals, stripeResult, updateResult, input },
