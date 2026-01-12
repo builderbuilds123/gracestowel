@@ -5,7 +5,7 @@
   "description": "End-to-end tests for Grace Stowel e-commerce platform",
   "scripts": {
     "test": "playwright test",
-    "test:e2e": "playwright test --project=chromium",
+    "test:e2e": "playwright test",
     "test:fast": "E2E_FAST=true playwright test --project=chromium",
     "test:ui": "playwright test --ui",
     "test:headed": "playwright test --headed",

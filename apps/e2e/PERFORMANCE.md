@@ -116,11 +116,56 @@ If tests are still slow:
 3. **Check network**: Slow network can affect API calls
 4. **Check workers**: Too many workers can overwhelm the dev server
 
-### 10. Future Optimizations
+### 10. Turborepo Integration
+
+Turborepo is already configured and provides several benefits:
+
+#### Benefits
+1. **Parallel Execution**: Run unit tests and E2E tests in parallel
+   ```bash
+   pnpm test:all  # Runs all tests in parallel
+   ```
+
+2. **Dependency Management**: Automatically ensures backend/storefront are built before E2E tests
+   ```bash
+   pnpm test:e2e  # Turbo ensures dependencies are built first
+   ```
+
+3. **Caching Test Artifacts**: Caches test results, reports, and screenshots
+   - Even though E2E tests must run, artifacts are cached
+   - Speeds up report generation and artifact retrieval
+
+4. **Remote Caching (CI)**: Share cache across CI runs
+   - Reduces redundant work in CI pipelines
+   - Faster CI execution when test code hasn't changed
+
+#### Usage
+
+```bash
+# Run E2E tests via Turborepo (with dependency management)
+pnpm test:e2e
+
+# Run all tests in parallel (unit + E2E)
+pnpm test:all
+
+# Fast mode via Turborepo
+pnpm test:e2e:fast
+```
+
+#### How It Works
+
+- **Inputs**: Turborepo tracks changes to test files, config, and dependencies
+- **Outputs**: Caches test results, reports, and artifacts
+- **Dependencies**: Automatically builds backend/storefront before E2E tests
+- **Parallelization**: Can run multiple test suites simultaneously
+
+### 11. Future Optimizations
 
 Potential improvements:
+- [x] Use Turborepo for test orchestration
+- [x] Cache test artifacts via Turborepo
 - [ ] Use test sharding for CI
-- [ ] Implement test result caching
 - [ ] Optimize beforeEach hooks (move to beforeAll where possible)
 - [ ] Use test fixtures for shared setup
 - [ ] Implement test tagging (smoke, full, etc.)
+- [ ] Enable Turborepo remote caching for CI
