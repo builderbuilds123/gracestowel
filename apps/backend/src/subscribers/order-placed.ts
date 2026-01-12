@@ -249,13 +249,15 @@ export default async function orderPlacedHandler({
                 shipping_total: order.shipping_total,
                 tax_total: order.tax_total,
                 // In Medusa V2: order.items has direct access to line item properties
+                // Handle both flat structure (Medusa V2) and nested structure (test mocks)
                 items: (order.items || []).map((orderItem: any) => {
+                  const lineItem = orderItem.item || orderItem;
                   return {
-                    title: orderItem.product_title || orderItem.title || 'Unknown Product',
-                    variant_title: orderItem.variant_title,
-                    color: orderItem.metadata?.color || orderItem.metadata?.cart_data?.color,
+                    title: lineItem.product_title || lineItem.title || orderItem.product_title || orderItem.title || 'Unknown Product',
+                    variant_title: lineItem.variant_title || orderItem.variant_title,
+                    color: lineItem.metadata?.color || lineItem.metadata?.cart_data?.color || orderItem.metadata?.color || orderItem.metadata?.cart_data?.color,
                     quantity: Number(orderItem.quantity) || 1,
-                    unit_price: Number(orderItem.unit_price) || 0,
+                    unit_price: Number(orderItem.unit_price) || Number(lineItem.unit_price) || 0,
                   };
                 }),
                 shipping_address: order.shipping_address ? {
