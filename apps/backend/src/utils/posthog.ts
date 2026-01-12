@@ -1,5 +1,6 @@
 import { PostHog } from 'posthog-node';
-import { logger } from './logger';
+
+
 
 let posthogClient: PostHog | null = null;
 
@@ -37,7 +38,7 @@ export function initPostHog() {
       flushInterval: 0,
     });
 
-    logger.info('posthog', 'Server-side tracking initialized');
+    console.info('[PostHog] Server-side tracking initialized');
   }
 
   return posthogClient;
@@ -62,7 +63,7 @@ export async function shutdownPostHog() {
   if (posthogClient) {
     await posthogClient.shutdown();
     posthogClient = null;
-    logger.info('posthog', 'Client shutdown');
+    console.info('[PostHog] Client shutdown');
   }
 }
 

@@ -19,6 +19,7 @@ import { formatModificationWindow } from "../../../lib/payment-capture-queue"
 interface OrderItem {
   title: string
   variant_title?: string
+  color?: string
   quantity: number
   unit_price: number
 }
@@ -134,8 +135,10 @@ export const OrderPlacedEmailComponent = ({ order, modification_token }: OrderPl
                 <Row key={index} style={itemRow}>
                   <Column style={itemDetailsColumn}>
                     <Text style={itemTitle}>{item.title}</Text>
-                    {item.variant_title && (
-                      <Text style={itemVariant}>{item.variant_title}</Text>
+                    {(item.variant_title || item.color) && (
+                      <Text style={itemVariant}>
+                        {[item.variant_title, item.color].filter(Boolean).join(" • ")}
+                      </Text>
                     )}
                     <Text style={itemQuantity}>Qty: {item.quantity}</Text>
                   </Column>

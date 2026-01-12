@@ -76,6 +76,7 @@ export default async function orderPlacedHandler({
           "items.item.product_title",
           "items.item.variant_title",
           "items.item.unit_price",
+          "items.item.metadata",
           "payment_collections.payments.data",
           "shipping_address.first_name",
           "shipping_address.last_name",
@@ -137,8 +138,10 @@ export default async function orderPlacedHandler({
 
                 // Basic duplicate check based on address_1 and postal_code
                 const addressExists = customer.addresses?.some(addr => {
-                    const match = addr.address_1 === order.shipping_address.address_1 &&
-                                  addr.postal_code === order.shipping_address.postal_code;
+                    const sa = order.shipping_address;
+                    if (!sa) return false;
+                    const match = addr.address_1 === sa.address_1 &&
+                                  addr.postal_code === sa.postal_code;
                     // SEC-02: Do not log PII (address_1, postal_code) in plaintext
                     return match;
                 });
@@ -246,6 +249,7 @@ export default async function orderPlacedHandler({
                   return {
                     title: lineItem.product_title || lineItem.title || 'Unknown Product',
                     variant_title: lineItem.variant_title,
+                    color: lineItem.metadata?.color || lineItem.metadata?.cart_data?.color,
                     quantity: Number(orderItem.quantity) || 1,
                     // Use order_item.unit_price if available, otherwise fall back to line_item.unit_price
                     unit_price: Number(orderItem.unit_price) || Number(lineItem.unit_price) || 0,

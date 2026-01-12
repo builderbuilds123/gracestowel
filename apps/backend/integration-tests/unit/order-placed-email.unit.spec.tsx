@@ -86,4 +86,24 @@ describe("OrderPlacedEmail", () => {
     expect(html).toMatch(/Qty: (?:<!-- -->)?1/)
     expect(html).toContain("$1,000.00") // Medusa v2 uses major units
   })
+
+  it("displays color if provided", async () => {
+    const orderWithColor = {
+      ...mockOrder,
+      items: [
+        {
+          ...mockOrder.items[0],
+          variant_title: "Large",
+          color: "Green",
+        },
+      ],
+    }
+    const html = await render(
+      <OrderPlacedEmailComponent
+        order={orderWithColor}
+      />
+    )
+
+    expect(html).toContain("Large • Green")
+  })
 })

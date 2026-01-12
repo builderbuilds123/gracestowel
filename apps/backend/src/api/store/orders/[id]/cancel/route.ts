@@ -120,13 +120,9 @@ export async function POST(
 
         // Story 3.4: Response schema per AC
         res.status(200).json({
-            order_id: result.order_id,
-            status: result.status,
-            payment_action: result.payment_action,
-            // Include warning if void failed (zombie case) for monitoring
-            ...(result.voidFailed && {
-                warning: "Order canceled but payment void failed. Manual intervention may be required.",
-            }),
+            order_id: result.orderId,
+            status: "canceled",
+            action: "canceled", // Add action for storefront compatibility
         });
     } catch (error) {
         // Story 3.4 AC #4: Race Condition Handling - 409 Conflict

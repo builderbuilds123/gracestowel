@@ -1,7 +1,9 @@
 import { useEffect, useLayoutEffect, useState, lazy, Suspense, useRef } from "react";
-import { Link, useNavigate, useLoaderData, redirect } from "react-router";
-import type { LoaderFunctionArgs, MetaFunction } from "react-router";
-import { CheckCircle2, Package, Truck, MapPin, XCircle } from "lucide-react";
+import { Link, useNavigate, useLoaderData, useFetcher, redirect, data } from "react-router";
+import type { LoaderFunctionArgs, ActionFunctionArgs, MetaFunction } from "react-router";
+import { CheckCircle2, Package, Truck, MapPin, XCircle, AlertTriangle } from "lucide-react";
+import { CancelOrderDialog } from "../components/CancelOrderDialog";
+import { monitoredFetch as serverMonitoredFetch } from "../utils/monitored-fetch";
 import { useCart } from "../context/CartContext";
 import { posts } from "../data/blogPosts";
 import { getStripe, initStripe } from "../lib/stripe";
@@ -23,6 +25,7 @@ interface OrderApiResponse {
         id: string;
         status: string;
     };
+    modification_token?: string;
 }
 
 const CHECKOUT_PARAMS_COOKIE = "checkout_params";
@@ -148,6 +151,9 @@ export default function CheckoutSuccess() {
 
     // Modification window state
     const [orderId, setOrderId] = useState<string | null>(null);
+    const [showCancelDialog, setShowCancelDialog] = useState(false);
+    const [isCanceling, setIsCanceling] = useState(false);
+    
     // Ref to track processed payment intent to prevent double-firing
     const processedRef = useRef<string | null>(null);
 
@@ -201,15 +207,25 @@ export default function CheckoutSuccess() {
             try {
                 const storedVerifiedOrder = sessionStorage.getItem('verifiedOrder');
                 if (storedVerifiedOrder) {
-                    const { orderDetails: storedDetails, shippingAddress: storedShipping } = JSON.parse(storedVerifiedOrder);
-                    setOrderDetails(storedDetails);
-                    setShippingAddress(storedShipping);
-                    setPaymentStatus('success');
-                    // Restore orderId if available
-                    const storedOrderId = sessionStorage.getItem('orderId');
-                    if (storedOrderId) setOrderId(storedOrderId);
-                    logger.info('Restored verified order from sessionStorage');
-                    return;
+                    const parsed = JSON.parse(storedVerifiedOrder);
+                    
+                    if (parsed.isCanceled) {
+                        setPaymentStatus('canceled');
+                        return;
+                    }
+
+                    if (parsed.orderDetails) {
+                        setOrderDetails(parsed.orderDetails);
+                        setShippingAddress(parsed.shippingAddress);
+                        setPaymentStatus('success');
+                        
+                        // Restore orderId if available
+                        const storedOrderId = sessionStorage.getItem('orderId');
+                        if (storedOrderId) setOrderId(storedOrderId);
+                        
+                        logger.info('Restored verified order from sessionStorage');
+                        return;
+                    }
                 }
             } catch (error) {
                 // Non-critical: if parsing fails, continue with Stripe verification
@@ -230,7 +246,16 @@ export default function CheckoutSuccess() {
                 return;
             }
 
-            if (redirectStatus === 'succeeded' && paymentIntentId && paymentIntentClientSecret) {
+            if (paymentIntentId && paymentIntentClientSecret) {
+                // If redirect status is failed, show error immediately
+                if (redirectStatus === 'failed') {
+                    logger.error("Payment redirect marked as failed", new Error("Stripe redirect failure"), {
+                        redirectStatus,
+                    });
+                    setMessage("The payment process was unsuccessful.");
+                    setPaymentStatus('error');
+                    return;
+                }
                 processedRef.current = paymentIntentId; // Mark as processed
 
                 try {
@@ -369,10 +394,13 @@ export default function CheckoutSuccess() {
                                     // SEC-05: Store in sessionStorage for ephemeral access (clears on tab close)
                                     try {
                                         sessionStorage.setItem('orderId', data.order.id);
+                                        if (data.modification_token) {
+                                            sessionStorage.setItem('modificationToken', data.modification_token);
+                                        }
                                     } catch (error) {
                                         // Non-critical: storage failures don't affect order processing
                                         // Errors can occur in private browsing mode or when storage is disabled
-                                        logger.warn("Failed to store orderId in sessionStorage", {
+                                        logger.warn("Failed to store order data in sessionStorage", {
                                             error: error instanceof Error ? error.message : String(error),
                                         });
                                     }
@@ -447,6 +475,9 @@ export default function CheckoutSuccess() {
                                 });
                             }
                         }, 500);
+                    } else if (paymentIntent?.status === 'canceled') {
+                        // SEC-07: Handle already-canceled payments gracefully (e.g. on refresh)
+                        setPaymentStatus('canceled');
                     } else {
                         logger.error("Payment status not valid", new Error(`Invalid status: ${paymentIntent?.status}`), {
                             status: paymentIntent?.status,
@@ -475,6 +506,57 @@ export default function CheckoutSuccess() {
         fetchPaymentDetails();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [urlSanitized]);
+
+    const handleCancelOrder = async () => {
+        if (!orderId) return;
+        
+        setIsCanceling(true);
+        try {
+            const token = sessionStorage.getItem('modificationToken');
+            const response = await monitoredFetch(`${medusaBackendUrl}/store/orders/${orderId}/cancel`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "x-modification-token": token || "",
+                    "x-publishable-api-key": medusaPublishableKey,
+                },
+                body: JSON.stringify({ reason: "Customer cancelled from success page" }),
+                label: "cancel-order-from-success",
+            });
+
+            if (response.ok) {
+                setPaymentStatus('canceled');
+                setShowCancelDialog(false);
+                
+                // Mark as canceled in sessionStorage to persist across refreshes
+                try {
+                    const currentOrder = sessionStorage.getItem('verifiedOrder');
+                    if (currentOrder) {
+                        const parsed = JSON.parse(currentOrder);
+                        sessionStorage.setItem('verifiedOrder', JSON.stringify({ ...parsed, isCanceled: true }));
+                    } else {
+                        sessionStorage.setItem('verifiedOrder', JSON.stringify({ isCanceled: true }));
+                    }
+                } catch (e) {
+                    logger.warn("Failed to persist canceled state", { error: e });
+                }
+                
+                // Clear other modification state
+                sessionStorage.removeItem('modificationToken');
+                // Keep orderId for now in case we need it for further lookups, 
+                // but usually the isCanceled flag in verifiedOrder is enough.
+            } else {
+                const errorData = await response.json() as { message?: string };
+                logger.error("Failed to cancel order", new Error(errorData.message || "Cancellation failed"));
+                alert(errorData.message || "Failed to cancel order. Please contact support.");
+            }
+        } catch (err) {
+            logger.error("Error canceling order", err instanceof Error ? err : new Error(String(err)));
+            alert("An error occurred. Please try again or contact support.");
+        } finally {
+            setIsCanceling(false);
+        }
+    };
 
     if (paymentStatus === 'loading') {
         return (
@@ -619,6 +701,18 @@ export default function CheckoutSuccess() {
                                 <span className="font-bold text-2xl text-accent-earthy">${orderDetails?.total.toFixed(2)}</span>
                             </div>
                         </div>
+
+                        {/* Story 3.5: Support direct cancellation from success page */}
+                        {orderId && (
+                            <div className="mt-8 pt-6 border-t border-gray-100 text-center">
+                                <button
+                                    onClick={() => setShowCancelDialog(true)}
+                                    className="text-sm text-red-600 hover:text-red-800 underline transition-colors font-medium cursor-pointer"
+                                >
+                                    Made a mistake? Cancel your order within 60 minutes
+                                </button>
+                            </div>
+                        )}
                     </div>
 
                     {/* Shipping & Map Card */}
@@ -713,9 +807,14 @@ export default function CheckoutSuccess() {
                         </Link>
                     </div>
                 </div>
+
+                <CancelOrderDialog
+                    isOpen={showCancelDialog}
+                    onClose={() => setShowCancelDialog(false)}
+                    onConfirm={handleCancelOrder}
+                    orderNumber={orderDetails?.orderNumber || ""}
+                />
             </div>
-
-
         </div>
     );
 }

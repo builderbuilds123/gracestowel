@@ -19,7 +19,9 @@ export async function registerProjectSubscribers(container: MedusaContainer): Pr
     try {
         logger.info("subscribers", "Registering project subscribers...");
         console.log("[SUBSCRIBERS] Registering project subscribers...");
-        const { Modules } = require("@medusajs/framework/utils");
+        
+        // Use dynamic import for framework utils
+        const { Modules } = await import("@medusajs/framework/utils");
         const eventBusModuleService = container.resolve(Modules.EVENT_BUS);
 
         // Define strict contract for subscriber handlers to ensure type safety
@@ -29,66 +31,32 @@ export async function registerProjectSubscribers(container: MedusaContainer): Pr
             pluginOptions: Record<string, unknown>;
         }) => Promise<void>;
 
-        // Use require for CommonJS compatibility in Medusa development mode
-        const orderPlacedModule = require("../subscribers/order-placed");
-        const orderPlacedHandler = orderPlacedModule.default;
-        const orderPlacedConfig = orderPlacedModule.config;
+        // Helper to register subscriber
+        const registerSubscriber = async (modulePath: string, name: string) => {
+             // Dynamic import for subscribers
+             const module = await import(modulePath);
+             const handler = module.default;
+             const config = module.config;
+             
+             const events = Array.isArray(config.event) ? config.event : [config.event];
+             for (const eventName of events) {
+                eventBusModuleService.subscribe(eventName, async (data: any) => {
+                    const subscriberHandler = handler as unknown as SubscriberHandler;
+                    const unwrappedData =
+                        data && typeof data === "object" && typeof (data as any).name === "string" && "data" in (data as any)
+                            ? (data as any).data
+                            : data;
 
-        const orderPlacedEvents = Array.isArray(orderPlacedConfig.event) ? orderPlacedConfig.event : [orderPlacedConfig.event];
-        for (const eventName of orderPlacedEvents) {
-            eventBusModuleService.subscribe(eventName, async (data: any) => {
-                const handler = orderPlacedHandler as unknown as SubscriberHandler;
-                const unwrappedData =
-                    data && typeof data === "object" && typeof (data as any).name === "string" && "data" in (data as any)
-                        ? (data as any).data
-                        : data;
+                    await subscriberHandler({ event: { name: eventName, data: unwrappedData }, container, pluginOptions: {} });
+                });
+                console.log(`[SUBSCRIBERS] ✅ Registered ${name}: ${eventName}`);
+             }
+        };
 
-                await handler({ event: { name: eventName, data: unwrappedData }, container, pluginOptions: {} });
-            });
-            console.log(`[SUBSCRIBERS] ✅ Registered: ${eventName}`);
-        }
-
-        // Import and register customer-created subscriber
-        const customerCreatedModule = require("../subscribers/customer-created");
-        const customerCreatedHandler = customerCreatedModule.default;
-        const customerCreatedConfig = customerCreatedModule.config;
-
-        const customerCreatedEvents = Array.isArray(customerCreatedConfig.event) ? customerCreatedConfig.event : [customerCreatedConfig.event];
-        for (const eventName of customerCreatedEvents) {
-            eventBusModuleService.subscribe(eventName, async (data: any) => {
-                const handler = customerCreatedHandler as unknown as SubscriberHandler;
-                await handler({ event: { name: eventName, data }, container, pluginOptions: {} });
-            });
-            console.log(`[SUBSCRIBERS] ✅ Registered: ${eventName}`);
-        }
-
-        // Import and register fulfillment-created subscriber
-        const fulfillmentCreatedModule = require("../subscribers/fulfillment-created");
-        const fulfillmentCreatedHandler = fulfillmentCreatedModule.default;
-        const fulfillmentCreatedConfig = fulfillmentCreatedModule.config;
-
-        const fulfillmentEvents = Array.isArray(fulfillmentCreatedConfig.event) ? fulfillmentCreatedConfig.event : [fulfillmentCreatedConfig.event];
-        for (const eventName of fulfillmentEvents) {
-            eventBusModuleService.subscribe(eventName, async (data: any) => {
-                const handler = fulfillmentCreatedHandler as unknown as SubscriberHandler;
-                await handler({ event: { name: eventName, data }, container, pluginOptions: {} });
-            });
-            console.log(`[SUBSCRIBERS] ✅ Registered: ${eventName}`);
-        }
-
-        // Import and register order-canceled subscriber
-        const orderCanceledModule = require("../subscribers/order-canceled");
-        const orderCanceledHandler = orderCanceledModule.default;
-        const orderCanceledConfig = orderCanceledModule.config;
-
-        const orderCanceledEvents = Array.isArray(orderCanceledConfig.event) ? orderCanceledConfig.event : [orderCanceledConfig.event];
-        for (const eventName of orderCanceledEvents) {
-            eventBusModuleService.subscribe(eventName, async (data: any) => {
-                const handler = orderCanceledHandler as unknown as SubscriberHandler;
-                await handler({ event: { name: eventName, data }, container, pluginOptions: {} });
-            });
-            console.log(`[SUBSCRIBERS] ✅ Registered: ${eventName}`);
-        }
+        await registerSubscriber("../subscribers/order-placed", "order-placed");
+        await registerSubscriber("../subscribers/customer-created", "customer-created");
+        await registerSubscriber("../subscribers/fulfillment-created", "fulfillment-created");
+        await registerSubscriber("../subscribers/order-canceled", "order-canceled");
 
         subscribersRegistered = true;
         logger.info("subscribers", "All subscribers registered successfully");

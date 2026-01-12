@@ -118,8 +118,12 @@ export function usePaymentSession(
             if (contentType && contentType.includes("application/json")) {
               const errorData = (await response.json()) as { error?: string };
               errorBody = errorData;
-              if (errorData && typeof errorData.error === "string") {
-                errorMessage = errorData.error;
+              if (errorData) {
+                if (typeof errorData.error === "string") {
+                  errorMessage = errorData.error;
+                } else if (typeof (errorData as any).message === "string") {
+                  errorMessage = (errorData as any).message;
+                }
               }
             } else {
               // Fallback for non-JSON error responses

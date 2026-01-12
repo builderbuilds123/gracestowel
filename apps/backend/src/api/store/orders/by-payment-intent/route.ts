@@ -1,5 +1,6 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { logger } from "../../../../utils/logger";
+import { modificationTokenService } from "../../../../services/modification-token";
 
 /**
  * GET /store/orders/by-payment-intent?payment_intent_id=pi_xxx
@@ -12,8 +13,8 @@ import { logger } from "../../../../utils/logger";
  *
  * SECURITY CONSTRAINTS:
  * - NO PII: Returns only order_id and status (no shipping_address, items, customer)
- * - NO token minting: Read-only endpoint (client should use /order/status/:id endpoint)
- * - Query optimization: Uses payment module for efficient lookup
+ * - TOKEN MINTING: Returns short-lived modification_token for authorized sessions
+ * - Proof-of-access: payment_intent_id acts as proof of identity
  * - Security headers: Cache-Control: no-store, private + X-Content-Type-Options: nosniff
  *
  * Used by storefront checkout.success.tsx to verify order exists after payment.
@@ -89,9 +90,9 @@ export async function GET(
                             // Query this specific order with payment_collections relation
                             const { data: orderWithPC } = await query.graph({
                                 entity: "order",
-                                fields: ["id", "status", "payment_collections.id"],
+                                fields: ["id", "status", "created_at", "payment_collections.id"],
                                 filters: { id: order.id },
-                            }) as { data: Array<{ id: string; status: string; payment_collections?: Array<{ id: string }> }> };
+                            }) as { data: Array<{ id: string; status: string; created_at: string; payment_collections?: Array<{ id: string }> }> };
                             
                             if (orderWithPC.length > 0) {
                                 const hasPC = orderWithPC[0].payment_collections?.some(
@@ -110,6 +111,11 @@ export async function GET(
                                             id: foundOrderId,
                                             status: status,
                                         },
+                                        modification_token: modificationTokenService.generateToken(
+                                            foundOrderId,
+                                            paymentIntentId,
+                                            orderWithPC[0].created_at
+                                        ),
                                     });
                                     return;
                                 }
@@ -157,6 +163,11 @@ export async function GET(
                         id: order.id,
                         status: order.status,
                     },
+                    modification_token: modificationTokenService.generateToken(
+                        order.id,
+                        paymentIntentId,
+                        order.created_at
+                    ),
                 });
                 return;
             }
