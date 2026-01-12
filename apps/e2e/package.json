@@ -6,6 +6,7 @@
   "scripts": {
     "test": "playwright test",
     "test:e2e": "playwright test --project=chromium",
+    "test:fast": "E2E_FAST=true playwright test --project=chromium",
     "test:ui": "playwright test --ui",
     "test:headed": "playwright test --headed",
     "test:debug": "playwright test --debug",
