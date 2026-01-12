@@ -68,15 +68,13 @@ export default async function orderPlacedHandler({
           "tax_total",
           "customer_id",
           "created_at",
-          // In Medusa V2: order.items = order_item table
-          // order.items.item = order_line_item table (has title, unit_price, variant info)
+          // In Medusa V2: order.items seems to be hydrated as OrderLineItem[] directly if fields are requested
           "items.quantity",
           "items.unit_price",
-          "items.item.title",
-          "items.item.product_title",
-          "items.item.variant_title",
-          "items.item.unit_price",
-          "items.item.metadata",
+          "items.title",
+          "items.product_title",
+          "items.variant_title",
+          "items.metadata",
           "payment_collections.payments.data",
           "shipping_address.first_name",
           "shipping_address.last_name",
@@ -94,6 +92,14 @@ export default async function orderPlacedHandler({
 
     if (orders.length > 0) {
         const order = orders[0]
+        
+        // DEBUG: Log first item to verify field mapping
+        if (order.items && order.items.length > 0) {
+             logger.info(`[ORDER_PLACED_DEBUG] First Item for ${order.id}: ${JSON.stringify(order.items[0], null, 2)}`)
+        } else {
+             logger.warn(`[ORDER_PLACED_DEBUG] No items found on order ${order.id}`)
+        }
+
         const isGuest = !order.customer_id
         
         // CUST-02 FIX: Sync Customer Name & Address from Order
@@ -242,17 +248,14 @@ export default async function orderPlacedHandler({
                 subtotal: order.subtotal,
                 shipping_total: order.shipping_total,
                 tax_total: order.tax_total,
-                // In Medusa V2: items = order_item, items.item = order_line_item
-                // quantity is on order_item, title/unit_price are on order_line_item
+                // In Medusa V2: order.items has direct access to line item properties
                 items: (order.items || []).map((orderItem: any) => {
-                  const lineItem = orderItem.item || {};
                   return {
-                    title: lineItem.product_title || lineItem.title || 'Unknown Product',
-                    variant_title: lineItem.variant_title,
-                    color: lineItem.metadata?.color || lineItem.metadata?.cart_data?.color,
+                    title: orderItem.product_title || orderItem.title || 'Unknown Product',
+                    variant_title: orderItem.variant_title,
+                    color: orderItem.metadata?.color || orderItem.metadata?.cart_data?.color,
                     quantity: Number(orderItem.quantity) || 1,
-                    // Use order_item.unit_price if available, otherwise fall back to line_item.unit_price
-                    unit_price: Number(orderItem.unit_price) || Number(lineItem.unit_price) || 0,
+                    unit_price: Number(orderItem.unit_price) || 0,
                   };
                 }),
                 shipping_address: order.shipping_address ? {

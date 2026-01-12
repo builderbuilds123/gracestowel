@@ -73,6 +73,14 @@ export class OrderShippedError extends Error {
     }
 }
 
+export class MissingPaymentCollectionError extends Error {
+    code = "MISSING_PAYMENT_COLLECTION";
+    constructor(orderId: string) {
+        super(`Order ${orderId} is missing PaymentCollection. Payment status implies legacy data.`);
+        this.name = "MissingPaymentCollectionError";
+    }
+}
+
 /**
  * Input for the cancel order workflow
  * Story 3.5: Added isWithinGracePeriod for branching logic
@@ -254,18 +262,14 @@ export const lockOrderHandler = async (
     // Per Medusa v2 docs: Each order should have exactly one PaymentCollection
     // Multiple PaymentCollections is an anomaly and should be treated as an error
     const paymentCollections = order.payment_collections || [];
-    
+
     if (paymentCollections.length === 0) {
-        // PAY-01: PaymentCollection is required - fail loudly
+        // PAY-01: PaymentCollection is required - fail loudly but with specific error
         console.error(
             `[PAY-01][CancelOrder][ERROR] Order ${input.orderId} has no PaymentCollection. ` +
             `Payment status cannot be determined. Order status: ${order.status}`
         );
-        throw new Error(
-            `Order ${input.orderId} is missing PaymentCollection. ` +
-            `This order may have been created before PAY-01 implementation. ` +
-            `Payment status cannot be verified for cancellation.`
-        );
+        throw new MissingPaymentCollectionError(input.orderId);
     }
     
     if (paymentCollections.length > 1) {

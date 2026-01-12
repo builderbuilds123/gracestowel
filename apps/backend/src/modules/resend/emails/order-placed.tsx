@@ -60,10 +60,14 @@ interface OrderPlacedEmailProps {
  */
 const formatPrice = (amount: number | undefined, currency: string = "cad") => {
   if (amount === undefined || amount === null) return "-"
+  // Medusa V2 stores prices in CENTS (e.g. 3500 cents = $35.00)
+  // But usage in template might expect raw amount.
+  // Debugging confirmed database stores 3500 for $35.00.
+  // We divide by 100 to display properly.
   return new Intl.NumberFormat("en-CA", {
     style: "currency",
     currency: currency.toUpperCase(),
-  }).format(amount)
+  }).format(amount / 100)
 }
 
 export const OrderPlacedEmailComponent = ({ order, modification_token }: OrderPlacedEmailProps) => {

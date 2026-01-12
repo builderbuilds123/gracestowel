@@ -81,7 +81,11 @@ export async function getGuestToken(
     const cookieToken = await cookie.parse(cookieHeader);
     
     if (cookieToken) {
-        return { token: cookieToken, source: 'cookie' };
+        const payload = decodeJwtPayload(cookieToken);
+        if (payload?.order_id === orderId) {
+            return { token: cookieToken, source: 'cookie' };
+        }
+        // Mismatched token in cookie - ignore it
     }
     
     // 2. Fallback to URL query param
@@ -89,7 +93,11 @@ export async function getGuestToken(
     const urlToken = url.searchParams.get("token");
     
     if (urlToken) {
-        return { token: urlToken, source: 'url' };
+        const payload = decodeJwtPayload(urlToken);
+        if (payload?.order_id === orderId) {
+            return { token: urlToken, source: 'url' };
+        }
+        // Mismatched token in URL - ignore it
     }
     
     return { token: null, source: null };

@@ -11,6 +11,7 @@ import {
     OrderShippedError,
 } from "../../../../../workflows/cancel-order-with-refund";
 
+// Trigger rebuild
 /**
  * POST /store/orders/:id/cancel
  *
@@ -69,6 +70,7 @@ export async function POST(
 
     // Verify the token is for this order (check payload even if expired)
     if (validation.payload?.order_id !== id) {
+        console.warn(`[CancelOrder] Token mismatch. Token Order ID: ${validation.payload?.order_id}, Request Order ID: ${id}`);
         res.status(403).json({
             code: "TOKEN_MISMATCH",
             message: "Token does not match this order",
@@ -128,8 +130,8 @@ export async function POST(
         // Story 3.4 AC #4: Race Condition Handling - 409 Conflict
         if (error instanceof LateCancelError) {
             res.status(409).json({
-                code: "late_cancel",
-                message: error.message,
+                code: "CANCELLATION_LATE",
+                message: "Order is already being processed. Please contact support for refund.",
             });
             return;
         }
@@ -137,8 +139,16 @@ export async function POST(
         // Story 3.5 AC3: Order Already Shipped - 409 Conflict
         if (error instanceof OrderShippedError) {
             res.status(409).json({
-                code: "order_shipped",
+                code: "ORDER_SHIPPED",
                 message: error.message,
+            });
+            return;
+        }
+
+        if (error instanceof MissingPaymentCollectionError) {
+            res.status(422).json({
+                code: "MISSING_PAYMENT_COLLECTION",
+                message: "Cannot cancel order: Missing payment information. Please contact support.",
             });
             return;
         }

@@ -76,10 +76,14 @@ export default function Checkout() {
   const [isCalculatingShipping, setIsCalculatingShipping] = useState(false);
   const [shippingAddress, setShippingAddress] = useState<any>(undefined);
   const [isCartSynced, setIsCartSynced] = useState(false); // Track when cart items are synced to Medusa
+  const [cartSyncError, setCartSyncError] = useState<string | null>(null);
 
   // SHP-01: Shipping persistence hook
   const { 
     isShippingPersisted, 
+// ... (lines 83-263 skipped for brevity in thought, but must match in replacement or multi-replace)
+// Using multi-replace or careful chunking for this.
+ 
     setIsShippingPersisted,
     shippingPersistError, 
     setShippingPersistError,
@@ -273,8 +277,21 @@ export default function Checkout() {
             // Retry with new cart on next call
             throw new Error(`Region mismatch: ${error.details}`);
           }
+
+          // Handle Inventory Errors
+          if (error.code === 'INVENTORY_ERROR') {
+             setCartSyncError(`${error.error}: ${error.details}`);
+             // Don't throw, just let the user know and maybe block checkout or allow them to fix
+             // If we throw, it might retry loops. We want to stop and show error.
+             return; 
+          }
+
           throw new Error(`Cart update failed: ${error.error}`);
         }
+        
+        // Clear previous errors if successful
+        setCartSyncError(null);
+
         if (isDevelopment) {
           console.log('[Checkout] Step 2 SUCCESS - Cart updated');
         }
@@ -466,6 +483,15 @@ export default function Checkout() {
             Return to Towels
           </Link>
         </div>
+
+        {/* Payment Error Display */}
+        {cartSyncError && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
+            <p className="font-bold">Items Unavailable</p>
+            <p>{cartSyncError}</p>
+            <p className="text-sm mt-1">Please return to your cart and remove the out-of-stock items.</p>
+          </div>
+        )}
 
         {/* Payment Error Display */}
         {paymentError && (

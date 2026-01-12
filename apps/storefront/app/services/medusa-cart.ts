@@ -137,6 +137,8 @@ export class MedusaCartService {
               quantity: localItem.quantity,
             }).catch((e: any) => {
                console.error(`Failed to update item ${localItem.variantId}:`, e);
+               // Re-throw to ensure caller knows update failed
+               throw e;
             })
           );
         }
@@ -149,9 +151,8 @@ export class MedusaCartService {
             metadata: localItem.embroidery ? { embroidery: localItem.embroidery } : undefined
           }).catch((e: any) => {
              console.error(`Failed to add item ${localItem.variantId}:`, e);
-             if (e.message?.includes('variant')) {
-                 console.warn(`Variant not found, skipping: ${localItem.variantId}`);
-             }
+             // Re-throw so API returns error (e.g. inventory missing)
+             throw e;
           })
         );
       }
