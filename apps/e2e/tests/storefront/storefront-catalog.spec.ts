@@ -20,7 +20,7 @@ test.describe("Storefront navigation, discovery, and PDP coverage", () => {
     await page.waitForLoadState("domcontentloaded");
 
     await expect(page).toHaveTitle(/Grace/i);
-    await expect(page.getByRole("heading", { name: /Best Sellers/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Bestselling|Best Sellers/i })).toBeVisible();
     await expect(page.locator('a[href^="/products/"]').first()).toBeVisible();
 
     const productCards = page.locator('a[href^="/products/"]');

@@ -21,7 +21,7 @@ test.describe("Homepage", () => {
     await expect(page).toHaveTitle(/Grace/i);
 
     // Verify Best Sellers heading is visible
-    await expect(page.getByRole("heading", { name: /Best Sellers/i })).toBeVisible({ timeout: 30000 });
+    await expect(page.getByRole("heading", { name: /Bestselling|Best Sellers/i })).toBeVisible({ timeout: 30000 });
 
     // Verify product cards are displayed
     const productLinks = page.locator('a[href^="/products/"]');
@@ -52,7 +52,7 @@ test.describe("Homepage", () => {
     await page.waitForLoadState("domcontentloaded");
 
     // Wait for products to load
-    await expect(page.getByRole("heading", { name: /Best Sellers/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Bestselling|Best Sellers/i })).toBeVisible();
 
     // Check that product cards have images
     const productImages = page.locator('a[href^="/products/"] img');
@@ -123,7 +123,7 @@ test.describe("Navigation", () => {
       await homeLink.scrollIntoViewIfNeeded();
       await homeLink.click({ force: true });
       await expect(page).toHaveURL("/");
-      await expect(page.getByRole("heading", { name: /Best Sellers/i })).toBeVisible();
+      await expect(page.getByRole("heading", { name: /Bestselling|Best Sellers/i })).toBeVisible();
     }
   });
 });
