@@ -131,14 +131,14 @@ test.describe("Session Recovery", () => {
     // Load homepage
     await page.goto("/");
     await page.waitForLoadState("domcontentloaded");
-    await expect(page.getByRole("heading", { name: /Best Sellers/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Bestselling|Best Sellers/i })).toBeVisible();
 
     // Refresh page
     await page.reload();
     await page.waitForLoadState("domcontentloaded");
 
     // Page should still work
-    await expect(page.getByRole("heading", { name: /Best Sellers/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Bestselling|Best Sellers/i })).toBeVisible();
   });
 
   test("should handle browser back navigation", async ({ page, productFactory }) => {
@@ -146,7 +146,7 @@ test.describe("Session Recovery", () => {
     // Navigate to homepage
     await page.goto("/");
     await page.waitForLoadState("domcontentloaded");
-    await expect(page.getByRole("heading", { name: /Best Sellers/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Bestselling|Best Sellers/i })).toBeVisible();
 
     // Navigate to product
     await page.goto(`/products/${product.handle}`);
@@ -158,6 +158,6 @@ test.describe("Session Recovery", () => {
     await page.waitForLoadState("domcontentloaded");
 
     // Should be on homepage
-    await expect(page.getByRole("heading", { name: /Best Sellers/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Bestselling|Best Sellers/i })).toBeVisible();
   });
 });
