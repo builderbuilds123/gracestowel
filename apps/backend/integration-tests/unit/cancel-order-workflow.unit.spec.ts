@@ -116,9 +116,18 @@ describe("Cancel Order Workflow Steps", () => {
             vi.clearAllMocks();
 
             queryMock = vi.fn();
+            const mockLogger = {
+                info: vi.fn(),
+                error: vi.fn(),
+                warn: vi.fn(),
+                debug: vi.fn()
+            };
+
             container = {
-                resolve: vi.fn().mockReturnValue({
-                    graph: queryMock
+                resolve: vi.fn().mockImplementation((key) => {
+                    if (key === "logger") return mockLogger;
+                    if (key === "query") return { graph: queryMock };
+                    return {};
                 })
             } as any;
 
@@ -402,9 +411,17 @@ describe("Cancel Order Workflow Steps", () => {
 
         beforeEach(() => {
             queryMock = vi.fn();
+            const mockLogger = {
+                info: vi.fn(),
+                error: vi.fn(),
+                warn: vi.fn(),
+                debug: vi.fn()
+            };
             container = {
-                resolve: vi.fn().mockReturnValue({
-                    graph: queryMock
+                resolve: vi.fn().mockImplementation((key) => {
+                    if (key === "logger") return mockLogger;
+                    if (key === "query") return { graph: queryMock };
+                    return {};
                 })
             } as any;
         });
