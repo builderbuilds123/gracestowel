@@ -90,10 +90,19 @@ class ResendNotificationProviderService extends AbstractNotificationProviderServ
     const html = await render(emailComponent)
 
     try {
+      const subject = this.getSubject(notification.template as Templates, notification.data || {})
+
+      console.log("--- [EMAIL DEBUG] START ---")
+      console.log(`Type: ${notification.template}`)
+      console.log(`To: ${notification.to}`)
+      console.log(`Subject: ${subject}`)
+      console.log(`Data: ${JSON.stringify(notification.data, null, 2)}`)
+      console.log("--- [EMAIL DEBUG] END ---")
+
       const { data, error } = await this.resend.emails.send({
         from: this.from,
         to: notification.to,
-        subject: this.getSubject(notification.template as Templates, notification.data || {}),
+        subject,
         html,
       })
 

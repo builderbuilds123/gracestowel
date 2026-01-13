@@ -47,6 +47,20 @@ import { getStripeClient } from "../../src/utils/stripe";
 import { PaymentCollectionStatus } from "../../src/types/payment-collection-status";
 
 describe("Cancel Order Workflow Steps", () => {
+    const mockLogger = {
+        info: vi.fn(),
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn()
+    };
+    const mockContainer = {
+        resolve: vi.fn((key) => {
+            if (key === "logger") {
+                return mockLogger;
+            }
+            return {};
+        })
+    } as unknown as MedusaContainer;
     beforeEach(() => {
         vi.clearAllMocks();
         vi.spyOn(console, "log").mockImplementation(() => {});
@@ -63,15 +77,17 @@ describe("Cancel Order Workflow Steps", () => {
             vi.clearAllMocks();
         });
 
+        // Local mocks removed, using shared container defined in top describe block
+
         it("should return removed: true when queue job is removed", async () => {
             (cancelPaymentCaptureJob as any).mockResolvedValue(true);
-            const result = await removeCaptureJobHandler({ orderId: "ord_123" });
+            const result = await removeCaptureJobHandler({ orderId: "ord_123", container: mockContainer });
             expect(result).toEqual({ orderId: "ord_123", removed: true });
         });
 
         it("should return removed: false (notFound) when job missing", async () => {
             (cancelPaymentCaptureJob as any).mockResolvedValue(false);
-            const result = await removeCaptureJobHandler({ orderId: "ord_miss" });
+            const result = await removeCaptureJobHandler({ orderId: "ord_miss", container: mockContainer });
             expect(result).toEqual({ orderId: "ord_miss", removed: false, notFound: true });
         });
 
@@ -79,7 +95,7 @@ describe("Cancel Order Workflow Steps", () => {
             const activeError = new JobActiveError("ord_active");
             (cancelPaymentCaptureJob as any).mockRejectedValue(activeError);
 
-            await expect(removeCaptureJobHandler({ orderId: "ord_active" }))
+            await expect(removeCaptureJobHandler({ orderId: "ord_active", container: mockContainer }))
                 .rejects.toThrow(JobActiveError);
         });
 
@@ -89,7 +105,7 @@ describe("Cancel Order Workflow Steps", () => {
             const redisError = new Error("Redis Down");
             (cancelPaymentCaptureJob as any).mockRejectedValue(redisError);
 
-            await expect(removeCaptureJobHandler({ orderId: "ord_fail" }))
+            await expect(removeCaptureJobHandler({ orderId: "ord_fail", container: mockContainer }))
                 .rejects.toThrow("Redis Down");
         });
     });
@@ -103,9 +119,18 @@ describe("Cancel Order Workflow Steps", () => {
             vi.clearAllMocks();
 
             queryMock = vi.fn();
+            const mockLogger = {
+                info: vi.fn(),
+                error: vi.fn(),
+                warn: vi.fn(),
+                debug: vi.fn()
+            };
+
             container = {
-                resolve: vi.fn().mockReturnValue({
-                    graph: queryMock
+                resolve: vi.fn().mockImplementation((key) => {
+                    if (key === "logger") return mockLogger;
+                    if (key === "query") return { graph: queryMock };
+                    return {};
                 })
             } as any;
 
@@ -122,7 +147,11 @@ describe("Cancel Order Workflow Steps", () => {
                 data: [{
                     id: "ord_1",
                     status: "pending",
-                    payment_collections: [{ id: "pc_1", status: PaymentCollectionStatus.AUTHORIZED }],
+                    payment_collections: [{ 
+                        id: "pc_1", 
+                        status: PaymentCollectionStatus.AUTHORIZED,
+                        payment_sessions: [{ provider_id: "stripe" }]
+                    }],
                     metadata: {}
                 }]
             });
@@ -287,7 +316,11 @@ describe("Cancel Order Workflow Steps", () => {
                 data: [{
                     id: "ord_1",
                     status: "pending",
-                    payment_collections: [{ id: "pc_1", status: PaymentCollectionStatus.AUTHORIZED }],
+                    payment_collections: [{ 
+                        id: "pc_1", 
+                        status: PaymentCollectionStatus.AUTHORIZED,
+                        payment_sessions: [{ provider_id: "stripe" }]
+                    }],
                     metadata: {}
                 }]
             });
@@ -305,7 +338,11 @@ describe("Cancel Order Workflow Steps", () => {
                 data: [{
                     id: "ord_1",
                     status: "pending",
-                    payment_collections: [{ id: "pc_1", status: PaymentCollectionStatus.AUTHORIZED }],
+                    payment_collections: [{ 
+                        id: "pc_1", 
+                        status: PaymentCollectionStatus.AUTHORIZED,
+                        payment_sessions: [{ provider_id: "stripe" }]
+                    }],
                     metadata: {}
                 }]
             });
@@ -323,7 +360,11 @@ describe("Cancel Order Workflow Steps", () => {
                 data: [{
                     id: "ord_1",
                     status: "pending",
-                    payment_collections: [{ id: "pc_1", status: PaymentCollectionStatus.COMPLETED }],
+                    payment_collections: [{ 
+                        id: "pc_1", 
+                        status: PaymentCollectionStatus.COMPLETED,
+                        payment_sessions: [{ provider_id: "stripe" }]
+                    }],
                     metadata: {}
                 }]
             });
@@ -373,9 +414,17 @@ describe("Cancel Order Workflow Steps", () => {
 
         beforeEach(() => {
             queryMock = vi.fn();
+            const mockLogger = {
+                info: vi.fn(),
+                error: vi.fn(),
+                warn: vi.fn(),
+                debug: vi.fn()
+            };
             container = {
-                resolve: vi.fn().mockReturnValue({
-                    graph: queryMock
+                resolve: vi.fn().mockImplementation((key) => {
+                    if (key === "logger") return mockLogger;
+                    if (key === "query") return { graph: queryMock };
+                    return {};
                 })
             } as any;
         });
@@ -450,7 +499,7 @@ describe("Cancel Order Workflow Steps", () => {
 
         it("should call schedulePaymentCapture with 0 delay", async () => {
             const { schedulePaymentCapture } = await import("../../src/lib/payment-capture-queue");
-            const result = await reAddPaymentCaptureJobHandler({ orderId: "ord_1", paymentIntentId: "pi_1" });
+            const result = await reAddPaymentCaptureJobHandler({ orderId: "ord_1", paymentIntentId: "pi_1", container: mockContainer });
             
             expect(result.reAdded).toBe(true);
             expect(schedulePaymentCapture).toHaveBeenCalledWith("ord_1", "pi_1", 0);
@@ -528,7 +577,7 @@ describe("Cancel Order Workflow Steps", () => {
 
             // The handler throws, which the step wrapper catches and converts to QueueRemovalError
             // This test verifies the handler propagates the error
-            await expect(removeCaptureJobHandler({ orderId: "ord_redis_down" }))
+            await expect(removeCaptureJobHandler({ orderId: "ord_redis_down", container: mockContainer }))
                 .rejects.toThrow();
         });
 
@@ -536,7 +585,7 @@ describe("Cancel Order Workflow Steps", () => {
             // Job not found is OK - it means the job either doesn't exist or already completed
             (cancelPaymentCaptureJob as any).mockResolvedValue(false);
 
-            const result = await removeCaptureJobHandler({ orderId: "ord_no_job" });
+            const result = await removeCaptureJobHandler({ orderId: "ord_no_job", container: mockContainer });
 
             expect(result.removed).toBe(false);
             expect(result.notFound).toBe(true);

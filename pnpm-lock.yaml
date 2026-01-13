@@ -119,9 +119,6 @@ importers:
       jsonwebtoken:
         specifier: ^9.0.3
         version: 9.0.3
-      pg:
-        specifier: ^8.12.0
-        version: 8.16.3
       posthog-node:
         specifier: ^5.18.0
         version: 5.18.0
@@ -174,9 +171,15 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^2.1.8
         version: 2.1.9(vitest@2.1.9(@types/node@20.19.25)(happy-dom@20.0.11)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.7(@types/node@20.19.25)(typescript@5.9.3))(terser@5.44.1))
+      dotenv:
+        specifier: ^17.2.3
+        version: 17.2.3
       jest:
         specifier: ^30.0.0
         version: 30.2.0(@types/node@20.19.25)(ts-node@10.9.2(@swc/core@1.15.8(@swc/helpers@0.5.17))(@types/node@20.19.25)(typescript@5.9.3))
+      pg:
+        specifier: ^8.16.3
+        version: 8.16.3
       prettier:
         specifier: ^3.7.4
         version: 3.7.4

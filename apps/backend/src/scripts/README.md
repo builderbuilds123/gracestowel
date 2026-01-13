@@ -1,63 +1,39 @@
-# Custom CLI Script
+# Backend Utility Scripts
 
-A custom CLI script is a function to execute through Medusa's CLI tool. This is useful when creating custom Medusa tooling to run as a CLI tool.
+This directory contains utility scripts for seeding, maintenance, and debugging the Grace's Towel backend.
 
-> Learn more about custom CLI scripts in [this documentation](https://docs.medusajs.com/learn/fundamentals/custom-cli-scripts).
+## Unified Test CLI (Recommended)
 
-## How to Create a Custom CLI Script?
+Most testing and debugging tasks are now consolidated into `test-cli.ts`. This tool is secure (loads secrets from `.env`) and provides a unified interface.
 
-To create a custom CLI script, create a TypeScript or JavaScript file under the `src/scripts` directory. The file must default export a function.
-
-For example, create the file `src/scripts/my-script.ts` with the following content:
-
-```ts title="src/scripts/my-script.ts"
-import { 
-  ExecArgs,
-} from "@medusajs/framework/types"
-
-export default async function myScript ({
-  container
-}: ExecArgs) {
-  const productModuleService = container.resolve("product")
-
-  const [, count] = await productModuleService.listAndCountProducts()
-
-  console.log(`You have ${count} product(s)`)
-}
+### Running the CLI
+From `apps/backend`:
+```bash
+npx ts-node src/scripts/test-cli.ts <command> [options]
 ```
 
-The function receives as a parameter an object having a `container` property, which is an instance of the Medusa Container. Use it to resolve resources in your Medusa application.
+### Available Commands
+
+| Command | Description | Example Options |
+| :--- | :--- | :--- |
+| `order` | List recent orders or get details | `--id <id>`, `--limit 5`, `--status pending` |
+| `payment` | Check Stripe PI and Medusa status | `--pi-id <id>`, `--order-id <id>` |
+| `inventory` | Check stock levels by variant or SKU | `--variant-id <id>`, `--sku <sku>` |
+| `queue` | Monitor BullMQ capture queue | `--status`, `--jobs` |
+| `api` | Get publishable keys and providers | `--keys`, `--providers` |
+| `token` | Generate order modification JWT | `--order-id <id>`, `--pi-id <id>` |
 
 ---
 
-## How to Run Custom CLI Script?
+## Other Specialized Scripts
 
-To run the custom CLI script, run the `exec` command:
+- `seed.ts`: Populates the database with initial products, regions, and settings.
+- `run-payment-worker.ts`: Manually starts the BullMQ worker for payment capture.
+- `fix-product-prices.ts`: Maintenance script for updating variant pricing.
+- `test-storage.ts`: Verifies Cloudflare R2 / S3 storage connectivity.
 
-```bash
-npx medusa exec ./src/scripts/my-script.ts
-```
+## Development Guidelines
 
----
-
-## Custom CLI Script Arguments
-
-Your script can accept arguments from the command line. Arguments are passed to the function's object parameter in the `args` property.
-
-For example:
-
-```ts
-import { ExecArgs } from "@medusajs/framework/types"
-
-export default async function myScript ({
-  args
-}: ExecArgs) {
-  console.log(`The arguments you passed: ${args}`)
-}
-```
-
-Then, pass the arguments in the `exec` command after the file path:
-
-```bash
-npx medusa exec ./src/scripts/my-script.ts arg1 arg2
-```
+1. **Security**: Never hardcode credentials. Always use `dotenv` to load from `.env`.
+2. **Container**: Use `medusa exec` if you need the full Medusa dependency container. Use `ts-node` for lightweight scripts that only need DB/SDK access.
+3. **Consolidation**: Prefer adding new debugging subcommands to `test-cli.ts` rather than creating new standalone files.

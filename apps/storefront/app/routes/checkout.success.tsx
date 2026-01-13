@@ -169,25 +169,9 @@ export default function CheckoutSuccess() {
         setUrlSanitized(true);
     }, []);
 
-    // MED-1 FIX: Cleanup checkout data when component unmounts (user navigates away)
-    useEffect(() => {
-        return () => {
-            // SEC-05 AC2: Clean up checkout data on unmount (navigation away from success page)
-            try {
-                sessionStorage.removeItem('lastOrder');
-                sessionStorage.removeItem('orderId');
-                sessionStorage.removeItem('verifiedOrder'); // REFRESH FIX: Clear on navigation away
-                // MED-3 FIX: Also clean up cart ID to prevent lingering session data on navigate-away
-                sessionStorage.removeItem('medusa_cart_id');
-            } catch (error) {
-                // Non-critical: storage cleanup failures don't affect navigation
-                // Errors can occur in private browsing mode or when storage is disabled
-                logger.warn("Failed to cleanup sessionStorage on unmount", {
-                    error: error instanceof Error ? error.message : String(error),
-                });
-            }
-        };
-    }, []);
+    // MED-1 FIX: Removed unmount cleanup to support page refreshes (SEC-05)
+    // We rely on explicit user actions (Continue Shopping) or Tab Close to clear session data.
+    // This ensures that if a user refreshes the success page, they don't lose their receipt view.
 
     useEffect(() => {
         if (!urlSanitized) return;
@@ -197,6 +181,14 @@ export default function CheckoutSuccess() {
 
         // Prevent double processing
         if (processedRef.current === paymentIntentId) {
+            return;
+        }
+
+        const currentParams = initialParamsRef.current;
+        if (!currentParams) return;
+
+        // Prevent double processing
+        if (processedRef.current === currentParams.paymentIntentId) {
             return;
         }
 
@@ -232,7 +224,7 @@ export default function CheckoutSuccess() {
                 logger.warn('Failed to restore verified order', { error: error instanceof Error ? error.message : String(error) });
             }
 
-            if (!paymentIntentClientSecret) {
+            if (!currentParams.paymentIntentClientSecret) {
                 setPaymentStatus("error");
                 setMessage("No payment intent found");
                 return;
@@ -246,27 +238,28 @@ export default function CheckoutSuccess() {
                 return;
             }
 
-            if (paymentIntentId && paymentIntentClientSecret) {
+            if (currentParams.paymentIntentId && currentParams.paymentIntentClientSecret) {
                 // If redirect status is failed, show error immediately
-                if (redirectStatus === 'failed') {
+                if (currentParams.redirectStatus === 'failed') {
                     logger.error("Payment redirect marked as failed", new Error("Stripe redirect failure"), {
-                        redirectStatus,
+                        redirectStatus: currentParams.redirectStatus,
                     });
                     setMessage("The payment process was unsuccessful.");
                     setPaymentStatus('error');
                     return;
                 }
-                processedRef.current = paymentIntentId; // Mark as processed
+                processedRef.current = currentParams.paymentIntentId; // Mark as processed
 
                 try {
                     // SECURITY: Don't log client secret or payment intent object
-                    const { paymentIntent, error } = await stripe.retrievePaymentIntent(paymentIntentClientSecret);
+                    const { paymentIntent, error } = await stripe.retrievePaymentIntent(currentParams.paymentIntentClientSecret);
+
 
                     if (error) {
                         // Use existing logger for errors (without sensitive data)
                         const errorObj = error instanceof Error ? error : new Error(error.message || String(error));
                         logger.error("Stripe retrieval error", errorObj, {
-                            redirectStatus,
+                            redirectStatus: currentParams.redirectStatus,
                             // Don't include paymentIntentId or clientSecret
                         });
                         setMessage(`Stripe Error: ${error.message}`);
@@ -282,8 +275,7 @@ export default function CheckoutSuccess() {
                         // SEC-05: Recover from sessionStorage (clears on tab close)
                         // MED-2 FIX: Migrate from localStorage if data exists there
                         const savedOrder = migrateStorageItem('lastOrder', logger);
-                        const savedOrderId = migrateStorageItem('orderId', logger);
-
+                        
                         let orderData = null;
 
                         if (savedOrder) {
@@ -291,7 +283,7 @@ export default function CheckoutSuccess() {
                             // Update with actual order number from Stripe
                             orderData = {
                                 ...parsedOrder,
-                                orderNumber: paymentIntentId.substring(3, 11).toUpperCase(),
+                                orderNumber: currentParams.paymentIntentId!.substring(3, 11).toUpperCase(),
                                 // Ensure date is set if missing
                                 date: parsedOrder.date || new Date().toLocaleDateString('en-US', {
                                     year: 'numeric',
@@ -302,7 +294,7 @@ export default function CheckoutSuccess() {
                         } else if (items.length > 0) {
                             // Fallback to context items if available (rare on redirect)
                             orderData = {
-                                orderNumber: paymentIntentId.substring(3, 11).toUpperCase(),
+                                orderNumber: currentParams.paymentIntentId!.substring(3, 11).toUpperCase(),
                                 date: new Date().toLocaleDateString('en-US', {
                                     year: 'numeric',
                                     month: 'long',
@@ -317,7 +309,7 @@ export default function CheckoutSuccess() {
                         } else {
                             // Final fallback: just show total from Stripe
                             orderData = {
-                                orderNumber: paymentIntentId.substring(3, 11).toUpperCase(),
+                                orderNumber: currentParams.paymentIntentId!.substring(3, 11).toUpperCase(),
                                 date: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
                                 items: [],
                                 total: paymentIntent.amount / 100
@@ -377,7 +369,7 @@ export default function CheckoutSuccess() {
                         const fetchOrderWithToken = async (): Promise<void> => {
                             try {
                                 const response = await monitoredFetch(
-                                    `${medusaUrl}/store/orders/by-payment-intent?payment_intent_id=${encodeURIComponent(paymentIntentId)}`,
+                                    `${medusaUrl}/store/orders/by-payment-intent?payment_intent_id=${encodeURIComponent(currentParams.paymentIntentId!)}`,
                                     {
                                         method: "GET",
                                         headers: {
@@ -488,7 +480,7 @@ export default function CheckoutSuccess() {
                     }
                 } catch (error: any) {
                     logger.error("Error fetching payment details", error instanceof Error ? error : new Error(String(error)), {
-                        redirectStatus,
+                        redirectStatus: currentParams.redirectStatus,
                         // Don't include paymentIntentId or clientSecret
                     });
                     setMessage(`Error: ${error.message || "Payment processing failed"}`);
@@ -496,7 +488,7 @@ export default function CheckoutSuccess() {
                 }
             } else {
                 logger.error("Missing required params or redirect status not succeeded", new Error("Invalid payment params"), {
-                    redirectStatus,
+                    redirectStatus: currentParams.redirectStatus,
                     // Don't include paymentIntentId
                 });
                 setPaymentStatus('error');
@@ -506,6 +498,23 @@ export default function CheckoutSuccess() {
         fetchPaymentDetails();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [urlSanitized]);
+
+    const clearSessionData = (options: { clearVerified?: boolean; keepCart?: boolean } = {}) => {
+        const { clearVerified = true, keepCart = false } = options;
+        try {
+            sessionStorage.removeItem('lastOrder');
+            sessionStorage.removeItem('orderId');
+            if (!keepCart) {
+                sessionStorage.removeItem('medusa_cart_id');
+            }
+            sessionStorage.removeItem('modificationToken');
+            if (clearVerified) {
+                sessionStorage.removeItem('verifiedOrder');
+            }
+        } catch (e) {
+            logger.warn("Failed to clear session data", { error: e });
+        }
+    };
 
     const handleCancelOrder = async () => {
         if (!orderId) return;
@@ -528,6 +537,9 @@ export default function CheckoutSuccess() {
                 setPaymentStatus('canceled');
                 setShowCancelDialog(false);
                 
+                // Clear session data but keep verifiedOrder (updated) for the UI
+                clearSessionData({ clearVerified: false, keepCart: false });
+
                 // Mark as canceled in sessionStorage to persist across refreshes
                 try {
                     const currentOrder = sessionStorage.getItem('verifiedOrder');
@@ -540,11 +552,6 @@ export default function CheckoutSuccess() {
                 } catch (e) {
                     logger.warn("Failed to persist canceled state", { error: e });
                 }
-                
-                // Clear other modification state
-                sessionStorage.removeItem('modificationToken');
-                // Keep orderId for now in case we need it for further lookups, 
-                // but usually the isCanceled flag in verifiedOrder is enough.
             } else {
                 const errorData = await response.json() as { message?: string };
                 logger.error("Failed to cancel order", new Error(errorData.message || "Cancellation failed"));
@@ -594,6 +601,7 @@ export default function CheckoutSuccess() {
                     </div>
                     <Link
                         to="/checkout"
+                        onClick={() => clearSessionData({ clearVerified: true, keepCart: true })}
                         className="inline-block bg-accent-earthy text-white px-6 py-3 rounded-lg hover:bg-accent-earthy/90 transition-colors cursor-pointer"
                     >
                         Return to Checkout
@@ -616,6 +624,7 @@ export default function CheckoutSuccess() {
                     </p>
                     <Link
                         to="/shop"
+                        onClick={() => clearSessionData({ clearVerified: true })}
                         className="inline-block bg-accent-earthy text-white px-6 py-3 rounded-lg hover:bg-accent-earthy/90 transition-colors cursor-pointer"
                     >
                         Continue Shopping

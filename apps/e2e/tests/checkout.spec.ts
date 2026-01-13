@@ -20,7 +20,7 @@ test.describe("Guest Checkout Flow", () => {
 
     // Check for Best Sellers section (actual homepage heading) - increase timeout for slow CI
     await expect(
-      page.getByRole("heading", { name: /Best Sellers/i }),
+      page.getByRole("heading", { name: /Bestselling|Best Sellers/i }),
     ).toBeVisible({ timeout: 30000 });
 
     // Verify products are displayed

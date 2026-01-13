@@ -20,7 +20,7 @@ test.describe("Visual Regression", () => {
       await page.waitForLoadState("domcontentloaded");
 
       // Wait for key content to stabilize
-      await expect(page.getByRole("heading", { name: /Best Sellers/i })).toBeVisible();
+      await expect(page.getByRole("heading", { name: /Bestselling|Best Sellers/i })).toBeVisible();
 
       await expect(page).toHaveScreenshot("homepage.png", {
         fullPage: true,
@@ -33,7 +33,7 @@ test.describe("Visual Regression", () => {
 
       await page.goto("/");
       await page.waitForLoadState("domcontentloaded");
-      await expect(page.getByRole("heading", { name: /Best Sellers/i })).toBeVisible();
+      await expect(page.getByRole("heading", { name: /Bestselling|Best Sellers/i })).toBeVisible();
 
       await expect(page).toHaveScreenshot("homepage-mobile.png", {
         fullPage: true,
@@ -79,7 +79,7 @@ test.describe("Visual Regression", () => {
       // Go to homepage and wait for content
       await page.goto("/");
       await page.waitForLoadState("domcontentloaded");
-      await expect(page.getByRole("heading", { name: /Best Sellers/i })).toBeVisible();
+      await expect(page.getByRole("heading", { name: /Bestselling|Best Sellers/i })).toBeVisible();
 
       // Try to open cart via button (may not be visible if cart icon isn't in nav)
       const cartButton = page.getByRole("button", { name: /cart|towel/i }).first();

@@ -17,7 +17,7 @@ test.describe("Mobile Navigation", () => {
 
     // Verify page loads on mobile
     await expect(page).toHaveTitle(/Grace/i);
-    await expect(page.getByRole("heading", { name: /Best Sellers/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Bestselling|Best Sellers/i })).toBeVisible();
 
     // Verify product cards are visible and tappable
     const productLinks = page.locator('a[href^="/products/"]');

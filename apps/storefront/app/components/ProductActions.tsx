@@ -88,30 +88,20 @@ interface ProductActionsProps {
     selectedVariant?: {
         id: string;
         sku?: string | null;
+        inventory_quantity?: number;
     };
+    selectedColor: string;
+    onColorChange: (color: string) => void;
     isOutOfStock: boolean;
 }
 
-export function ProductActions({ product, selectedVariant: initialVariant, isOutOfStock }: ProductActionsProps) {
+export function ProductActions({ product, selectedVariant, selectedColor, onColorChange, isOutOfStock }: ProductActionsProps) {
     const { addToCart } = useCart();
     const { t } = useLocale();
     
     const [quantity, setQuantity] = useState(1);
-    const [selectedColor, setSelectedColor] = useState(product.colors[0] || "");
     const [isEmbroideryOpen, setIsEmbroideryOpen] = useState(false);
     const [embroideryData, setEmbroideryData] = useState<EmbroideryData | null>(null);
-
-    // Find the actual variant for the selected color
-    const getSelectedVariantId = () => {
-        if (typeof window === 'undefined' && initialVariant) return initialVariant.id; // Fallback for SSR if needed
-
-        // Try to find a variant that has an option matching the selected color
-        const match = product.variants?.find(v => 
-            v.options?.some(o => o.value === selectedColor)
-        );
-
-        return match?.id || initialVariant?.id;
-    };
 
     const handleQuantityChange = (delta: number) => {
         setQuantity(prev => Math.max(1, prev + delta));
@@ -125,12 +115,12 @@ export function ProductActions({ product, selectedVariant: initialVariant, isOut
     };
 
     const handleAddToCart = () => {
-        const variantId = getSelectedVariantId();
+        const variantId = selectedVariant?.id;
         
         addToCart({
             id: product.id,
-            variantId: variantId,
-            sku: initialVariant?.sku || undefined, // Note: SKU might also differ per variant, but keeping change minimal for now
+            variantId: variantId || "",
+            sku: selectedVariant?.sku || undefined,
             title: product.title,
             price: product.formattedPrice,
             image: product.images[0],
@@ -167,7 +157,7 @@ export function ProductActions({ product, selectedVariant: initialVariant, isOut
                         {product.colors.map((color) => (
                             <button
                                 key={color}
-                                onClick={() => setSelectedColor(color)}
+                                onClick={() => onColorChange(color)}
                                 className={`w-10 h-10 rounded-full border-2 transition-all cursor-pointer ${
                                     selectedColor === color
                                         ? "border-accent-earthy ring-2 ring-accent-earthy/20 ring-offset-2"

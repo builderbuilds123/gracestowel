@@ -35,8 +35,15 @@ export const CAPTURE_BUFFER_SECONDS = parseInt(
 
 // Delay for payment capture - configurable via env, defaults to 59:30 (3570000ms)
 // Story 6.3: Uses 30s buffer before full hour to prevent edit/capture race
+const envDelay = process.env.PAYMENT_CAPTURE_DELAY_MS;
+if (!envDelay) {
+    console.error("[CRITICAL] PAYMENT_CAPTURE_DELAY_MS environment variable is missing. Using default of 59:30.");
+} else if (isNaN(parseInt(envDelay, 10))) {
+    console.error(`[CRITICAL] PAYMENT_CAPTURE_DELAY_MS environment variable is invalid: "${envDelay}". Using default of 59:30.`);
+}
+
 export const PAYMENT_CAPTURE_DELAY_MS = parseInt(
-    process.env.PAYMENT_CAPTURE_DELAY_MS || String(calculateCaptureDelayMs(CAPTURE_BUFFER_SECONDS)),
+    envDelay || String(calculateCaptureDelayMs(CAPTURE_BUFFER_SECONDS)),
     10
 );
 

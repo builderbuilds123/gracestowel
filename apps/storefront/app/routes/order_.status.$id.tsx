@@ -1,5 +1,5 @@
 import { data } from "react-router";
-import { useLoaderData, useRevalidator } from "react-router";
+import { useLoaderData, useRevalidator, useNavigate } from "react-router";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { useState, useCallback } from "react";
 import { CheckCircle2, MapPin, Package, Truck, AlertCircle } from "lucide-react";
@@ -341,6 +341,7 @@ export async function action({ params, request, context }: ActionFunctionArgs) {
 export default function OrderStatus() {
     const loaderData = useLoaderData<LoaderData | ErrorData>();
     const revalidator = useRevalidator();
+    const navigate = useNavigate();
     
     // Handle Token Expired View
     if ('error' in loaderData) {
@@ -410,7 +411,7 @@ export default function OrderStatus() {
                             currentAddress={shippingAddress}
                             onOrderUpdated={handleOrderUpdate}
                             onAddressUpdated={setShippingAddress}
-                            onOrderCanceled={() => window.location.reload()}
+                            onOrderCanceled={() => navigate("/")}
                          />
                     </div>
                 )}
