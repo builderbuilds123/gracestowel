@@ -16,3 +16,8 @@ export { useFormTracking } from "./useFormTracking";
 export { usePaymentCollection } from "./usePaymentCollection";
 export { usePaymentSession } from "./usePaymentSession";
 
+// Feedback hooks (FEEDBACK-01)
+export { useFeedbackContext } from "./useFeedbackContext";
+export { useFeedbackTrigger } from "./useFeedbackTrigger";
+export { useFeedbackSubmit } from "./useFeedbackSubmit";
+
