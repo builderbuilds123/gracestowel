@@ -1,0 +1,285 @@
+{
+	"info": {
+		"_postman_id": "order-flow-fix-collection",
+		"name": "Grace's Towel - Order Flow Fix",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "1. Create Cart",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"var jsonData = pm.response.json();",
+							"pm.environment.set(\"cart_id\", jsonData.cart.id);"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "x-publishable-api-key",
+						"value": "{{publishable_key}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"email\": \"test@example.com\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/store/carts",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"store",
+						"carts"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "2. Add Item to Cart",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "x-publishable-api-key",
+						"value": "{{publishable_key}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"variant_id\": \"{{variant_id}}\",\n    \"quantity\": 1\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/store/carts/{{cart_id}}/line-items",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"store",
+						"carts",
+						"{{cart_id}}",
+						"line-items"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "3. Simulate Stripe Webhook (Create Order)",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							"// Generate a random Payment Intent ID",
+							"var timestamp = new Date().getTime();",
+							"var randomSuffix = Math.random().toString(36).substring(2, 12) + \"xxxxx\";",
+							"var pi_id = 'pi_' + timestamp + randomSuffix;",
+							"pi_id = pi_id.substring(0, 27);",
+							"pm.environment.set(\"payment_intent_id\", pi_id);",
+							"",
+							"// Calculate HMAC SHA256 Signature",
+							"// Note: You must set 'stripe_webhook_secret' in your Postman Environment",
+							"var secret = pm.environment.get(\"stripe_webhook_secret\") || \"whsec_test_secret\";",
+							"var sigTimestamp = Math.floor(timestamp / 1000);",
+							"",
+							"// Reconstruct the exact body that will be sent",
+							"// We must mimic the raw body structure exactly",
+							"var rawBodyObj = {",
+							"    \"id\": \"evt_test_\" + timestamp,",
+							"    \"object\": \"event\",",
+							"    \"type\": \"payment_intent.succeeded\",",
+							"    \"data\": {",
+							"        \"object\": {",
+							"            \"id\": pi_id,",
+							"            \"amount\": 1000,",
+							"            \"currency\": \"usd\",",
+							"            \"metadata\": {",
+							"                \"cart_id\": pm.environment.get(\"cart_id\")",
+							"            },",
+							"            \"shipping\": {",
+							"                \"name\": \"Test User\",",
+							"                \"address\": {",
+							"                    \"line1\": \"123 Test St\",",
+							"                    \"city\": \"Test City\",",
+							"                    \"country\": \"US\",",
+							"                    \"postal_code\": \"12345\"",
+							"                }",
+							"            }",
+							"        }",
+							"    }",
+							"};",
+							"// Ensure consistent JSON stringification (no spaces for simplified payload construction usually, but Postman 'raw' body might have spaces)",
+							"// Ideally we use PM's request body, but for pre-request strict control:",
+							"var payloadString = JSON.stringify(rawBodyObj, null, 4); // Matching the Body indentation",
+							"// Actually, let's just use the timestamp loop logic to match simpler output if needed",
+							"// But safer to just construct signature payload:",
+							"var signedPayload = sigTimestamp + \".\" + payloadString;",
+							"",
+							"var signature = CryptoJS.HmacSHA256(signedPayload, secret).toString(CryptoJS.enc.Hex);",
+							"var sigHeader = \"t=\" + sigTimestamp + \",v1=\" + signature;",
+							"pm.environment.set(\"stripe_signature\", sigHeader);"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "stripe-signature",
+						"value": "{{stripe_signature}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"id\": \"evt_test_{{$timestamp}}\",\n    \"object\": \"event\",\n    \"type\": \"payment_intent.succeeded\",\n    \"data\": {\n        \"object\": {\n            \"id\": \"{{payment_intent_id}}\",\n            \"amount\": 1000,\n            \"currency\": \"usd\",\n            \"metadata\": {\n                \"cart_id\": \"{{cart_id}}\"\n            },\n            \"shipping\": {\n                \"name\": \"Test User\",\n                \"address\": {\n                    \"line1\": \"123 Test St\",\n                    \"city\": \"Test City\",\n                    \"country\": \"US\",\n                    \"postal_code\": \"12345\"\n                }\n            }\n        }\n    }\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/webhooks/stripe",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"webhooks",
+						"stripe"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "4. Get Order & Modification Token",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"var jsonData = pm.response.json();",
+							"if(jsonData.order) {",
+							"    pm.environment.set(\"order_id\", jsonData.order.id);",
+							"}",
+							"if(jsonData.modification_token) {",
+							"    pm.environment.set(\"modification_token\", jsonData.modification_token);",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "x-publishable-api-key",
+						"value": "{{publishable_key}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/store/orders/by-payment-intent?payment_intent_id={{payment_intent_id}}",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"store",
+						"orders",
+						"by-payment-intent"
+					],
+					"query": [
+						{
+							"key": "payment_intent_id",
+							"value": "{{payment_intent_id}}"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "5. Cancel Order",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "x-publishable-api-key",
+						"value": "{{publishable_key}}",
+						"type": "text"
+					},
+					{
+						"key": "x-modification-token",
+						"value": "{{modification_token}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"reason\": \"Changed my mind\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/store/orders/{{order_id}}/cancel",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"store",
+						"orders",
+						"{{order_id}}",
+						"cancel"
+					]
+				}
+			},
+			"response": []
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:9000",
+			"type": "string"
+		},
+		{
+			"key": "publishable_key",
+			"value": "pk_test_1768271676900",
+			"type": "string"
+		},
+		{
+			"key": "variant_id",
+			"value": "variant_01KCQ89AYX36XYB5NZQGQ8EHW2",
+			"type": "string"
+		}
+	]
+}
