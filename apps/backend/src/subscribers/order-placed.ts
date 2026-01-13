@@ -69,12 +69,7 @@ export default async function orderPlacedHandler({
           "customer_id",
           "created_at",
           // In Medusa V2: order.items seems to be hydrated as OrderLineItem[] directly if fields are requested
-          "items.quantity",
-          "items.unit_price",
-          "items.title",
-          "items.product_title",
-          "items.variant_title",
-          "items.metadata",
+          "items.*", // FIXED: Fetch all item fields to ensure quantity/unit_price are present
           "payment_collections.payments.data",
           "shipping_address.first_name",
           "shipping_address.last_name",

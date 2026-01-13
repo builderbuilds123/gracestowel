@@ -5,7 +5,7 @@ import {
     WorkflowResponse,
     transform,
 } from "@medusajs/framework/workflows-sdk";
-import { cancelOrderWorkflow } from "@medusajs/core-flows";
+import { cancelOrderWorkflow, deleteReservationsStep } from "@medusajs/core-flows";
 import type { MedusaContainer } from "@medusajs/types";
 import Stripe from "stripe";
 import { getStripeClient } from "../utils/stripe";
@@ -520,6 +520,48 @@ export const reAddPaymentCaptureJobHandler = async (
  * 6. Restock inventory
  * 7. Emit order.canceled event
  */
+/**
+ * Step to find reservations associated with order line items
+ * Phase 3 of Plan: Release reservations on cancellation
+ */
+const prepareReservationReleaseStep = createStep(
+    "prepare-reservation-release",
+    async (input: { orderId: string }, { container }) => {
+        const query = container.resolve("query");
+        
+        // 1. Get Line Item IDs
+        const { data: orders } = await query.graph({
+            entity: "order",
+            fields: ["items.id"],
+            filters: { id: input.orderId }
+        });
+        
+        if (!orders.length || !orders[0].items || !orders[0].items.length) {
+            return new StepResponse([]);
+        }
+
+        const lineItemIds = orders[0].items.map((i: any) => i.id);
+
+        // 2. Find reservations linked to these line items
+        // Uses the module link defined in Phase 1
+        const { data: reservations } = await query.graph({
+            entity: "reservation_item",
+            fields: ["id"],
+            filters: {
+                line_item_id: lineItemIds
+            }
+        });
+        
+        const ids = reservations.map((r: any) => r.id);
+        
+        if (ids.length > 0) {
+            console.log(`[CancelOrder] Found ${ids.length} reservations to release for order ${input.orderId}`);
+        }
+        
+        return new StepResponse(ids);
+    }
+);
+
 export const cancelOrderWithRefundWorkflow = createWorkflow(
     "cancel-order-with-refund",
     (input: CancelOrderWithRefundInput) => {
@@ -550,6 +592,11 @@ export const cancelOrderWithRefundWorkflow = createWorkflow(
             };
         });
         lockOrderStep(lockInput);
+
+        // Step 3.5: Release Reservations (Phase 3 of Plan)
+        // This ensures inventory is freed up when order is cancelled
+        const reservationIds = prepareReservationReleaseStep({ orderId: input.orderId });
+        deleteReservationsStep(reservationIds);
 
         // Step 4 (FIX): Use Medusa Core Workflow for cancellation
         const coreCancelInput = transform({ input }, (data) => {

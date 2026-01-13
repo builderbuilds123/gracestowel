@@ -37,18 +37,14 @@ export interface InventoryAdjustment {
 type InjectedDependencies = {
     logger: Logger;
     query: any;
-    pg_connection: any;
 };
 
 export class InventoryDecrementService {
     private logger: Logger;
     private query: any;
-    private pgConnection: any;
-
-    constructor({ logger, query, pg_connection }: InjectedDependencies) {
+    constructor({ logger, query }: InjectedDependencies) {
         this.logger = logger;
         this.query = query;
-        this.pgConnection = pg_connection;
     }
 
     async getSalesChannelLocationIds(salesChannelId?: string | null): Promise<string[]> {
@@ -56,13 +52,13 @@ export class InventoryDecrementService {
         try {
             const { data: salesChannels } = await this.query.graph({
                 entity: "sales_channel",
-                fields: ["stock_locations.stock_location_id"],
+                fields: ["stock_locations.*"],
                 filters: { id: salesChannelId },
             });
             const channel = salesChannels?.[0];
             const locations = channel?.stock_locations || [];
             return locations
-                .map((loc: any) => loc?.stock_location_id)
+                .map((loc: any) => loc?.id || loc?.stock_location_id) // Handle both potential cases
                 .filter((id: string | undefined): id is string => Boolean(id));
         } catch (err) {
             this.logger.error(
@@ -127,7 +123,7 @@ export class InventoryDecrementService {
 
         const { data: allLevels } = await this.query.graph({
             entity: "inventory_level",
-            fields: ["id", "location_id", "stocked_quantity", "inventory_item_id"],
+            fields: ["id", "location_id", "stocked_quantity", "reserved_quantity", "inventory_item_id", "allow_backorder"],
             filters: { inventory_item_id: inventoryItemIds },
         });
 
@@ -143,16 +139,12 @@ export class InventoryDecrementService {
         }
 
         // 4. Batch fetch 'allow_backorder' flags for ALL resolved levels
-        // This avoids N+1 queries inside the loop
-        let allowBackorderMap = new Map<string, boolean>(); // level_id -> boolean
-        if (allLevelIds.length > 0) {
-            const levelDetails = await this.pgConnection("inventory_level")
-                .whereIn("id", allLevelIds)
-                .select("id", "allow_backorder");
-            
-            for (const details of levelDetails) {
-                 allowBackorderMap.set(details.id, details?.allow_backorder ?? false);
-            }
+        // Now fetched via query.graph
+        const allowBackorderMap = new Map<string, boolean>(); // level_id -> boolean
+        const reservedQuantityMap = new Map<string, number>(); // level_id -> number
+        for (const lvl of allLevels) {
+             allowBackorderMap.set(lvl.id, lvl.allow_backorder ?? false);
+             reservedQuantityMap.set(lvl.id, lvl.reserved_quantity ?? 0);
         }
 
         // 5. Process decrements
@@ -176,16 +168,22 @@ export class InventoryDecrementService {
 
             // Use pre-fetched flag
             const allowBackorder = allowBackorderMap.get(level.id) ?? false;
+            const reservedQuantity = reservedQuantityMap.get(level.id) ?? 0;
 
             const previousStock = level.stocked_quantity ?? 0;
+            // FIX: Calculate available quantity considering reservations
+            const availableQuantity = previousStock - reservedQuantity;
+            
             const newStock = previousStock - item.quantity;
+            const newAvailable = availableQuantity - item.quantity;
 
             // AC2 & AC7: Enforce stock check if backorders are NOT allowed
-            if (!allowBackorder && newStock < 0) {
+            // Fix: Check against AVAILABLE quantity, not just physical stock
+            if (!allowBackorder && newAvailable < 0) {
                 this.logger.warn(
-                    `[Inventory] Insufficient stock for ${item.variant_id} at ${level.location_id}: requested ${item.quantity}, available ${previousStock}`
+                    `[Inventory] Insufficient stock for ${item.variant_id} at ${level.location_id}: requested ${item.quantity}, available ${availableQuantity} (stocked: ${previousStock}, reserved: ${reservedQuantity})`
                 );
-                throw new InsufficientStockError(item.variant_id, previousStock, item.quantity);
+                throw new InsufficientStockError(item.variant_id, availableQuantity, item.quantity);
             }
 
             adjustments.push({

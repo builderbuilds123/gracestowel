@@ -8,7 +8,7 @@ import {
 } from "@medusajs/framework/workflows-sdk";
 import {
     createOrdersWorkflow,
-    updateInventoryLevelsStep,
+    createReservationsStep, // Replaced updateInventoryLevelsStep
     acquireLockStep,
     releaseLockStep,
 } from "@medusajs/core-flows";
@@ -250,7 +250,6 @@ const prepareInventoryAdjustmentsStep = createStep(
                 : new InventoryDecrementService({
                       logger: container.resolve("logger"),
                       query: container.resolve("query"),
-                      pg_connection: container.resolve("pg_connection"),
                   });
         const adjustments = await service.atomicDecrementInventory(input);
         return new StepResponse(adjustments);
@@ -496,22 +495,51 @@ export const createOrderFromStripeWorkflow = createWorkflow(
 
         const inventoryAdjustments = prepareInventoryAdjustmentsStep(inventoryInput);
 
-        // Step 4: Apply inventory adjustments using Medusa's built-in step
-        // This step has automatic compensation (rollback) if any later step fails
-        const updateInput = transform({ inventoryAdjustments }, (data) =>
-            (data.inventoryAdjustments || []).map((adj: InventoryAdjustment) => ({
-                inventory_item_id: adj.inventory_item_id,
-                location_id: adj.location_id,
-                stocked_quantity: adj.stocked_quantity,
-            }))
+        // Step 4: Create Reservations instead of direct inventory updates
+        // This ensures proper Order ID association and reservations in Admin
+        const reservationInput = transform(
+            { order, inventoryAdjustments, input },
+            (data) => {
+                const adjustments = data.inventoryAdjustments || [];
+                const items = data.order.items || [];
+                const reservations: any[] = [];
+
+                // Create a map of variant_id -> adjustment for quick lookup of inventory/location IDs
+                const adjustmentMap = new Map<string, InventoryAdjustment>();
+                for (const adj of adjustments) {
+                    if (adj.variant_id) {
+                        adjustmentMap.set(adj.variant_id, adj);
+                    }
+                }
+
+                for (const item of items) {
+                    if (!item.variant_id) continue;
+                    
+                    const adj = adjustmentMap.get(item.variant_id);
+                    if (adj) {
+                        reservations.push({
+                            line_item_id: item.id,
+                            inventory_item_id: adj.inventory_item_id,
+                            location_id: adj.location_id,
+                            quantity: item.quantity,
+                            metadata: {
+                                order_id: data.order.id,
+                                created_via: "create-order-from-stripe"
+                            }
+                        });
+                    }
+                }
+                return reservations;
+            }
         );
-        updateInventoryLevelsStep(updateInput);
+
+        createReservationsStep(reservationInput);
 
         const shouldAdjustInventory = transform({ inventoryAdjustments }, (data) =>
             data.inventoryAdjustments && data.inventoryAdjustments.length > 0
         );
 
-        // Step 4b: Emit inventory.backordered event for items that went negative (AC3)
+        // Step 4b: Emit inventory.backordered event logic preserved (using adjustments for calculation)
         const backorderedItems = transform({ inventoryAdjustments }, (data) =>
             (data.inventoryAdjustments || []).filter(
                 (adj: InventoryAdjustment) => adj.stocked_quantity < 0
@@ -525,14 +553,13 @@ export const createOrderFromStripeWorkflow = createWorkflow(
                     variant_id: adj.variant_id,
                     inventory_item_id: adj.inventory_item_id,
                     location_id: adj.location_id,
-                    delta: adj.previous_stocked_quantity - adj.stocked_quantity, // AC3: quantity decremented
-                    new_stock: adj.stocked_quantity, // AC3: resulting stock level
+                    delta: adj.previous_stocked_quantity - adj.stocked_quantity, 
+                    new_stock: adj.stocked_quantity,
                     previous_stocked_quantity: adj.previous_stocked_quantity,
                     available_quantity: adj.available_quantity,
                 })),
             },
         }));
-        // Conditionally emit backorder event (only if there are backordered items)
         when({ backorderedItems }, ({ backorderedItems }) => {
             return backorderedItems && backorderedItems.length > 0;
         }).then(() => {

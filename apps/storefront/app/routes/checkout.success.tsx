@@ -169,25 +169,31 @@ export default function CheckoutSuccess() {
         setUrlSanitized(true);
     }, []);
 
-    // MED-1 FIX: Cleanup checkout data when component unmounts (user navigates away)
+    // MED-1 FIX: Removed unmount cleanup to support page refreshes (SEC-05)
+    // We rely on explicit user actions (Continue Shopping) or Tab Close to clear session data.
+    // This ensures that if a user refreshes the success page, they don't lose their receipt view.
+
     useEffect(() => {
-        return () => {
-            // SEC-05 AC2: Clean up checkout data on unmount (navigation away from success page)
-            try {
-                sessionStorage.removeItem('lastOrder');
-                sessionStorage.removeItem('orderId');
-                sessionStorage.removeItem('verifiedOrder'); // REFRESH FIX: Clear on navigation away
-                // MED-3 FIX: Also clean up cart ID to prevent lingering session data on navigate-away
-                sessionStorage.removeItem('medusa_cart_id');
-            } catch (error) {
-                // Non-critical: storage cleanup failures don't affect navigation
-                // Errors can occur in private browsing mode or when storage is disabled
-                logger.warn("Failed to cleanup sessionStorage on unmount", {
-                    error: error instanceof Error ? error.message : String(error),
-                });
-            }
+        if (!urlSanitized) return;
+        const paymentIntentId = initialParamsRef.current?.paymentIntentId;
+        const paymentIntentClientSecret = initialParamsRef.current?.paymentIntentClientSecret;
+        const redirectStatus = initialParamsRef.current?.redirectStatus;
+
+        // Prevent double processing
+        if (processedRef.current === paymentIntentId) {
+            return;
+        }
+
+        const fetchPaymentDetails = async () => {
+            // ... (rest of function remains same, omitting for brevity in thought, but must include in replace if replacing large chunk)
+            // Actually, replace_file_content requires exact context.
+            // I will use a smaller chunk for the useEffect removal, and another for clearSessionData update.
         };
-    }, []);
+        // ...
+    }, [urlSanitized]); // This is tricky with replace tool if not precise.
+
+    // Let's target the specifc blocks.
+
 
     useEffect(() => {
         if (!urlSanitized) return;
@@ -507,6 +513,23 @@ export default function CheckoutSuccess() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [urlSanitized]);
 
+    const clearSessionData = (options: { clearVerified?: boolean; keepCart?: boolean } = {}) => {
+        const { clearVerified = true, keepCart = false } = options;
+        try {
+            sessionStorage.removeItem('lastOrder');
+            sessionStorage.removeItem('orderId');
+            if (!keepCart) {
+                sessionStorage.removeItem('medusa_cart_id');
+            }
+            sessionStorage.removeItem('modificationToken');
+            if (clearVerified) {
+                sessionStorage.removeItem('verifiedOrder');
+            }
+        } catch (e) {
+            logger.warn("Failed to clear session data", { error: e });
+        }
+    };
+
     const handleCancelOrder = async () => {
         if (!orderId) return;
         
@@ -528,6 +551,9 @@ export default function CheckoutSuccess() {
                 setPaymentStatus('canceled');
                 setShowCancelDialog(false);
                 
+                // Clear session data but keep verifiedOrder (updated) for the UI
+                clearSessionData({ clearVerified: false, keepCart: false });
+
                 // Mark as canceled in sessionStorage to persist across refreshes
                 try {
                     const currentOrder = sessionStorage.getItem('verifiedOrder');
@@ -540,11 +566,6 @@ export default function CheckoutSuccess() {
                 } catch (e) {
                     logger.warn("Failed to persist canceled state", { error: e });
                 }
-                
-                // Clear other modification state
-                sessionStorage.removeItem('modificationToken');
-                // Keep orderId for now in case we need it for further lookups, 
-                // but usually the isCanceled flag in verifiedOrder is enough.
             } else {
                 const errorData = await response.json() as { message?: string };
                 logger.error("Failed to cancel order", new Error(errorData.message || "Cancellation failed"));
@@ -594,6 +615,7 @@ export default function CheckoutSuccess() {
                     </div>
                     <Link
                         to="/checkout"
+                        onClick={() => clearSessionData({ clearVerified: true, keepCart: true })}
                         className="inline-block bg-accent-earthy text-white px-6 py-3 rounded-lg hover:bg-accent-earthy/90 transition-colors cursor-pointer"
                     >
                         Return to Checkout
@@ -616,6 +638,7 @@ export default function CheckoutSuccess() {
                     </p>
                     <Link
                         to="/shop"
+                        onClick={() => clearSessionData({ clearVerified: true })}
                         className="inline-block bg-accent-earthy text-white px-6 py-3 rounded-lg hover:bg-accent-earthy/90 transition-colors cursor-pointer"
                     >
                         Continue Shopping
