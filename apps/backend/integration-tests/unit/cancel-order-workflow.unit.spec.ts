@@ -122,7 +122,11 @@ describe("Cancel Order Workflow Steps", () => {
                 data: [{
                     id: "ord_1",
                     status: "pending",
-                    payment_collections: [{ id: "pc_1", status: PaymentCollectionStatus.AUTHORIZED }],
+                    payment_collections: [{ 
+                        id: "pc_1", 
+                        status: PaymentCollectionStatus.AUTHORIZED,
+                        payment_sessions: [{ provider_id: "stripe" }]
+                    }],
                     metadata: {}
                 }]
             });
@@ -287,7 +291,11 @@ describe("Cancel Order Workflow Steps", () => {
                 data: [{
                     id: "ord_1",
                     status: "pending",
-                    payment_collections: [{ id: "pc_1", status: PaymentCollectionStatus.AUTHORIZED }],
+                    payment_collections: [{ 
+                        id: "pc_1", 
+                        status: PaymentCollectionStatus.AUTHORIZED,
+                        payment_sessions: [{ provider_id: "stripe" }]
+                    }],
                     metadata: {}
                 }]
             });
@@ -305,7 +313,11 @@ describe("Cancel Order Workflow Steps", () => {
                 data: [{
                     id: "ord_1",
                     status: "pending",
-                    payment_collections: [{ id: "pc_1", status: PaymentCollectionStatus.AUTHORIZED }],
+                    payment_collections: [{ 
+                        id: "pc_1", 
+                        status: PaymentCollectionStatus.AUTHORIZED,
+                        payment_sessions: [{ provider_id: "stripe" }]
+                    }],
                     metadata: {}
                 }]
             });
@@ -323,7 +335,11 @@ describe("Cancel Order Workflow Steps", () => {
                 data: [{
                     id: "ord_1",
                     status: "pending",
-                    payment_collections: [{ id: "pc_1", status: PaymentCollectionStatus.COMPLETED }],
+                    payment_collections: [{ 
+                        id: "pc_1", 
+                        status: PaymentCollectionStatus.COMPLETED,
+                        payment_sessions: [{ provider_id: "stripe" }]
+                    }],
                     metadata: {}
                 }]
             });

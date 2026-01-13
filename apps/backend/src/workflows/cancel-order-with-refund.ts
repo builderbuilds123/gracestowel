@@ -385,6 +385,9 @@ export const lockOrderHandler = async (
                     throw new PartialCaptureError();
                 }
             } catch (error) {
+                if (error instanceof LateCancelError || error instanceof PartialCaptureError) {
+                    throw error;
+                }
                 console.error(`[CancelOrder][WARN] Failed to retrieve Stripe PI ${input.paymentIntentId}: ${error}. Skipping Stripe check.`);
             }
         }
