@@ -236,6 +236,7 @@ export const lockOrderHandler = async (
                 "status",
                 "payment_collections.id",
                 "payment_collections.status",
+                "payment_collections.payment_sessions.provider_id", 
             ],
             filters: { id: input.orderId },
         });
@@ -353,23 +354,42 @@ export const lockOrderHandler = async (
         );
     }
     
-    // Step 3b: Verify Stripe PaymentIntent status
-    const paymentIntent = await stripe.paymentIntents.retrieve(input.paymentIntentId);
+    // Step 3b: Verify Stripe PaymentIntent status checks
+    // only if the provider is Stripe
+    
+    // Determine provider from Payment Sessions
+    const paymentSessions = paymentCollection.payment_sessions || [];
+    const stripeSession = paymentSessions.find((s: any) => s.provider_id && s.provider_id.includes("stripe"));
+    const isStripeProvider = !!stripeSession;
 
-    if (paymentIntent.status === "succeeded") {
-        if (input.isWithinGracePeriod) {
-            // Within grace period but Stripe shows succeeded = race condition
-            console.log(`[CancelOrder] Stripe PaymentIntent ${input.paymentIntentId} is succeeded - too late to cancel via void`);
-            throw new LateCancelError();
+    if (isStripeProvider) {
+        if (!input.paymentIntentId) {
+             console.warn(`[CancelOrder][WARN] Order ${input.orderId} has Stripe provider but no paymentIntentId in input. Skipping Stripe check.`);
         } else {
-            // Post-grace period: succeeded is expected for refund path
-            console.log(`[CancelOrder][Story 3.5] Stripe PaymentIntent ${input.paymentIntentId} is succeeded - will proceed with refund`);
-        }
-    }
+            try {
+                const paymentIntent = await stripe.paymentIntents.retrieve(input.paymentIntentId);
 
-    if (paymentIntent.status === "requires_capture" && paymentIntent.amount_received && paymentIntent.amount_received > 0) {
-        console.log(`[CancelOrder] Stripe PaymentIntent ${input.paymentIntentId} is partially captured`);
-        throw new PartialCaptureError();
+                if (paymentIntent.status === "succeeded") {
+                    if (input.isWithinGracePeriod) {
+                        // Within grace period but Stripe shows succeeded = race condition
+                        console.log(`[CancelOrder] Stripe PaymentIntent ${input.paymentIntentId} is succeeded - too late to cancel via void`);
+                        throw new LateCancelError();
+                    } else {
+                        // Post-grace period: succeeded is expected for refund path
+                        console.log(`[CancelOrder][Story 3.5] Stripe PaymentIntent ${input.paymentIntentId} is succeeded - will proceed with refund`);
+                    }
+                }
+
+                if (paymentIntent.status === "requires_capture" && paymentIntent.amount_received && paymentIntent.amount_received > 0) {
+                    console.log(`[CancelOrder] Stripe PaymentIntent ${input.paymentIntentId} is partially captured`);
+                    throw new PartialCaptureError();
+                }
+            } catch (error) {
+                console.error(`[CancelOrder][WARN] Failed to retrieve Stripe PI ${input.paymentIntentId}: ${error}. Skipping Stripe check.`);
+            }
+        }
+    } else {
+        console.log(`[CancelOrder] Skipping Stripe PI check. No Stripe provider found in payment sessions.`);
     }
     
     return {

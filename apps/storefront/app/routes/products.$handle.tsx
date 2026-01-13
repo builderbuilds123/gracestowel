@@ -147,9 +147,13 @@ export default function ProductDetail({ loaderData }: Route.ComponentProps) {
     const [reviewStats, setReviewStats] = useState<ReviewStats>(initialStats || { average: 0, count: 0, distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 } });
     const [reviewSort, setReviewSort] = useState("newest");
     const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+    const [selectedColor, setSelectedColor] = useState(product.colors?.[0] || "");
 
-    // Get stock status for the first variant
-    const selectedVariant = product.variants?.[0];
+    // Find the actual variant for the selected color
+    const selectedVariant = product.variants?.find(v => 
+        v.options?.some(o => o.value === selectedColor)
+    ) || product.variants?.[0];
+
     const stockStatus = getStockStatus(selectedVariant?.inventory_quantity);
     const isOutOfStock = stockStatus === "out_of_stock";
 
@@ -267,6 +271,8 @@ export default function ProductDetail({ loaderData }: Route.ComponentProps) {
                             <ProductActions
                                 product={product}
                                 selectedVariant={selectedVariant}
+                                selectedColor={selectedColor}
+                                onColorChange={setSelectedColor}
                                 isOutOfStock={isOutOfStock}
                             />
 
