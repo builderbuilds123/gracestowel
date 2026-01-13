@@ -140,7 +140,7 @@ export async function GET(
             const { data: recentOrders } = await query.graph({
                 entity: "order",
                 fields: ["id", "status", "created_at", "metadata"],
-                pagination: { take: 200 },
+                pagination: { take: 200, order: { created_at: "DESC" } },
             });
 
             const ordersFromMetadata = (recentOrders as any[]).filter((order: any) => {

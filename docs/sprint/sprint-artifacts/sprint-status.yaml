@@ -488,3 +488,21 @@ development_status:
     depends_on: ["CHK-02-A", "CHK-02-B"]
     blocks: ["RET-02"]
   audit-epic-1-retrospective: optional
+
+  # --- Promotions & Discounts (from research 2026-01-13) ---
+  promo-epic-1: backlog
+  promo-1-promotions-module-integration:
+    path: docs/sprint/sprint-artifacts/promo-1-promotions-module-integration.md
+    status: ready-for-dev
+    meta: "Medusa v2 Promotions module integration. 4 phases: promo code entry, automatic promotions, CartProgressBar, order integration. 8-13 points estimated."
+    created: "2026-01-13"
+  promo-epic-1-retrospective: optional
+
+  # --- Notifications & Communications Enhancement (from research 2026-01-13) ---
+  notif-epic-1: backlog
+  notif-1-notification-module-enhancement:
+    path: docs/sprint/sprint-artifacts/notif-1-notification-module-enhancement.md
+    status: ready-for-dev
+    meta: "Enhance existing Resend notification provider. New templates (order-modified, refund, password-reset), optional SMS via Twilio, admin alerts. 5-8 points estimated."
+    created: "2026-01-13"
+  notif-epic-1-retrospective: optional
