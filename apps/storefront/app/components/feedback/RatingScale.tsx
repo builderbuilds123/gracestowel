@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 
 interface RatingScaleProps {
   type: "csat" | "nps" | "ces"
@@ -10,12 +10,74 @@ interface RatingScaleProps {
 const CSAT_EMOJIS = ["😞", "😕", "😐", "🙂", "😊"]
 const CSAT_LABELS = ["Very Dissatisfied", "", "", "", "Very Satisfied"]
 
+function useKeyboardNavigation(
+  value: number | null,
+  onChange: (value: number) => void,
+  min: number,
+  max: number,
+  disabled: boolean
+) {
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (disabled) return
+
+      const currentValue = value ?? min
+      let newValue: number | null = null
+
+      switch (e.key) {
+        case "ArrowRight":
+        case "ArrowUp":
+          e.preventDefault()
+          newValue = Math.min(currentValue + 1, max)
+          break
+        case "ArrowLeft":
+        case "ArrowDown":
+          e.preventDefault()
+          newValue = Math.max(currentValue - 1, min)
+          break
+        case "Home":
+          e.preventDefault()
+          newValue = min
+          break
+        case "End":
+          e.preventDefault()
+          newValue = max
+          break
+      }
+
+      if (newValue !== null) {
+        onChange(newValue)
+      }
+    },
+    [value, onChange, min, max, disabled]
+  )
+
+  return { containerRef, handleKeyDown }
+}
+
 export function RatingScale({ type, value, onChange, disabled = false }: RatingScaleProps) {
   const [hoveredValue, setHoveredValue] = useState<number | null>(null)
 
+  const scaleConfig = {
+    csat: { min: 1, max: 5 },
+    nps: { min: 0, max: 10 },
+    ces: { min: 1, max: 7 },
+  }
+
+  const { min, max } = scaleConfig[type]
+  const { containerRef, handleKeyDown } = useKeyboardNavigation(value, onChange, min, max, disabled)
+
   if (type === "csat") {
     return (
-      <div className="flex flex-col items-center gap-2">
+      <div
+        ref={containerRef}
+        className="flex flex-col items-center gap-2"
+        role="radiogroup"
+        aria-label="Satisfaction rating"
+        onKeyDown={handleKeyDown}
+      >
         <div className="flex gap-2">
           {CSAT_EMOJIS.map((emoji, index) => {
             const score = index + 1
@@ -55,7 +117,13 @@ export function RatingScale({ type, value, onChange, disabled = false }: RatingS
 
   if (type === "nps") {
     return (
-      <div className="flex flex-col items-center gap-2">
+      <div
+        ref={containerRef}
+        className="flex flex-col items-center gap-2"
+        role="radiogroup"
+        aria-label="NPS rating"
+        onKeyDown={handleKeyDown}
+      >
         <div className="flex gap-1">
           {Array.from({ length: 11 }, (_, i) => i).map((score) => {
             const isSelected = value === score
@@ -103,7 +171,13 @@ export function RatingScale({ type, value, onChange, disabled = false }: RatingS
 
   // CES (1-7 scale)
   return (
-    <div className="flex flex-col items-center gap-2">
+    <div
+      ref={containerRef}
+      className="flex flex-col items-center gap-2"
+      role="radiogroup"
+      aria-label="Effort rating"
+      onKeyDown={handleKeyDown}
+    >
       <div className="flex gap-2">
         {Array.from({ length: 7 }, (_, i) => i + 1).map((score) => {
           const isSelected = value === score

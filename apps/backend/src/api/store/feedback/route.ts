@@ -22,7 +22,7 @@ const FeedbackRequestSchema = z.object({
     .default("floating_button"),
 
   // Optional fields
-  comment: z.string().max(2000).optional().nullable(),
+  comment: z.string().max(500).optional().nullable(),
   page_title: z.string().optional().nullable(),
   referrer: z.string().optional().nullable(),
 
@@ -161,16 +161,10 @@ export async function GET(
   req: MedusaRequest,
   res: MedusaResponse
 ): Promise<void> {
-  // Simple stats endpoint for internal use
-  try {
-    const feedbackService = req.scope.resolve<FeedbackModuleService>(FEEDBACK_MODULE)
-    const stats = await feedbackService.getFeedbackStats()
-
-    res.status(200).json({ stats })
-  } catch (error: any) {
-    res.status(500).json({
-      type: "server_error",
-      message: "Failed to retrieve feedback stats.",
-    })
-  }
+  // Stats endpoint - requires admin authentication
+  // For now, return 403 until admin routes are implemented
+  res.status(403).json({
+    type: "forbidden",
+    message: "Admin authentication required. Use /admin/feedback/stats instead.",
+  })
 }

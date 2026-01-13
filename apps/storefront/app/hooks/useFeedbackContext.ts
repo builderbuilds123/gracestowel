@@ -152,7 +152,7 @@ export function useFeedbackContext(productData?: {
         customerId: customer?.id || null,
         sessionId: getOrCreateSessionId(),
         locale: typeof navigator !== "undefined" ? navigator.language : "en",
-        region: "reg_canada", // Default region
+        region: null, // Region determined by backend from cart/session
       },
 
       session: {

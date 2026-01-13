@@ -26,6 +26,7 @@ interface FeedbackWidgetProps {
  * Usage:
  * - Add to root layout for site-wide feedback
  * - Pass productData when on product pages for richer context
+ * - Set VITE_DISABLE_FEEDBACK=true to disable globally
  */
 export function FeedbackWidget({ productData, disabled = false }: FeedbackWidgetProps) {
   const location = useLocation()
@@ -42,7 +43,13 @@ export function FeedbackWidget({ productData, disabled = false }: FeedbackWidget
   } = useFeedbackTrigger(location.pathname)
   const { submit, isSubmitting } = useFeedbackSubmit()
 
-  if (disabled) return null
+  // Check for global disable via environment variable
+  const isGloballyDisabled =
+    typeof window !== "undefined" &&
+    ((window as any).ENV?.DISABLE_FEEDBACK === "true" ||
+      (window as any).ENV?.DISABLE_FEEDBACK === true)
+
+  if (disabled || isGloballyDisabled) return null
 
   const handleSubmit = async (data: { score: number; comment: string }) => {
     if (!triggerType) return { success: false }
