@@ -176,7 +176,10 @@ describe("GET /store/orders/by-payment-intent - SEC-02 Security Tests", () => {
             expect(mockQuery).toHaveBeenCalledWith({
                 entity: "order",
                 fields: ["id", "status", "created_at", "metadata"],
-                pagination: { take: 200 },
+                pagination: { 
+                    take: 200,
+                    order: { created_at: "DESC" }
+                },
             });
 
             // Verify it does NOT fetch PII fields
