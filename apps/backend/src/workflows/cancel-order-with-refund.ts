@@ -142,75 +142,57 @@ interface CheckFulfillmentResult {
     canCancel: boolean;
 }
 
+// ... imports
+
+// Helper to resolve logger or fallback to console for handlers outside dependency injection context (if necessary)
+// For handlers passed 'container', we resolve logger.
+
 export async function removeCaptureJobHandler(
-    input: { orderId: string }
+    input: { orderId: string; container: MedusaContainer } // Updated signature to accept container
 ): Promise<{ removed: boolean; orderId: string; notFound?: boolean }> {
-    console.log(`[CancelOrder] Attempting to remove capture job for order ${input.orderId}`);
+    const logger = input.container.resolve("logger");
+    logger.info(`[CancelOrder] Attempting to remove capture job for order ${input.orderId}`);
     
+    // Note: cancelPaymentCaptureJob implementation might need logger too, but keeping scope limited
     const removed = await cancelPaymentCaptureJob(input.orderId);
     
     if (!removed) {
         // Job not found is OK - it either doesn't exist or already completed
-        console.log(`[CancelOrder] Capture job not found for order ${input.orderId} (this is OK)`);
+        logger.info(`[CancelOrder] Capture job not found for order ${input.orderId} (this is OK)`);
         return { removed: false, orderId: input.orderId, notFound: true };
     }
     
-    console.log(`[CancelOrder] Capture job removed for order ${input.orderId}`);
+    logger.info(`[CancelOrder] Capture job removed for order ${input.orderId}`);
     return { removed: true, orderId: input.orderId };
 }
 
 const removeCaptureJobStep = createStep(
     "remove-capture-job",
-    async (input: { orderId: string; paymentIntentId: string }) => {
+    async (input: { orderId: string; paymentIntentId: string }, { container }) => {
+        const logger = container.resolve("logger");
         try {
-            const result = await removeCaptureJobHandler(input);
+            const result = await removeCaptureJobHandler({ orderId: input.orderId, container });
             return new StepResponse(result, input);
         } catch (error) {
             if (error instanceof JobActiveError) {
-                console.error(`[CancelOrder][ABORT] Capture job is ACTIVE for ${input.orderId}. Too late to cancel.`);
+                logger.error(`[CancelOrder][ABORT] Capture job is ACTIVE for ${input.orderId}. Too late to cancel.`);
                 throw new LateCancelError("Payment capture is already in progress");
             }
 
-            console.error(`[CancelOrder][ABORT] Redis error removing capture job for ${input.orderId}:`, error);
+            logger.error(`[CancelOrder][ABORT] Redis error removing capture job for ${input.orderId}:`, error);
             throw new QueueRemovalError(input.orderId, error as Error);
         }
     },
-    async (input) => {
+    async (input, { container }) => {
+        const logger = container.resolve("logger");
         // Compensation: Re-add job if later steps fail
         if (input) {
-            await reAddPaymentCaptureJobHandler(input);
+            await reAddPaymentCaptureJobHandler({ ...input, container });
         }
     }
 );
 
-/**
- * Story 3.4: Lock order step - validates order state before proceeding
- * Implements optimistic concurrency control (OCC) pattern
- *
- * This handler performs the critical validation step before cancellation:
- * 1. Fetches order with PaymentCollection status (canonical source per PAY-01)
- * 2. Validates PaymentCollection exists (fails loudly if missing - NO backward compatibility)
- * 3. Checks PaymentCollection status to determine if cancellation is allowed
- * 4. Validates Stripe PaymentIntent status for consistency
- *
- * Handler exported for unit testing.
- *
- * @param input - Object containing order and payment details
- * @param input.orderId - The Medusa order ID to validate for cancellation
- * @param input.paymentIntentId - The Stripe PaymentIntent ID to check status
- * @param container - Medusa dependency injection container for resolving services
- * @returns Promise resolving to lock result with cancellation eligibility
- * @returns {string} orderId - The order ID that was validated
- * @returns {boolean} canCancel - Whether the order can be safely canceled
- * @returns {string} previousStatus - The order's status before locking
- * @throws {OrderNotFoundError} If order doesn't exist in database
- * @throws {OrderAlreadyCanceledError} If order status is already "canceled"
- * @throws {Error} If PaymentCollection is missing (PAY-01 requirement - no fallback)
- * @throws {Error} If multiple PaymentCollections found (anomaly per Medusa docs)
- * @throws {Error} If PaymentCollection has invalid status value
- * @throws {LateCancelError} If payment already captured (PC status "completed" or Stripe status "succeeded")
- * @throws {PartialCaptureError} If payment partially captured (requires manual refund)
- */
+// ... LockOrderResult interface
 interface LockOrderResult {
     orderId: string;
     canCancel: boolean;
@@ -221,7 +203,8 @@ export const lockOrderHandler = async (
     input: { orderId: string; paymentIntentId: string; isWithinGracePeriod?: boolean },
     container: MedusaContainer
 ): Promise<LockOrderResult> => {
-    console.log(`[CancelOrder] Locking order ${input.orderId} for cancellation`);
+    const logger = container.resolve("logger");
+    logger.info(`[CancelOrder] Locking order ${input.orderId} for cancellation`);
     
     const query = container.resolve("query");
     const stripe = getStripeClient();
@@ -242,12 +225,12 @@ export const lockOrderHandler = async (
         });
         orders = result.data || [];
     } catch (error) {
-        console.error(`[CancelOrder][ERROR] Failed to query order ${input.orderId}:`, error);
+        logger.error(`[CancelOrder][ERROR] Failed to query order ${input.orderId}:`, error);
         throw new Error(`Failed to retrieve order ${input.orderId}: ${(error as Error).message}`);
     }
     
     if (!orders.length) {
-        console.error(`[CancelOrder][ERROR] Order ${input.orderId} not found in database`);
+        logger.error(`[CancelOrder][ERROR] Order ${input.orderId} not found in database`);
         throw new OrderNotFoundError(input.orderId);
     }
     
@@ -255,7 +238,7 @@ export const lockOrderHandler = async (
     
     // Check if order is already in a terminal state
     if (order.status === "canceled") {
-        console.log(`[CancelOrder] Order ${input.orderId} is already canceled`);
+        logger.info(`[CancelOrder] Order ${input.orderId} is already canceled`);
         throw new OrderAlreadyCanceledError(input.orderId);
     }
     
@@ -266,7 +249,7 @@ export const lockOrderHandler = async (
 
     if (paymentCollections.length === 0) {
         // PAY-01: PaymentCollection is required - fail loudly but with specific error
-        console.error(
+        logger.error(
             `[PAY-01][CancelOrder][ERROR] Order ${input.orderId} has no PaymentCollection. ` +
             `Payment status cannot be determined. Order status: ${order.status}`
         );
@@ -275,7 +258,7 @@ export const lockOrderHandler = async (
     
     if (paymentCollections.length > 1) {
         // Multiple PaymentCollections is an anomaly per Medusa docs
-        console.error(
+        logger.error(
             `[PAY-01][CancelOrder][ERROR] Order ${input.orderId} has ${paymentCollections.length} PaymentCollections. ` +
             `Expected exactly one. This is an anomaly. Statuses: ${paymentCollections.map((pc: any) => pc.status).join(", ")}`
         );
@@ -296,9 +279,9 @@ export const lockOrderHandler = async (
             paymentCollection.status,
             input.orderId
         );
-        console.log(`[PAY-01][CancelOrder] Order ${input.orderId} PaymentCollection status validated: ${paymentStatus}`);
+        logger.info(`[PAY-01][CancelOrder] Order ${input.orderId} PaymentCollection status validated: ${paymentStatus}`);
     } catch (error) {
-        console.error(
+        logger.error(
             `[PAY-01][CancelOrder][ERROR] Invalid PaymentCollection status for order ${input.orderId}. ` +
             `Raw status value: ${JSON.stringify(paymentCollection.status)}. ` +
             `Error: ${(error as Error).message}`
@@ -307,31 +290,29 @@ export const lockOrderHandler = async (
     }
     
     // Explicit handling for all PaymentCollection statuses
-    // This ensures no status is accidentally allowed when it shouldn't be
     
     // Terminal states handling
-    // Story 3.5: If within grace period, captured = error; if post-grace, captured = allowed (refund path)
     if (paymentStatus === PaymentCollectionStatus.COMPLETED) {
         if (input.isWithinGracePeriod) {
             // Within grace period but payment captured = race condition, too late
-            console.log(`[CancelOrder] Order ${input.orderId} payment already captured (status: completed) - too late to cancel via void`);
+            logger.info(`[CancelOrder] Order ${input.orderId} payment already captured (status: completed) - too late to cancel via void`);
             throw new LateCancelError();
         } else {
             // Post-grace period: captured is expected, proceed with refund
-            console.log(`[CancelOrder][Story 3.5] Order ${input.orderId} payment captured (status: completed) - will proceed with refund`);
+            logger.info(`[CancelOrder][Story 3.5] Order ${input.orderId} payment captured (status: completed) - will proceed with refund`);
         }
     }
     
     if (paymentStatus === PaymentCollectionStatus.PARTIALLY_CAPTURED) {
-        console.error(`[CancelOrder][REJECTED] Order ${input.orderId} is partially captured. Manual refund required.`);
+        logger.error(`[CancelOrder][REJECTED] Order ${input.orderId} is partially captured. Manual refund required.`);
         throw new PartialCaptureError();
     }
     
     if (paymentStatus === PaymentCollectionStatus.CANCELED) {
-        console.log(`[CancelOrder] Order ${input.orderId} PaymentCollection is already canceled`);
+        logger.info(`[CancelOrder] Order ${input.orderId} PaymentCollection is already canceled`);
         // PaymentCollection is canceled but order might not be - this is an edge case
         // We should still allow order cancellation to proceed, but log the anomaly
-        console.warn(
+        logger.warn(
             `[CancelOrder][WARN] Order ${input.orderId} has canceled PaymentCollection but order status is ${order.status}. ` +
             `Proceeding with order cancellation.`
         );
@@ -339,23 +320,22 @@ export const lockOrderHandler = async (
     
     // Cancellable states - allow cancellation to proceed
     if (paymentStatus === PaymentCollectionStatus.NOT_PAID) {
-        console.log(`[CancelOrder] Order ${input.orderId} PaymentCollection status: not_paid - cancellation allowed`);
+        logger.info(`[CancelOrder] Order ${input.orderId} PaymentCollection status: not_paid - cancellation allowed`);
     } else if (paymentStatus === PaymentCollectionStatus.AWAITING) {
-        console.log(`[CancelOrder] Order ${input.orderId} PaymentCollection status: awaiting - cancellation allowed`);
+        logger.info(`[CancelOrder] Order ${input.orderId} PaymentCollection status: awaiting - cancellation allowed`);
     } else if (paymentStatus === PaymentCollectionStatus.AUTHORIZED) {
-        console.log(`[CancelOrder] Order ${input.orderId} PaymentCollection status: authorized - cancellation allowed`);
+        logger.info(`[CancelOrder] Order ${input.orderId} PaymentCollection status: authorized - cancellation allowed`);
     } else if (paymentStatus === PaymentCollectionStatus.REQUIRES_ACTION) {
-        console.log(`[CancelOrder] Order ${input.orderId} PaymentCollection status: requires_action - cancellation allowed`);
+        logger.info(`[CancelOrder] Order ${input.orderId} PaymentCollection status: requires_action - cancellation allowed`);
     } else {
         // This should never happen due to validation, but handle defensively
-        console.error(
+        logger.error(
             `[CancelOrder][ERROR] Order ${input.orderId} has unexpected PaymentCollection status: ${paymentStatus}. ` +
             `This should have been caught by validation. Proceeding with caution.`
         );
     }
     
     // Step 3b: Verify Stripe PaymentIntent status checks
-    // only if the provider is Stripe
     
     // Determine provider from Payment Sessions
     const paymentSessions = paymentCollection.payment_sessions || [];
@@ -364,7 +344,7 @@ export const lockOrderHandler = async (
 
     if (isStripeProvider) {
         if (!input.paymentIntentId) {
-             console.warn(`[CancelOrder][WARN] Order ${input.orderId} has Stripe provider but no paymentIntentId in input. Skipping Stripe check.`);
+             logger.warn(`[CancelOrder][WARN] Order ${input.orderId} has Stripe provider but no paymentIntentId in input. Skipping Stripe check.`);
         } else {
             try {
                 const paymentIntent = await stripe.paymentIntents.retrieve(input.paymentIntentId);
@@ -376,23 +356,23 @@ export const lockOrderHandler = async (
                         throw new LateCancelError();
                     } else {
                         // Post-grace period: succeeded is expected for refund path
-                        console.log(`[CancelOrder][Story 3.5] Stripe PaymentIntent ${input.paymentIntentId} is succeeded - will proceed with refund`);
+                        logger.info(`[CancelOrder][Story 3.5] Stripe PaymentIntent ${input.paymentIntentId} is succeeded - will proceed with refund`);
                     }
                 }
 
                 if (paymentIntent.status === "requires_capture" && paymentIntent.amount_received && paymentIntent.amount_received > 0) {
-                    console.log(`[CancelOrder] Stripe PaymentIntent ${input.paymentIntentId} is partially captured`);
+                    logger.info(`[CancelOrder] Stripe PaymentIntent ${input.paymentIntentId} is partially captured`);
                     throw new PartialCaptureError();
                 }
             } catch (error) {
                 if (error instanceof LateCancelError || error instanceof PartialCaptureError) {
                     throw error;
                 }
-                console.error(`[CancelOrder][WARN] Failed to retrieve Stripe PI ${input.paymentIntentId}: ${error}. Skipping Stripe check.`);
+                logger.error(`[CancelOrder][WARN] Failed to retrieve Stripe PI ${input.paymentIntentId}: ${error}. Skipping Stripe check.`);
             }
         }
     } else {
-        console.log(`[CancelOrder] Skipping Stripe PI check. No Stripe provider found in payment sessions.`);
+        logger.info(`[CancelOrder] Skipping Stripe PI check. No Stripe provider found in payment sessions.`);
     }
     
     return {
@@ -410,12 +390,11 @@ const lockOrderStep = createStep(
     }
 );
 
-
-
 export const checkFulfillmentStatusHandler = async (
     input: { orderId: string },
     container: MedusaContainer
 ): Promise<CheckFulfillmentResult> => {
+    const logger = container.resolve("logger");
     const query = container.resolve("query");
 
     // Query order with fulfillments to determine status
@@ -431,8 +410,6 @@ export const checkFulfillmentStatusHandler = async (
 
     const order = orders[0] as any;
 
-    // Determine fulfillment status based on fulfillments
-    // Medusa v2 doesn't have a top-level fulfillment_status, we derive it from fulfillments
     let fulfillmentStatus = "not_fulfilled";
     const fulfillments = order.fulfillments || [];
 
@@ -450,10 +427,10 @@ export const checkFulfillmentStatusHandler = async (
         }
     }
 
-    console.log(`[CancelOrder][Story 3.5] Order ${input.orderId} fulfillment_status: ${fulfillmentStatus}`);
+    logger.info(`[CancelOrder][Story 3.5] Order ${input.orderId} fulfillment_status: ${fulfillmentStatus}`);
 
     if (SHIPPED_FULFILLMENT_STATUSES.includes(fulfillmentStatus)) {
-        console.log(`[CancelOrder][Story 3.5] Order ${input.orderId} has been shipped (${fulfillmentStatus}) - REJECTING cancellation`);
+        logger.info(`[CancelOrder][Story 3.5] Order ${input.orderId} has been shipped (${fulfillmentStatus}) - REJECTING cancellation`);
         throw new OrderShippedError(input.orderId, fulfillmentStatus);
     }
 
@@ -477,52 +454,29 @@ const checkFulfillmentStatusStep = createStep(
  * Called when cancellation fails after job was removed - prevents revenue loss
  */
 export const reAddPaymentCaptureJobHandler = async (
-    input: { orderId: string; paymentIntentId: string }
+    input: { orderId: string; paymentIntentId: string; container: MedusaContainer }
 ): Promise<{ reAdded: boolean; orderId: string }> => {
-    console.log(`[CancelOrder][Story 3.5][COMPENSATION] Re-adding capture job for order ${input.orderId}`);
+    const logger = input.container.resolve("logger");
+    logger.info(`[CancelOrder][Story 3.5][COMPENSATION] Re-adding capture job for order ${input.orderId}`);
 
     try {
         // Re-add with immediate execution (0 delay) since we're past the original schedule
         // Note: If payment is already captured, the worker will detect this and no-op
         await schedulePaymentCapture(input.orderId, input.paymentIntentId, 0);
-        console.log(`[CancelOrder][Story 3.5][COMPENSATION] Capture job re-added for order ${input.orderId}`);
-        console.log(`[METRIC] cancel_compensation_job_readded order=${input.orderId}`);
+        logger.info(`[CancelOrder][Story 3.5][COMPENSATION] Capture job re-added for order ${input.orderId}`);
+        logger.info(`[METRIC] cancel_compensation_job_readded order=${input.orderId}`);
         return { reAdded: true, orderId: input.orderId };
     } catch (error) {
         // Log but don't throw - compensation is best-effort
-        console.error(
+        logger.error(
             `[CancelOrder][Story 3.5][COMPENSATION][CRITICAL] Failed to re-add capture job for order ${input.orderId}:`,
             error
         );
-        console.log(`[METRIC] cancel_compensation_job_failed order=${input.orderId}`);
+        logger.info(`[METRIC] cancel_compensation_job_failed order=${input.orderId}`);
         return { reAdded: false, orderId: input.orderId };
     }
 };
 
-
-
-/**
- * Story 3.5: Unified Order Cancellation Workflow
- *
- * This workflow implements:
- * - Grace Period Cancellation (within modification window): Void authorization
- * - Post-Grace Cancellation (after modification window): Refund captured payment
- * - Fulfillment check: Reject if order shipped
- * - Compensation: Re-add capture job if cancellation fails after job removal
- *
- * Note: The modification window duration is configured via PAYMENT_CAPTURE_DELAY_MS
- *
- * Flow:
- * 1. Check fulfillment status (reject if shipped) - Story 3.5 AC3
- * 2. Remove capture job from queue (with compensation on failure) - Story 3.4
- * 3. Validate order state (PAY-01)
- * 4. Cancel order in Medusa
- * 5. Process payment:
- *    - Within modification window: Void authorization
- *    - After modification window: Issue refund
- * 6. Restock inventory
- * 7. Emit order.canceled event
- */
 /**
  * Step to find reservations associated with order line items
  * Phase 3 of Plan: Release reservations on cancellation
@@ -530,6 +484,7 @@ export const reAddPaymentCaptureJobHandler = async (
 const prepareReservationReleaseStep = createStep(
     "prepare-reservation-release",
     async (input: { orderId: string }, { container }) => {
+        const logger = container.resolve("logger");
         const query = container.resolve("query");
         
         // 1. Get Line Item IDs
@@ -558,7 +513,7 @@ const prepareReservationReleaseStep = createStep(
         const ids = reservations.map((r: any) => r.id);
         
         if (ids.length > 0) {
-            console.log(`[CancelOrder] Found ${ids.length} reservations to release for order ${input.orderId}`);
+            logger.info(`[CancelOrder] Found ${ids.length} reservations to release for order ${input.orderId}`);
         }
         
         return new StepResponse(ids);
@@ -570,14 +525,13 @@ export const cancelOrderWithRefundWorkflow = createWorkflow(
     (input: CancelOrderWithRefundInput) => {
         // Step 1 (Story 3.5 AC3): Check fulfillment status first
         const fulfillmentInput = transform({ input }, (data) => {
-            console.log(`[CancelOrder][Workflow] Step 1: Checking fulfillment for ${data.input.orderId}`);
+            // Can't use logger in transform, it's pure logic
             return { orderId: data.input.orderId };
         });
         checkFulfillmentStatusStep(fulfillmentInput);
 
         // Step 2 (AC): Queue Stop - Attempt to remove capture job
         const removeJobInput = transform({ input }, (data) => {
-            console.log(`[CancelOrder][Workflow] Step 2: Removing capture job for ${data.input.orderId}`);
             return {
                 orderId: data.input.orderId,
                 paymentIntentId: data.input.paymentIntentId,
@@ -587,7 +541,6 @@ export const cancelOrderWithRefundWorkflow = createWorkflow(
 
         // Step 3 (AC): DB Lock - Validate order state before proceeding
         const lockInput = transform({ input }, (data) => {
-            console.log(`[CancelOrder][Workflow] Step 3: Locking order ${data.input.orderId} (Grace: ${data.input.isWithinGracePeriod})`);
             return {
                 orderId: data.input.orderId,
                 paymentIntentId: data.input.paymentIntentId,
@@ -603,7 +556,6 @@ export const cancelOrderWithRefundWorkflow = createWorkflow(
 
         // Step 4 (FIX): Use Medusa Core Workflow for cancellation
         const coreCancelInput = transform({ input }, (data) => {
-            console.log(`[CancelOrder][Workflow] Step 4: Running core cancelOrderWorkflow for ${data.input.orderId}`);
             return {
                 order_id: data.input.orderId,
             };
