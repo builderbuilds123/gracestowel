@@ -63,18 +63,7 @@ describe("Cancel Order Workflow Steps", () => {
             vi.clearAllMocks();
         });
 
-        const mockLogger = {
-            info: vi.fn(),
-            error: vi.fn(),
-            warn: vi.fn(),
-            debug: vi.fn()
-        };
-        const mockContainer = {
-            resolve: vi.fn().mockImplementation((key) => {
-                if (key === "logger") return mockLogger;
-                return {};
-            })
-        } as unknown as MedusaContainer;
+        // Local mocks removed, using shared container defined in top describe block
 
         it("should return removed: true when queue job is removed", async () => {
             (cancelPaymentCaptureJob as any).mockResolvedValue(true);
@@ -496,7 +485,7 @@ describe("Cancel Order Workflow Steps", () => {
 
         it("should call schedulePaymentCapture with 0 delay", async () => {
             const { schedulePaymentCapture } = await import("../../src/lib/payment-capture-queue");
-            const result = await reAddPaymentCaptureJobHandler({ orderId: "ord_1", paymentIntentId: "pi_1", container: {} as any });
+            const result = await reAddPaymentCaptureJobHandler({ orderId: "ord_1", paymentIntentId: "pi_1", container: mockContainer });
             
             expect(result.reAdded).toBe(true);
             expect(schedulePaymentCapture).toHaveBeenCalledWith("ord_1", "pi_1", 0);
@@ -563,18 +552,6 @@ describe("Cancel Order Workflow Steps", () => {
     });
 
     describe("Queue Guard Behavior (Review Fix)", () => {
-        const mockLogger = {
-            info: vi.fn(),
-            error: vi.fn(),
-            warn: vi.fn(),
-            debug: vi.fn()
-        };
-        const mockContainer = {
-            resolve: vi.fn().mockImplementation((key) => {
-                if (key === "logger") return mockLogger;
-                return {};
-            })
-        } as unknown as MedusaContainer;
         /**
          * REVIEW FIX: Queue removal now fails hard on Redis errors.
          * This prevents canceling an order when we can't confirm the capture job is stopped,
