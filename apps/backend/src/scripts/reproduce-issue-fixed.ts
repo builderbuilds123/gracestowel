@@ -9,7 +9,7 @@ async function main() {
     try {
         // 0. Get Publishable Key
         const apiKey = await getPublishableApiKey(client);
-        console.log(`🔑 API Key: ${apiKey}`);
+        console.log(`🔑 API Key: ${apiKey.substring(0, 10)}... (Redacted)`);
 
         // 1. Get a Valid Product Variant
         console.log("🤔 Querying for variant...");
