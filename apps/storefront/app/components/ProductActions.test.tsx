@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import React from 'react';
+import React, { useState } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -41,19 +41,28 @@ describe('ProductActions Component', () => {
     images: ['image1.jpg'],
     colors: ['Cloud White', 'Sage'],
     disableEmbroidery: false,
+    variants: [{ id: 'variant_1', title: 'Variant 1' }] // Added variants structure to match interface minimally
   };
 
-  it('should capture product_added_to_cart event when adding to cart', async () => {
-    const user = userEvent.setup();
-    render(
+  // Wrapper to handle authentic controlled state behavior
+  const TestWrapper = () => {
+    const [color, setColor] = useState('Cloud White');
+    return (
       <ProductActions
         product={mockProduct}
         isOutOfStock={false}
         selectedVariant={{ id: 'variant_1' }}
+        selectedColor={color}
+        onColorChange={setColor}
       />
     );
+  };
 
-    const addButton = screen.getByRole('button', { name: /product.add/i }); // t('product.add') returns key
+  it('should capture product_added_to_cart event when adding to cart', async () => {
+    const user = userEvent.setup();
+    render(<TestWrapper />);
+
+    const addButton = screen.getByRole('button', { name: /product.add/i });
     await user.click(addButton);
 
     expect(mockAddToCart).toHaveBeenCalled();
@@ -64,7 +73,7 @@ describe('ProductActions Component', () => {
         product_name: mockProduct.title,
         product_price: mockProduct.formattedPrice,
         quantity: 1,
-        color: 'Cloud White', // Default selected
+        color: 'Cloud White',
         has_embroidery: false,
         variant_id: 'variant_1',
       }));
@@ -73,13 +82,7 @@ describe('ProductActions Component', () => {
 
   it('should capture correct quantity and color', async () => {
     const user = userEvent.setup();
-    render(
-      <ProductActions
-        product={mockProduct}
-        isOutOfStock={false}
-        selectedVariant={{ id: 'variant_1' }}
-      />
-    );
+    render(<TestWrapper />);
 
     // Change Color
     const sageButton = screen.getByTitle('Sage');
