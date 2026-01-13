@@ -54,8 +54,10 @@ describe("Cancel Order Workflow Steps", () => {
         debug: vi.fn()
     };
     const mockContainer = {
-        resolve: vi.fn().mockImplementation((key) => {
-            if (key === "logger") return mockLogger;
+        resolve: vi.fn((key) => {
+            if (key === "logger") {
+                return mockLogger;
+            }
             return {};
         })
     } as unknown as MedusaContainer;
