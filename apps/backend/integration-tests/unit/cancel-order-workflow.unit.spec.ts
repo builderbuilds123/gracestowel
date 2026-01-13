@@ -47,6 +47,18 @@ import { getStripeClient } from "../../src/utils/stripe";
 import { PaymentCollectionStatus } from "../../src/types/payment-collection-status";
 
 describe("Cancel Order Workflow Steps", () => {
+    const mockLogger = {
+        info: vi.fn(),
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn()
+    };
+    const mockContainer = {
+        resolve: vi.fn().mockImplementation((key) => {
+            if (key === "logger") return mockLogger;
+            return {};
+        })
+    } as unknown as MedusaContainer;
     beforeEach(() => {
         vi.clearAllMocks();
         vi.spyOn(console, "log").mockImplementation(() => {});
