@@ -74,16 +74,27 @@ export function useFeedbackSubmit(): UseFeedbackSubmitResult {
           },
         }
 
+        const publishableKey =
+          typeof window !== "undefined"
+            ? (window as any).ENV?.MEDUSA_PUBLISHABLE_KEY || ""
+            : ""
+
         const response = await fetch(`${backendUrl}/store/feedback`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            ...(publishableKey && { "x-publishable-api-key": publishableKey }),
           },
           body: JSON.stringify(payload),
         })
 
         if (!response.ok) {
-          const data = await response.json().catch(() => ({}))
+          let data: { message?: string } = {}
+          try {
+            data = await response.json()
+          } catch {
+            // JSON parse failed, use empty object
+          }
 
           if (response.status === 429) {
             setError("You've submitted too much feedback recently. Please try again later.")

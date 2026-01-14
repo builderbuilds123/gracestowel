@@ -6,9 +6,9 @@ import { FEEDBACK_MODULE } from "../../../modules/feedback"
 const FeedbackRequestSchema = z.object({
   // Required fields
   feedback_type: z.enum(["csat", "nps", "ces", "general"]).default("csat"),
-  score: z.number().min(0).max(10),
+  score: z.number(),
   session_id: z.string().min(1, "session_id is required"),
-  page_url: z.string().min(1, "page_url is required"),
+  page_url: z.string().url("page_url must be a valid URL"),
   page_route: z.string().min(1, "page_route is required"),
   trigger: z
     .enum([
@@ -67,6 +67,59 @@ const FeedbackRequestSchema = z.object({
     })
     .optional()
     .nullable(),
+}).superRefine((data, ctx) => {
+  const { feedback_type, score } = data
+
+  if (typeof score !== "number" || Number.isNaN(score)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["score"],
+      message: "Score must be a valid number.",
+    })
+    return
+  }
+
+  if (feedback_type === "csat") {
+    if (score < 1 || score > 5) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["score"],
+        message: "CSAT score must be between 1 and 5.",
+      })
+    }
+    return
+  }
+
+  if (feedback_type === "nps") {
+    if (score < 0 || score > 10) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["score"],
+        message: "NPS score must be between 0 and 10.",
+      })
+    }
+    return
+  }
+
+  if (feedback_type === "ces") {
+    if (score < 1 || score > 7) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["score"],
+        message: "CES score must be between 1 and 7.",
+      })
+    }
+    return
+  }
+
+  // Default validation for "general" or any other feedback types
+  if (score < 0 || score > 10) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["score"],
+      message: "Score must be between 0 and 10.",
+    })
+  }
 })
 
 type FeedbackRequest = z.infer<typeof FeedbackRequestSchema>

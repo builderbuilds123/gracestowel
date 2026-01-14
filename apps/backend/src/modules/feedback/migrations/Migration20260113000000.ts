@@ -6,7 +6,12 @@ export class Migration20260113000000 extends Migration {
       CREATE TABLE IF NOT EXISTS "feedback" (
         "id" TEXT NOT NULL,
         "feedback_type" TEXT CHECK ("feedback_type" IN ('csat', 'nps', 'ces', 'general')) NOT NULL DEFAULT 'csat',
-        "score" INTEGER NOT NULL,
+        "score" INTEGER NOT NULL CHECK (
+          ("feedback_type" = 'csat' AND "score" BETWEEN 1 AND 5) OR
+          ("feedback_type" = 'nps' AND "score" BETWEEN 0 AND 10) OR
+          ("feedback_type" = 'ces' AND "score" BETWEEN 1 AND 7) OR
+          "feedback_type" = 'general'
+        ),
         "comment" TEXT NULL,
         "trigger" TEXT CHECK ("trigger" IN ('floating_button', 'exit_intent', 'post_purchase', 'time_based', 'scroll_depth', 'manual')) NOT NULL DEFAULT 'floating_button',
         "page_url" TEXT NOT NULL,

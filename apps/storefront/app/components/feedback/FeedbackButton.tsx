@@ -55,16 +55,17 @@ export function FeedbackButton({ onClick, onDismiss, visible }: FeedbackButtonPr
       `}
     >
       <div className="relative group">
-        {/* Dismiss button (visible on hover) */}
+        {/* Dismiss button - always visible for accessibility, subtle styling */}
         <button
           onClick={(e) => {
             e.stopPropagation()
             onDismiss()
           }}
-          className="absolute -top-2 -right-2 w-5 h-5 bg-gray-100 rounded-full 
+          className="absolute -top-2 -right-2 w-5 h-5 bg-gray-200 rounded-full 
                    flex items-center justify-center
-                   opacity-0 group-hover:opacity-100 transition-opacity
-                   hover:bg-gray-200 text-gray-500"
+                   opacity-60 hover:opacity-100 focus:opacity-100 transition-opacity
+                   hover:bg-gray-300 focus:bg-gray-300 text-gray-600
+                   focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-accent-earthy"
           aria-label="Dismiss feedback button"
         >
           <X className="w-3 h-3" />

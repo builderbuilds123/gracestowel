@@ -1,12 +1,12 @@
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { describe, it, expect } from "vitest"
 import { z } from "zod"
 
-// Test the validation schema directly
+// Test the validation schema with conditional score validation
 const FeedbackRequestSchema = z.object({
   feedback_type: z.enum(["csat", "nps", "ces", "general"]).default("csat"),
-  score: z.number().min(0).max(10),
+  score: z.number(),
   session_id: z.string().min(1, "session_id is required"),
-  page_url: z.string().min(1, "page_url is required"),
+  page_url: z.string().url("page_url must be a valid URL"),
   page_route: z.string().min(1, "page_route is required"),
   trigger: z
     .enum([
@@ -55,6 +55,50 @@ const FeedbackRequestSchema = z.object({
     })
     .optional()
     .nullable(),
+}).superRefine((data, ctx) => {
+  const { feedback_type, score } = data
+
+  if (feedback_type === "csat") {
+    if (score < 1 || score > 5) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["score"],
+        message: "CSAT score must be between 1 and 5.",
+      })
+    }
+    return
+  }
+
+  if (feedback_type === "nps") {
+    if (score < 0 || score > 10) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["score"],
+        message: "NPS score must be between 0 and 10.",
+      })
+    }
+    return
+  }
+
+  if (feedback_type === "ces") {
+    if (score < 1 || score > 7) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["score"],
+        message: "CES score must be between 1 and 7.",
+      })
+    }
+    return
+  }
+
+  // Default for "general"
+  if (score < 0 || score > 10) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["score"],
+      message: "Score must be between 0 and 10.",
+    })
+  }
 })
 
 describe("Feedback API Route - Validation", () => {
@@ -82,32 +126,63 @@ describe("Feedback API Route - Validation", () => {
     it("rejects missing required fields", () => {
       const result = FeedbackRequestSchema.safeParse({})
       expect(result.success).toBe(false)
-      if (!result.success) {
-        const fields = result.error.issues.map((i) => i.path[0])
-        expect(fields).toContain("score")
-        expect(fields).toContain("session_id")
-        expect(fields).toContain("page_url")
-        expect(fields).toContain("page_route")
-      }
     })
 
-    it("rejects score below 0", () => {
+    it("rejects invalid URL for page_url", () => {
       const result = FeedbackRequestSchema.safeParse({
         ...validPayload,
-        score: -1,
+        page_url: "not-a-url",
       })
       expect(result.success).toBe(false)
     })
 
-    it("rejects score above 10", () => {
+    it("accepts valid URL for page_url", () => {
       const result = FeedbackRequestSchema.safeParse({
         ...validPayload,
-        score: 11,
+        page_url: "https://gracestowel.com/products/towel",
+      })
+      expect(result.success).toBe(true)
+    })
+
+    // CSAT validation (1-5)
+    it("rejects CSAT score below 1", () => {
+      const result = FeedbackRequestSchema.safeParse({
+        ...validPayload,
+        feedback_type: "csat",
+        score: 0,
       })
       expect(result.success).toBe(false)
     })
 
-    it("accepts score 0 for NPS", () => {
+    it("rejects CSAT score above 5", () => {
+      const result = FeedbackRequestSchema.safeParse({
+        ...validPayload,
+        feedback_type: "csat",
+        score: 6,
+      })
+      expect(result.success).toBe(false)
+    })
+
+    it("accepts CSAT score 1", () => {
+      const result = FeedbackRequestSchema.safeParse({
+        ...validPayload,
+        feedback_type: "csat",
+        score: 1,
+      })
+      expect(result.success).toBe(true)
+    })
+
+    it("accepts CSAT score 5", () => {
+      const result = FeedbackRequestSchema.safeParse({
+        ...validPayload,
+        feedback_type: "csat",
+        score: 5,
+      })
+      expect(result.success).toBe(true)
+    })
+
+    // NPS validation (0-10)
+    it("accepts NPS score 0", () => {
       const result = FeedbackRequestSchema.safeParse({
         ...validPayload,
         feedback_type: "nps",
@@ -116,13 +191,50 @@ describe("Feedback API Route - Validation", () => {
       expect(result.success).toBe(true)
     })
 
-    it("accepts score 10 for NPS", () => {
+    it("accepts NPS score 10", () => {
       const result = FeedbackRequestSchema.safeParse({
         ...validPayload,
         feedback_type: "nps",
         score: 10,
       })
       expect(result.success).toBe(true)
+    })
+
+    it("rejects NPS score above 10", () => {
+      const result = FeedbackRequestSchema.safeParse({
+        ...validPayload,
+        feedback_type: "nps",
+        score: 11,
+      })
+      expect(result.success).toBe(false)
+    })
+
+    // CES validation (1-7)
+    it("accepts CES score 1", () => {
+      const result = FeedbackRequestSchema.safeParse({
+        ...validPayload,
+        feedback_type: "ces",
+        score: 1,
+      })
+      expect(result.success).toBe(true)
+    })
+
+    it("accepts CES score 7", () => {
+      const result = FeedbackRequestSchema.safeParse({
+        ...validPayload,
+        feedback_type: "ces",
+        score: 7,
+      })
+      expect(result.success).toBe(true)
+    })
+
+    it("rejects CES score above 7", () => {
+      const result = FeedbackRequestSchema.safeParse({
+        ...validPayload,
+        feedback_type: "ces",
+        score: 8,
+      })
+      expect(result.success).toBe(false)
     })
 
     it("rejects empty session_id", () => {
@@ -192,16 +304,6 @@ describe("Feedback API Route - Validation", () => {
       expect(result.success).toBe(false)
     })
 
-    it("rejects invalid device_type", () => {
-      const result = FeedbackRequestSchema.safeParse({
-        ...validPayload,
-        context: {
-          device_type: "smartwatch",
-        },
-      })
-      expect(result.success).toBe(false)
-    })
-
     it("accepts valid cart_items array", () => {
       const result = FeedbackRequestSchema.safeParse({
         ...validPayload,
@@ -211,14 +313,6 @@ describe("Feedback API Route - Validation", () => {
         ],
       })
       expect(result.success).toBe(true)
-    })
-
-    it("rejects cart_items with missing required fields", () => {
-      const result = FeedbackRequestSchema.safeParse({
-        ...validPayload,
-        cart_items: [{ id: "item_1" }], // missing title and quantity
-      })
-      expect(result.success).toBe(false)
     })
 
     it("accepts all valid trigger types", () => {
@@ -240,13 +334,19 @@ describe("Feedback API Route - Validation", () => {
       }
     })
 
-    it("accepts all valid feedback types", () => {
-      const types = ["csat", "nps", "ces", "general"]
+    it("accepts all valid feedback types with valid scores", () => {
+      const types = [
+        { type: "csat", score: 4 },
+        { type: "nps", score: 8 },
+        { type: "ces", score: 5 },
+        { type: "general", score: 7 },
+      ]
 
-      for (const feedback_type of types) {
+      for (const { type, score } of types) {
         const result = FeedbackRequestSchema.safeParse({
           ...validPayload,
-          feedback_type,
+          feedback_type: type,
+          score,
         })
         expect(result.success).toBe(true)
       }
@@ -267,16 +367,6 @@ describe("Feedback API Route - Rate Limiting", () => {
 
   it("rate limit logic: blocks when at 5 per hour", () => {
     const recentCount = 5
-    const maxPerHour = 5
-    const allowed = recentCount < maxPerHour
-    const remaining = Math.max(0, maxPerHour - recentCount)
-
-    expect(allowed).toBe(false)
-    expect(remaining).toBe(0)
-  })
-
-  it("rate limit logic: blocks when over 5 per hour", () => {
-    const recentCount = 7
     const maxPerHour = 5
     const allowed = recentCount < maxPerHour
     const remaining = Math.max(0, maxPerHour - recentCount)

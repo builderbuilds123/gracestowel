@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest"
+import { describe, it, expect } from "vitest"
 
 // Test pure functions extracted from useFeedbackContext
 
@@ -65,25 +65,46 @@ describe("useFeedbackContext - Scroll Depth Calculation", () => {
   it("handles zero doc height", () => {
     const scrollTop = 100
     const docHeight = 0
-    // Should not divide by zero
     const depth = docHeight > 0 ? Math.min(100, Math.round((scrollTop / docHeight) * 100)) : 0
     expect(depth).toBe(0)
   })
 })
 
 describe("useFeedbackContext - Cart Item Mapping", () => {
-  it("maps cart items correctly", () => {
+  it("maps cart items correctly with safe price parsing", () => {
     const items = [
       { id: "item_1", title: "Turkish Towel", quantity: 2, price: "$49.99" },
       { id: "item_2", title: "Bath Mat", quantity: 1, price: "$29.99" },
     ]
 
-    const mapped = items.map((item) => ({
-      id: typeof item.id === "string" ? item.id : (item.id as any).id,
-      title: item.title,
-      quantity: item.quantity,
-      price: parseFloat(item.price.replace(/[^0-9.]/g, "")) * 100,
-    }))
+    const mapped = items.map((item) => {
+      let itemId: string
+      if (typeof item.id === "string") {
+        itemId = item.id
+      } else if (item.id && typeof item.id === "object" && "id" in item.id) {
+        itemId = (item.id as { id: string }).id
+      } else {
+        itemId = String(item.id)
+      }
+
+      let priceInCents = 0
+      try {
+        const priceStr = item.price.replace(/[^0-9.]/g, "")
+        const parsed = parseFloat(priceStr)
+        if (!isNaN(parsed)) {
+          priceInCents = Math.round(parsed * 100)
+        }
+      } catch {
+        priceInCents = 0
+      }
+
+      return {
+        id: itemId,
+        title: item.title,
+        quantity: item.quantity,
+        price: priceInCents,
+      }
+    })
 
     expect(mapped).toEqual([
       { id: "item_1", title: "Turkish Towel", quantity: 2, price: 4999 },
@@ -94,14 +115,35 @@ describe("useFeedbackContext - Cart Item Mapping", () => {
   it("handles complex id objects", () => {
     const items = [{ id: { id: "item_complex" }, title: "Towel", quantity: 1, price: "$10.00" }]
 
-    const mapped = items.map((item) => ({
-      id: typeof item.id === "string" ? item.id : (item.id as any).id,
-      title: item.title,
-      quantity: item.quantity,
-      price: parseFloat(item.price.replace(/[^0-9.]/g, "")) * 100,
-    }))
+    const mapped = items.map((item) => {
+      let itemId: string
+      if (typeof item.id === "string") {
+        itemId = item.id
+      } else if (item.id && typeof item.id === "object" && "id" in item.id) {
+        itemId = (item.id as { id: string }).id
+      } else {
+        itemId = String(item.id)
+      }
+      return { id: itemId }
+    })
 
     expect(mapped[0].id).toBe("item_complex")
+  })
+
+  it("handles malformed price gracefully", () => {
+    const priceStr = "invalid"
+    let priceInCents = 0
+    try {
+      const cleaned = priceStr.replace(/[^0-9.]/g, "")
+      const parsed = parseFloat(cleaned)
+      if (!isNaN(parsed)) {
+        priceInCents = Math.round(parsed * 100)
+      }
+    } catch {
+      priceInCents = 0
+    }
+
+    expect(priceInCents).toBe(0)
   })
 })
 

@@ -31,7 +31,7 @@ export interface FeedbackContextData {
     customerId: string | null
     sessionId: string
     locale: string
-    region: string
+    region: string | null
   }
 
   // Session
@@ -140,12 +140,36 @@ export function useFeedbackContext(productData?: {
       cart: {
         itemCount: items.length,
         total: cartTotal,
-        items: items.map((item) => ({
-          id: typeof item.id === "string" ? item.id : item.id.id,
-          title: item.title,
-          quantity: item.quantity,
-          price: parseFloat(item.price.replace(/[^0-9.]/g, "")) * 100,
-        })),
+        items: items.map((item) => {
+          // Handle various id formats safely
+          let itemId: string
+          if (typeof item.id === "string") {
+            itemId = item.id
+          } else if (item.id && typeof item.id === "object" && "id" in item.id) {
+            itemId = (item.id as { id: string }).id
+          } else {
+            itemId = String(item.id)
+          }
+
+          // Parse price safely with error handling
+          let priceInCents = 0
+          try {
+            const priceStr = item.price.replace(/[^0-9.]/g, "")
+            const parsed = parseFloat(priceStr)
+            if (!isNaN(parsed)) {
+              priceInCents = Math.round(parsed * 100)
+            }
+          } catch {
+            priceInCents = 0
+          }
+
+          return {
+            id: itemId,
+            title: item.title,
+            quantity: item.quantity,
+            price: priceInCents,
+          }
+        }),
       },
 
       user: {
