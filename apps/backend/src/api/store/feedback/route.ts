@@ -176,15 +176,16 @@ export async function POST(
       product_handle: data.product_handle,
       product_title: data.product_title,
       selected_variant_id: data.selected_variant_id,
-      selected_options: data.selected_options,
+      // JSON fields need type assertion for Medusa model compatibility
+      selected_options: data.selected_options as Record<string, unknown> | null | undefined,
       cart_item_count: data.cart_item_count,
       cart_total: data.cart_total,
-      cart_items: data.cart_items,
+      cart_items: data.cart_items as unknown as Record<string, unknown> | null | undefined,
       customer_id: data.customer_id,
       session_id: data.session_id,
       locale: data.locale,
       region: data.region,
-      context: data.context,
+      context: data.context as Record<string, unknown> | null | undefined,
       submitted_at: new Date(),
     })
 
