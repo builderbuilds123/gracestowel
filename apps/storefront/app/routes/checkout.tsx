@@ -108,6 +108,7 @@ export default function Checkout() {
     hasFreeShipping,
   } = useAutomaticPromotions({ 
     cartSubtotal: cartTotal,
+    currencyCode: currency,
     enabled: cartTotal > 0,
   });
 

@@ -604,6 +604,7 @@ export function PromoCodeInput({
 - Checkout Page: `apps/storefront/app/routes/checkout.tsx`
 - CartProgressBar: `apps/storefront/app/components/CartProgressBar.tsx`
 - Product Types: `apps/storefront/app/types/product.ts`
+- E2E Tests: `apps/e2e/tests/storefront/promotions.spec.ts`
 
 ### Related Stories
 - Story 9.x: Cart-based shipping (completed)

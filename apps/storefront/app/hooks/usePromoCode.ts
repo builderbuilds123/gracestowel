@@ -18,6 +18,49 @@ interface UsePromoCodeReturn {
 }
 
 /**
+ * Rebuild applied promo codes from cart adjustments
+ * This ensures accurate discount display when stacking rules apply
+ */
+function extractAppliedCodesFromCart(cart: any): AppliedPromoCode[] {
+  const codeDiscounts = new Map<string, number>();
+
+  // Sum line item adjustments by code
+  if (cart.items) {
+    cart.items.forEach((item: any) => {
+      if (item.adjustments) {
+        item.adjustments.forEach((adj: any) => {
+          if (adj.code) {
+            const current = codeDiscounts.get(adj.code) || 0;
+            codeDiscounts.set(adj.code, current + (adj.amount || 0));
+          }
+        });
+      }
+    });
+  }
+
+  // Sum shipping method adjustments by code
+  if (cart.shipping_methods) {
+    cart.shipping_methods.forEach((method: any) => {
+      if (method.adjustments) {
+        method.adjustments.forEach((adj: any) => {
+          if (adj.code) {
+            const current = codeDiscounts.get(adj.code) || 0;
+            codeDiscounts.set(adj.code, current + (adj.amount || 0));
+          }
+        });
+      }
+    });
+  }
+
+  // Convert to array
+  return Array.from(codeDiscounts.entries()).map(([code, discount]) => ({
+    code,
+    discount,
+    description: `Promo code ${code}`,
+  }));
+}
+
+/**
  * Hook for managing promo codes on a Medusa cart
  * Handles multiple codes and stacking rules enforcement
  * @see https://docs.medusajs.com/resources/storefront-development/cart/manage-promotions
@@ -69,22 +112,24 @@ export function usePromoCode({
           promo_codes: allCodes,
         });
 
-        // Extract applied promotions from cart response
-        const discountTotal = cart.discount_total || 0;
+        // Rebuild applied codes from cart response for accuracy
+        const rebuiltCodes = extractAppliedCodesFromCart(cart);
         
-        // Calculate per-code discount (simplified - Medusa may provide breakdown)
-        const previousTotal = appliedCodes.reduce((sum, c) => sum + c.discount, 0);
-        const newDiscount = Math.max(0, discountTotal - previousTotal);
-        
-        // Update applied codes state
-        setAppliedCodes((prev) => [
-          ...prev,
-          {
-            code: normalizedCode,
-            discount: newDiscount,
-            description: `Promo code ${normalizedCode}`,
-          },
-        ]);
+        // If adjustments not available, fall back to simple approach
+        if (rebuiltCodes.length > 0) {
+          setAppliedCodes(rebuiltCodes);
+        } else {
+          // Fallback: use discount_total with simple distribution
+          const discountTotal = cart.discount_total || 0;
+          const numCodes = allCodes.length;
+          setAppliedCodes(
+            allCodes.map((c) => ({
+              code: c,
+              discount: discountTotal / numCodes,
+              description: `Promo code ${c}`,
+            }))
+          );
+        }
 
         setSuccessMessage("Promo code applied!");
         onCartUpdate?.();

@@ -8,6 +8,7 @@ import type { ProductId } from '../types/product';
 import type { AppliedPromoCode } from '../types/promotion';
 
 interface AutomaticPromotionInfo {
+    id: string;
     type: "free_shipping" | "discount";
     message: string;
     isApplied: boolean;
@@ -76,9 +77,9 @@ export function OrderSummary({
             {/* Automatic Promotion Banners (Phase 2) */}
             {automaticPromotions.length > 0 && (
                 <div className="space-y-2 mb-4">
-                    {automaticPromotions.map((promo, index) => (
+                    {automaticPromotions.map((promo) => (
                         <AutomaticPromotionBanner
-                            key={index}
+                            key={promo.id}
                             type={promo.type}
                             message={promo.message}
                             isApplied={promo.isApplied}

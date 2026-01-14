@@ -44,7 +44,7 @@ export function CartDrawer() {
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-6">
-                    {items.length > 0 && freeShippingThreshold && (
+                    {items.length > 0 && freeShippingThreshold !== null && (
                         <CartProgressBar 
                             currentAmount={cartTotal}
                             threshold={freeShippingThreshold}

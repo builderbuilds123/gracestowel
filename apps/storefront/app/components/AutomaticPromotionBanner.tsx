@@ -53,7 +53,7 @@ export function AutomaticPromotionBanner({
             />
           </div>
           <p className="text-xs text-gray-500 mt-1 text-right">
-            {Math.round(progressPercent)}% there
+            {Math.floor(progressPercent)}% there
           </p>
         </div>
       )}

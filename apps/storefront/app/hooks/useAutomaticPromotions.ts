@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { getMedusaClient } from "../lib/medusa";
 import type { Promotion } from "../types/promotion";
 
@@ -15,6 +15,7 @@ interface AutomaticPromotionInfo {
 
 interface UseAutomaticPromotionsOptions {
   cartSubtotal: number;
+  currencyCode?: string;
   enabled?: boolean;
 }
 
@@ -30,16 +31,20 @@ interface UseAutomaticPromotionsReturn {
 
 /**
  * Hook for fetching and tracking automatic promotions
+ * Caches promotion rules and only re-processes when cart subtotal changes
  * @see https://docs.medusajs.com/resources/commerce-modules/promotion
  */
 export function useAutomaticPromotions({
   cartSubtotal,
+  currencyCode = "usd",
   enabled = true,
 }: UseAutomaticPromotionsOptions): UseAutomaticPromotionsReturn {
-  const [promotions, setPromotions] = useState<AutomaticPromotionInfo[]>([]);
+  // Cache raw promotions from API (only fetched once when enabled)
+  const [rawPromotions, setRawPromotions] = useState<Promotion[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Fetch promotion rules only once (or when manually refreshed)
   const fetchPromotions = useCallback(async () => {
     if (!enabled) return;
 
@@ -50,62 +55,71 @@ export function useAutomaticPromotions({
       const client = getMedusaClient();
       
       // Fetch automatic promotions from Medusa
-      const { promotions: rawPromotions } = await client.store.promotion.list({
+      // @ts-ignore - promotion resource missing from client types
+      const { promotions } = await (client.store as any).promotion.list({
         is_automatic: true,
       });
 
-      // Process promotions to extract threshold info
-      const processedPromotions: AutomaticPromotionInfo[] = (rawPromotions || [])
-        .filter((p: Promotion) => p.status === "active")
-        .map((promo: Promotion) => {
-          const threshold = extractThreshold(promo);
-          const isShipping = promo.application_method?.target_type === "shipping";
-          const isApplied = cartSubtotal >= threshold;
-          const amountRemaining = Math.max(0, threshold - cartSubtotal);
-          const progressPercent = threshold > 0 
-            ? Math.min(100, (cartSubtotal / threshold) * 100) 
-            : 100;
-
-          let message: string;
-          if (isApplied) {
-            message = isShipping 
-              ? "🎉 Free shipping applied!" 
-              : `🎉 ${promo.application_method?.value}% discount applied!`;
-          } else {
-            const formatted = new Intl.NumberFormat("en-US", {
-              style: "currency",
-              currency: "USD",
-            }).format(amountRemaining);
-            message = isShipping
-              ? `Add ${formatted} more for free shipping!`
-              : `Add ${formatted} more to unlock your discount!`;
-          }
-
-          return {
-            id: promo.id,
-            type: isShipping ? "free_shipping" : "discount",
-            threshold,
-            currentAmount: cartSubtotal,
-            amountRemaining,
-            isApplied,
-            message,
-            progressPercent,
-          };
-        });
-
-      setPromotions(processedPromotions);
+      // Cache raw promotions (filtering only active ones)
+      const activePromotions = (promotions || []).filter(
+        (p: Promotion) => p.status === "active"
+      );
+      setRawPromotions(activePromotions);
     } catch (err) {
       console.error("[useAutomaticPromotions] Error fetching promotions:", err);
       setError("Failed to load promotions");
     } finally {
       setIsLoading(false);
     }
-  }, [cartSubtotal, enabled]);
+  }, [enabled]);
 
-  // Fetch on mount and when cart subtotal changes
+  // Fetch on mount when enabled, clear when disabled
   useEffect(() => {
-    fetchPromotions();
-  }, [fetchPromotions]);
+    if (enabled) {
+      fetchPromotions();
+    } else {
+      setRawPromotions([]);
+    }
+  }, [enabled, fetchPromotions]);
+
+  // Process cached promotions when cart subtotal changes (no network call)
+  const promotions = useMemo<AutomaticPromotionInfo[]>(() => {
+    return rawPromotions.map((promo: Promotion) => {
+      const threshold = extractThreshold(promo);
+      const isShipping = promo.application_method?.target_type === "shipping";
+      const isApplied = cartSubtotal >= threshold;
+      const amountRemaining = Math.max(0, threshold - cartSubtotal);
+      const progressPercent = threshold > 0 
+        ? Math.min(100, (cartSubtotal / threshold) * 100) 
+        : 100;
+
+      let message: string;
+      if (isApplied) {
+        message = isShipping 
+          ? "🎉 Free shipping applied!" 
+          : `🎉 ${promo.application_method?.value}% discount applied!`;
+      } else {
+        const formatted = new Intl.NumberFormat(undefined, {
+          style: "currency",
+          currency: currencyCode.toUpperCase(),
+        }).format(amountRemaining);
+        message = isShipping
+          ? `Add ${formatted} more for free shipping!`
+          : `Add ${formatted} more to unlock your discount!`;
+      }
+
+      return {
+        id: promo.id,
+        type: isShipping ? "free_shipping" : "discount",
+        threshold,
+        currentAmount: cartSubtotal,
+        amountRemaining,
+        isApplied,
+        message,
+        progressPercent,
+      };
+    });
+  }, [rawPromotions, cartSubtotal, currencyCode]);
 
   // Derived values for convenience
   const freeShippingPromo = promotions.find((p) => p.type === "free_shipping");
