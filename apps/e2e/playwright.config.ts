@@ -33,7 +33,7 @@ export default defineConfig({
   /* Shared settings for all the projects below */
   use: {
     /* Base URL to use in actions like `await page.goto('/')` */
-    baseURL: process.env.STOREFRONT_URL || "https://localhost:5173",
+    baseURL: process.env.STOREFRONT_URL || "http://localhost:5173",
     /* Collect trace when retrying the failed test */
     trace: "retain-on-failure",
     /* Capture screenshot on failure */
@@ -90,15 +90,7 @@ export default defineConfig({
 
   /* Run your local dev server before starting the tests */
   /* In CI, storefront is already running via Docker Compose, so we skip webServer */
-  webServer: process.env.CI
-    ? undefined
-    : {
-        command: `cd ../.. && MEDUSA_PUBLISHABLE_KEY=${process.env.MEDUSA_PUBLISHABLE_KEY} CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE='${process.env.CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE || "postgresql://postgres:postgres@localhost:5432/medusa"}' pnpm --filter=apps-storefront dev`,
-        url: "https://localhost:5173",
-        reuseExistingServer: true,
-        ignoreHTTPSErrors: true,
-        timeout: 120 * 1000,
-      },
+  // webServer config removed for manual testing
 
   /* Optimized timeouts: Reduced for faster feedback */
   timeout: 45 * 1000, // Reduced from 60s to 45s

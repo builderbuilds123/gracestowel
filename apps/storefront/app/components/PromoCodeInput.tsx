@@ -60,6 +60,7 @@ export function PromoCodeInput({
         <form onSubmit={handleSubmit} className="flex gap-2">
           <input
             type="text"
+            data-testid="promo-code-input"
             value={code}
             onChange={(e) => setCode(e.target.value.toUpperCase())}
             placeholder="Enter promo code"
@@ -72,6 +73,7 @@ export function PromoCodeInput({
           />
           <button
             type="submit"
+            data-testid="apply-promo-button"
             disabled={isLoading || !code.trim() || !cartId}
             className="px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded-md
                        hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-500
@@ -92,14 +94,14 @@ export function PromoCodeInput({
 
       {/* Success message */}
       {successMessage && (
-        <p className="mt-2 text-sm text-green-600 flex items-center gap-1">
+        <p className="mt-2 text-sm text-green-600 flex items-center gap-1" data-testid="promo-success-message">
           <span>✓</span> {successMessage}
         </p>
       )}
 
       {/* Error message */}
       {error && (
-        <p className="mt-2 text-sm text-red-600" role="alert">
+        <p className="mt-2 text-sm text-red-600" role="alert" data-testid="promo-error-message">
           {error}
         </p>
       )}
@@ -126,7 +128,7 @@ function AppliedPromoBadge({
   const formattedDiscount = formatCurrencyFixed(discount);
 
   return (
-    <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-md px-3 py-2">
+    <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-md px-3 py-2" data-testid={`applied-promo-${code}`}>
       <div className="flex items-center gap-2">
         <Tag className="w-4 h-4 text-green-600" />
         <span className="text-sm font-medium text-green-800">{code}</span>
@@ -138,6 +140,7 @@ function AppliedPromoBadge({
         type="button"
         onClick={onRemove}
         disabled={isLoading}
+        data-testid={`remove-promo-${code}`}
         className="p-1 text-green-600 hover:text-green-800 hover:bg-green-100 rounded
                    disabled:opacity-50 disabled:cursor-not-allowed"
         aria-label={`Remove promo code ${code}`}

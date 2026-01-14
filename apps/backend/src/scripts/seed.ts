@@ -130,12 +130,12 @@ export default async function seedDemoData({ container }: ExecArgs) {
         code: "TEST10",
         type: "standard",
         is_automatic: false,
-        status: "active", // Required field
+        status: "active",
         application_method: {
             type: "percentage",
             target_type: "order",
             value: 10,
-            currency_code: "usd",
+            // currency_code: "usd", // REMOVED: Should be currency agnostic for percentage
         },
         rules: [
             {
@@ -150,7 +150,33 @@ export default async function seedDemoData({ container }: ExecArgs) {
         logger.warn("Failed to create promotion TEST10: " + e.message);
     }
   } else {
-    logger.info("Using existing promotion: TEST10");
+    // Delete and recreate to ensure correct configuration (e.g. currency_code removal)
+    try {
+        await promotionModuleService.deletePromotions([existingPromotions[0].id]);
+        
+        await promotionModuleService.createPromotions({
+            code: "TEST10",
+            type: "standard",
+            is_automatic: false,
+            status: "active",
+            application_method: {
+                type: "percentage",
+                target_type: "order",
+                value: 10,
+                // currency_code removed
+            },
+            rules: [
+                {
+                attribute: "currency_code",
+                operator: "eq",
+                values: ["usd", "eur", "cad"],
+                }
+            ]
+        });
+        logger.info("Recreated promotion: TEST10 (10% OFF)");
+    } catch (e) {
+        logger.warn("Failed to recreate promotion TEST10: " + e.message);
+    }
   }
   logger.info("Finished seeding promotion data.");
 

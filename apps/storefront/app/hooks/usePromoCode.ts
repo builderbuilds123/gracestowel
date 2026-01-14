@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { getMedusaClient } from "../lib/medusa";
-import type { AppliedPromoCode } from "../types/promotion";
+import type { AppliedPromoCode, CartWithPromotions, LineItemAdjustment, ShippingMethodAdjustment } from "../types/promotion";
 
 interface UsePromoCodeOptions {
   cartId: string | undefined;
@@ -16,8 +16,6 @@ interface UsePromoCodeReturn {
   removePromoCode: (code: string) => Promise<boolean>;
   clearMessages: () => void;
 }
-
-import type { CartWithPromotions } from "../types/promotion";
 
 /**
  * Rebuild applied promo codes from cart adjustments
