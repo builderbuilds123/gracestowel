@@ -17,6 +17,7 @@ import { WishlistProvider } from "./context/WishlistContext";
 import { CartDrawer } from "./components/CartDrawer";
 import { Header } from "./components/Header";
 import { Footer } from "./components/Footer";
+import { FeedbackWidget } from "./components/feedback";
 import { initPostHog, reportWebVitals, setupErrorTracking, captureException } from "./utils/posthog";
 import {
   useNavigationTracking,
@@ -152,6 +153,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 </main>
                 <Footer />
                 <CartDrawer />
+                <FeedbackWidget />
                 <ScrollRestoration />
                 <EnvScript />
                 <Scripts />
