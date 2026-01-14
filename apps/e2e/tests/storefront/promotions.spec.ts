@@ -24,12 +24,16 @@ test.describe("Promotions Flow", () => {
     // Wait for network idle or specific UI feedback to ensure cart is updated
     await expect(page.getByTestId("nav-cart-count")).not.toHaveText("0", { timeout: 10000 });
     
+    // Wait for cart to persist to localStorage
+    await page.waitForTimeout(500);
+    
     // 2. Go to checkout
     await page.goto("/checkout");
+    await page.waitForLoadState("networkidle");
     
     // 3. Find and fill promo input
     const promoInput = page.getByTestId("promo-code-input");
-    await expect(promoInput).toBeVisible();
+    await expect(promoInput).toBeVisible({ timeout: 15000 });
     await promoInput.fill(PROMO_CODE);
     
     const applyButton = page.getByTestId("apply-promo-button");
@@ -55,10 +59,14 @@ test.describe("Promotions Flow", () => {
     
     await expect(page.getByTestId("nav-cart-count")).not.toHaveText("0", { timeout: 10000 });
 
+    // Wait for cart to persist to localStorage
+    await page.waitForTimeout(500);
+
     await page.goto("/checkout");
+    await page.waitForLoadState("networkidle");
     
     const promoInput = page.getByTestId("promo-code-input");
-    await expect(promoInput).toBeVisible();
+    await expect(promoInput).toBeVisible({ timeout: 15000 });
     await promoInput.fill("INVALID_CODE_123");
     
     await page.getByTestId("apply-promo-button").click();
@@ -75,11 +83,15 @@ test.describe("Promotions Flow", () => {
     await addToCartButton.click();
     await expect(page.getByTestId("nav-cart-count")).not.toHaveText("0", { timeout: 10000 });
 
+    // Wait for cart to persist to localStorage
+    await page.waitForTimeout(500);
+
     await page.goto("/checkout");
+    await page.waitForLoadState("networkidle");
     
     // Apply first
     const promoInput = page.getByTestId("promo-code-input");
-    await expect(promoInput).toBeVisible();
+    await expect(promoInput).toBeVisible({ timeout: 15000 });
     await promoInput.fill(PROMO_CODE);
     await page.getByTestId("apply-promo-button").click();
     await expect(page.getByTestId(`applied-promo-${PROMO_CODE}`)).toBeVisible();
