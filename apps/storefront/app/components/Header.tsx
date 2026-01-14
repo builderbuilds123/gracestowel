@@ -353,11 +353,12 @@ export function Header() {
                                 aria-label="Open cart"
                             >
                                 <Towel size={20} weight="regular" />
-                                {itemCount > 0 && (
-                                    <span className="absolute top-0 right-0 bg-accent-earthy text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
-                                        {itemCount}
-                                    </span>
-                                )}
+                                <span 
+                                    data-testid="nav-cart-count"
+                                    className={`absolute top-0 right-0 bg-accent-earthy text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center ${itemCount === 0 ? 'hidden' : ''}`}
+                                >
+                                    {itemCount}
+                                </span>
                             </button>
                         </div>
                     </div>
