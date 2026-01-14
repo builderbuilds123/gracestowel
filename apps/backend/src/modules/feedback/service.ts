@@ -41,17 +41,18 @@ class FeedbackModuleService extends MedusaService({
     if (filters?.product_id) {
       queryFilters.product_id = filters.product_id
     }
-
-    const feedbacks = await this.listFeedbacks(queryFilters)
-
-    // Filter by date range in memory (MikroORM date filtering can be complex)
-    let filtered = feedbacks
-    if (filters?.from) {
-      filtered = filtered.filter((f) => new Date(f.submitted_at) >= filters.from!)
+    // Filter by date range at database level for performance
+    if (filters?.from || filters?.to) {
+      queryFilters.submitted_at = {}
+      if (filters?.from) {
+        queryFilters.submitted_at.$gte = filters.from
+      }
+      if (filters?.to) {
+        queryFilters.submitted_at.$lte = filters.to
+      }
     }
-    if (filters?.to) {
-      filtered = filtered.filter((f) => new Date(f.submitted_at) <= filters.to!)
-    }
+
+    const filtered = await this.listFeedbacks(queryFilters)
 
     if (filtered.length === 0) {
       return {
@@ -235,10 +236,11 @@ class FeedbackModuleService extends MedusaService({
   async checkRateLimit(sessionId: string): Promise<{ allowed: boolean; remaining: number }> {
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000)
 
-    const feedbacks = await this.listFeedbacks({ session_id: sessionId })
-    const recentCount = feedbacks.filter(
-      (f) => new Date(f.submitted_at) >= oneHourAgo
-    ).length
+    // Query database with date filter for performance
+    const [, recentCount] = await this.listAndCountFeedbacks({
+      session_id: sessionId,
+      submitted_at: { $gte: oneHourAgo },
+    })
 
     const maxPerHour = 5
     const allowed = recentCount < maxPerHour

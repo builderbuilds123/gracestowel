@@ -120,7 +120,7 @@ export function useFeedbackTrigger(
   useEffect(() => {
     if (!mergedConfig.exitIntent.enabled) return
     if (typeof window === "undefined") return
-    if (isInCooldown()) return
+    if (isInCooldown() || showPopup) return
 
     // Only on desktop
     if (window.innerWidth < 1024) return
@@ -141,7 +141,7 @@ export function useFeedbackTrigger(
 
     document.addEventListener("mouseleave", handleMouseLeave)
     return () => document.removeEventListener("mouseleave", handleMouseLeave)
-  }, [mergedConfig.exitIntent, isInCooldown])
+  }, [mergedConfig.exitIntent, isInCooldown, showPopup])
 
   // Post-purchase trigger (on checkout success page)
   useEffect(() => {

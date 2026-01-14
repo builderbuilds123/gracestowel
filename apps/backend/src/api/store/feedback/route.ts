@@ -176,15 +176,15 @@ export async function POST(
       product_handle: data.product_handle,
       product_title: data.product_title,
       selected_variant_id: data.selected_variant_id,
-      selected_options: data.selected_options as Record<string, unknown> | null | undefined,
+      selected_options: data.selected_options,
       cart_item_count: data.cart_item_count,
       cart_total: data.cart_total,
-      cart_items: data.cart_items as unknown as Record<string, unknown> | null | undefined,
+      cart_items: data.cart_items,
       customer_id: data.customer_id,
       session_id: data.session_id,
       locale: data.locale,
       region: data.region,
-      context: data.context as Record<string, unknown> | null | undefined,
+      context: data.context,
       submitted_at: new Date(),
     })
 
