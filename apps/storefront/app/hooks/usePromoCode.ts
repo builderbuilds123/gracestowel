@@ -17,18 +17,20 @@ interface UsePromoCodeReturn {
   clearMessages: () => void;
 }
 
+import type { CartWithPromotions } from "../types/promotion";
+
 /**
  * Rebuild applied promo codes from cart adjustments
  * This ensures accurate discount display when stacking rules apply
  */
-function extractAppliedCodesFromCart(cart: any): AppliedPromoCode[] {
+function extractAppliedCodesFromCart(cart: CartWithPromotions): AppliedPromoCode[] {
   const codeDiscounts = new Map<string, number>();
 
   // Sum line item adjustments by code
   if (cart.items) {
-    cart.items.forEach((item: any) => {
+    cart.items.forEach((item) => {
       if (item.adjustments) {
-        item.adjustments.forEach((adj: any) => {
+        item.adjustments.forEach((adj) => {
           if (adj.code) {
             const current = codeDiscounts.get(adj.code) || 0;
             codeDiscounts.set(adj.code, current + (adj.amount || 0));
@@ -40,9 +42,9 @@ function extractAppliedCodesFromCart(cart: any): AppliedPromoCode[] {
 
   // Sum shipping method adjustments by code
   if (cart.shipping_methods) {
-    cart.shipping_methods.forEach((method: any) => {
+    cart.shipping_methods.forEach((method) => {
       if (method.adjustments) {
-        method.adjustments.forEach((adj: any) => {
+        method.adjustments.forEach((adj) => {
           if (adj.code) {
             const current = codeDiscounts.get(adj.code) || 0;
             codeDiscounts.set(adj.code, current + (adj.amount || 0));

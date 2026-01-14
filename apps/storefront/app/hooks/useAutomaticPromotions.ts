@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { getMedusaClient } from "../lib/medusa";
 import type { Promotion } from "../types/promotion";
 
-interface AutomaticPromotionInfo {
+export interface AutomaticPromotionInfo {
   id: string;
   type: "free_shipping" | "discount";
   threshold: number;

@@ -6,14 +6,7 @@ import type { CartItem } from '../context/CartContext';
 import type { ShippingOption } from './CheckoutForm';
 import type { ProductId } from '../types/product';
 import type { AppliedPromoCode } from '../types/promotion';
-
-interface AutomaticPromotionInfo {
-    id: string;
-    type: "free_shipping" | "discount";
-    message: string;
-    isApplied: boolean;
-    progressPercent: number;
-}
+import type { AutomaticPromotionInfo } from '../hooks/useAutomaticPromotions';
 
 export interface OrderSummaryProps {
     items: CartItem[];

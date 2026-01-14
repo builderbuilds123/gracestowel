@@ -40,13 +40,20 @@ export function CartProgressBar({
   const defaultLabel = type === "free_shipping" ? "Free Shipping" : "Discount";
   const label = promotionLabel || defaultLabel;
 
-  // Styles based on goal state
-  const containerBg = isGoalReached
-    ? "bg-green-50 border-green-200"
-    : "bg-gray-50 border-gray-200";
-  const iconColor = isGoalReached ? "text-green-600" : "text-gray-500";
-  const progressBg = isGoalReached ? "bg-green-500" : "bg-blue-500";
-  const textColor = isGoalReached ? "text-green-700" : "text-gray-700";
+  // Styles grouped by goal state for maintainability
+  const { containerBg, iconColor, progressBg, textColor } = isGoalReached
+    ? {
+        containerBg: "bg-green-50 border-green-200",
+        iconColor: "text-green-600",
+        progressBg: "bg-green-500",
+        textColor: "text-green-700",
+      }
+    : {
+        containerBg: "bg-gray-50 border-gray-200",
+        iconColor: "text-gray-500",
+        progressBg: "bg-blue-500",
+        textColor: "text-gray-700",
+      };
 
   return (
     <div className={`rounded-lg border p-4 ${containerBg}`}>
