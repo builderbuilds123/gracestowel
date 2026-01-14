@@ -16,6 +16,8 @@ import { generateCartHash } from "../utils/cart-hash";
 import { useShippingPersistence } from "../hooks/useShippingPersistence";
 import { usePaymentCollection } from "../hooks/usePaymentCollection";
 import { usePaymentSession } from "../hooks/usePaymentSession";
+import { usePromoCode } from "../hooks/usePromoCode";
+import { useAutomaticPromotions } from "../hooks/useAutomaticPromotions";
 import { monitoredFetch } from "../utils/monitored-fetch";
 
 
@@ -89,6 +91,25 @@ export default function Checkout() {
     setShippingPersistError,
     persistShippingOption 
   } = useShippingPersistence(cartId, sessionTraceId.current);
+
+  // PROMO-1: Promo code hook for managing promotional codes
+  const {
+    appliedCodes: appliedPromoCodes,
+    isLoading: isPromoLoading,
+    error: promoError,
+    successMessage: promoSuccessMessage,
+    applyPromoCode,
+    removePromoCode,
+  } = usePromoCode({ cartId });
+
+  // PROMO-1 Phase 2: Automatic promotions hook
+  const {
+    promotions: automaticPromotions,
+    hasFreeShipping,
+  } = useAutomaticPromotions({ 
+    cartSubtotal: cartTotal,
+    enabled: cartTotal > 0,
+  });
 
   /**
    * SHP-01: Handle shipping selection (LOCAL ONLY)
@@ -578,6 +599,15 @@ export default function Checkout() {
             finalTotal={finalTotal}
             onUpdateQuantity={updateQuantity}
             onRemoveFromCart={removeFromCart}
+            // PROMO-1: Promo code props
+            cartId={cartId}
+            appliedPromoCodes={appliedPromoCodes}
+            onApplyPromoCode={applyPromoCode}
+            onRemovePromoCode={removePromoCode}
+            isPromoLoading={isPromoLoading}
+            promoError={promoError}
+            promoSuccessMessage={promoSuccessMessage}
+            automaticPromotions={automaticPromotions}
           />
         </div>
       </div>

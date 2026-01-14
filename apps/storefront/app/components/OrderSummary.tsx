@@ -1,8 +1,18 @@
 import { X, Minus, Plus } from 'lucide-react';
 import { ProductPrice } from './ProductPrice';
+import { PromoCodeInput } from './PromoCodeInput';
+import { AutomaticPromotionBanner } from './AutomaticPromotionBanner';
 import type { CartItem } from '../context/CartContext';
 import type { ShippingOption } from './CheckoutForm';
 import type { ProductId } from '../types/product';
+import type { AppliedPromoCode } from '../types/promotion';
+
+interface AutomaticPromotionInfo {
+    type: "free_shipping" | "discount";
+    message: string;
+    isApplied: boolean;
+    progressPercent: number;
+}
 
 export interface OrderSummaryProps {
     items: CartItem[];
@@ -13,6 +23,17 @@ export interface OrderSummaryProps {
     finalTotal: number;
     onUpdateQuantity: (id: ProductId, quantity: number, color?: string, variantId?: string) => void;
     onRemoveFromCart: (id: ProductId, color?: string) => void;
+    // Promo code props (optional for backward compatibility)
+    cartId?: string;
+    appliedPromoCodes?: AppliedPromoCode[];
+    onApplyPromoCode?: (code: string) => Promise<boolean>;
+    onRemovePromoCode?: (code: string) => Promise<boolean>;
+    isPromoLoading?: boolean;
+    promoError?: string | null;
+    promoSuccessMessage?: string | null;
+    discountTotal?: number;
+    // Automatic promotions (Phase 2)
+    automaticPromotions?: AutomaticPromotionInfo[];
 }
 
 export function OrderSummary({
@@ -24,8 +45,19 @@ export function OrderSummary({
     finalTotal,
     onUpdateQuantity,
     onRemoveFromCart,
+    // Promo code props
+    cartId,
+    appliedPromoCodes = [],
+    onApplyPromoCode,
+    onRemovePromoCode,
+    isPromoLoading = false,
+    promoError,
+    promoSuccessMessage,
+    discountTotal = 0,
+    // Automatic promotions (Phase 2)
+    automaticPromotions = [],
 }: OrderSummaryProps) {
-    const hasDiscount = originalTotal > cartTotal;
+    const hasDiscount = originalTotal > cartTotal || discountTotal > 0;
 
     return (
         <div className="lg:col-span-5 bg-white p-6 lg:p-8 rounded-lg shadow-sm border border-card-earthy/20 sticky top-8">
@@ -40,6 +72,34 @@ export function OrderSummary({
                     />
                 ))}
             </div>
+
+            {/* Automatic Promotion Banners (Phase 2) */}
+            {automaticPromotions.length > 0 && (
+                <div className="space-y-2 mb-4">
+                    {automaticPromotions.map((promo, index) => (
+                        <AutomaticPromotionBanner
+                            key={index}
+                            type={promo.type}
+                            message={promo.message}
+                            isApplied={promo.isApplied}
+                            progressPercent={promo.progressPercent}
+                        />
+                    ))}
+                </div>
+            )}
+
+            {/* Promo Code Input */}
+            {onApplyPromoCode && onRemovePromoCode && (
+                <PromoCodeInput
+                    cartId={cartId}
+                    appliedCodes={appliedPromoCodes}
+                    onApply={onApplyPromoCode}
+                    onRemove={onRemovePromoCode}
+                    isLoading={isPromoLoading}
+                    error={promoError}
+                    successMessage={promoSuccessMessage}
+                />
+            )}
 
             {/* Totals */}
             <div className="border-t border-gray-100 pt-4 space-y-3">
@@ -57,6 +117,16 @@ export function OrderSummary({
                         </span>
                     </div>
                 </div>
+
+                {/* Applied Promo Discounts */}
+                {appliedPromoCodes.length > 0 && appliedPromoCodes.map((promo) => (
+                    <div key={promo.code} className="flex justify-between text-sm">
+                        <span className="text-green-600">{promo.code}</span>
+                        <span className="text-green-600 font-medium">
+                            -${promo.discount.toFixed(2)}
+                        </span>
+                    </div>
+                ))}
 
                 {/* Shipping */}
                 <div className="flex justify-between text-sm">

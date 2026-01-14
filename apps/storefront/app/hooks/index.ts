@@ -21,3 +21,7 @@ export { useFeedbackContext } from "./useFeedbackContext";
 export { useFeedbackTrigger } from "./useFeedbackTrigger";
 export { useFeedbackSubmit } from "./useFeedbackSubmit";
 
+// Promotions hooks (PROMO-1)
+export { usePromoCode } from "./usePromoCode";
+export { useAutomaticPromotions } from "./useAutomaticPromotions";
+
