@@ -21,21 +21,20 @@ export function AutomaticPromotionBanner({
 }: AutomaticPromotionBannerProps) {
   const Icon = type === "free_shipping" ? Truck : Gift;
   
-  const bgColor = isApplied 
-    ? "bg-green-50 border-green-200" 
-    : "bg-blue-50 border-blue-200";
-  
-  const textColor = isApplied 
-    ? "text-green-700" 
-    : "text-blue-700";
-  
-  const iconColor = isApplied 
-    ? "text-green-600" 
-    : "text-blue-600";
-  
-  const progressBgColor = isApplied 
-    ? "bg-green-500" 
-    : "bg-blue-500";
+  // Styles grouped by applied state for maintainability
+  const { bgColor, textColor, iconColor, progressBgColor } = isApplied
+    ? {
+        bgColor: "bg-green-50 border-green-200",
+        textColor: "text-green-700",
+        iconColor: "text-green-600",
+        progressBgColor: "bg-green-500",
+      }
+    : {
+        bgColor: "bg-blue-50 border-blue-200",
+        textColor: "text-blue-700",
+        iconColor: "text-blue-600",
+        progressBgColor: "bg-blue-500",
+      };
 
   return (
     <div className={`rounded-lg border p-3 ${bgColor}`}>

@@ -166,12 +166,30 @@ export function usePromoCode({
           .filter((c) => c.code !== code)
           .map((c) => c.code);
         
-        await client.store.cart.update(cartId, {
+        const { cart } = await client.store.cart.update(cartId, {
           promo_codes: remainingCodes,
         });
 
-        // Update local state
-        setAppliedCodes((prev) => prev.filter((c) => c.code !== code));
+        // Rebuild applied codes from cart response for accurate discount amounts
+        const rebuiltCodes = extractAppliedCodesFromCart(cart);
+        
+        if (rebuiltCodes.length > 0) {
+          setAppliedCodes(rebuiltCodes);
+        } else if (remainingCodes.length > 0) {
+          // Fallback: distribute total discount across remaining codes
+          const discountTotal = cart.discount_total || 0;
+          const perCodeDiscount = Math.floor(discountTotal / remainingCodes.length);
+          setAppliedCodes(
+            remainingCodes.map((c) => ({
+              code: c,
+              discount: perCodeDiscount,
+              description: `Promo code ${c}`,
+            }))
+          );
+        } else {
+          setAppliedCodes([]);
+        }
+        
         setSuccessMessage("Promo code removed");
         onCartUpdate?.();
         return true;

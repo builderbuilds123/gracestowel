@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { X, Tag, Loader2 } from "lucide-react";
+import { formatCurrencyFixed } from "../utils/format-currency";
 
 interface PromoCodeInputProps {
   cartId: string | undefined;
@@ -122,10 +123,7 @@ function AppliedPromoBadge({
   onRemove,
   isLoading,
 }: AppliedPromoBadgeProps) {
-  const formattedDiscount = new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(discount);
+  const formattedDiscount = formatCurrencyFixed(discount);
 
   return (
     <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-md px-3 py-2">

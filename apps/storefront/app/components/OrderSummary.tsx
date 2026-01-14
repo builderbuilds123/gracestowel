@@ -112,16 +112,6 @@ export function OrderSummary({
                     </div>
                 </div>
 
-                {/* Applied Promo Discounts */}
-                {appliedPromoCodes.length > 0 && appliedPromoCodes.map((promo) => (
-                    <div key={promo.code} className="flex justify-between text-sm">
-                        <span className="text-green-600">{promo.code}</span>
-                        <span className="text-green-600 font-medium">
-                            -${promo.discount.toFixed(2)}
-                        </span>
-                    </div>
-                ))}
-
                 {/* Shipping */}
                 <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Shipping</span>

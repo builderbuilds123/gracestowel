@@ -1,4 +1,5 @@
 import { Truck, Gift, PartyPopper } from "lucide-react";
+import { formatCurrency } from "../utils/format-currency";
 
 interface CartProgressBarProps {
   currentAmount: number;
@@ -27,14 +28,6 @@ export function CartProgressBar({
   const progressPercent = Math.min(100, (currentAmount / threshold) * 100);
   const isGoalReached = currentAmount >= threshold;
   const amountRemaining = Math.max(0, threshold - currentAmount);
-
-  const formatCurrency = (amount: number) =>
-    new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2,
-    }).format(amount);
 
   const Icon = type === "free_shipping" ? Truck : Gift;
   const defaultLabel = type === "free_shipping" ? "Free Shipping" : "Discount";

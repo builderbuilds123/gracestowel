@@ -370,114 +370,135 @@ export default async function seedDemoData({ container }: ExecArgs) {
     });
   }
 
-  // Create shipping options for North America zone
-  await createShippingOptionsWorkflow(container).run({
-    input: [
-      {
-        name: "Standard Shipping (3-5 days)",
-        price_type: "flat",
-        provider_id: "manual_manual",
-        service_zone_id: fulfillmentSet.service_zones[0].id, // North America
-        shipping_profile_id: shippingProfile.id,
-        type: {
-          label: "Standard",
-          description: "Delivery in 3-5 business days. Free on orders $99+",
-          code: "standard",
-        },
-        prices: [
+  // Ensure service zones are available (refetch if necessary or use fallback logic)
+  // Medusa v2 listFulfillmentSets might not expand relations by default
+  // But createFulfillmentSets returns the created object with zones.
+  // We need to handle the case where we fetched an existing one that might lack zones in the response.
+  
+  let serviceZoneNA = fulfillmentSet.service_zones?.find(z => z.name === "North America");
+  let serviceZoneEU = fulfillmentSet.service_zones?.find(z => z.name === "Europe");
+
+  // Refetch if zones are missing but set exists
+  if (!serviceZoneNA || !serviceZoneEU) {
+      const detailedSet = await fulfillmentModuleService.retrieveFulfillmentSet(fulfillmentSet.id, {
+          relations: ["service_zones", "service_zones.geo_zones"]
+      });
+      serviceZoneNA = detailedSet.service_zones.find(z => z.name === "North America");
+      serviceZoneEU = detailedSet.service_zones.find(z => z.name === "Europe");
+  }
+
+  if (!serviceZoneNA || !serviceZoneEU) {
+      logger.warn("Service zones not found, skipping shipping options creation to avoid crash.");
+  } else {
+      // Create shipping options for North America zone
+      await createShippingOptionsWorkflow(container).run({
+        input: [
           {
-            currency_code: "usd",
-            amount: 8.95,
+            name: "Standard Shipping (3-5 days)",
+            price_type: "flat",
+            provider_id: "manual_manual",
+            service_zone_id: serviceZoneNA.id, // North America
+            shipping_profile_id: shippingProfile.id,
+            type: {
+              label: "Standard",
+              description: "Delivery in 3-5 business days. Free on orders $99+",
+              code: "standard",
+            },
+            prices: [
+              {
+                currency_code: "usd",
+                amount: 8.95,
+              },
+              {
+                region_id: regionUS.id,
+                amount: 8.95,
+              },
+            ],
+            rules: [
+              {
+                attribute: "enabled_in_store",
+                value: "true",
+                operator: "eq",
+              },
+              {
+                attribute: "is_return",
+                value: "false",
+                operator: "eq",
+              },
+            ],
           },
           {
-            region_id: regionUS.id,
-            amount: 8.95,
+            name: "Express Shipping (1-2 days)",
+            price_type: "flat",
+            provider_id: "manual_manual",
+            service_zone_id: serviceZoneNA.id, // North America
+            shipping_profile_id: shippingProfile.id,
+            type: {
+              label: "Express",
+              description: "Delivery in 1-2 business days.",
+              code: "express",
+            },
+            prices: [
+              {
+                currency_code: "usd",
+                amount: 14.95,
+              },
+              {
+                region_id: regionUS.id,
+                amount: 14.95,
+              },
+            ],
+            rules: [
+              {
+                attribute: "enabled_in_store",
+                value: "true",
+                operator: "eq",
+              },
+              {
+                attribute: "is_return",
+                value: "false",
+                operator: "eq",
+              },
+            ],
+          },
+          // Europe shipping options
+          {
+            name: "Standard Shipping (5-7 days)",
+            price_type: "flat",
+            provider_id: "manual_manual",
+            service_zone_id: serviceZoneEU.id, // Europe
+            shipping_profile_id: shippingProfile.id,
+            type: {
+              label: "Standard",
+              description: "Delivery in 5-7 business days.",
+              code: "standard-eu",
+            },
+            prices: [
+              {
+                currency_code: "eur",
+                amount: 12.95,
+              },
+              {
+                region_id: regionEU.id,
+                amount: 12.95,
+              },
+            ],
+            rules: [
+              {
+                attribute: "enabled_in_store",
+                value: "true",
+                operator: "eq",
+              },
+              {
+                attribute: "is_return",
+                value: "false",
+                operator: "eq",
+              },
+            ],
           },
         ],
-        rules: [
-          {
-            attribute: "enabled_in_store",
-            value: "true",
-            operator: "eq",
-          },
-          {
-            attribute: "is_return",
-            value: "false",
-            operator: "eq",
-          },
-        ],
-      },
-      {
-        name: "Express Shipping (1-2 days)",
-        price_type: "flat",
-        provider_id: "manual_manual",
-        service_zone_id: fulfillmentSet.service_zones[0].id, // North America
-        shipping_profile_id: shippingProfile.id,
-        type: {
-          label: "Express",
-          description: "Delivery in 1-2 business days.",
-          code: "express",
-        },
-        prices: [
-          {
-            currency_code: "usd",
-            amount: 14.95,
-          },
-          {
-            region_id: regionUS.id,
-            amount: 14.95,
-          },
-        ],
-        rules: [
-          {
-            attribute: "enabled_in_store",
-            value: "true",
-            operator: "eq",
-          },
-          {
-            attribute: "is_return",
-            value: "false",
-            operator: "eq",
-          },
-        ],
-      },
-      // Europe shipping options
-      {
-        name: "Standard Shipping (5-7 days)",
-        price_type: "flat",
-        provider_id: "manual_manual",
-        service_zone_id: fulfillmentSet.service_zones[1].id, // Europe
-        shipping_profile_id: shippingProfile.id,
-        type: {
-          label: "Standard",
-          description: "Delivery in 5-7 business days.",
-          code: "standard-eu",
-        },
-        prices: [
-          {
-            currency_code: "eur",
-            amount: 12.95,
-          },
-          {
-            region_id: regionEU.id,
-            amount: 12.95,
-          },
-        ],
-        rules: [
-          {
-            attribute: "enabled_in_store",
-            value: "true",
-            operator: "eq",
-          },
-          {
-            attribute: "is_return",
-            value: "false",
-            operator: "eq",
-          },
-        ],
-      },
-    ],
-  });
+      });
+  }
   logger.info("Finished seeding fulfillment data.");
 
   await linkSalesChannelsToStockLocationWorkflow(container).run({
@@ -513,6 +534,7 @@ export default async function seedDemoData({ container }: ExecArgs) {
   logger.info("Finished seeding publishable API key data.");
 
   logger.info("Seeding product data...");
+  const productModuleService = container.resolve(Modules.PRODUCT);
 
   const categories = [
     { name: "Bath Towels", is_active: true },
@@ -521,11 +543,50 @@ export default async function seedDemoData({ container }: ExecArgs) {
     { name: "Accessories", is_active: true },
   ];
 
-  const { result: categoryResult } = await createProductCategoriesWorkflow(container).run({
-    input: {
-      product_categories: categories,
-    },
-  });
+  // Fetch all existing categories first to avoid case sensitivity issues in query
+  // listProductCategories signature: (filters, config)
+  const existingCategories = await productModuleService.listProductCategories({}, { take: 1000 });
+  const existingCategoryMap = new Map(existingCategories.map(c => [(c.name || "").toLowerCase(), c]));
+
+  let allCategories: any[] = [...existingCategories];
+
+  for (const cat of categories) {
+      if (!existingCategoryMap.has(cat.name.toLowerCase())) {
+          try {
+            logger.info(`Creating missing category: ${cat.name}`);
+            const { result } = await createProductCategoriesWorkflow(container).run({
+                input: { product_categories: [cat] }, // Create one by one to isolate failures
+            });
+            allCategories.push(result[0]);
+          } catch (e) {
+              logger.warn(`Failed to create category ${cat.name}, might have been created concurrently or handle conflict.`);
+              // Attempt to fetch it again just in case
+              const [refetched] = await productModuleService.listProductCategories({ name: cat.name });
+              if (refetched) allCategories.push(refetched);
+          }
+      }
+  }
+
+  // Duplicate declaration removed; using 'allCategories' from above
+  // const allCategories = ... (removed)
+
+  // Ensure we have at least one category to assign
+  let fallbackCategory: any;
+  if (allCategories.length > 0) {
+      fallbackCategory = allCategories[0];
+  } else {
+      // Create a fallback one
+       const { result } = await createProductCategoriesWorkflow(container).run({
+            input: { product_categories: [{ name: "General" }] },
+        });
+        fallbackCategory = result[0];
+        allCategories.push(fallbackCategory);
+  }
+
+  const getCategoryId = (name: string) => {
+      const found = allCategories.find(c => c.name?.toLowerCase() === name.toLowerCase());
+      return found ? found.id : fallbackCategory.id;
+  };
 
   await createProductsWorkflow(container).run({
     input: {
@@ -534,7 +595,7 @@ export default async function seedDemoData({ container }: ExecArgs) {
         {
           title: "The Nuzzle",
           category_ids: [
-            categoryResult.find((cat) => cat.name === "Washcloths")!.id,
+            getCategoryId("Washcloths"),
           ],
           description:
             "Our signature washcloth. Gentle enough for a baby, durable enough for daily use. The Nuzzle is woven from 100% long-staple cotton for superior absorbency and softness.",
@@ -604,7 +665,7 @@ export default async function seedDemoData({ container }: ExecArgs) {
         {
           title: "The Cradle",
           category_ids: [
-            categoryResult.find((cat) => cat.name === "Hand Towels")!.id,
+            getCategoryId("Hand Towels"),
           ],
           description:
             "The perfect hand towel. Soft, absorbent, and ready to comfort your hands after every wash. Designed to add a touch of luxury to your powder room.",
@@ -674,7 +735,7 @@ export default async function seedDemoData({ container }: ExecArgs) {
         {
           title: "The Bear Hug",
           category_ids: [
-            categoryResult.find((cat) => cat.name === "Bath Towels")!.id,
+            getCategoryId("Bath Towels"),
           ],
           description:
             "Wrap yourself in a warm embrace with our oversized, ultra-plush bath towel. The Bear Hug provides maximum coverage and maximum comfort for your post-bath ritual.",
@@ -746,7 +807,7 @@ export default async function seedDemoData({ container }: ExecArgs) {
         {
           title: "3 Wool Dryer Balls",
           category_ids: [
-            categoryResult.find((cat) => cat.name === "Accessories")!.id,
+            getCategoryId("Accessories"),
           ],
           description:
             "Reduce drying time and soften fabrics naturally. Comes with 3 balls. Our 100% New Zealand wool dryer balls are the eco-friendly alternative to dryer sheets.",
@@ -820,4 +881,35 @@ export default async function seedDemoData({ container }: ExecArgs) {
   });
 
   logger.info("Finished seeding inventory levels data.");
+
+  logger.info("Seeding promotion data...");
+  const promotionModuleService = container.resolve(Modules.PROMOTION);
+  
+  const existingPromotions = await promotionModuleService.listPromotions({
+    code: "TEST10"
+  });
+
+  if (existingPromotions.length === 0) {
+    await promotionModuleService.createPromotions({
+      code: "TEST10",
+      type: "standard",
+      application_method: {
+        type: "percentage",
+        target_type: "order",
+        value: 10,
+        currency_code: "usd",
+      },
+      rules: [
+        {
+          attribute: "currency_code",
+          operator: "eq",
+          values: ["usd", "eur", "cad"],
+        }
+      ]
+    });
+    logger.info("Created promotion: TEST10 (10% OFF)");
+  } else {
+    logger.info("Using existing promotion: TEST10");
+  }
+  logger.info("Finished seeding promotion data.");
 }
