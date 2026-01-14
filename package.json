@@ -32,8 +32,8 @@
   "dependencies": {
     "@react-native-async-storage/async-storage": "^2.2.0",
     "fetch-event-stream": "0.1.6",
-    "posthog-react-native": "^4.17.1",
-    "preact": "10.27.3",
+    "posthog-react-native": "^4.18.0",
+    "preact": "10.28.2",
     "qs": "6.14.1",
     "react-native-device-info": "^15.0.1",
     "react-native-localize": "^3.6.1"
@@ -44,7 +44,7 @@
   "pnpm": {
     "overrides": {
       "jws": "3.2.3",
-      "preact": "10.27.3",
+      "preact": "10.28.2",
       "@remix-run/router": "1.23.2",
       "apps-storefront>react-router": "7.12.0",
       "apps-storefront>react-router-dom": "7.12.0",
