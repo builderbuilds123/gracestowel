@@ -61,18 +61,18 @@ export interface CampaignBudget {
 
 export interface LineItemAdjustment {
   id: string;
-  item_id: string;
+  item_id?: string;
   amount: number;
-  promotion_id: string;
+  promotion_id?: string;
   code?: string | null;
   description?: string;
 }
 
 export interface ShippingMethodAdjustment {
   id: string;
-  shipping_method_id: string;
+  shipping_method_id?: string;
   amount: number;
-  promotion_id: string;
+  promotion_id?: string;
   code?: string | null;
   description?: string;
 }
@@ -81,4 +81,21 @@ export interface AppliedPromoCode {
   code: string;
   discount: number;
   description?: string;
+}
+
+/**
+ * Cart with promotion adjustments
+ * Used for extracting applied promo codes from cart response
+ */
+export interface CartWithPromotions {
+  id: string;
+  discount_total?: number;
+  items?: Array<{
+    id: string;
+    adjustments?: LineItemAdjustment[];
+  }>;
+  shipping_methods?: Array<{
+    id: string;
+    adjustments?: ShippingMethodAdjustment[];
+  }>;
 }
