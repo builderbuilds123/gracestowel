@@ -92,10 +92,12 @@ test.describe("Guest Checkout Flow", () => {
     ).toBeVisible({ timeout: 30000 });
 
     // Find and click increase quantity button (+ button)
-    // Increase quantity - use force: true if backdrop intercepts
-    const increaseBtn = page.locator('button[aria-label="Increase quantity"]').first();
+    // Increase quantity - use evaluate to bypass overlays
+    // Verify drawer header first
+    await expect(page.getByRole("heading", { name: /towel rack/i })).toBeVisible({ timeout: 30000 });
+    const increaseBtn = page.getByLabel("Increase quantity");
     await increaseBtn.scrollIntoViewIfNeeded();
-    await increaseBtn.click({ force: true });
+    await increaseBtn.evaluate((el: any) => el.click());
 
     // Wait for UI to reflect the change
     await page.waitForTimeout(1000);

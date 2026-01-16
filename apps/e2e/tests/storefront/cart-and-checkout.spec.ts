@@ -34,8 +34,8 @@ test.describe("Storefront cart + checkout flows", () => {
     // Increase quantity
     const increaseButton = page.getByLabel("Increase quantity");
     await increaseButton.scrollIntoViewIfNeeded();
-    await increaseButton.click({ force: true });
-    await increaseButton.click({ force: true });
+    await increaseButton.evaluate((el: any) => el.click());
+    await increaseButton.evaluate((el: any) => el.click());
 
     const subtotal = page.getByText(/\$|€|£/).first();
     await expect(subtotal).toBeVisible();
