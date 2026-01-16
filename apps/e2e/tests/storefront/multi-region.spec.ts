@@ -9,6 +9,34 @@ test.describe("Multi-Region Flow", () => {
   const STORAGE_KEY_REGION = "medusa_region_id";
   const PRODUCT_HANDLE = "the-nuzzle";
 
+  /**
+   * Helper function to wait for region to be set in localStorage
+   * Uses polling instead of fixed timeout for CI reliability
+   */
+  async function waitForRegionToBeSet(page: import("@playwright/test").Page, timeout = 15000): Promise<string | null> {
+    return page.evaluate(
+      async ({ key, timeout }) => {
+        const startTime = Date.now();
+        while (Date.now() - startTime < timeout) {
+          const stored = localStorage.getItem(key);
+          if (stored) {
+            try {
+              const parsed = JSON.parse(stored);
+              if (parsed && typeof parsed === "string" && parsed.startsWith("reg_")) {
+                return parsed;
+              }
+            } catch {
+              // Ignore parse errors
+            }
+          }
+          await new Promise((resolve) => setTimeout(resolve, 500));
+        }
+        return null;
+      },
+      { key: STORAGE_KEY_REGION, timeout }
+    );
+  }
+
   test.beforeEach(async ({ page }) => {
     // Clear localStorage to start fresh
     await page.goto("/");
@@ -24,14 +52,8 @@ test.describe("Multi-Region Flow", () => {
       await page.goto("/");
       await page.waitForLoadState("domcontentloaded");
 
-      // Wait for regions to load and default to be set
-      await page.waitForTimeout(2000);
-
-      // Check localStorage for region ID
-      const regionId = await page.evaluate((key) => {
-        const stored = localStorage.getItem(key);
-        return stored ? JSON.parse(stored) : null;
-      }, STORAGE_KEY_REGION);
+      // Wait for region to be set (with polling)
+      const regionId = await waitForRegionToBeSet(page);
 
       // Region ID should be set (we don't know the exact value)
       expect(regionId).toBeTruthy();
@@ -43,14 +65,9 @@ test.describe("Multi-Region Flow", () => {
       // Visit home page
       await page.goto("/");
       await page.waitForLoadState("domcontentloaded");
-      await page.waitForTimeout(2000);
 
-      // Get the initial region ID
-      const initialRegionId = await page.evaluate((key) => {
-        const stored = localStorage.getItem(key);
-        return stored ? JSON.parse(stored) : null;
-      }, STORAGE_KEY_REGION);
-
+      // Wait for region to be set
+      const initialRegionId = await waitForRegionToBeSet(page);
       expect(initialRegionId).toBeTruthy();
 
       // Navigate to products page
@@ -71,20 +88,15 @@ test.describe("Multi-Region Flow", () => {
       // Visit home page
       await page.goto("/");
       await page.waitForLoadState("domcontentloaded");
-      await page.waitForTimeout(2000);
 
-      // Get the initial region ID
-      const initialRegionId = await page.evaluate((key) => {
-        const stored = localStorage.getItem(key);
-        return stored ? JSON.parse(stored) : null;
-      }, STORAGE_KEY_REGION);
-
+      // Wait for region to be set
+      const initialRegionId = await waitForRegionToBeSet(page);
       expect(initialRegionId).toBeTruthy();
 
       // Refresh the page
       await page.reload();
       await page.waitForLoadState("domcontentloaded");
-      await page.waitForTimeout(1000);
+      await page.waitForTimeout(1000); // Brief wait for React to hydrate
 
       // Get region ID after refresh
       const regionAfterRefresh = await page.evaluate((key) => {
@@ -102,14 +114,9 @@ test.describe("Multi-Region Flow", () => {
       // Navigate and wait for region to be set
       await page.goto(`/products/${PRODUCT_HANDLE}`);
       await page.waitForLoadState("domcontentloaded");
-      await page.waitForTimeout(2000);
 
-      // Get the region ID
-      const regionId = await page.evaluate((key) => {
-        const stored = localStorage.getItem(key);
-        return stored ? JSON.parse(stored) : null;
-      }, STORAGE_KEY_REGION);
-
+      // Wait for region to be set
+      const regionId = await waitForRegionToBeSet(page);
       expect(regionId).toBeTruthy();
 
       // Set up network monitoring for cart creation
@@ -119,11 +126,11 @@ test.describe("Multi-Region Flow", () => {
 
       // Add product to cart
       const addToCartButton = page.getByRole("button", { name: /hang it up|add to cart/i }).first();
-      await expect(addToCartButton).toBeVisible({ timeout: 10000 });
+      await expect(addToCartButton).toBeVisible({ timeout: 15000 });
       await addToCartButton.evaluate((node: any) => node.click());
 
       // Wait for cart count to update
-      await expect(page.getByTestId("nav-cart-count")).not.toHaveText("0", { timeout: 10000 });
+      await expect(page.getByTestId("nav-cart-count")).not.toHaveText("0", { timeout: 15000 });
 
       // Navigate to checkout to trigger cart sync
       await page.goto("/checkout");
@@ -154,15 +161,18 @@ test.describe("Multi-Region Flow", () => {
       // Navigate to product and add to cart
       await page.goto(`/products/${PRODUCT_HANDLE}`);
       await page.waitForLoadState("domcontentloaded");
-      await page.waitForTimeout(2000);
+
+      // Wait for region to be set
+      const regionId = await waitForRegionToBeSet(page);
+      expect(regionId).toBeTruthy();
 
       // Add product to cart
       const addToCartButton = page.getByRole("button", { name: /hang it up|add to cart/i }).first();
-      await expect(addToCartButton).toBeVisible({ timeout: 10000 });
+      await expect(addToCartButton).toBeVisible({ timeout: 15000 });
       await addToCartButton.evaluate((node: any) => node.click());
 
       // Wait for cart count to update
-      await expect(page.getByTestId("nav-cart-count")).not.toHaveText("0", { timeout: 10000 });
+      await expect(page.getByTestId("nav-cart-count")).not.toHaveText("0", { timeout: 15000 });
 
       // Navigate to checkout
       await page.goto("/checkout");
@@ -186,7 +196,7 @@ test.describe("Multi-Region Flow", () => {
 
       // Look for currency selector button (typically shows current currency)
       const currencyButton = page.getByRole("button", { name: /\$\s*(CAD|USD)/i });
-      await expect(currencyButton).toBeVisible({ timeout: 10000 });
+      await expect(currencyButton).toBeVisible({ timeout: 15000 });
     });
   });
 
@@ -195,13 +205,15 @@ test.describe("Multi-Region Flow", () => {
       // Add product to cart
       await page.goto(`/products/${PRODUCT_HANDLE}`);
       await page.waitForLoadState("domcontentloaded");
-      await page.waitForTimeout(2000);
+
+      // Wait for region to be set
+      await waitForRegionToBeSet(page);
 
       const addToCartButton = page.getByRole("button", { name: /hang it up|add to cart/i }).first();
-      await expect(addToCartButton).toBeVisible({ timeout: 10000 });
+      await expect(addToCartButton).toBeVisible({ timeout: 15000 });
       await addToCartButton.evaluate((node: any) => node.click());
 
-      await expect(page.getByTestId("nav-cart-count")).not.toHaveText("0", { timeout: 10000 });
+      await expect(page.getByTestId("nav-cart-count")).not.toHaveText("0", { timeout: 15000 });
 
       // Navigate to checkout
       await page.goto("/checkout");
