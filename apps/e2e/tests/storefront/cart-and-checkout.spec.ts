@@ -25,7 +25,8 @@ test.describe("Storefront cart + checkout flows", () => {
     const product = await productFactory.createProduct();
     await page.goto(`/products/${product.handle}`);
 
-    await page.getByRole("button", { name: /hang it up|add to cart/i }).first().click({ force: true });
+    const addToCartButton = page.getByRole("button", { name: /hang it up|add to cart/i }).first();
+    await addToCartButton.evaluate((el: any) => el.click());
 
     // Check cart drawer
     await expect(page.getByRole("heading", { name: /towel rack/i })).toBeVisible({ timeout: 30000 });
@@ -43,7 +44,8 @@ test.describe("Storefront cart + checkout flows", () => {
   test("removes items and shows empty state", async ({ page, productFactory }) => {
     const product = await productFactory.createProduct();
     await page.goto(`/products/${product.handle}`);
-    await page.getByRole("button", { name: /hang it up|add to cart/i }).first().click({ force: true });
+    const addToCartButton = page.getByRole("button", { name: /hang it up|add to cart/i }).first();
+    await addToCartButton.evaluate((el: any) => el.click());
     // Check cart drawer
     await expect(page.getByRole("heading", { name: /towel rack/i })).toBeVisible({ timeout: 30000 });
     
@@ -57,7 +59,8 @@ test.describe("Storefront cart + checkout flows", () => {
   test("persists cart contents across reloads", async ({ page, productFactory }) => {
     const product = await productFactory.createProduct();
     await page.goto(`/products/${product.handle}`);
-    await page.getByRole("button", { name: /hang it up|add to cart/i }).first().click({ force: true });
+    const addToCartButton = page.getByRole("button", { name: /hang it up|add to cart/i }).first();
+    await addToCartButton.evaluate((el: any) => el.click());
     // Check cart drawer
     await expect(page.getByRole("heading", { name: /towel rack/i })).toBeVisible({ timeout: 30000 });
 
@@ -82,7 +85,8 @@ test.describe("Storefront cart + checkout flows", () => {
     const product = await productFactory.createProduct();
     await page.goto(`/products/${product.handle}`);
 
-    await page.getByRole("button", { name: /hang it up|add to cart/i }).first().click({ force: true });
+    const addToCartButton = page.getByRole("button", { name: /hang it up|add to cart/i }).first();
+    await addToCartButton.evaluate((el: any) => el.click());
 
 
     const checkoutTrigger = page

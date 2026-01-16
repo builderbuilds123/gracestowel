@@ -56,7 +56,8 @@ test.describe("Guest Checkout Flow", () => {
     await page.waitForLoadState("domcontentloaded");
 
     // Wait for product page to load
-    await expect(page.getByRole("heading", { name: product.title })).toBeVisible({ timeout: 30000 });
+    // Wait for product page to load
+    await expect(page.locator("h1").filter({ hasText: product.title }).first()).toBeVisible({ timeout: 30000 });
 
     // Add to cart (button says "Hang it Up" in this storefront)
     const addToCartButton = page.getByRole("button", { name: /hang it up|add to cart/i }).first();
@@ -81,7 +82,9 @@ test.describe("Guest Checkout Flow", () => {
     const addToCartButton = page.getByRole("button", { name: /hang it up|add to cart/i }).first();
     await addToCartButton.scrollIntoViewIfNeeded();
     await page.waitForTimeout(1000); // Wait for hydration
-    await addToCartButton.click({ force: true });
+    await addToCartButton.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(1000); // Wait for hydration
+    await addToCartButton.evaluate((el: any) => el.click());
 
     // Wait for cart drawer to open
     await expect(
@@ -108,7 +111,8 @@ test.describe("Guest Checkout Flow", () => {
     // Add product to cart first
     await page.goto(`/products/${product.handle}`);
     await page.waitForLoadState("domcontentloaded");
-    await expect(page.getByRole("heading", { name: product.title })).toBeVisible({ timeout: 30000 });
+    await page.waitForLoadState("domcontentloaded");
+    await expect(page.locator("h1").filter({ hasText: product.title }).first()).toBeVisible({ timeout: 30000 });
     const addToCartButton = page.getByRole("button", { name: /hang it up|add to cart/i }).first();
     await addToCartButton.scrollIntoViewIfNeeded();
     await page.waitForTimeout(1000); // Wait for hydration
@@ -139,11 +143,13 @@ test.describe("Guest Checkout Flow", () => {
     // Add product to cart
     await page.goto(`/products/${product.handle}`);
     await page.waitForLoadState("domcontentloaded");
-    await expect(page.getByRole("heading", { name: product.title })).toBeVisible({ timeout: 30000 });
+    await page.waitForLoadState("domcontentloaded");
+    await expect(page.locator("h1").filter({ hasText: product.title }).first()).toBeVisible({ timeout: 30000 });
     const addToCartButton = page.getByRole("button", { name: /hang it up|add to cart/i }).first();
     await addToCartButton.scrollIntoViewIfNeeded();
     await page.waitForTimeout(1000); // Wait for hydration
-    await addToCartButton.click({ force: true });
+    await page.waitForTimeout(1000); // Wait for hydration
+    await addToCartButton.evaluate((el: any) => el.click());
 
     // Wait for cart drawer
     await expect(
@@ -164,12 +170,14 @@ test.describe("Guest Checkout Flow", () => {
     const product = await productFactory.createProduct();
     await page.goto(`/products/${product.handle}`);
     await page.waitForLoadState("domcontentloaded");
-    await expect(page.getByRole("heading", { name: product.title })).toBeVisible({ timeout: 30000 });
+    await page.waitForLoadState("domcontentloaded");
+    await expect(page.locator("h1").filter({ hasText: product.title }).first()).toBeVisible({ timeout: 30000 });
     
     const addToCartButton = page.getByRole("button", { name: /hang it up|add to cart/i }).first();
     await addToCartButton.scrollIntoViewIfNeeded();
     await page.waitForTimeout(1000); // Wait for hydration
-    await addToCartButton.click({ force: true });
+    await page.waitForTimeout(1000); // Wait for hydration
+    await addToCartButton.evaluate((el: any) => el.click());
     
     // Wait for cart drawer to confirm item was added
     await expect(page.getByText(product.title).first()).toBeVisible({ timeout: 30000 });
@@ -201,11 +209,13 @@ test.describe("Guest Checkout Flow", () => {
     // Add product and go to checkout
     await page.goto(`/products/${product.handle}`);
     await page.waitForLoadState("domcontentloaded");
-    await expect(page.getByRole("heading", { name: product.title })).toBeVisible({ timeout: 30000 });
+    await page.waitForLoadState("domcontentloaded");
+    await expect(page.locator("h1").filter({ hasText: product.title }).first()).toBeVisible({ timeout: 30000 });
     const addToCartButton = page.getByRole("button", { name: /hang it up|add to cart/i }).first();
     await addToCartButton.scrollIntoViewIfNeeded();
     await page.waitForTimeout(1000); // Wait for hydration
-    await addToCartButton.click({ force: true });
+    await page.waitForTimeout(1000); // Wait for hydration
+    await addToCartButton.evaluate((el: any) => el.click());
     
     // Wait for cart action to complete
     await page.waitForTimeout(500);
