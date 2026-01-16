@@ -25,3 +25,6 @@ export { useFeedbackSubmit } from "./useFeedbackSubmit";
 export { usePromoCode } from "./usePromoCode";
 export { useAutomaticPromotions } from "./useAutomaticPromotions";
 
+// Region management (MULTI-REGION)
+export { useRegions, clearRegionsCache, type MedusaRegion } from "./useRegions";
+

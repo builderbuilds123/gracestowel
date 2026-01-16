@@ -1,5 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { monitoredFetch } from "../utils/monitored-fetch";
+
+// Check if in development mode
+const isDevelopment = import.meta.env.MODE === 'development';
 
 /**
  * Medusa API configuration
@@ -35,6 +38,15 @@ export interface MedusaProduct {
     metadata?: Record<string, unknown>;
 }
 
+interface UseMedusaProductsOptions {
+    /** Region ID to fetch region-specific pricing */
+    regionId?: string | null;
+    /** Limit number of products */
+    limit?: number;
+    /** Offset for pagination */
+    offset?: number;
+}
+
 interface UseMedusaProductsResult {
     products: MedusaProduct[];
     isLoading: boolean;
@@ -51,18 +63,34 @@ interface UseMedusaProductResult {
 
 /**
  * Fetch all products from Medusa Store API
+ * @param options - Optional configuration including regionId for pricing
  */
-export function useMedusaProducts(): UseMedusaProductsResult {
+export function useMedusaProducts(options: UseMedusaProductsOptions = {}): UseMedusaProductsResult {
+    const { regionId, limit, offset } = options;
     const [products, setProducts] = useState<MedusaProduct[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<Error | null>(null);
 
-    const fetchProducts = async () => {
+    const fetchProducts = useCallback(async () => {
         setIsLoading(true);
         setError(null);
         
         try {
-            const response = await monitoredFetch(`${MEDUSA_API_URL}/store/products`, {
+            // Build query params
+            const params = new URLSearchParams();
+            if (regionId) {
+                params.append('region_id', regionId);
+                if (isDevelopment) {
+                    console.log('[useMedusaProducts] Fetching with region_id:', regionId);
+                }
+            }
+            if (limit) params.append('limit', limit.toString());
+            if (offset) params.append('offset', offset.toString());
+            
+            const queryString = params.toString();
+            const url = `${MEDUSA_API_URL}/store/products${queryString ? `?${queryString}` : ''}`;
+
+            const response = await monitoredFetch(url, {
                 headers: {
                     "Content-Type": "application/json",
                 },
@@ -82,24 +110,32 @@ export function useMedusaProducts(): UseMedusaProductsResult {
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [regionId, limit, offset]);
 
     useEffect(() => {
         fetchProducts();
-    }, []);
+    }, [fetchProducts]);
 
     return { products, isLoading, error, refetch: fetchProducts };
 }
 
+interface UseMedusaProductOptions {
+    /** Region ID to fetch region-specific pricing */
+    regionId?: string | null;
+}
+
 /**
  * Fetch a single product by handle from Medusa Store API
+ * @param handle - Product handle to fetch
+ * @param options - Optional configuration including regionId for pricing
  */
-export function useMedusaProduct(handle: string): UseMedusaProductResult {
+export function useMedusaProduct(handle: string, options: UseMedusaProductOptions = {}): UseMedusaProductResult {
+    const { regionId } = options;
     const [product, setProduct] = useState<MedusaProduct | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<Error | null>(null);
 
-    const fetchProduct = async () => {
+    const fetchProduct = useCallback(async () => {
         if (!handle) {
             setIsLoading(false);
             return;
@@ -109,16 +145,25 @@ export function useMedusaProduct(handle: string): UseMedusaProductResult {
         setError(null);
 
         try {
-            const response = await monitoredFetch(
-                `${MEDUSA_API_URL}/store/products?handle=${encodeURIComponent(handle)}`,
-                {
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    credentials: "include",
-                    label: "medusa-product-by-handle",
+            // Build query params
+            const params = new URLSearchParams();
+            params.append('handle', handle);
+            if (regionId) {
+                params.append('region_id', regionId);
+                if (isDevelopment) {
+                    console.log('[useMedusaProduct] Fetching with region_id:', regionId);
                 }
-            );
+            }
+
+            const url = `${MEDUSA_API_URL}/store/products?${params.toString()}`;
+
+            const response = await monitoredFetch(url, {
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                credentials: "include",
+                label: "medusa-product-by-handle",
+            });
 
             if (!response.ok) {
                 throw new Error(`Failed to fetch product: ${response.status}`);
@@ -132,11 +177,11 @@ export function useMedusaProduct(handle: string): UseMedusaProductResult {
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [handle, regionId]);
 
     useEffect(() => {
         fetchProduct();
-    }, [handle]);
+    }, [fetchProduct]);
 
     return { product, isLoading, error, refetch: fetchProduct };
 }
@@ -177,4 +222,3 @@ export function getPriceAmount(
 
     return price ? price.amount / 100 : 0;
 }
-

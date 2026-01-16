@@ -30,5 +30,13 @@ export default defineConfig({
   esbuild: {
     jsx: "automatic",
   },
+  // Pre-bundle dependencies that are dynamically imported to prevent
+  // Vite from triggering hot reload during user flows (e.g., checkout)
+  optimizeDeps: {
+    include: [
+      "react-leaflet",
+      "leaflet",
+    ],
+  },
 });
 

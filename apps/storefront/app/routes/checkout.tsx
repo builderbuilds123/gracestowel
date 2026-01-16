@@ -47,8 +47,8 @@ export default function Checkout() {
     }
   }, [stripePublishableKey]);
 
-  const { items, cartTotal, updateQuantity, removeFromCart } = useCart();
-  const { currency } = useLocale(); // Verify currency is obtained here
+  const { items, cartTotal, updateQuantity, removeFromCart, isLoaded } = useCart();
+  const { currency, regionId } = useLocale(); // MULTI-REGION: Get both currency and regionId
   const { customer, isAuthenticated } = useCustomer();
 
   // Guest email state
@@ -137,6 +137,9 @@ export default function Checkout() {
     if (typeof window !== 'undefined') {
       if (cartId) {
         sessionStorage.setItem('medusa_cart_id', cartId);
+        if (isDevelopment) {
+          console.log('[Checkout] cartId changed:', cartId);
+        }
       } else {
         // We generally don't remove it unless explicitly expired, but if cartId becomes undefined
         // it means we lost context.
@@ -239,6 +242,7 @@ export default function Checkout() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            region_id: regionId, // MULTI-REGION: Pass explicit region from LocaleContext
             currency,
             country_code: address?.address?.country,
           }),
@@ -292,12 +296,20 @@ export default function Checkout() {
           const error = await updateResponse.json() as { error: string; details?: string; code?: string };
           console.error('[Checkout] Step 2 FAILED - Cart update:', error);
           
-          // Handle region mismatch - need to create new cart
+          // Handle region mismatch - display error instead of creating new cart
+          // CRITICAL: Do NOT reset cartId here as it causes paymentCollectionId reset
+          // and Elements remount, clearing all form inputs
           if (error.code === 'REGION_MISMATCH') {
-            console.log('[Checkout] Region mismatch detected, creating new cart...');
-            setCartId(undefined);
-            // Retry with new cart on next call
-            throw new Error(`Region mismatch: ${error.details}`);
+            if (isDevelopment) {
+              console.log('[Checkout] Region mismatch detected:', {
+                code: error.code,
+                details: error.details,
+                action: 'Displaying error without resetting cart to preserve form state',
+              });
+            }
+            setCartSyncError(`This country is not available for your cart region. Please select a different shipping address.`);
+            // Don't throw - let user correct the address
+            return;
           }
 
           // Handle Inventory Errors
@@ -477,6 +489,15 @@ export default function Checkout() {
       },
     ],
   } : null;
+
+  // Show loading spinner while cart is being loaded from localStorage
+  if (!isLoaded) {
+    return (
+      <div className="min-h-screen bg-card-earthy/10 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent-earthy"></div>
+      </div>
+    );
+  }
 
   if (cartTotal <= 0) {
     return (
