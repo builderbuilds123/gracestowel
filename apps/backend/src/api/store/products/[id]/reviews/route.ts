@@ -5,16 +5,32 @@ import type ReviewModuleService from "../../../../../modules/review/service"
 
 /**
  * Sanitize user input to prevent XSS attacks
- * Strips HTML tags and trims whitespace
+ * Decodes HTML entities first, then strips HTML tags
+ * Order matters: decode entities BEFORE stripping tags to prevent bypass
  */
 function sanitizeInput(input: string): string {
-  // Remove HTML tags (basic XSS prevention)
-  return input
-    .replace(/<[^>]*>/g, "")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&amp;/g, "&")
-    .trim()
+  // First decode HTML entities to their literal characters
+  // This prevents bypass via encoded tags like &lt;script&gt;
+  let result = input
+
+  // Decode entities in a loop until no more changes occur
+  // This handles double-encoding attacks
+  let previous: string
+  do {
+    previous = result
+    result = result
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&amp;/g, "&")
+      .replace(/&quot;/g, '"')
+      .replace(/&#x27;/g, "'")
+      .replace(/&#39;/g, "'")
+  } while (result !== previous)
+
+  // Now strip HTML tags after all entities are decoded
+  result = result.replace(/<[^>]*>/g, "")
+
+  return result.trim()
 }
 
 /**
