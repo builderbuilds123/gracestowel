@@ -27,7 +27,7 @@ import { useCart } from "../context/CartContext";
 import { getMedusaClient, castToMedusaProduct, type MedusaProduct, getBackendUrl, getStockStatus, validateMedusaProduct, getDefaultRegion } from "../lib/medusa";
 import { transformToDetail, type ProductDetail } from "../lib/product-transformer";
 import { monitoredFetch } from "../utils/monitored-fetch";
-import { sanitizeDisplayText } from "../utils/sanitize-text";
+
 
 
 // SEO Meta tags for product pages
