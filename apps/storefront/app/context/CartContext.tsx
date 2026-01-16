@@ -9,6 +9,7 @@ export type { CartItem, EmbroideryData } from '../types/product';
 interface CartContextType {
     items: CartItem[];
     isOpen: boolean;
+    isLoaded: boolean;
     addToCart: (item: Omit<CartItem, 'quantity'> & { quantity?: number }) => void;
     removeFromCart: (id: ProductId, color?: string) => void;
     updateQuantity: (id: ProductId, quantity: number, color?: string, variantId?: string) => void;
@@ -22,6 +23,7 @@ const CartContext = createContext<CartContextType | undefined>(undefined);
 export function CartProvider({ children }: { children: React.ReactNode }) {
     const [items, setItems] = useState<CartItem[]>([]);
     const [isOpen, setIsOpen] = useState(false);
+    const [isLoaded, setIsLoaded] = useState(false);
 
     // Validate cart item integrity
     const validateCartItem = (item: any): boolean => {
@@ -51,6 +53,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
                 localStorage.removeItem('cart');
             }
         }
+        setIsLoaded(true);
     }, []);
 
     // Save cart to local storage whenever it changes
@@ -118,7 +121,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     const cartTotal = calculateTotal(items);
 
     return (
-        <CartContext.Provider value={{ items, isOpen, addToCart, removeFromCart, updateQuantity, toggleCart, clearCart, cartTotal }}>
+        <CartContext.Provider value={{ items, isOpen, isLoaded, addToCart, removeFromCart, updateQuantity, toggleCart, clearCart, cartTotal }}>
             {children}
         </CartContext.Provider>
     );
