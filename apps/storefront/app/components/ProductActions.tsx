@@ -9,28 +9,13 @@ import { useState } from "react";
 import { Sparkles } from "lucide-react";
 import { Towel } from "@phosphor-icons/react";
 import { EmbroideryCustomizer } from "./EmbroideryCustomizer";
+import { SafeImage } from "./SafeImage";
 import { useCart } from "../context/CartContext";
 import { useLocale } from "../context/LocaleContext";
 import type { EmbroideryData } from "../types/product";
 
-/**
- * Validate that an image source is safe (data URL or HTTPS)
- * Prevents javascript: and other dangerous URL schemes (XSS prevention)
- */
-function isSafeImageSrc(src: string): boolean {
-    if (!src) return false;
-    // Allow data URLs (base64 images from canvas)
-    if (src.startsWith('data:image/')) return true;
-    // Allow HTTPS URLs only
-    if (src.startsWith('https://')) return true;
-    return false;
-}
-
 // Embroidery Preview Sub-component
 function EmbroideryPreview({ data, onEdit }: { data: EmbroideryData; onEdit: () => void }) {
-    // Validate image source to prevent XSS via javascript: URLs
-    const safeImageSrc = data.type === 'drawing' && isSafeImageSrc(data.data) ? data.data : null;
-
     return (
         <div className="mt-4 p-4 bg-accent-earthy/5 border-2 border-accent-earthy/20 rounded-lg">
             <div className="flex items-center justify-between mb-3">
@@ -60,17 +45,18 @@ function EmbroideryPreview({ data, onEdit }: { data: EmbroideryData; onEdit: () 
                 >
                     {data.data}
                 </div>
-            ) : safeImageSrc ? (
+            ) : (
                 <div className="flex justify-center">
-                    <img
-                        src={safeImageSrc}
+                    <SafeImage
+                        src={data.data}
                         alt="Custom embroidery drawing"
                         className="max-w-full h-32 rounded border border-gray-200"
+                        fallback={
+                            <span className="text-gray-500 text-sm py-4">
+                                Drawing preview unavailable
+                            </span>
+                        }
                     />
-                </div>
-            ) : (
-                <div className="flex justify-center text-gray-500 text-sm py-4">
-                    Drawing preview unavailable
                 </div>
             )}
         </div>

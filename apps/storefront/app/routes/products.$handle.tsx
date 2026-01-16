@@ -21,6 +21,9 @@ import {
   StickyPurchaseBar,
 } from "../components/product-experience";
 
+// Safe image component for XSS prevention
+import { SafeImage } from "../components/SafeImage";
+
 import { useCart } from "../context/CartContext";
 import { getMedusaClient, castToMedusaProduct, type MedusaProduct, getBackendUrl, getStockStatus, validateMedusaProduct, getDefaultRegion } from "../lib/medusa";
 import { transformToDetail, type ProductDetail } from "../lib/product-transformer";
@@ -424,10 +427,15 @@ export default function ProductDetail({ loaderData }: Route.ComponentProps) {
                                         {embroideryData.data}
                                     </div>
                                 ) : (
-                                    <img
+                                    <SafeImage
                                         src={embroideryData.data}
                                         alt="Custom embroidery drawing"
                                         className="max-w-full h-24 mx-auto rounded"
+                                        fallback={
+                                            <span className="text-gray-500 text-sm">
+                                                Drawing preview unavailable
+                                            </span>
+                                        }
                                     />
                                 )}
                             </div>
