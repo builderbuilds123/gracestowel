@@ -20,6 +20,27 @@ beforeAll(() => {
       dispatchEvent: vi.fn(),
     })),
   });
+
+  // Mock IntersectionObserver for JSDOM environment
+  class MockIntersectionObserver {
+    observe = vi.fn();
+    unobserve = vi.fn();
+    disconnect = vi.fn();
+    root = null;
+    rootMargin = '';
+    thresholds = [];
+    constructor(callback: IntersectionObserverCallback, options?: IntersectionObserverInit) {}
+  }
+  Object.defineProperty(window, 'IntersectionObserver', {
+    writable: true,
+    configurable: true,
+    value: MockIntersectionObserver,
+  });
+  Object.defineProperty(global, 'IntersectionObserver', {
+    writable: true,
+    configurable: true,
+    value: MockIntersectionObserver,
+  });
 });
 
 // Mock dependencies
