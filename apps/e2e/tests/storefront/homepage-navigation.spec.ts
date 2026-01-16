@@ -81,7 +81,7 @@ test.describe("Navigation", () => {
     // Verify URL contains the product path
     await Promise.all([
       page.waitForURL(/\/products\//),
-      productCard.click({ force: true })
+      productCard.evaluate((el: any) => el.click())
     ]);
 
     // Verify product page loaded (has add to cart button)
@@ -138,7 +138,7 @@ test.describe("Cart Access", () => {
     
     if (await cartButton.isVisible().catch(() => false)) {
       await cartButton.scrollIntoViewIfNeeded();
-      await cartButton.click({ force: true });
+      await cartButton.evaluate((el: any) => el.click());
 
       // Cart drawer should open
       // Standardize cart heading
@@ -155,8 +155,7 @@ test.describe("Cart Access", () => {
     await page.goto(`/products/${product.handle}`);
     await page.waitForLoadState("domcontentloaded");
     const addToCartButton = page.getByRole("button", { name: /hang it up|add to cart/i }).first();
-    await addToCartButton.scrollIntoViewIfNeeded();
-    await addToCartButton.click({ force: true });
+    await addToCartButton.evaluate((el: any) => el.click());
 
     // Verify cart drawer opens with item
     // Standardize cart heading

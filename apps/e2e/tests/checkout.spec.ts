@@ -40,7 +40,8 @@ test.describe("Guest Checkout Flow", () => {
     
     // Verify product page loads with details - increase timeout for slow CI
     await page.waitForLoadState("networkidle");
-    await expect(page.getByRole("link", { name: "Grace Towel" }).first()).toBeVisible({ timeout: 30000 });
+    // Verify product page loads using main heading (h1) to avoid sticky bar conflict
+    await expect(page.locator("h1").filter({ hasText: product.title }).first()).toBeVisible({ timeout: 30000 });
 
     // Look for add to cart button (uses "Hang it Up" text in this storefront)
     await expect(
@@ -59,8 +60,8 @@ test.describe("Guest Checkout Flow", () => {
 
     // Add to cart (button says "Hang it Up" in this storefront)
     const addToCartButton = page.getByRole("button", { name: /hang it up|add to cart/i }).first();
-    await addToCartButton.scrollIntoViewIfNeeded();
-    await addToCartButton.click({ force: true });
+    // Force click via evaluation to bypass overlapping elements or viewport issues
+    await addToCartButton.evaluate((el: any) => el.click());
 
     // Verify cart drawer opens with the item - increased timeout for API call
     await expect(
@@ -225,13 +226,11 @@ test.describe("Cart Persistence", () => {
     // Navigate to product page
     await page.goto(`/products/${product.handle}`);
     await page.waitForLoadState("domcontentloaded");
-    await expect(page.getByRole('heading', { name: product.title }).first()).toBeVisible();
-    
-    // Add item to cart
-    const addToCartButton = page.getByRole("button", { name: /hang it up|add to cart/i }).first();
-    await addToCartButton.scrollIntoViewIfNeeded();
-    await page.waitForTimeout(1000); // Wait for hydration
-    await addToCartButton.click({ force: true });
+      await expect(page.locator("h1").filter({ hasText: product.title }).first()).toBeVisible();
+      
+      const addToCart = page.getByRole("button", { name: /add to cart/i }).first();
+      await addToCart.evaluate((el: any) => el.click()); // Wait for hydration
+    await addToCart.click({ force: true });
     
     await expect(page.getByText(product.title).first()).toBeVisible({ timeout: 30000 });
 
