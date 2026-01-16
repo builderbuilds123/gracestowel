@@ -5,12 +5,14 @@ import type ReviewModuleService from "../../../../../modules/review/service"
 
 /**
  * Sanitize user input to prevent XSS attacks
- * Decodes HTML entities first, then strips HTML tags
- * Order matters: decode entities BEFORE stripping tags to prevent bypass
+ * Uses multiple layers of protection:
+ * 1. Decode HTML entities to literal characters
+ * 2. Explicitly block dangerous patterns (script, event handlers)
+ * 3. Strip all HTML tags
  */
 function sanitizeInput(input: string): string {
-  // First decode HTML entities to their literal characters
-  // This prevents bypass via encoded tags like &lt;script&gt;
+  if (!input || typeof input !== "string") return ""
+
   let result = input
 
   // Decode entities in a loop until no more changes occur
@@ -19,15 +21,33 @@ function sanitizeInput(input: string): string {
   do {
     previous = result
     result = result
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&amp;/g, "&")
-      .replace(/&quot;/g, '"')
-      .replace(/&#x27;/g, "'")
-      .replace(/&#39;/g, "'")
+      .replace(/&lt;/gi, "<")
+      .replace(/&gt;/gi, ">")
+      .replace(/&amp;/gi, "&")
+      .replace(/&quot;/gi, '"')
+      .replace(/&#x27;/gi, "'")
+      .replace(/&#39;/gi, "'")
+      .replace(/&#x([0-9a-f]+);/gi, (_, hex) =>
+        String.fromCharCode(parseInt(hex, 16))
+      )
+      .replace(/&#(\d+);/gi, (_, dec) => String.fromCharCode(parseInt(dec, 10)))
   } while (result !== previous)
 
-  // Now strip HTML tags after all entities are decoded
+  // Explicitly remove script tags and their content (case-insensitive)
+  result = result.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
+  // Remove standalone script tags that may not be closed properly
+  result = result.replace(/<\s*script[^>]*>/gi, "")
+  result = result.replace(/<\s*\/\s*script[^>]*>/gi, "")
+
+  // Remove event handlers (onclick, onerror, onload, etc.)
+  result = result.replace(/\s*on\w+\s*=\s*["'][^"']*["']/gi, "")
+  result = result.replace(/\s*on\w+\s*=\s*[^\s>]+/gi, "")
+
+  // Remove javascript: and data: URLs
+  result = result.replace(/javascript\s*:/gi, "")
+  result = result.replace(/data\s*:/gi, "")
+
+  // Strip all remaining HTML tags
   result = result.replace(/<[^>]*>/g, "")
 
   return result.trim()

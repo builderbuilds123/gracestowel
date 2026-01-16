@@ -45,14 +45,20 @@ export function SafeImage({ src, fallback = null, alt = "", ...props }: SafeImag
         return <>{fallback}</>;
     }
 
-    // Check against allowed prefixes
-    const isSafe = SAFE_URL_PREFIXES.some(prefix => src.startsWith(prefix));
+    // Strict validation patterns
+    // data:image URLs must match specific format: data:image/<type>;base64,<data>
+    const isValidBase64Image = /^data:image\/(png|jpeg|jpg|gif|webp|svg\+xml);base64,[A-Za-z0-9+/=]+$/.test(src);
+    const isValidHttps = src.startsWith('https://');
+
+    // URL must match one of our safe patterns exactly
+    // This is stricter than just prefix checking
+    const isSafe = isValidBase64Image || isValidHttps;
 
     if (!isSafe) {
         return <>{fallback}</>;
     }
 
-    // At this point, src has been validated to start with a safe prefix
+    // At this point, src has been validated with strict patterns
     // eslint-disable-next-line @next/next/no-img-element
     return <img src={src} alt={alt} {...props} />;
 }
