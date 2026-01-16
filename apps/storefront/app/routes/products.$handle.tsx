@@ -28,6 +28,7 @@ import { useCart } from "../context/CartContext";
 import { getMedusaClient, castToMedusaProduct, type MedusaProduct, getBackendUrl, getStockStatus, validateMedusaProduct, getDefaultRegion } from "../lib/medusa";
 import { transformToDetail, type ProductDetail } from "../lib/product-transformer";
 import { monitoredFetch } from "../utils/monitored-fetch";
+import { sanitizeDisplayText } from "../utils/sanitize-text";
 import type { EmbroideryData } from "../types/product";
 
 // SEO Meta tags for product pages
@@ -424,7 +425,8 @@ export default function ProductDetail({ loaderData }: Route.ComponentProps) {
                                             color: embroideryData.color,
                                         }}
                                     >
-                                        {embroideryData.data}
+                                        {/* Sanitize user text input for defense-in-depth XSS protection */}
+                                        {sanitizeDisplayText(embroideryData.data)}
                                     </div>
                                 ) : (
                                     <SafeImage

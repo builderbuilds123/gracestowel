@@ -12,6 +12,7 @@ import { EmbroideryCustomizer } from "./EmbroideryCustomizer";
 import { SafeImage } from "./SafeImage";
 import { useCart } from "../context/CartContext";
 import { useLocale } from "../context/LocaleContext";
+import { sanitizeDisplayText } from "../utils/sanitize-text";
 import type { EmbroideryData } from "../types/product";
 
 // Embroidery Preview Sub-component
@@ -43,7 +44,8 @@ function EmbroideryPreview({ data, onEdit }: { data: EmbroideryData; onEdit: () 
                         `
                     }}
                 >
-                    {data.data}
+                    {/* Sanitize user text for defense-in-depth XSS protection */}
+                    {sanitizeDisplayText(data.data)}
                 </div>
             ) : (
                 <div className="flex justify-center">
