@@ -90,7 +90,15 @@ export default defineConfig({
 
   /* Run your local dev server before starting the tests */
   /* In CI, storefront is already running via Docker Compose, so we skip webServer */
-  // webServer config removed for manual testing
+  // webServer: process.env.CI
+  //   ? undefined
+  //   : {
+  //       command: `cd ../.. && MEDUSA_PUBLISHABLE_KEY=${process.env.MEDUSA_PUBLISHABLE_KEY} CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE='${process.env.CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE || "postgresql://postgres:postgres@localhost:5432/medusa"}' pnpm --filter=apps-storefront dev`,
+  //       url: "http://localhost:5173",
+  //       reuseExistingServer: true,
+  //       ignoreHTTPSErrors: true,
+  //       timeout: 120 * 1000,
+  //     },
 
   /* Optimized timeouts: Reduced for faster feedback */
   timeout: 45 * 1000, // Reduced from 60s to 45s
