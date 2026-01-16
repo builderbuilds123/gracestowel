@@ -1,9 +1,26 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import ProductDetail from './products.$handle';
 import { createMockProduct } from '../../tests/factories/product';
+
+// Mock window.matchMedia for JSDOM environment
+beforeAll(() => {
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    value: vi.fn().mockImplementation((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  });
+});
 
 // Mock dependencies
 const mockPostHog = {
@@ -49,7 +66,14 @@ vi.mock('react-router', async () => {
 
 // Mock Contexts
 vi.mock('../context/CartContext', () => ({
-  useCart: () => ({ addToCart: vi.fn() }),
+  useCart: () => ({
+    addToCart: vi.fn(),
+    items: [], // Required for cartItems.reduce() in ProductDetail
+    cartTotal: 0,
+    isOpen: false,
+    isLoaded: true,
+    toggleCart: vi.fn(), // Required for StickyPurchaseBar onViewCart prop
+  }),
   CartProvider: ({ children }: any) => <div>{children}</div>,
 }));
 

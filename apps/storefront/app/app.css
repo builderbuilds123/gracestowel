@@ -20,3 +20,489 @@ body {
   color: var(--color-text-earthy);
   font-family: var(--font-sans);
 }
+
+/* ============================================
+   Product Experience Animations
+   ============================================ */
+
+/* Soft easing for gentle, luxurious feel */
+:root {
+  --ease-soft: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-bounce-soft: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Floating cotton fiber animation */
+@keyframes float-fiber {
+  0%, 100% {
+    transform: translateY(0) rotate(0deg) scale(1);
+    opacity: 0.6;
+  }
+  25% {
+    transform: translateY(-30px) rotate(90deg) scale(1.1);
+    opacity: 0.8;
+  }
+  50% {
+    transform: translateY(-50px) rotate(180deg) scale(1);
+    opacity: 0.7;
+  }
+  75% {
+    transform: translateY(-30px) rotate(270deg) scale(0.9);
+    opacity: 0.8;
+  }
+}
+
+/* Gentle pulse for hotspots */
+@keyframes pulse-soft {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 0.7;
+  }
+}
+
+/* Scroll indicator bounce */
+@keyframes bounce-gentle {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(8px);
+  }
+}
+
+/* Letter reveal animation */
+@keyframes letter-reveal {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Slide in from left */
+@keyframes slide-in-left {
+  0% {
+    opacity: 0;
+    transform: translateX(-40px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Slide in from right */
+@keyframes slide-in-right {
+  0% {
+    opacity: 0;
+    transform: translateX(40px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Fade up reveal */
+@keyframes fade-up {
+  0% {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Ripple effect for buttons */
+@keyframes ripple {
+  0% {
+    transform: scale(0);
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(4);
+    opacity: 0;
+  }
+}
+
+/* Sparkle animation for embroidery */
+@keyframes sparkle {
+  0%, 100% {
+    opacity: 0;
+    transform: scale(0) rotate(0deg);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1) rotate(180deg);
+  }
+}
+
+/* Float up for add to cart success */
+@keyframes float-up {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-60px) scale(0.5);
+  }
+}
+
+/* Gentle zoom for texture discovery */
+@keyframes zoom-breathe {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.02);
+  }
+}
+
+/* Star fill animation */
+@keyframes star-fill {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.3);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Utility classes for animations */
+.animate-float-fiber {
+  animation: float-fiber 8s ease-in-out infinite;
+}
+
+.animate-pulse-soft {
+  animation: pulse-soft 2s ease-in-out infinite;
+}
+
+.animate-bounce-gentle {
+  animation: bounce-gentle 2s ease-in-out infinite;
+}
+
+.animate-slide-in-left {
+  animation: slide-in-left 0.6s var(--ease-out-expo) forwards;
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.6s var(--ease-out-expo) forwards;
+}
+
+.animate-fade-up {
+  animation: fade-up 0.6s var(--ease-out-expo) forwards;
+}
+
+.animate-ripple {
+  animation: ripple 0.6s ease-out forwards;
+}
+
+.animate-sparkle {
+  animation: sparkle 0.6s ease-out forwards;
+}
+
+.animate-float-up {
+  animation: float-up 0.8s var(--ease-out-expo) forwards;
+}
+
+.animate-zoom-breathe {
+  animation: zoom-breathe 4s ease-in-out infinite;
+}
+
+.animate-star-fill {
+  animation: star-fill 0.3s var(--ease-bounce-soft) forwards;
+}
+
+/* Stagger animation delays */
+.stagger-1 { animation-delay: 0.1s; }
+.stagger-2 { animation-delay: 0.2s; }
+.stagger-3 { animation-delay: 0.3s; }
+.stagger-4 { animation-delay: 0.4s; }
+.stagger-5 { animation-delay: 0.5s; }
+.stagger-6 { animation-delay: 0.6s; }
+.stagger-7 { animation-delay: 0.7s; }
+.stagger-8 { animation-delay: 0.8s; }
+
+/* Initial hidden state for animated elements */
+.animate-on-scroll {
+  opacity: 0;
+}
+
+.animate-on-scroll.is-visible {
+  opacity: 1;
+}
+
+/* Smooth scroll behavior */
+.smooth-scroll {
+  scroll-behavior: smooth;
+}
+
+/* Hide scrollbar for horizontal carousels */
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Respect reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .animate-float-fiber,
+  .animate-pulse-soft,
+  .animate-bounce-gentle,
+  .animate-zoom-breathe {
+    animation: none !important;
+  }
+}
+
+/* Texture overlay for sensory feel */
+.texture-overlay {
+  position: relative;
+}
+
+.texture-overlay::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  opacity: 0.03;
+  pointer-events: none;
+  mix-blend-mode: multiply;
+}
+
+/* Soft shadow for cards */
+.shadow-soft {
+  box-shadow: 0 10px 40px -10px rgba(60, 54, 50, 0.15);
+}
+
+.shadow-soft-lg {
+  box-shadow: 0 20px 60px -15px rgba(60, 54, 50, 0.2);
+}
+
+/* ============================================
+   Mobile Optimizations
+   ============================================ */
+
+/* Touch-friendly tap targets */
+@media (pointer: coarse) {
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Larger touch targets for hotspots on touch devices */
+  .hotspot-touch {
+    min-width: 48px;
+    min-height: 48px;
+  }
+}
+
+/* Mobile-first responsive adjustments */
+@media (max-width: 640px) {
+  /* Reduce hero height on small screens */
+  .hero-mobile {
+    min-height: 80vh;
+  }
+
+  /* Stack layout for better mobile reading */
+  .mobile-stack {
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  /* Reduce padding on mobile */
+  .mobile-compact {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  /* Smaller font sizes for mobile headings */
+  .mobile-heading {
+    font-size: 1.75rem;
+    line-height: 1.3;
+  }
+
+  /* Full-width buttons on mobile */
+  .mobile-full-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* Tablet optimizations */
+@media (min-width: 641px) and (max-width: 1024px) {
+  .tablet-two-col {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* ============================================
+   Accessibility Enhancements
+   ============================================ */
+
+/* Focus visible styling for keyboard navigation */
+:focus-visible {
+  outline: 2px solid var(--color-accent-earthy);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Skip to main content link */
+.skip-to-main {
+  position: absolute;
+  left: -9999px;
+  top: auto;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+.skip-to-main:focus {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: auto;
+  height: auto;
+  padding: 1rem 2rem;
+  background: var(--color-accent-earthy);
+  color: white;
+  z-index: 9999;
+  font-weight: 600;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .shadow-soft,
+  .shadow-soft-lg {
+    box-shadow: 0 0 0 2px currentColor;
+  }
+
+  .text-text-earthy\/60,
+  .text-text-earthy\/70 {
+    opacity: 1;
+  }
+}
+
+/* Screen reader only class */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Improved focus for interactive elements */
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid var(--color-accent-earthy);
+  outline-offset: 2px;
+}
+
+/* Disable animations when reduced motion is preferred */
+@media (prefers-reduced-motion: reduce) {
+  /* Scroll behavior should also be instant */
+  html {
+    scroll-behavior: auto;
+  }
+
+  /* Static alternatives for parallax effects */
+  .parallax-disabled {
+    transform: none !important;
+  }
+}
+
+/* Safe area padding for notched devices */
+@supports (padding: max(0px)) {
+  .safe-area-bottom {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+
+  .safe-area-sides {
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+  }
+}
+
+/* ============================================
+   Performance Optimizations
+   ============================================ */
+
+/* GPU acceleration for animated elements */
+.will-animate {
+  will-change: transform, opacity;
+}
+
+/* Remove will-change after animation completes */
+.animation-complete {
+  will-change: auto;
+}
+
+/* Content visibility for off-screen sections */
+.section-lazy {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 500px;
+}
+
+/* Optimize image rendering */
+.image-crisp {
+  image-rendering: -webkit-optimize-contrast;
+}
+
+/* ============================================
+   Print Styles
+   ============================================ */
+
+@media print {
+  /* Hide interactive elements */
+  .no-print,
+  .animate-float-fiber,
+  button[aria-label*="scroll"],
+  .sticky {
+    display: none !important;
+  }
+
+  /* Ensure readable colors */
+  * {
+    color: #000 !important;
+    background: #fff !important;
+  }
+
+  /* Show full content */
+  .truncate {
+    overflow: visible;
+    text-overflow: initial;
+    white-space: normal;
+  }
+}

@@ -6,7 +6,35 @@
 import "@testing-library/jest-dom/vitest";
 import "vitest-axe/extend-expect";
 import { cleanup } from "@testing-library/react";
-import { afterEach, beforeEach } from "vitest";
+import { afterEach, beforeEach, vi } from "vitest";
+
+// Mock IntersectionObserver for components using useInViewReveal
+class IntersectionObserverMock {
+  readonly root: Element | null = null;
+  readonly rootMargin: string = "";
+  readonly thresholds: ReadonlyArray<number> = [];
+
+  constructor(private callback: IntersectionObserverCallback) {}
+
+  observe() {
+    // Immediately trigger callback as if element is in view
+    this.callback([{
+      isIntersecting: true,
+      boundingClientRect: {} as DOMRectReadOnly,
+      intersectionRatio: 1,
+      intersectionRect: {} as DOMRectReadOnly,
+      rootBounds: null,
+      target: document.body,
+      time: 0,
+    }], this as unknown as IntersectionObserver);
+  }
+
+  unobserve() {}
+  disconnect() {}
+  takeRecords(): IntersectionObserverEntry[] { return []; }
+}
+
+vi.stubGlobal('IntersectionObserver', IntersectionObserverMock);
 
 // Factory function to create storage mocks (avoids code duplication)
 const createStorageMock = () => {
