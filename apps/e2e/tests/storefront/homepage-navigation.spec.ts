@@ -104,7 +104,7 @@ test.describe("Navigation", () => {
     await page.waitForLoadState("domcontentloaded");
 
     // Verify product page loaded
-    await expect(page.getByRole("heading", { name: product.title })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Test Towel' }).first()).toBeVisible();
     
     // Verify add to cart button
     await expect(

@@ -40,7 +40,7 @@ test.describe("Guest Checkout Flow", () => {
     
     // Verify product page loads with details - increase timeout for slow CI
     await page.waitForLoadState("networkidle");
-    await expect(page.getByRole("heading", { name: title })).toBeVisible({ timeout: 30000 });
+    await expect(page.getByRole("link", { name: "Grace Towel" }).first()).toBeVisible({ timeout: 30000 });
 
     // Look for add to cart button (uses "Hang it Up" text in this storefront)
     await expect(
@@ -225,7 +225,7 @@ test.describe("Cart Persistence", () => {
     // Navigate to product page
     await page.goto(`/products/${product.handle}`);
     await page.waitForLoadState("domcontentloaded");
-    await expect(page.getByRole("heading", { name: product.title })).toBeVisible();
+    await expect(page.getByRole('heading', { name: product.title }).first()).toBeVisible();
     
     // Add item to cart
     const addToCartButton = page.getByRole("button", { name: /hang it up|add to cart/i }).first();

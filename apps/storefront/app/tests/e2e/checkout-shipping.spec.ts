@@ -77,6 +77,7 @@ describe("Checkout Integration", () => {
 
   // TODO: This test requires complex context mocking (LocaleContext + CartContext + useRegions)
   // Skipping temporarily to unblock CI - needs a dedicated test environment setup
+  // NOTE: This is NOT the strict mode violation; that was in E2E tests.
   it.skip("should fetch shipping rates when address is entered but NOT auto-select", async () => {
     // Setup mocks for new RESTful cart endpoints
     mockMonitoredFetch.mockImplementation((url) => {

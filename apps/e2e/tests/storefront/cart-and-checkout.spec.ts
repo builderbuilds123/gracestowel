@@ -7,7 +7,7 @@ test.describe("Storefront cart + checkout flows", () => {
     const product = await productFactory.createProduct();
     await page.goto(`/products/${product.handle}`);
 
-    await expect(page.getByRole("heading", { name: product.title })).toBeVisible();
+    await expect(page.getByRole("heading", { name: product.title }).first()).toBeVisible();
 
     // Add item to cart
     const addToCartButton = page.getByRole("button", { name: /hang it up|add to cart/i }).first();
@@ -16,6 +16,7 @@ test.describe("Storefront cart + checkout flows", () => {
     await addToCartButton.click({ force: true });
     
     // Check cart drawer
+    // Standardize cart heading
     await expect(page.getByRole("heading", { name: /towel rack/i })).toBeVisible({ timeout: 30000 });
     await expect(page.getByText(product.title).first()).toBeVisible();
   });

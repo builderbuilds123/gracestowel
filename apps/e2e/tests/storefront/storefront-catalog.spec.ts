@@ -88,7 +88,8 @@ test.describe("Storefront navigation, discovery, and PDP coverage", () => {
     ).toBeVisible();
 
     // Verify reviews section exists (more reliable than Suspense-wrapped related products)
-    await expect(page.getByText(/Customer Reviews/i)).toBeVisible();
+    // Verify reviews section exists (ReviewRiver uses "Happy Homes" heading)
+    await expect(page.getByText(/Happy Homes|Customer Reviews/i)).toBeVisible();
   });
 
   test("handles 404 and offline UX gracefully", async ({ page }) => {

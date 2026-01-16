@@ -17,7 +17,7 @@ test.describe("Mobile Navigation", () => {
 
     // Verify page loads on mobile
     await expect(page).toHaveTitle(/Grace/i);
-    await expect(page.getByRole("heading", { name: /Bestselling|Best Sellers/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Bestselling|Best Sellers/i }).first()).toBeVisible();
 
     // Verify product cards are visible and tappable
     const productLinks = page.locator('a[href^="/products/"]');
@@ -40,7 +40,7 @@ test.describe("Mobile Navigation", () => {
     await expect(page).toHaveURL(/\/products\//);
     
     // Verify product heading is visible
-    await expect(page.getByRole("heading", { name: product.title })).toBeVisible({ timeout: 30000 });
+    await expect(page.getByRole("heading", { name: product.title }).first()).toBeVisible({ timeout: 30000 });
     
     // Verify add to cart button is visible
     await expect(
@@ -59,7 +59,10 @@ test.describe("Mobile Cart Experience", () => {
     await expect(page.getByRole("heading", { name: product.title })).toBeVisible();
 
     // Add to cart
-    await page.getByRole("button", { name: /hang it up|add to cart/i }).first().click({ force: true });
+    // Add to cart - use force:true and scroll
+    const addToCartButton = page.getByRole("button", { name: /hang it up|add to cart/i }).first();
+    await addToCartButton.scrollIntoViewIfNeeded();
+    await addToCartButton.click({ force: true });
 
     // Verify cart drawer opens (should work on mobile)
     await expect(page.getByText(product.title).first()).toBeVisible({ timeout: 30000 });
@@ -95,7 +98,10 @@ test.describe("Mobile Cart Experience", () => {
     await page.waitForLoadState("domcontentloaded");
 
     // Add to cart
-    await page.getByRole("button", { name: /hang it up|add to cart/i }).first().click({ force: true });
+    // Add to cart
+    const addToCartButton = page.getByRole("button", { name: /hang it up|add to cart/i }).first();
+    await addToCartButton.scrollIntoViewIfNeeded();
+    await addToCartButton.click({ force: true });
     await expect(page.getByText(product.title).first()).toBeVisible({ timeout: 30000 });
 
     // Find checkout link and click
@@ -114,7 +120,9 @@ test.describe("Mobile Checkout Form", () => {
     const product = await productFactory.createProduct();
     await page.goto(`/products/${product.handle}`);
     await page.waitForLoadState("domcontentloaded");
-    await page.getByRole("button", { name: /hang it up|add to cart/i }).first().click();
+    const addToCartButton = page.getByRole("button", { name: /hang it up|add to cart/i }).first();
+    await addToCartButton.scrollIntoViewIfNeeded();
+    await addToCartButton.click({ force: true });
     await expect(page.getByText(product.title).first()).toBeVisible({ timeout: 30000 });
 
     // Go to checkout
