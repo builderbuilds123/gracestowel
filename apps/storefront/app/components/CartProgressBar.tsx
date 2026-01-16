@@ -81,7 +81,10 @@ export function CartProgressBar({
       </div>
 
       {/* Status Message */}
-      <p className={`text-sm mt-2 ${isGoalReached ? "text-green-600 font-medium" : "text-gray-600"}`}>
+      <p
+        className={`text-sm mt-2 ${isGoalReached ? "text-green-600 font-medium" : "text-gray-600"}`}
+        aria-live="polite"
+      >
         {isGoalReached ? (
           `You've unlocked ${label.toLowerCase()}!`
         ) : (

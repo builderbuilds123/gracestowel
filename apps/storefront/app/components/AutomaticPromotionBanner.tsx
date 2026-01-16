@@ -45,13 +45,20 @@ export function AutomaticPromotionBanner({
       
       {showProgress && !isApplied && (
         <div className="mt-2">
-          <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-            <div 
+          <div
+            className="h-2 bg-gray-200 rounded-full overflow-hidden"
+            role="progressbar"
+            aria-valuenow={progressPercent}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-describedby="promotion-progress-text"
+          >
+            <div
               className={`h-full ${progressBgColor} transition-all duration-300 ease-out`}
               style={{ width: `${progressPercent}%` }}
             />
           </div>
-          <p className="text-xs text-gray-500 mt-1 text-right">
+          <p id="promotion-progress-text" className="text-xs text-gray-500 mt-1 text-right">
             {Math.floor(progressPercent)}% there
           </p>
         </div>
