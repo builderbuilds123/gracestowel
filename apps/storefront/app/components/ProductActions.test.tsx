@@ -24,10 +24,7 @@ vi.mock('../context/LocaleContext', () => ({
   useLocale: () => ({ t: (key: string) => key }),
 }));
 
-// Mock simple components used inside
-vi.mock('./EmbroideryCustomizer', () => ({
-    EmbroideryCustomizer: () => <div data-testid="embroidery-customizer">Embroidery Customizer</div>
-}));
+
 
 describe('ProductActions Component', () => {
   beforeEach(() => {
@@ -74,7 +71,6 @@ describe('ProductActions Component', () => {
         product_price: mockProduct.formattedPrice,
         quantity: 1,
         color: 'Cloud White',
-        has_embroidery: false,
         variant_id: 'variant_1',
       }));
     });

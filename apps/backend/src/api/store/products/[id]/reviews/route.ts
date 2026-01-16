@@ -3,6 +3,8 @@ import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
 import { REVIEW_MODULE } from "../../../../../modules/review"
 import type ReviewModuleService from "../../../../../modules/review/service"
 
+import sanitizeHtml from "sanitize-html"
+
 /**
  * Sanitize user input to prevent XSS attacks
  * Uses multiple layers of protection:
@@ -13,44 +15,13 @@ import type ReviewModuleService from "../../../../../modules/review/service"
 function sanitizeInput(input: string): string {
   if (!input || typeof input !== "string") return ""
 
-  let result = input
-
-  // Decode entities in a loop until no more changes occur
-  // This handles double-encoding attacks
-  let previous: string
-  do {
-    previous = result
-    result = result
-      .replace(/&lt;/gi, "<")
-      .replace(/&gt;/gi, ">")
-      .replace(/&amp;/gi, "&")
-      .replace(/&quot;/gi, '"')
-      .replace(/&#x27;/gi, "'")
-      .replace(/&#39;/gi, "'")
-      .replace(/&#x([0-9a-f]+);/gi, (_, hex) =>
-        String.fromCharCode(parseInt(hex, 16))
-      )
-      .replace(/&#(\d+);/gi, (_, dec) => String.fromCharCode(parseInt(dec, 10)))
-  } while (result !== previous)
-
-  // Explicitly remove script tags and their content (case-insensitive)
-  result = result.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
-  // Remove standalone script tags that may not be closed properly
-  result = result.replace(/<\s*script[^>]*>/gi, "")
-  result = result.replace(/<\s*\/\s*script[^>]*>/gi, "")
-
-  // Remove event handlers (onclick, onerror, onload, etc.)
-  result = result.replace(/\s*on\w+\s*=\s*["'][^"']*["']/gi, "")
-  result = result.replace(/\s*on\w+\s*=\s*[^\s>]+/gi, "")
-
-  // Remove javascript: and data: URLs
-  result = result.replace(/javascript\s*:/gi, "")
-  result = result.replace(/data\s*:/gi, "")
-
-  // Strip all remaining HTML tags
-  result = result.replace(/<[^>]*>/g, "")
-
-  return result.trim()
+  // Use sanitize-html to strip all tags and unsafe attributes
+  // We want to allow NO HTML tags in reviews, just plain text
+  return sanitizeHtml(input, {
+    allowedTags: [], // No tags allowed
+    allowedAttributes: {}, // No attributes allowed
+    disallowedTagsMode: 'recursiveEscape' // Escape disallowed tags recursively to prevent bypasses
+  }).trim()
 }
 
 /**

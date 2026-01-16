@@ -27,6 +27,8 @@ jobs:
   validate:
     name: Validate
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -96,6 +98,8 @@ jobs:
     name: Backend Unit Tests
     runs-on: ubuntu-latest
     needs: validate
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -141,6 +145,8 @@ jobs:
     name: Storefront Tests
     runs-on: ubuntu-latest
     needs: validate
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -188,6 +194,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: validate
     timeout-minutes: 30
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -322,6 +330,8 @@ jobs:
     if: github.ref == 'refs/heads/staging'
     needs: [validate, test-backend]
     environment: staging
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v6
 
@@ -347,6 +357,8 @@ jobs:
     if: github.ref == 'refs/heads/main'
     needs: [validate, test-backend]
     environment: production
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v6
 
@@ -372,6 +384,8 @@ jobs:
     if: github.ref == 'refs/heads/staging'
     needs: [validate, test-backend, test-storefront]
     environment: staging
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v6
 
@@ -428,6 +442,8 @@ jobs:
     if: github.ref == 'refs/heads/main'
     needs: [validate, test-backend, test-storefront, deploy-backend-production]
     environment: production
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v6
 

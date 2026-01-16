@@ -10,9 +10,9 @@ on:
   workflow_dispatch:
     inputs:
       environment:
-        description: 'Environment to test against'
+        description: "Environment to test against"
         required: true
-        default: 'staging'
+        default: "staging"
         type: choice
         options:
           - staging
@@ -58,7 +58,9 @@ jobs:
     needs: check-secrets
     if: needs.check-secrets.outputs.has-secrets == 'true'
     timeout-minutes: 15
-    
+    permissions:
+      contents: read
+
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -145,7 +147,7 @@ jobs:
           echo "Store API Tests: ${{ steps.store-api-tests.outcome }}"
           echo "Admin API Tests: ${{ steps.admin-api-tests.outcome }}"
           echo "Custom Endpoints Tests: ${{ steps.custom-endpoints-tests.outcome }}"
-          
+
           if [ "${{ steps.store-api-tests.outcome }}" == "failure" ] || \
              [ "${{ steps.admin-api-tests.outcome }}" == "failure" ] || \
              [ "${{ steps.custom-endpoints-tests.outcome }}" == "failure" ]; then
@@ -154,7 +156,7 @@ jobs:
             echo "Check the Newman HTML reports artifact for detailed results."
             exit 1
           fi
-          
+
           echo ""
           echo "✅ All API contract tests passed!"
 

@@ -1,69 +1,18 @@
 /**
  * ProductActions Component
  * 
- * Handles color selection, embroidery customization, quantity, and add-to-cart.
+ * Handles color selection, quantity, and add-to-cart.
  * Extracted from products.$handle.tsx for better component organization.
+ * 
+ * NOTE: Embroidery customization feature was removed to address CodeQL
+ * security vulnerability (XSS through DOM). Can be re-added with proper
+ * sanitization in the future.
  */
 
 import { useState } from "react";
-import { Sparkles } from "lucide-react";
 import { Towel } from "@phosphor-icons/react";
-import { EmbroideryCustomizer } from "./EmbroideryCustomizer";
-import { SafeImage } from "./SafeImage";
 import { useCart } from "../context/CartContext";
 import { useLocale } from "../context/LocaleContext";
-import { sanitizeDisplayText } from "../utils/sanitize-text";
-import type { EmbroideryData } from "../types/product";
-
-// Embroidery Preview Sub-component
-function EmbroideryPreview({ data, onEdit }: { data: EmbroideryData; onEdit: () => void }) {
-    return (
-        <div className="mt-4 p-4 bg-accent-earthy/5 border-2 border-accent-earthy/20 rounded-lg">
-            <div className="flex items-center justify-between mb-3">
-                <h4 className="text-sm font-semibold text-text-earthy flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-accent-earthy" />
-                    Your Custom Embroidery
-                </h4>
-                <button
-                    onClick={onEdit}
-                    className="text-xs text-accent-earthy hover:underline cursor-pointer"
-                >
-                    Edit
-                </button>
-            </div>
-            {data.type === 'text' ? (
-                <div
-                    className="text-2xl text-center py-4"
-                    style={{
-                        fontFamily: data.font,
-                        color: data.color,
-                        textShadow: `
-                            1px 1px 0 rgba(0,0,0,0.1),
-                            2px 2px 0 rgba(0,0,0,0.05),
-                            -1px -1px 0 rgba(255,255,255,0.3)
-                        `
-                    }}
-                >
-                    {/* Sanitize user text for defense-in-depth XSS protection */}
-                    {sanitizeDisplayText(data.data)}
-                </div>
-            ) : (
-                <div className="flex justify-center">
-                    <SafeImage
-                        src={data.data}
-                        alt="Custom embroidery drawing"
-                        className="max-w-full h-32 rounded border border-gray-200"
-                        fallback={
-                            <span className="text-gray-500 text-sm py-4">
-                                Drawing preview unavailable
-                            </span>
-                        }
-                    />
-                </div>
-            )}
-        </div>
-    );
-}
 
 // Color mapping for swatches
 const COLOR_MAP: Record<string, string> = {
@@ -108,18 +57,9 @@ export function ProductActions({ product, selectedVariant, selectedColor, onColo
     const { t } = useLocale();
     
     const [quantity, setQuantity] = useState(1);
-    const [isEmbroideryOpen, setIsEmbroideryOpen] = useState(false);
-    const [embroideryData, setEmbroideryData] = useState<EmbroideryData | null>(null);
 
     const handleQuantityChange = (delta: number) => {
         setQuantity(prev => Math.max(1, prev + delta));
-    };
-
-    const handleEmbroideryConfirm = (data: EmbroideryData | null) => {
-        if (data) {
-            setEmbroideryData(data);
-        }
-        setIsEmbroideryOpen(false);
     };
 
     const handleAddToCart = () => {
@@ -134,7 +74,6 @@ export function ProductActions({ product, selectedVariant, selectedColor, onColo
             image: product.images[0],
             quantity,
             color: selectedColor,
-            embroidery: embroideryData || undefined
         });
 
         // Track add to cart event in PostHog
@@ -146,7 +85,6 @@ export function ProductActions({ product, selectedVariant, selectedColor, onColo
                     product_price: product.formattedPrice,
                     quantity,
                     color: selectedColor,
-                    has_embroidery: !!embroideryData,
                     variant_id: variantId,
                 });
             });
@@ -177,31 +115,6 @@ export function ProductActions({ product, selectedVariant, selectedColor, onColo
                             />
                         ))}
                     </div>
-                </div>
-            )}
-
-            {/* Embroidery Customization Button */}
-            {!product.disableEmbroidery && (
-                <div className="mb-6">
-                    <button
-                        onClick={() => setIsEmbroideryOpen(true)}
-                        className={`w-full sm:w-auto px-6 py-3 rounded-lg border-2 transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                            embroideryData
-                                ? 'border-accent-earthy bg-accent-earthy/10 text-accent-earthy'
-                                : 'border-gray-300 hover:border-accent-earthy text-text-earthy'
-                        }`}
-                    >
-                        <Sparkles className="w-5 h-5" />
-                        {embroideryData ? 'Edit Custom Embroidery' : 'Add Custom Embroidery'}
-                    </button>
-
-                    {/* Embroidery Preview */}
-                    {embroideryData && (
-                        <EmbroideryPreview 
-                            data={embroideryData} 
-                            onEdit={() => setIsEmbroideryOpen(true)} 
-                        />
-                    )}
                 </div>
             )}
 
@@ -240,13 +153,6 @@ export function ProductActions({ product, selectedVariant, selectedColor, onColo
                     {isOutOfStock ? 'Out of Stock' : t('product.add')}
                 </button>
             </div>
-
-            {/* Embroidery Customizer Modal */}
-            <EmbroideryCustomizer
-                isOpen={isEmbroideryOpen}
-                onClose={() => setIsEmbroideryOpen(false)}
-                onConfirm={handleEmbroideryConfirm}
-            />
         </>
     );
 }

@@ -8,7 +8,7 @@ import { Towel } from "@phosphor-icons/react";
 import { type Review, type ReviewStats } from "../components/ReviewSection";
 import { ReviewForm } from "../components/ReviewForm";
 import { RelatedProducts } from "../components/RelatedProducts";
-import { EmbroideryCustomizer } from "../components/EmbroideryCustomizer";
+
 
 // New immersive experience components
 import {
@@ -21,15 +21,14 @@ import {
   StickyPurchaseBar,
 } from "../components/product-experience";
 
-// Safe image component for XSS prevention
-import { SafeImage } from "../components/SafeImage";
+
 
 import { useCart } from "../context/CartContext";
 import { getMedusaClient, castToMedusaProduct, type MedusaProduct, getBackendUrl, getStockStatus, validateMedusaProduct, getDefaultRegion } from "../lib/medusa";
 import { transformToDetail, type ProductDetail } from "../lib/product-transformer";
 import { monitoredFetch } from "../utils/monitored-fetch";
 import { sanitizeDisplayText } from "../utils/sanitize-text";
-import type { EmbroideryData } from "../types/product";
+
 
 // SEO Meta tags for product pages
 export function meta({ data }: Route.MetaArgs) {
@@ -179,8 +178,6 @@ export default function ProductDetail({ loaderData }: Route.ComponentProps) {
     const [isSubmittingReview, setIsSubmittingReview] = useState(false);
     const [selectedColor, setSelectedColor] = useState(product.colors?.[0] || "");
     const [quantity, setQuantity] = useState(1);
-    const [isEmbroideryOpen, setIsEmbroideryOpen] = useState(false);
-    const [embroideryData, setEmbroideryData] = useState<EmbroideryData | null>(null);
 
     // Find the actual variant for the selected color
     const selectedVariant = product.variants?.find(v =>
@@ -264,7 +261,6 @@ export default function ProductDetail({ loaderData }: Route.ComponentProps) {
             image: product.images[0],
             quantity,
             color: selectedColor,
-            embroidery: embroideryData || undefined
         });
 
         // Track in PostHog
@@ -276,20 +272,13 @@ export default function ProductDetail({ loaderData }: Route.ComponentProps) {
                     product_price: product.formattedPrice,
                     quantity,
                     color: selectedColor,
-                    has_embroidery: !!embroideryData,
                     variant_id: variantId,
                 });
             });
         }
-    }, [addToCart, product, selectedVariant, quantity, selectedColor, embroideryData]);
+    }, [addToCart, product, selectedVariant, quantity, selectedColor]);
 
-    // Embroidery handler
-    const handleEmbroideryConfirm = (data: EmbroideryData | null) => {
-        if (data) {
-            setEmbroideryData(data);
-        }
-        setIsEmbroideryOpen(false);
-    };
+
 
     // Transform colors for ColorMorpher
     const colorOptions = product.colors?.map(name => ({
@@ -384,67 +373,7 @@ export default function ProductDetail({ loaderData }: Route.ComponentProps) {
                 />
             )}
 
-            {/* ============================================
-                SECTION 5: EMBROIDERY CUSTOMIZATION
-                Make it personal
-               ============================================ */}
-            {!product.disableEmbroidery && (
-                <section className="py-16 px-6 bg-gradient-to-b from-bg-earthy to-card-earthy/10">
-                    <div className="max-w-4xl mx-auto text-center">
-                        <h2 className="text-3xl md:text-4xl font-serif text-text-earthy mb-4">
-                            Make It Yours
-                        </h2>
-                        <p className="text-text-earthy/60 mb-8 max-w-md mx-auto">
-                            Add a personal touch with custom embroidery. Your initials, a name, or a special message.
-                        </p>
 
-                        <button
-                            onClick={() => setIsEmbroideryOpen(true)}
-                            className={`inline-flex items-center gap-3 px-8 py-4 rounded-full text-lg transition-all duration-300 ${
-                                embroideryData
-                                    ? 'bg-accent-earthy text-white shadow-soft hover:shadow-soft-lg'
-                                    : 'border-2 border-accent-earthy text-accent-earthy hover:bg-accent-earthy hover:text-white'
-                            }`}
-                        >
-                            <Sparkles className="w-6 h-6" />
-                            {embroideryData ? 'Edit Embroidery' : 'Add Embroidery'}
-                        </button>
-
-                        {/* Embroidery Preview */}
-                        {embroideryData && (
-                            <div className="mt-8 p-6 bg-white rounded-3xl shadow-soft max-w-sm mx-auto">
-                                <h4 className="text-sm font-medium text-text-earthy/60 mb-3 flex items-center justify-center gap-2">
-                                    <Sparkles className="w-4 h-4 text-accent-earthy" />
-                                    Your Custom Embroidery
-                                </h4>
-                                {embroideryData.type === 'text' ? (
-                                    <div
-                                        className="text-3xl py-4"
-                                        style={{
-                                            fontFamily: embroideryData.font,
-                                            color: embroideryData.color,
-                                        }}
-                                    >
-                                        {/* Sanitize user text input for defense-in-depth XSS protection */}
-                                        {sanitizeDisplayText(embroideryData.data)}
-                                    </div>
-                                ) : (
-                                    <SafeImage
-                                        src={embroideryData.data}
-                                        alt="Custom embroidery drawing"
-                                        className="max-w-full h-24 mx-auto rounded"
-                                        fallback={
-                                            <span className="text-gray-500 text-sm">
-                                                Drawing preview unavailable
-                                            </span>
-                                        }
-                                    />
-                                )}
-                            </div>
-                        )}
-                    </div>
-                </section>
-            )}
 
             {/* ============================================
                 SECTION 6: JOURNEY CAROUSEL - "From Field to Fold"
@@ -603,12 +532,7 @@ export default function ProductDetail({ loaderData }: Route.ComponentProps) {
                 />
             )}
 
-            {/* Embroidery Customizer Modal */}
-            <EmbroideryCustomizer
-                isOpen={isEmbroideryOpen}
-                onClose={() => setIsEmbroideryOpen(false)}
-                onConfirm={handleEmbroideryConfirm}
-            />
+
         </div>
     );
 }
