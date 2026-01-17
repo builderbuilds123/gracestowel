@@ -5,7 +5,7 @@ import { WorkflowResponse } from "@medusajs/framework/workflows-sdk";
 import Stripe from "stripe";
 
 async function createStripePI() {
-  const apiKey = process.env.STRIPE_SECRET_KEY || "sk_test_mock";
+  const apiKey = process.env.STRIPE_SECRET_KEY || "test_sk_mock_key";
   const stripe = new Stripe(apiKey, { apiVersion: "2024-12-18.acacia" } as any);
 
   try {
