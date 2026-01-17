@@ -36,11 +36,12 @@ test.describe("Homepage", () => {
     await page.goto("/");
     await page.waitForLoadState("domcontentloaded");
 
-    // Verify main navigation exists
-    const nav = page.getByRole("navigation").first();
-    await expect(nav).toBeVisible();
-
-    // Verify cart button is accessible
+    // Verify header/navigation exists
+    // On mobile, the actual <nav> might be hidden in a hamburger menu
+    const header = page.getByRole("banner").or(page.locator("header"));
+    await expect(header.first()).toBeVisible();
+    
+    // Verify cart button is accessible (usually in header)
     const cartButton = page.getByRole("button", { name: /cart|open cart/i }).first();
     // Cart button may exist but might be hidden in some layouts
     const cartExists = await cartButton.count() > 0;
@@ -74,7 +75,7 @@ test.describe("Navigation", () => {
     // Click on first product
     // Use a more robust locator and wait for hydration
     // Use a more robust locator and wait for hydration
-    const productCard = page.locator('a[href*="/products/"]:has(img)').first();
+    const productCard = page.locator('a[href*="/products/"]:has(img)').filter({ visible: true }).first();
     await expect(productCard).toBeVisible({ timeout: 30000 }); // Ensure the new locator finds something
     await productCard.scrollIntoViewIfNeeded();
     await page.waitForTimeout(1000); // Wait for hydration
@@ -104,7 +105,7 @@ test.describe("Navigation", () => {
     await page.waitForLoadState("domcontentloaded");
 
     // Verify product page loaded
-    await expect(page.getByRole('heading', { name: 'Test Towel' }).first()).toBeVisible();
+    await expect(page.getByRole('heading', { name: new RegExp(product.title, "i") }).first()).toBeVisible();
     
     // Verify add to cart button
     await expect(
