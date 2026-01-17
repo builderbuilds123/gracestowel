@@ -12,13 +12,13 @@ export default async function getPublishableKey({ container }: ExecArgs) {
   });
 
   if (apiKeys.length > 0) {
-      console.log(`Found Publishable Key: ${apiKeys[0].token}`);
+      console.log(`Found Publishable Key: ${apiKeys[0].token.substring(0, 12)}...`);
   } else {
       console.log("Webshop E2E key not found. Listing all publishable keys:");
       const allKeys = await apiKeyModuleService.listApiKeys({ type: "publishable" });
       
       if(allKeys.length > 0) {
-          console.log(`Found Publishable Key: ${allKeys[0].token}`);
+          console.log(`Found Publishable Key: ${allKeys[0].token.substring(0, 12)}...`);
       } else {
           console.log("No publishable keys found.");
       }

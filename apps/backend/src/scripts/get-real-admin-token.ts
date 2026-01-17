@@ -12,22 +12,22 @@ export default async function getRealAdminToken({ container }: ExecArgs) {
     throw new Error("JWT_SECRET is not set");
   }
 
-  console.log("Searching for users...");
+  // console.log("Searching for users...");
   const users = await userModuleService.listUsers({}, { take: 1 });
   
   let userId = "";
   
   if (users.length > 0) {
-    console.log(`Found existing user: ${users[0].email} (${users[0].id})`);
+    // console.log(`Found existing user: ${users[0].email} (${users[0].id})`);
     userId = users[0].id;
   } else {
-    console.log("No users found. Creating default admin user...");
+    // console.log("No users found. Creating default admin user...");
     const user = await userModuleService.createUsers({
       email: "admin@medusa-test.com",
       first_name: "Admin",
       last_name: "User",
     });
-    console.log(`Created user: ${user.email} (${user.id})`);
+    // console.log(`Created user: ${user.email} (${user.id})`);
     userId = user.id;
   }
 
@@ -39,5 +39,5 @@ export default async function getRealAdminToken({ container }: ExecArgs) {
      exp: Math.floor(Date.now() / 1000) + (3600 * 24 * 7)
   }, secret, { algorithm: "HS256" });
 
-  console.log(`ADMIN_TOKEN=${token}`);
+  process.stdout.write(token);
 }
