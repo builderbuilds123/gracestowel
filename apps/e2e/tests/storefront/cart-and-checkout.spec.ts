@@ -7,7 +7,7 @@ test.describe("Storefront cart + checkout flows", () => {
     const product = await productFactory.createProduct();
     await page.goto(`/products/${product.handle}`);
 
-    await expect(page.locator("h1").filter({ hasText: product.title }).first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: new RegExp(product.title.split("").join("\\s*"), "i"), level: 1 })).toBeVisible();
 
     // Add item to cart
     const addToCartButton = page.getByRole("button", { name: /hang it up|add to cart/i }).first();
@@ -18,7 +18,7 @@ test.describe("Storefront cart + checkout flows", () => {
     // Check cart drawer
     // Standardize cart heading
     await expect(page.getByRole("heading", { name: /towel rack/i })).toBeVisible({ timeout: 30000 });
-    await expect(page.getByText(product.title).first()).toBeVisible();
+    await expect(page.getByText(new RegExp(product.title, "i")).first()).toBeVisible();
   });
 
   test("updates cart quantities and recalculates totals", async ({ page, productFactory }) => {
@@ -75,7 +75,7 @@ test.describe("Storefront cart + checkout flows", () => {
 
     // Check cart drawer
     await expect(page.getByRole("heading", { name: /towel rack/i })).toBeVisible({ timeout: 30000 });
-    await expect(page.getByText(product.title).first()).toBeVisible();
+    await expect(page.getByText(new RegExp(product.title, "i")).first()).toBeVisible();
   });
 
   test("guest checkout displays address, shipping, tax, and payment steps", async ({

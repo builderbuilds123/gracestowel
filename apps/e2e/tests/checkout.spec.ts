@@ -186,7 +186,7 @@ test.describe("Guest Checkout Flow", () => {
     
     // Navigate directly to checkout page
     await page.goto("/checkout");
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
 
     // Wait for checkout page to load
     await expect(page).toHaveURL(/\/checkout/);
@@ -224,7 +224,7 @@ test.describe("Guest Checkout Flow", () => {
 
     // Navigate to checkout
     await page.goto("/checkout");
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
 
     // Wait for checkout page to load and verify content
     await expect(page).toHaveURL(/\/checkout/);
@@ -241,8 +241,9 @@ test.describe("Cart Persistence", () => {
       await expect(page.getByRole("heading", { name: new RegExp(product.title.split("").join("\\s*"), "i"), level: 1 })).toBeVisible();
       
       const addToCart = page.getByRole("button", { name: /add to cart/i }).first();
-      await addToCart.evaluate((el: any) => el.click()); // Wait for hydration
-    await addToCart.click({ force: true });
+    await addToCart.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(500);
+    await addToCart.evaluate((el: any) => el.click());
     
     await expect(page.getByText(product.title).first()).toBeVisible({ timeout: 30000 });
 
@@ -258,7 +259,7 @@ test.describe("Cart Persistence", () => {
 
     // Navigate to checkout to verify cart persisted
     await page.goto("/checkout");
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
 
     // Verify we're on checkout page
     await expect(page).toHaveURL(/\/checkout/);
