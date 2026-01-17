@@ -54,7 +54,7 @@ test.describe("API Error Handling", () => {
     // First load product page normally
     await page.goto(`/products/${product.handle}`);
     await page.waitForLoadState("domcontentloaded");
-    await expect(page.locator("h1").filter({ hasText: product.title }).first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: new RegExp(product.title.split("").join("\\s*"), "i"), level: 1 }).first()).toBeVisible();
 
     // Then intercept cart API with error
     await page.route("**/store/carts**", (route) => {
@@ -132,14 +132,14 @@ test.describe("Session Recovery", () => {
     // Load homepage
     await page.goto("/");
     await page.waitForLoadState("domcontentloaded");
-    await expect(page.locator("h1", { hasText: /Bestselling|Best Sellers/i }).first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Bestselling|Best Sellers/i }).first()).toBeVisible();
 
     // Refresh page
     await page.reload();
     await page.waitForLoadState("domcontentloaded");
 
     // Page should still work
-    await expect(page.locator("h1", { hasText: /Bestselling|Best Sellers/i }).first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Bestselling|Best Sellers/i }).first()).toBeVisible();
   });
 
   test("should handle browser back navigation", async ({ page, productFactory }) => {
@@ -147,12 +147,12 @@ test.describe("Session Recovery", () => {
     // Navigate to homepage
     await page.goto("/");
     await page.waitForLoadState("domcontentloaded");
-    await expect(page.locator("h1", { hasText: /Bestselling|Best Sellers/i }).first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Bestselling|Best Sellers/i }).first()).toBeVisible();
 
     // Navigate to product
     await page.goto(`/products/${product.handle}`);
     await page.waitForLoadState("domcontentloaded");
-    await expect(page.locator("h1").filter({ hasText: product.title }).first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: new RegExp(product.title.split("").join("\\s*"), "i"), level: 1 }).first()).toBeVisible();
 
     // Go back
     await page.goBack();

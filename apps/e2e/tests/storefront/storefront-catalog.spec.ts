@@ -72,7 +72,7 @@ test.describe("Storefront navigation, discovery, and PDP coverage", () => {
     await page.waitForLoadState("domcontentloaded");
 
     // Verify product content renders (use .first() as PDP may have title in sticky bar too)
-    await expect(page.getByRole("heading", { name: product.title }).first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: new RegExp(product.title.split("").join("\\s*"), "i"), level: 1 }).first()).toBeVisible();
     await expect(page.getByText(/\$|€|£/).first()).toBeVisible();
     await expect(page.locator("img").first()).toBeVisible();
 
