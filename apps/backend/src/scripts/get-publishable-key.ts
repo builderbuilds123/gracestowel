@@ -12,14 +12,13 @@ export default async function getPublishableKey({ container }: ExecArgs) {
   });
 
   if (apiKeys.length > 0) {
-      console.log(`MEDUSA_PUBLISHABLE_KEY=${apiKeys[0].token}`);
+      console.log(`Found Publishable Key: ${apiKeys[0].token}`);
   } else {
       console.log("Webshop E2E key not found. Listing all publishable keys:");
       const allKeys = await apiKeyModuleService.listApiKeys({ type: "publishable" });
-      allKeys.forEach(k => console.log(`${k.title}: ${k.token}`));
       
       if(allKeys.length > 0) {
-          console.log(`MEDUSA_PUBLISHABLE_KEY=${allKeys[0].token}`);
+          console.log(`Found Publishable Key: ${allKeys[0].token}`);
       } else {
           console.log("No publishable keys found.");
       }

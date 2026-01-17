@@ -7,7 +7,10 @@ export default async function getRealAdminToken({ container }: ExecArgs) {
   const userModuleService = container.resolve(Modules.USER);
   
   // @ts-ignore
-  const secret = configModule.projectConfig.http.jwtSecret || process.env.JWT_SECRET || "supersecret";
+  const secret = configModule.projectConfig.http.jwtSecret || process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error("JWT_SECRET is not set");
+  }
 
   console.log("Searching for users...");
   const users = await userModuleService.listUsers({}, { take: 1 });
