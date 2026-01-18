@@ -3,18 +3,25 @@ import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
 import { REVIEW_MODULE } from "../../../../../modules/review"
 import type ReviewModuleService from "../../../../../modules/review/service"
 
+import sanitizeHtml from "sanitize-html"
+
 /**
  * Sanitize user input to prevent XSS attacks
- * Strips HTML tags and trims whitespace
+ * Uses multiple layers of protection:
+ * 1. Decode HTML entities to literal characters
+ * 2. Explicitly block dangerous patterns (script, event handlers)
+ * 3. Strip all HTML tags
  */
 function sanitizeInput(input: string): string {
-  // Remove HTML tags (basic XSS prevention)
-  return input
-    .replace(/<[^>]*>/g, "")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&amp;/g, "&")
-    .trim()
+  if (!input || typeof input !== "string") return ""
+
+  // Use sanitize-html to strip all tags and unsafe attributes
+  // We want to allow NO HTML tags in reviews, just plain text
+  return sanitizeHtml(input, {
+    allowedTags: [], // No tags allowed
+    allowedAttributes: {}, // No attributes allowed
+    disallowedTagsMode: 'recursiveEscape' // Escape disallowed tags recursively to prevent bypasses
+  }).trim()
 }
 
 /**

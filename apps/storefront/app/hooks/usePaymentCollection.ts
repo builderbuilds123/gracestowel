@@ -158,6 +158,12 @@ export function usePaymentCollection(
   // Auto-reset when cartId changes (new cart)
   useEffect(() => {
     if (cartId !== lastCartIdRef.current && lastCartIdRef.current !== null) {
+      if (isDevelopment) {
+        console.log("[usePaymentCollection] RESET - cartId changed", {
+          oldCartId: lastCartIdRef.current,
+          newCartId: cartId,
+        });
+      }
       setPaymentCollectionId(null);
       setError(null);
       lastCartIdRef.current = null;

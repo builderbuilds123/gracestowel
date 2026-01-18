@@ -5,10 +5,17 @@ import { useLocale } from '../context/LocaleContext';
 import { Link } from 'react-router';
 import { CartProgressBar } from './CartProgressBar';
 import { ProductPrice } from './ProductPrice';
+import { useAutomaticPromotions } from '../hooks/useAutomaticPromotions';
 
 export function CartDrawer() {
     const { items, isOpen, toggleCart, removeFromCart, updateQuantity, cartTotal } = useCart();
     const { formatPrice, t } = useLocale();
+    
+    // PROMO-1 Phase 3: Fetch free shipping threshold from backend
+    const { freeShippingThreshold } = useAutomaticPromotions({
+        cartSubtotal: cartTotal,
+        enabled: isOpen && items.length > 0,
+    });
 
     return (
         <>
@@ -37,7 +44,13 @@ export function CartDrawer() {
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-6">
-                    {items.length > 0 && <CartProgressBar />}
+                    {items.length > 0 && freeShippingThreshold !== null && (
+                        <CartProgressBar 
+                            currentAmount={cartTotal}
+                            threshold={freeShippingThreshold}
+                            type="free_shipping"
+                        />
+                    )}
                     {items.length === 0 ? (
                         <div className="h-full flex flex-col items-center justify-center text-text-earthy/60">
                             <Towel size={64} weight="thin" className="mb-4 opacity-20" />

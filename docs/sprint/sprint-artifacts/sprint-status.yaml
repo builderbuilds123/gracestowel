@@ -452,19 +452,19 @@ development_status:
     completed: "2025-12-29"
   fix-PERF-01-stock-validation:
     path: docs/sprint/sprint-artifacts/fix-PERF-01-stock-validation.md
-    status: ready-for-dev
+    status: in-progress
   fix-CONC-01-edit-status-locking:
     path: docs/sprint/sprint-artifacts/fix-CONC-01-edit-status-locking.md
-    status: ready-for-dev
+    status: in-progress
   fix-UX-01-cart-update-quantity:
     path: docs/sprint/sprint-artifacts/fix-UX-01-cart-update-quantity.md
-    status: ready-for-dev
+    status: in-progress
   fix-FUL-01-fulfillment-tracking:
     path: docs/sprint/sprint-artifacts/fix-FUL-01-fulfillment-tracking.md
-    status: ready-for-dev
+    status: in-progress
   fix-RET-02-payment-intent-order-link:
     path: docs/sprint/sprint-artifacts/fix-RET-02-payment-intent-order-link.md
-    status: ready-for-dev
+    status: in-progress
   fix-CHK-02-A-backend-payment-collection:
     path: docs/sprint/sprint-artifacts/fix-CHK-02-A-backend-payment-collection.md
     status: done
@@ -493,7 +493,7 @@ development_status:
   promo-epic-1: backlog
   promo-1-promotions-module-integration:
     path: docs/sprint/sprint-artifacts/promo-1-promotions-module-integration.md
-    status: ready-for-dev
+    status: review
     meta: "Medusa v2 Promotions module integration. 4 phases: promo code entry, automatic promotions, CartProgressBar, order integration. 8-13 points estimated."
     created: "2026-01-13"
   promo-epic-1-retrospective: optional
@@ -502,7 +502,7 @@ development_status:
   notif-epic-1: backlog
   notif-1-notification-module-enhancement:
     path: docs/sprint/sprint-artifacts/notif-1-notification-module-enhancement.md
-    status: ready-for-dev
+    status: in-progress
     meta: "Enhance existing Resend notification provider. New templates (order-modified, refund, password-reset), optional SMS via Twilio, admin alerts. 5-8 points estimated."
     created: "2026-01-13"
   notif-epic-1-retrospective: optional

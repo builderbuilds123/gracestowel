@@ -29,12 +29,14 @@ interface AddItemsDialogProps {
     onClose: () => void;
     onAdd: (items: Array<{ variant_id: string; quantity: number }>) => Promise<void>;
     currencyCode: string;
+    /** Region ID for region-specific pricing */
+    regionId?: string | null;
 }
 
 /**
  * Dialog for adding items to an order within the modification window.
  */
-export function AddItemsDialog({ isOpen, onClose, onAdd, currencyCode }: AddItemsDialogProps) {
+export function AddItemsDialog({ isOpen, onClose, onAdd, currencyCode, regionId }: AddItemsDialogProps) {
     const [isLoading, setIsLoading] = useState(false);
     const [isLoadingProducts, setIsLoadingProducts] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -55,7 +57,13 @@ export function AddItemsDialog({ isOpen, onClose, onAdd, currencyCode }: AddItem
                 ? (window as unknown as { ENV?: { MEDUSA_BACKEND_URL?: string } }).ENV?.MEDUSA_BACKEND_URL || 'http://localhost:9000'
                 : 'http://localhost:9000';
             
-            const response = await monitoredFetch(`${medusaUrl}/store/products?limit=20`, {
+            // Build URL with optional region_id for pricing
+            const params = new URLSearchParams();
+            params.append('limit', '20');
+            if (regionId) {
+                params.append('region_id', regionId);
+            }
+            const response = await monitoredFetch(`${medusaUrl}/store/products?${params.toString()}`, {
                 method: "GET",
                 label: "add-items-products",
             });

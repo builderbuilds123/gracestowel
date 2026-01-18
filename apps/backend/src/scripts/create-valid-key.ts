@@ -11,8 +11,8 @@ async function main() {
         const scId = scRes.rows[0].id;
         
         // 2. Create API Key
-        const keyId = `apk_test_${Date.now()}`;
-        const token = `pk_test_${Date.now()}`;
+        const keyId = `apk_mock_${Date.now()}`;
+        const token = `test_pk_${Date.now()}`;
         
         await client.query(`
             INSERT INTO api_key (id, token, type, title, created_by, created_at, updated_at, salt, redacted)

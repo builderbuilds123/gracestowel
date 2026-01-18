@@ -30,12 +30,15 @@ test.describe("Backend API workflows (admin)", () => {
 
     // Verify update (V2 style: update variant price via variant endpoint)
     const variantId = product.variants?.[0]?.id || (product as any).variant_id;
+    const existingUsdPrice = product.variants?.[0]?.prices?.find((p: any) => p.currency_code === "usd");
+    
     await apiRequest({
       method: "POST",
       url: `/admin/products/${product.id}/variants/${variantId}`,
       data: {
         prices: [
           {
+            id: existingUsdPrice?.id,
             amount: 1500,
             currency_code: "usd",
           },
@@ -49,7 +52,8 @@ test.describe("Backend API workflows (admin)", () => {
     });
 
     const updatedVariant = updatedResponse.product.variants?.[0];
-    expect(updatedVariant?.prices?.[0]?.amount).toBe(1500);
+    const usdPrice = updatedVariant?.prices?.find((p: any) => p.currency_code === "usd");
+    expect(usdPrice?.amount).toBe(1500);
   });
 
   test("customers issue tokens and manage addresses", async ({

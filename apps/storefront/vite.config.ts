@@ -21,7 +21,7 @@ export default defineConfig({
   },
   plugins: [
     // Only use mkcert for local development (not in CI/production builds)
-    !isProduction && !isCI && mkcert(),
+    // !isProduction && !isCI && mkcert(),
     cloudflare({ viteEnvironment: { name: "ssr" } }),
     tailwindcss(),
     reactRouter(),
@@ -29,6 +29,14 @@ export default defineConfig({
   ].filter(Boolean),
   esbuild: {
     jsx: "automatic",
+  },
+  // Pre-bundle dependencies that are dynamically imported to prevent
+  // Vite from triggering hot reload during user flows (e.g., checkout)
+  optimizeDeps: {
+    include: [
+      "react-leaflet",
+      "leaflet",
+    ],
   },
 });
 

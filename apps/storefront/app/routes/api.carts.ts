@@ -37,7 +37,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
     // Empty body is OK, we'll use defaults
   }
 
-  const { currency = "CAD", country_code } = body;
+  const { region_id, currency = "CAD", country_code } = body;
 
   try {
     // Fetch regions to find appropriate region
@@ -55,9 +55,19 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
     const { regions } = await regionsResponse.json() as { regions: any[] };
 
-    // Priority 1: Find region by country code
+    // Priority 0: Use explicit region_id if provided (from LocaleContext)
     let region = null;
-    if (country_code) {
+    if (region_id) {
+      region = regions.find((r: any) => r.id === region_id);
+      if (region) {
+        console.log(`[api.carts] Using explicit region_id: "${region.name}" (${region_id})`);
+      } else {
+        console.warn(`[api.carts] Provided region_id "${region_id}" not found, falling back`);
+      }
+    }
+
+    // Priority 1: Find region by country code
+    if (!region && country_code) {
       const code = country_code.toLowerCase();
       region = regions.find((r: any) =>
         r.countries?.some((c: any) =>
@@ -66,7 +76,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
         )
       );
       if (region) {
-        console.log(`Found region "${region.name}" for country ${country_code}`);
+        console.log(`[api.carts] Found region "${region.name}" for country ${country_code}`);
       }
     }
 
@@ -76,14 +86,14 @@ export async function action({ request, context }: ActionFunctionArgs) {
         r.currency_code.toUpperCase() === currency.toUpperCase()
       );
       if (region) {
-        console.log(`Using region "${region.name}" based on currency ${currency}`);
+        console.log(`[api.carts] Using region "${region.name}" based on currency ${currency}`);
       }
     }
 
     // Priority 3: Use first available region
     if (!region && regions.length > 0) {
       region = regions[0];
-      console.log(`Using fallback region "${region.name}"`);
+      console.log(`[api.carts] Using fallback region "${region.name}"`);
     }
 
     if (!region) {

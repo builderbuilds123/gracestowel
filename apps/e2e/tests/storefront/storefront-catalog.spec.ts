@@ -71,8 +71,8 @@ test.describe("Storefront navigation, discovery, and PDP coverage", () => {
     await page.goto(`/products/${product.handle}`);
     await page.waitForLoadState("domcontentloaded");
 
-    // Verify product content renders
-    await expect(page.getByRole("heading", { name: product.title })).toBeVisible();
+    // Verify product content renders (use .first() as PDP may have title in sticky bar too)
+    await expect(page.getByRole("heading", { name: new RegExp(product.title.split("").join("\\s*"), "i"), level: 1 }).first()).toBeVisible();
     await expect(page.getByText(/\$|€|£/).first()).toBeVisible();
     await expect(page.locator("img").first()).toBeVisible();
 
@@ -88,7 +88,8 @@ test.describe("Storefront navigation, discovery, and PDP coverage", () => {
     ).toBeVisible();
 
     // Verify reviews section exists (more reliable than Suspense-wrapped related products)
-    await expect(page.getByText(/Customer Reviews/i)).toBeVisible();
+    // Verify reviews section exists (ReviewRiver uses "Happy Homes" heading)
+    await expect(page.getByText(/Happy Homes|Customer Reviews/i)).toBeVisible();
   });
 
   test("handles 404 and offline UX gracefully", async ({ page }) => {

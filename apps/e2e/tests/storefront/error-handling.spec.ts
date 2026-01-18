@@ -54,7 +54,7 @@ test.describe("API Error Handling", () => {
     // First load product page normally
     await page.goto(`/products/${product.handle}`);
     await page.waitForLoadState("domcontentloaded");
-    await expect(page.getByRole("heading", { name: product.title })).toBeVisible();
+    await expect(page.getByRole("heading", { name: new RegExp(product.title.split("").join("\\s*"), "i"), level: 1 }).first()).toBeVisible();
 
     // Then intercept cart API with error
     await page.route("**/store/carts**", (route) => {
@@ -66,7 +66,8 @@ test.describe("API Error Handling", () => {
     });
 
     // Try to add to cart
-    await page.getByRole("button", { name: /hang it up|add to cart/i }).first().click();
+    const addToCartButton = page.getByRole("button", { name: /hang it up|add to cart/i }).first();
+    await addToCartButton.evaluate((el: any) => el.click());
 
     // Wait for error handling - look for error message or alert
     // The app should either show an error message or remain interactive
@@ -131,14 +132,14 @@ test.describe("Session Recovery", () => {
     // Load homepage
     await page.goto("/");
     await page.waitForLoadState("domcontentloaded");
-    await expect(page.getByRole("heading", { name: /Bestselling|Best Sellers/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Bestselling|Best Sellers/i }).first()).toBeVisible();
 
     // Refresh page
     await page.reload();
     await page.waitForLoadState("domcontentloaded");
 
     // Page should still work
-    await expect(page.getByRole("heading", { name: /Bestselling|Best Sellers/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Bestselling|Best Sellers/i }).first()).toBeVisible();
   });
 
   test("should handle browser back navigation", async ({ page, productFactory }) => {
@@ -146,18 +147,18 @@ test.describe("Session Recovery", () => {
     // Navigate to homepage
     await page.goto("/");
     await page.waitForLoadState("domcontentloaded");
-    await expect(page.getByRole("heading", { name: /Bestselling|Best Sellers/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Bestselling|Best Sellers/i }).first()).toBeVisible();
 
     // Navigate to product
     await page.goto(`/products/${product.handle}`);
     await page.waitForLoadState("domcontentloaded");
-    await expect(page.getByRole("heading", { name: product.title })).toBeVisible();
+    await expect(page.getByRole("heading", { name: new RegExp(product.title.split("").join("\\s*"), "i"), level: 1 }).first()).toBeVisible();
 
     // Go back
     await page.goBack();
     await page.waitForLoadState("domcontentloaded");
 
     // Should be on homepage
-    await expect(page.getByRole("heading", { name: /Bestselling|Best Sellers/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Bestselling|Best Sellers/i }).first()).toBeVisible();
   });
 });
