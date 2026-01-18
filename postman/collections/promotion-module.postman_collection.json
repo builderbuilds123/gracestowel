@@ -1,0 +1,838 @@
+{
+  "info": {
+    "_postman_id": "0f24a7f7-7b62-4ef7-9b15-2a66b3f3c1c1",
+    "name": "Promotion Module (Medusa v2)",
+    "description": "Admin + Store Promotion Module coverage.\n\nThis collection exercises Medusa v2 Promotion Module endpoints (campaigns, promotions, rules, and storefront cart promotion application).\n\nAuth:\n- Admin endpoints require a Bearer JWT set in `jwt_token`.\n- Store cart promotion endpoints require `publishable_api_key` and `cart_id`.\n\nReferences:\n- Admin Promotions & Campaigns: https://docs.medusajs.com/resources/commerce-modules/promotion\n- Store Cart Promotions: https://docs.medusajs.com/resources/storefront-development/cart/manage-promotions",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Validate required environment variables",
+          "const warnIfMissing = (key) => {",
+          "  if (!pm.environment.get(key) && !pm.collectionVariables.get(key)) {",
+          "    console.warn(`Warning: ${key} not set in environment or collection variables`);",
+          "  }",
+          "};",
+          "warnIfMissing('base_url');",
+          "warnIfMissing('jwt_token');",
+          "warnIfMissing('publishable_api_key');",
+          "warnIfMissing('cart_id');"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "Admin Campaigns",
+      "description": "Campaign endpoints used to group promotions and enforce budget/time windows.",
+      "item": [
+        {
+          "name": "List Campaigns",
+          "id": "admin-campaigns-list",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/admin/campaigns?limit=20&offset=0",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "campaigns"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                },
+                {
+                  "key": "q",
+                  "value": "",
+                  "disabled": true,
+                  "description": "Search query"
+                },
+                {
+                  "key": "order",
+                  "value": "-created_at",
+                  "disabled": true,
+                  "description": "Sort order (prefix with - for desc)"
+                }
+              ]
+            },
+            "description": "List campaigns. Optional query params: limit, offset, q, order, campaign_identifier, budget[currency_code], with_deleted."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Campaign",
+          "id": "admin-campaigns-create",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "const json = pm.response.json();",
+                  "const campaign = json.campaign || json;",
+                  "if (campaign && campaign.id) {",
+                  "  pm.environment.set('campaign_id', campaign.id);",
+                  "  pm.collectionVariables.set('campaign_id', campaign.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Promo Campaign {{$randomInt}}\",\n  \"campaign_identifier\": \"PROMO-{{$randomUUID}}\",\n  \"description\": \"Campaign for promotion module testing\",\n  \"budget\": {\n    \"type\": \"usage\",\n    \"limit\": 1000,\n    \"currency_code\": \"usd\"\n  },\n  \"starts_at\": \"2024-01-01T00:00:00.000Z\",\n  \"ends_at\": \"2028-01-01T00:00:00.000Z\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/admin/campaigns",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "campaigns"
+              ]
+            },
+            "description": "Create a campaign. Required fields: name, campaign_identifier, description, budget (type/limit/currency_code), starts_at, ends_at."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Campaign",
+          "id": "admin-campaigns-get",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/admin/campaigns/{{campaign_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "campaigns",
+                "{{campaign_id}}"
+              ]
+            },
+            "description": "Get a campaign by ID."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Campaign",
+          "id": "admin-campaigns-update",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"Updated campaign description\",\n  \"starts_at\": \"2024-01-01T00:00:00.000Z\",\n  \"ends_at\": \"2028-01-01T00:00:00.000Z\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/admin/campaigns/{{campaign_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "campaigns",
+                "{{campaign_id}}"
+              ]
+            },
+            "description": "Update a campaign (requires campaign_id)."
+          },
+          "response": []
+        },
+        {
+          "name": "Manage Campaign Promotions (Add/Remove)",
+          "id": "admin-campaigns-promotions-batch",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"add\": [\"{{promotion_id}}\"],\n  \"remove\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/admin/campaigns/{{campaign_id}}/promotions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "campaigns",
+                "{{campaign_id}}",
+                "promotions"
+              ]
+            },
+            "description": "Add/remove promotions to a campaign using AdminBatchLink: add/remove arrays of promotion IDs."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Admin Promotions",
+      "description": "Promotion endpoints for creating and managing promo codes and automatic promotions.",
+      "item": [
+        {
+          "name": "List Promotions",
+          "id": "admin-promotions-list",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/admin/promotions?limit=20&offset=0",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "promotions"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                },
+                {
+                  "key": "q",
+                  "value": "",
+                  "disabled": true,
+                  "description": "Search term"
+                },
+                {
+                  "key": "code",
+                  "value": "",
+                  "disabled": true,
+                  "description": "Filter by promo code"
+                },
+                {
+                  "key": "campaign_id",
+                  "value": "{{campaign_id}}",
+                  "disabled": true,
+                  "description": "Filter by campaign id"
+                }
+              ]
+            },
+            "description": "List promotions. Optional query params: limit, offset, q, code, campaign_id, application_method filters, created_at/updated_at filters."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Promotion (Standard)",
+          "id": "admin-promotions-create",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "const json = pm.response.json();",
+                  "const promotion = json.promotion || json;",
+                  "if (promotion && promotion.id) {",
+                  "  pm.environment.set('promotion_id', promotion.id);",
+                  "  pm.collectionVariables.set('promotion_id', promotion.id);",
+                  "}",
+                  "if (promotion && promotion.code) {",
+                  "  pm.environment.set('promotion_code', promotion.code);",
+                  "  pm.collectionVariables.set('promotion_code', promotion.code);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"PROMO10-{{$randomInt}}\",\n  \"is_automatic\": false,\n  \"type\": \"standard\",\n  \"campaign_id\": \"{{campaign_id}}\",\n  \"application_method\": {\n    \"description\": \"10% off order\",\n    \"value\": 10,\n    \"currency_code\": \"usd\",\n    \"max_quantity\": 1000,\n    \"type\": \"percentage\",\n    \"target_type\": \"order\",\n    \"allocation\": \"across\",\n    \"apply_to_quantity\": 1,\n    \"buy_rules_min_quantity\": 1\n  },\n  \"rules\": [\n    {\n      \"operator\": \"gte\",\n      \"description\": \"Cart total >= 0\",\n      \"attribute\": \"cart.total\",\n      \"values\": \"0\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/admin/promotions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "promotions"
+              ]
+            },
+            "description": "Create a standard promotion. Required: code, type, campaign_id, application_method (with required fields). Optional: rules, is_automatic."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Promotion",
+          "id": "admin-promotions-get",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/admin/promotions/{{promotion_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "promotions",
+                "{{promotion_id}}"
+              ]
+            },
+            "description": "Retrieve a promotion by ID."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Promotion",
+          "id": "admin-promotions-update",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"campaign_id\": \"{{campaign_id}}\",\n  \"code\": \"PROMO10-UPDATED-{{$randomInt}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/admin/promotions/{{promotion_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "promotions",
+                "{{promotion_id}}"
+              ]
+            },
+            "description": "Update a promotion. Requires campaign_id in body."
+          },
+          "response": []
+        },
+        {
+          "name": "List Rule Attribute Options",
+          "id": "admin-promotions-rule-attribute-options",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "const json = pm.response.json();",
+                  "if (json && Array.isArray(json.attributes) && json.attributes.length > 0) {",
+                  "  const attr = json.attributes[0];",
+                  "  if (attr.id) {",
+                  "    pm.environment.set('rule_attribute_id', attr.id);",
+                  "    pm.collectionVariables.set('rule_attribute_id', attr.id);",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/admin/promotions/rule-attribute-options/{{rule_type}}?promotion_type=standard&application_method_type=percentage&application_method_target_type=order",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "promotions",
+                "rule-attribute-options",
+                "{{rule_type}}"
+              ],
+              "query": [
+                {
+                  "key": "promotion_type",
+                  "value": "standard"
+                },
+                {
+                  "key": "application_method_type",
+                  "value": "percentage"
+                },
+                {
+                  "key": "application_method_target_type",
+                  "value": "order"
+                }
+              ]
+            },
+            "description": "List rule attribute options for a rule_type (rules/target-rules/buy-rules)."
+          },
+          "response": []
+        },
+        {
+          "name": "List Rule Value Options",
+          "id": "admin-promotions-rule-value-options",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "const json = pm.response.json();",
+                  "if (json && Array.isArray(json.values) && json.values.length > 0) {",
+                  "  const val = json.values[0];",
+                  "  if (val.value) {",
+                  "    pm.environment.set('rule_attribute_value', val.value);",
+                  "    pm.collectionVariables.set('rule_attribute_value', val.value);",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/admin/promotions/rule-value-options/{{rule_type}}/{{rule_attribute_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "promotions",
+                "rule-value-options",
+                "{{rule_type}}",
+                "{{rule_attribute_id}}"
+              ]
+            },
+            "description": "List rule value options for a given rule attribute."
+          },
+          "response": []
+        },
+        {
+          "name": "List Promotion Rules",
+          "id": "admin-promotions-list-rules",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/admin/promotions/{{promotion_id}}/{{rule_type}}?promotion_type=standard&application_method_type=percentage&application_method_target_type=order",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "promotions",
+                "{{promotion_id}}",
+                "{{rule_type}}"
+              ],
+              "query": [
+                {
+                  "key": "promotion_type",
+                  "value": "standard"
+                },
+                {
+                  "key": "application_method_type",
+                  "value": "percentage"
+                },
+                {
+                  "key": "application_method_target_type",
+                  "value": "order"
+                }
+              ]
+            },
+            "description": "List rules for a promotion by rule_type: rules, target-rules, buy-rules."
+          },
+          "response": []
+        },
+        {
+          "name": "Batch Update Promotion Rules",
+          "id": "admin-promotions-rules-batch",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"create\": [\n    {\n      \"operator\": \"in\",\n      \"attribute\": \"{{rule_attribute_id}}\",\n      \"values\": [\"{{rule_attribute_value}}\"]\n    }\n  ],\n  \"update\": [],\n  \"delete\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/admin/promotions/{{promotion_id}}/rules/batch?promotion_type=standard&application_method_type=percentage&application_method_target_type=order",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "promotions",
+                "{{promotion_id}}",
+                "rules",
+                "batch"
+              ],
+              "query": [
+                {
+                  "key": "promotion_type",
+                  "value": "standard"
+                },
+                {
+                  "key": "application_method_type",
+                  "value": "percentage"
+                },
+                {
+                  "key": "application_method_target_type",
+                  "value": "order"
+                }
+              ]
+            },
+            "description": "Create/update/delete promotion rules in batch. Requires valid rule attribute/value options."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Promotion",
+          "id": "admin-promotions-delete",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/admin/promotions/{{promotion_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "promotions",
+                "{{promotion_id}}"
+              ]
+            },
+            "description": "Delete a promotion by ID."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Store Cart Promotions",
+      "description": "Storefront endpoints to add/remove promo codes to cart.",
+      "item": [
+        {
+          "name": "Add Promotion to Cart",
+          "id": "store-cart-promotions-add",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-publishable-api-key",
+                "value": "{{publishable_api_key}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"promo_codes\": [\n    \"{{promotion_code}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/store/carts/{{cart_id}}/promotions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "store",
+                "carts",
+                "{{cart_id}}",
+                "promotions"
+              ]
+            },
+            "description": "Add promo codes to cart. Requires x-publishable-api-key and cart_id."
+          },
+          "response": []
+        },
+        {
+          "name": "Remove Promotion from Cart",
+          "id": "store-cart-promotions-remove",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-publishable-api-key",
+                "value": "{{publishable_api_key}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"promo_codes\": [\n    \"{{promotion_code}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/store/carts/{{cart_id}}/promotions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "store",
+                "carts",
+                "{{cart_id}}",
+                "promotions"
+              ]
+            },
+            "description": "Remove promo codes from cart. Requires x-publishable-api-key and cart_id."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Cleanup",
+      "description": "Cleanup admin artifacts created by this collection.",
+      "item": [
+        {
+          "name": "Delete Campaign",
+          "id": "admin-campaigns-delete",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/admin/campaigns/{{campaign_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "campaigns",
+                "{{campaign_id}}"
+              ]
+            },
+            "description": "Delete the campaign created by this collection. Promotions are not deleted automatically."
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{jwt_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:9000",
+      "type": "string"
+    },
+    {
+      "key": "jwt_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "publishable_api_key",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "cart_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "campaign_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "promotion_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "promotion_code",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "rule_type",
+      "value": "rules",
+      "type": "string"
+    },
+    {
+      "key": "rule_attribute_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "rule_attribute_value",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}

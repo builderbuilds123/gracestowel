@@ -30,6 +30,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         if (!item.id) return false;
         if (!item.title || typeof item.title !== 'string') return false;
         if (!item.price || typeof item.price !== 'string') return false;
+        if (typeof item.quantity !== 'number' || item.quantity <= 0) return false;
         return true;
     };
 
@@ -96,6 +97,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     };
 
     const updateQuantity = (id: ProductId, quantity: number, color?: string, variantId?: string) => {
+        if (quantity <= 0) {
+            removeFromCart(id, color);
+            return;
+        }
+
         setItems(prevItems =>
             prevItems.map(item => {
                 let isMatch = false;

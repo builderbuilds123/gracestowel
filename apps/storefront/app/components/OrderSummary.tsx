@@ -112,6 +112,16 @@ export function OrderSummary({
                     </div>
                 </div>
 
+                {/* Discount (from promo codes) */}
+                {discountTotal > 0 && (
+                    <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Discount</span>
+                        <span className="font-medium text-green-600">
+                            -${discountTotal.toFixed(2)}
+                        </span>
+                    </div>
+                )}
+
                 {/* Shipping */}
                 <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Shipping</span>

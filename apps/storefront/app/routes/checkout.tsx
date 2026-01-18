@@ -19,6 +19,7 @@ import { usePaymentSession } from "../hooks/usePaymentSession";
 import { usePromoCode } from "../hooks/usePromoCode";
 import { useAutomaticPromotions } from "../hooks/useAutomaticPromotions";
 import { monitoredFetch } from "../utils/monitored-fetch";
+import type { CartWithPromotions } from "../types/promotion";
 
 
 // Check if in development mode (consistent with codebase pattern)
@@ -62,6 +63,7 @@ export default function Checkout() {
 
   // AbortController for cancelling stale shipping requests
   const abortControllerRef = useRef<AbortController | null>(null);
+  const cartUpdateRequestIdRef = useRef(0);
 
   // Shipping & Cart state
   // Initialize cartId from sessionStorage if available (client-side only)
@@ -95,11 +97,14 @@ export default function Checkout() {
   // PROMO-1: Promo code hook for managing promotional codes
   const {
     appliedCodes: appliedPromoCodes,
+    totalDiscount,
     isLoading: isPromoLoading,
     error: promoError,
     successMessage: promoSuccessMessage,
     applyPromoCode,
     removePromoCode,
+    refreshDiscount,
+    syncFromCart: syncPromoFromCart,
   } = usePromoCode({ cartId });
 
   // PROMO-1 Phase 2: Automatic promotions hook
@@ -155,7 +160,8 @@ export default function Checkout() {
 
   // Shipping amount from Medusa is in dollars
   const shippingCost = selectedShipping?.amount ?? 0;
-  const finalTotal = cartTotal + shippingCost;
+  // PROMO-1: Subtract discount from final total
+  const finalTotal = cartTotal - totalDiscount + shippingCost;
 
   const hasFiredCheckoutStarted = useRef(false);
 
@@ -214,6 +220,7 @@ export default function Checkout() {
     // 2. Create new controller for this request
     const controller = new AbortController();
     abortControllerRef.current = controller;
+    const currentRequestId = ++cartUpdateRequestIdRef.current;
 
     setIsCalculatingShipping(true);
 
@@ -270,30 +277,63 @@ export default function Checkout() {
         if (isDevelopment) {
           console.log('[Checkout] Step 2: Updating cart items/address...');
         }
+        const updatePayload: {
+          items: typeof currentItems;
+          promo_codes?: string[];
+          region_id?: string;
+          shipping_address?: {
+            first_name: string;
+            last_name: string;
+            address_1: string;
+            address_2?: string;
+            city: string;
+            country_code: string;
+            postal_code: string;
+            province?: string;
+            phone?: string;
+          };
+          email?: string;
+        } = {
+          items: currentItems,
+          shipping_address: address ? {
+            first_name: address.firstName || '',
+            last_name: address.lastName || '',
+            address_1: address.address?.line1 || '',
+            address_2: address.address?.line2,
+            city: address.address?.city || '',
+            country_code: address.address?.country || '',
+            postal_code: address.address?.postal_code || '',
+            province: address.address?.state,
+            phone: address.phone,
+          } : undefined,
+          email: guestEmail,
+        };
+
+        if (regionId) {
+          updatePayload.region_id = regionId;
+        }
+
+        if (appliedPromoCodes.length > 0) {
+          updatePayload.promo_codes = appliedPromoCodes.map((code) => code.code);
+        }
+
         const updateResponse = await monitoredFetch(`/api/carts/${currentCartId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            items: currentItems,
-            shipping_address: address ? {
-              first_name: address.firstName || '',
-              last_name: address.lastName || '',
-              address_1: address.address?.line1 || '',
-              address_2: address.address?.line2,
-              city: address.address?.city || '',
-              country_code: address.address?.country || '',
-              postal_code: address.address?.postal_code || '',
-              province: address.address?.state,
-              phone: address.phone,
-            } : undefined,
-            email: guestEmail, // CUST-01 FIX: Sync email to cart
-          }),
+          body: JSON.stringify(updatePayload),
           label: 'update-cart',
           signal: controller.signal,
         });
 
+        const updateResult = await updateResponse.json() as { 
+          error?: string; 
+          details?: string; 
+          code?: string;
+          cart?: CartWithPromotions;
+        };
+
         if (!updateResponse.ok) {
-          const error = await updateResponse.json() as { error: string; details?: string; code?: string };
+          const error = updateResult as { error: string; details?: string; code?: string };
           console.error('[Checkout] Step 2 FAILED - Cart update:', error);
           
           // Handle region mismatch - display error instead of creating new cart
@@ -325,6 +365,14 @@ export default function Checkout() {
         
         // Clear previous errors if successful
         setCartSyncError(null);
+
+        if (updateResult.cart && typeof updateResult.cart.discount_total === "number") {
+          if (currentRequestId === cartUpdateRequestIdRef.current) {
+            syncPromoFromCart(updateResult.cart);
+          }
+        } else {
+          await refreshDiscount(currentRequestId);
+        }
 
         if (isDevelopment) {
           console.log('[Checkout] Step 2 SUCCESS - Cart updated');
@@ -393,7 +441,7 @@ export default function Checkout() {
          setIsCalculatingShipping(false);
       }
     }
-  }, [currency, cartId, selectedShipping, handleShippingSelect, guestEmail]);
+  }, [currency, cartId, selectedShipping, handleShippingSelect, guestEmail, appliedPromoCodes, regionId]);
 
   // Effect to trigger shipping fetch when items or address change
   // Uses direct setTimeout architecture for robust debouncing
@@ -407,6 +455,8 @@ export default function Checkout() {
 
     return () => clearTimeout(timer);
   }, [items, shippingAddress, cartTotal, fetchShippingRates, guestEmail]);
+
+  // PROMO-1: Promo discounts are synced from the cart update response to avoid stale reads.
 
   // Handler for address changes from Stripe Address Element
   const handleAddressChange = async (event: StripeAddressElementChangeEvent) => {
@@ -629,6 +679,7 @@ export default function Checkout() {
             isPromoLoading={isPromoLoading}
             promoError={promoError}
             promoSuccessMessage={promoSuccessMessage}
+            discountTotal={totalDiscount}
             automaticPromotions={automaticPromotions}
           />
         </div>

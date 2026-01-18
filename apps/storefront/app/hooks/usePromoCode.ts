@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { getMedusaClient } from "../lib/medusa";
 import type { AppliedPromoCode, CartWithPromotions, LineItemAdjustment, ShippingMethodAdjustment } from "../types/promotion";
 
@@ -9,11 +9,14 @@ interface UsePromoCodeOptions {
 
 interface UsePromoCodeReturn {
   appliedCodes: AppliedPromoCode[];
+  totalDiscount: number;
   isLoading: boolean;
   error: string | null;
   successMessage: string | null;
   applyPromoCode: (code: string) => Promise<boolean>;
   removePromoCode: (code: string) => Promise<boolean>;
+  refreshDiscount: (requestId?: number) => Promise<void>;
+  syncFromCart: (cart: CartWithPromotions) => void;
   clearMessages: () => void;
 }
 
@@ -60,6 +63,20 @@ function extractAppliedCodesFromCart(cart: CartWithPromotions): AppliedPromoCode
   }));
 }
 
+function applyCartDiscountState(
+  cart: CartWithPromotions,
+  setTotalDiscount: (value: number) => void,
+  setAppliedCodes: (codes: AppliedPromoCode[]) => void
+) {
+  const discountTotal = cart.discount_total || 0;
+  setTotalDiscount(discountTotal);
+
+  const rebuiltCodes = extractAppliedCodesFromCart(cart);
+  if (rebuiltCodes.length > 0) {
+    setAppliedCodes(rebuiltCodes);
+  }
+}
+
 /**
  * Hook for managing promo codes on a Medusa cart
  * Handles multiple codes and stacking rules enforcement
@@ -70,13 +87,46 @@ export function usePromoCode({
   onCartUpdate,
 }: UsePromoCodeOptions): UsePromoCodeReturn {
   const [appliedCodes, setAppliedCodes] = useState<AppliedPromoCode[]>([]);
+  const [totalDiscount, setTotalDiscount] = useState<number>(0);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const refreshRequestIdRef = useRef(0);
 
   const clearMessages = useCallback(() => {
     setError(null);
     setSuccessMessage(null);
+  }, []);
+
+  /**
+   * Refresh discount total from cart without applying/removing codes
+   * Used when cart items are updated (quantity changes) to recalculate percentage discounts
+   */
+  const refreshDiscount = useCallback(async (requestId?: number) => {
+    if (!cartId) return;
+
+    const currentRequestId = requestId ?? ++refreshRequestIdRef.current;
+    if (requestId !== undefined) {
+      refreshRequestIdRef.current = requestId;
+    }
+
+    try {
+      const client = getMedusaClient();
+      const { cart } = await client.store.cart.retrieve(cartId);
+
+      if (currentRequestId !== refreshRequestIdRef.current) {
+        return;
+      }
+
+      applyCartDiscountState(cart, setTotalDiscount, setAppliedCodes);
+    } catch (err) {
+      // Silent fail - don't disrupt user flow for refresh errors
+      console.warn('Failed to refresh discount:', err);
+    }
+  }, [cartId]);
+
+  const syncFromCart = useCallback((cart: CartWithPromotions) => {
+    applyCartDiscountState(cart, setTotalDiscount, setAppliedCodes);
   }, []);
 
   const applyPromoCode = useCallback(
@@ -114,13 +164,16 @@ export function usePromoCode({
 
         // Rebuild applied codes from cart response for accuracy
         const rebuiltCodes = extractAppliedCodesFromCart(cart);
-        
+
+        // Store the total discount from cart
+        const discountTotal = cart.discount_total || 0;
+        setTotalDiscount(discountTotal);
+
         // If adjustments not available, fall back to simple approach
         if (rebuiltCodes.length > 0) {
           setAppliedCodes(rebuiltCodes);
         } else {
           // Fallback: use discount_total with simple distribution
-          const discountTotal = cart.discount_total || 0;
           const numCodes = allCodes.length;
           setAppliedCodes(
             allCodes.map((c) => ({
@@ -170,12 +223,15 @@ export function usePromoCode({
 
         // Rebuild applied codes from cart response for accurate discount amounts
         const rebuiltCodes = extractAppliedCodesFromCart(cart);
-        
+
+        // Update total discount from cart
+        const discountTotal = cart.discount_total || 0;
+        setTotalDiscount(discountTotal);
+
         if (rebuiltCodes.length > 0) {
           setAppliedCodes(rebuiltCodes);
         } else if (remainingCodes.length > 0) {
           // Fallback: distribute total discount across remaining codes
-          const discountTotal = cart.discount_total || 0;
           const perCodeDiscount = Math.floor(discountTotal / remainingCodes.length);
           setAppliedCodes(
             remainingCodes.map((c) => ({
@@ -187,7 +243,7 @@ export function usePromoCode({
         } else {
           setAppliedCodes([]);
         }
-        
+
         setSuccessMessage("Promo code removed");
         onCartUpdate?.();
         return true;
@@ -204,11 +260,14 @@ export function usePromoCode({
 
   return {
     appliedCodes,
+    totalDiscount,
     isLoading,
     error,
     successMessage,
     applyPromoCode,
     removePromoCode,
+    refreshDiscount,
+    syncFromCart,
     clearMessages,
   };
 }

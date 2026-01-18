@@ -111,5 +111,16 @@ module.exports = defineConfig({
         ],
       },
     },
+    {
+      resolve: "@medusajs/translation",
+      options: {
+        providers: [
+          // The translation module might not need explicit providers defined here
+          // if it defaults to a built-in one. The error suggested the previous
+          // configuration structure was invalid for this specific module.
+          // Let's try minimal configuration first.
+        ],
+      },
+    },
   ],
 })
