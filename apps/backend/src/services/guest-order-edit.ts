@@ -3,18 +3,13 @@ import { MedusaRequest } from "@medusajs/framework/http";
 import { 
     createOrderChangeWorkflow,
     requestOrderEditRequestWorkflow,
-    confirmOrderEditRequestWorkflow
+    confirmOrderEditRequestWorkflow,
+    orderEditAddNewItemWorkflow,
+    removeItemOrderEditActionWorkflow,
+    orderEditUpdateItemQuantityWorkflow,
+    updateOrderEditItemQuantityWorkflow,
+    createPaymentSessionsWorkflow
 } from "@medusajs/core-flows";
-// @ts-ignore
-import { orderEditAddNewItemWorkflow } from "@medusajs/core-flows/dist/order/workflows/order-edit/order-edit-add-new-item";
-// @ts-ignore
-import { removeItemOrderEditActionWorkflow } from "@medusajs/core-flows/dist/order/workflows/order-edit/remove-order-edit-item-action";
-// @ts-ignore
-import { orderEditUpdateItemQuantityWorkflow } from "@medusajs/core-flows/dist/order/workflows/order-edit/order-edit-update-item-quantity";
-// @ts-ignore
-import { updateOrderEditItemQuantityWorkflow } from "@medusajs/core-flows/dist/order/workflows/order-edit/update-order-edit-item-quantity";
-// @ts-ignore
-import { createPaymentSessionsWorkflow } from "@medusajs/core-flows/dist/payment-collection/workflows/create-payment-session";
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
 import { modificationTokenService } from "./modification-token";
 
