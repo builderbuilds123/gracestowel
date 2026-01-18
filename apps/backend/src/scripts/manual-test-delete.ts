@@ -39,7 +39,7 @@ export default async function manualTestDelete({ container }: ExecArgs) {
     const addItemRes = await guestOrderEditService.addItem(container, order.id, variantId, 1);
     
     // Find Action ID
-    let actions = addItemRes.actions || [];
+    let actions = (addItemRes as any).actions || [];
     
     if (!actions.length) {
          logger.warn("No actions in result. Querying DB...");

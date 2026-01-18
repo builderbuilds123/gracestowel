@@ -665,7 +665,7 @@ export default async function seedDemoData({ container }: ExecArgs) {
     length: 2,          // cm (folded thickness)
     hs_code: "6302.60", // HS code for cotton terry toweling
     origin_country: "PT", // Made in Portugal
-    mid_code: null,
+    mid_code: undefined,
     material: "100% Long-Staple Turkish Cotton",
   };
 
@@ -676,7 +676,7 @@ export default async function seedDemoData({ container }: ExecArgs) {
     length: 3,          // cm (folded thickness)
     hs_code: "6302.60", // HS code for cotton terry toweling
     origin_country: "PT", // Made in Portugal
-    mid_code: null,
+    mid_code: undefined,
     material: "100% Long-Staple Turkish Cotton",
   };
 
@@ -687,7 +687,7 @@ export default async function seedDemoData({ container }: ExecArgs) {
     length: 5,          // cm (folded thickness)
     hs_code: "6302.60", // HS code for cotton terry toweling
     origin_country: "PT", // Made in Portugal
-    mid_code: null,
+    mid_code: undefined,
     material: "100% Long-Staple Turkish Cotton",
   };
 
@@ -698,7 +698,7 @@ export default async function seedDemoData({ container }: ExecArgs) {
     length: 8,          // cm
     hs_code: "5105.39", // HS code for wool
     origin_country: "NZ", // New Zealand wool
-    mid_code: null,
+    mid_code: undefined,
     material: "100% New Zealand Wool",
   };
 

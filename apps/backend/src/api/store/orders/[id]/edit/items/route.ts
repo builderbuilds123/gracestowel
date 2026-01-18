@@ -30,7 +30,7 @@ export async function POST(
         res.status(400).json({
             code: "INVALID_INPUT",
             message: "Invalid request body",
-            errors: bodyResult.error.errors,
+            errors: bodyResult.error.issues,
         });
         return;
     }

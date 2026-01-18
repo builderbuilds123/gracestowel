@@ -129,6 +129,6 @@ export default async function verifyOrderEditApi({ container }: ExecArgs) {
         fields: ["total", "items.*"],
         filters: { id: order.id }
     });
-    logger.info(`Final Order Total: ${finalOrders[0].total}`);
-    logger.info(`Final Item Count: ${finalOrders[0].items.length}`);
+    logger.info(`Final Order Total: ${finalOrders?.[0]?.total}`);
+    logger.info(`Final Item Count: ${finalOrders?.[0]?.items?.length}`);
 }
