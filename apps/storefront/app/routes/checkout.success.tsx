@@ -11,6 +11,7 @@ import { monitoredFetch } from "../utils/monitored-fetch";
 import { createLogger } from "../lib/logger";
 import { migrateStorageItem } from "../lib/storage-migration";
 import { parsePrice } from "../lib/price";
+import posthog from "posthog-js";
 
 // Lazy load Map component to avoid SSR issues with Leaflet
 const Map = lazy(() => import("../components/Map.client"));
@@ -333,9 +334,20 @@ export default function CheckoutSuccess() {
                         if (paymentIntent.shipping) {
                             setShippingAddress(paymentIntent.shipping);
                         }
-                        
+
                         // RENDER SUCCESS IMMEDIATELY
                         setPaymentStatus('success');
+
+                        // Capture purchase_completed event for PostHog survey targeting
+                        // PostHog will auto-show post-purchase survey based on URL targeting
+                        if (typeof window !== 'undefined') {
+                            posthog.capture('purchase_completed', {
+                                order_total: orderData.total,
+                                item_count: orderData.items?.length || 0,
+                                has_discount: (orderData.discount || 0) > 0,
+                                has_promo_codes: (orderData.appliedPromoCodes?.length || 0) > 0,
+                            });
+                        }
 
                         // REFRESH FIX: Store verified order data so success page survives refresh
                         try {

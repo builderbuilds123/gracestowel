@@ -16,10 +16,9 @@ export { useFormTracking } from "./useFormTracking";
 export { usePaymentCollection } from "./usePaymentCollection";
 export { usePaymentSession } from "./usePaymentSession";
 
-// Feedback hooks (FEEDBACK-01)
-export { useFeedbackContext } from "./useFeedbackContext";
-export { useFeedbackTrigger } from "./useFeedbackTrigger";
-export { useFeedbackSubmit } from "./useFeedbackSubmit";
+// PostHog Survey hooks (replacing custom FEEDBACK-01)
+export { usePostHogSurveys } from "./usePostHogSurveys";
+export { useExitIntent } from "./useExitIntent";
 
 // Promotions hooks (PROMO-1)
 export { usePromoCode } from "./usePromoCode";

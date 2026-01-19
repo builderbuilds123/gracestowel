@@ -32,9 +32,11 @@ interface LoaderData {
 export async function loader({
   context,
 }: LoaderFunctionArgs): Promise<LoaderData> {
-  const env = context.cloudflare.env as { STRIPE_PUBLISHABLE_KEY: string };
+  // Support both Cloudflare (context.env) and Node/Vite (process.env)
+  const env = (context?.cloudflare?.env || process.env) as { STRIPE_PUBLISHABLE_KEY?: string; VITE_STRIPE_PUBLISHABLE_KEY?: string };
+  const stripeKey = env.STRIPE_PUBLISHABLE_KEY || env.VITE_STRIPE_PUBLISHABLE_KEY;
   return {
-    stripePublishableKey: env.STRIPE_PUBLISHABLE_KEY,
+    stripePublishableKey: stripeKey || "",
   };
 }
 

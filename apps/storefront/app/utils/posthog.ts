@@ -1,6 +1,22 @@
 import posthog from 'posthog-js';
 
 /**
+ * PostHog Survey IDs - Created via PostHog MCP
+ * These are used for programmatic survey triggers (API-based surveys)
+ */
+export const POSTHOG_SURVEY_IDS = {
+  OPEN_FEEDBACK: '019bd4c4-b299-0000-a365-bda3737bc1a2',
+  NPS: '019bd4c4-b63c-0000-c368-0c8d7ffd8860',
+  CSAT: '019bd4c4-b958-0000-bc7c-9f7b2b67eebe',
+  POST_PURCHASE: '019bd4c4-bc5b-0000-b0eb-05a1ed724025',
+  CES: '019bd4c4-f0e9-0000-2d22-9e15e664946a',
+  FEATURE_REQUEST: '019bd4c4-f385-0000-eb56-c4bdc86b5496',
+  ERROR_FEEDBACK: '019bd4c4-f695-0000-1c70-613b7370358c',
+  ATTRIBUTION: '019bd4c4-f9b9-0000-2ca0-c9790f2e9792',
+  BETA_FEEDBACK: '019bd4c4-fc65-0000-ce38-809d7a924e9d',
+} as const;
+
+/**
  * Get sanitized URL (strips sensitive query params like tokens)
  * Prevents leaking auth tokens to analytics
  */
@@ -62,11 +78,15 @@ export function initPostHog() {
 
     // Explicitly enable persistence (localStorage+cookie) as per architecture policy
     persistence: 'localStorage+cookie',
-    
+
+    // Enable surveys (PostHog native surveys)
+    disable_surveys: false,
+
     // Debugging (only in development)
     loaded: (posthog) => {
       if (import.meta.env.MODE === 'development') {
         console.log('[PostHog] Successfully initialized');
+        console.log('[PostHog] Surveys enabled');
         posthog.debug();
       }
     },
@@ -202,10 +222,11 @@ export function setupErrorTracking() {
 /**
  * Capture a handled exception manually
  * Use this to track errors that are caught but still significant
+ * Optionally triggers the error feedback survey
  */
-export function captureException(error: Error, context?: Record<string, unknown>) {
+export function captureException(error: Error, context?: Record<string, unknown>, triggerSurvey = false) {
   if (typeof window === 'undefined') return;
-  
+
   posthog.capture('$exception', {
     $exception_type: error.name,
     $exception_message: error.message,
@@ -216,6 +237,43 @@ export function captureException(error: Error, context?: Record<string, unknown>
     user_agent: navigator.userAgent, // L2 fix: consistent with auto-captured exceptions
     ...context,
   });
+
+  // Optionally trigger error feedback survey
+  if (triggerSurvey) {
+    triggerErrorFeedbackSurvey();
+  }
+}
+
+/**
+ * Trigger the error feedback survey programmatically
+ * Uses session-based cooldown to prevent survey fatigue
+ */
+export function triggerErrorFeedbackSurvey() {
+  if (typeof window === 'undefined') return;
+
+  const COOLDOWN_KEY = 'ph_error_feedback_shown';
+  const COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+  // Check cooldown
+  try {
+    const lastShown = sessionStorage.getItem(COOLDOWN_KEY);
+    if (lastShown) {
+      const elapsed = Date.now() - parseInt(lastShown, 10);
+      if (elapsed < COOLDOWN_MS) {
+        return; // Still in cooldown
+      }
+    }
+
+    // Mark as shown
+    sessionStorage.setItem(COOLDOWN_KEY, Date.now().toString());
+
+    // Capture survey shown event - PostHog will render the survey
+    posthog.capture('survey shown', {
+      $survey_id: POSTHOG_SURVEY_IDS.ERROR_FEEDBACK,
+    });
+  } catch {
+    // Storage access failed (private mode, etc.) - skip survey
+  }
 }
 
 export default posthog;

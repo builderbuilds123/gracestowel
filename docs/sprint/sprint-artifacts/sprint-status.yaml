@@ -82,6 +82,9 @@ development_status:
 
   # --- Enhanced Analytics (Growth Features from PRD) ---
   epic-5-enhanced-analytics: in-progress
+  backend-analytics-migration-2026-01-19:
+    path: docs/sprint/sprint-artifacts/story-2026-01-19-backend-analytics-migration.md
+    status: drafted
   5-2-comprehensive-frontend-tracking:
     path: docs/sprint/sprint-artifacts/5-2-comprehensive-frontend-tracking.md
     status: done
