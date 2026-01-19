@@ -474,21 +474,21 @@ export default async function seedDemoData({ container }: ExecArgs) {
       
       const allOptions = await fulfillmentModuleService.listShippingOptions(
           { service_zone_id: [serviceZoneNA.id, serviceZoneEU.id] } as any
-      ).catch(() => []); // Fallback if filter is invalid
+      ).catch(() => []);
       
-      // If the above throw or returned all, let's ensure we really filtered
       const existingOptions = allOptions.filter((o: any) => 
           o.service_zone_id === serviceZoneNA.id || o.service_zone_id === serviceZoneEU.id
       );
       
-      const existingNames = new Set(existingOptions.map(o => o.name));
+      const hasOption = (name: string, zoneId: string) => 
+          existingOptions.some((o: any) => o.name === name && (o.service_zone_id === zoneId || o.service_zone?.id === zoneId));
 
       const shippingOptionsToCreate: any[] = [];
 
       // NA Standard
-      if (!existingNames.has("Standard Shipping (3-5 days)")) {
+      if (!hasOption("Standard Shipping", serviceZoneNA.id)) {
           shippingOptionsToCreate.push({
-            name: "Standard Shipping (3-5 days)",
+            name: "Standard Shipping",
             price_type: "flat",
             provider_id: "manual_manual",
             service_zone_id: serviceZoneNA.id,
@@ -501,6 +501,8 @@ export default async function seedDemoData({ container }: ExecArgs) {
             prices: [
               { currency_code: "usd", amount: 8.95 },
               { region_id: regionUS.id, amount: 8.95 },
+              { currency_code: "cad", amount: 12.00 },
+              { region_id: regionCA.id, amount: 12.00 },
             ],
             rules: [
               { attribute: "enabled_in_store", value: "true", operator: "eq" },
@@ -510,9 +512,9 @@ export default async function seedDemoData({ container }: ExecArgs) {
       }
 
       // NA Express
-      if (!existingNames.has("Express Shipping (1-2 days)")) {
+      if (!hasOption("Express Shipping", serviceZoneNA.id)) {
         shippingOptionsToCreate.push({
-            name: "Express Shipping (1-2 days)",
+            name: "Express Shipping",
             price_type: "flat",
             provider_id: "manual_manual",
             service_zone_id: serviceZoneNA.id,
@@ -525,6 +527,8 @@ export default async function seedDemoData({ container }: ExecArgs) {
             prices: [
               { currency_code: "usd", amount: 14.95 },
               { region_id: regionUS.id, amount: 14.95 },
+              { currency_code: "cad", amount: 20.00 },
+              { region_id: regionCA.id, amount: 20.00 },
             ],
             rules: [
               { attribute: "enabled_in_store", value: "true", operator: "eq" },
@@ -534,9 +538,9 @@ export default async function seedDemoData({ container }: ExecArgs) {
       }
 
       // EU Standard
-      if (!existingNames.has("Standard Shipping (5-7 days)")) {
+      if (!hasOption("Standard Shipping", serviceZoneEU.id)) {
         shippingOptionsToCreate.push({
-            name: "Standard Shipping (5-7 days)",
+            name: "Standard Shipping",
             price_type: "flat",
             provider_id: "manual_manual",
             service_zone_id: serviceZoneEU.id,
@@ -605,10 +609,10 @@ export default async function seedDemoData({ container }: ExecArgs) {
   const productModuleService = container.resolve(Modules.PRODUCT);
 
   const categories = [
-    { name: "Bath Towels", is_active: true },
-    { name: "Hand Towels", is_active: true },
-    { name: "Washcloths", is_active: true },
-    { name: "Accessories", is_active: true },
+    { name: "Bath Towels", handle: "bath-towels", is_active: true },
+    { name: "Hand Towels", handle: "hand-towels", is_active: true },
+    { name: "Washcloths", handle: "washcloths", is_active: true },
+    { name: "Accessories", handle: "accessories", is_active: true },
   ];
 
   // Fetch all existing categories first to avoid case sensitivity issues in query
@@ -622,10 +626,12 @@ export default async function seedDemoData({ container }: ExecArgs) {
       if (!existingCategoryMap.has(cat.name.toLowerCase())) {
           try {
             logger.info(`Creating missing category: ${cat.name}`);
-            const { result } = await createProductCategoriesWorkflow(container).run({
-                input: { product_categories: [cat] }, // Create one by one to isolate failures
-            });
-            allCategories.push(result[0]);
+             const { result } = await createProductCategoriesWorkflow(container).run({
+                 input: { product_categories: [cat] }, // Create one by one to isolate failures
+             });
+             const createdCat = Array.isArray(result) ? result[0] : result;
+             allCategories.push(createdCat);
+             logger.info(`✓ Created category: ${cat.name} (${createdCat.id}) (Handle: ${createdCat.handle})`);
           } catch (e) {
               logger.warn(`Failed to create category ${cat.name}, might have been created concurrently or handle conflict.`);
               // Attempt to fetch it again just in case
@@ -652,8 +658,12 @@ export default async function seedDemoData({ container }: ExecArgs) {
   }
 
   const getCategoryId = (name: string) => {
-      const found = allCategories.find(c => c.name?.toLowerCase() === name.toLowerCase());
-      return found ? found.id : fallbackCategory.id;
+      const found = allCategories.find(c => c && (c.name?.toLowerCase() === name.toLowerCase() || c.handle?.toLowerCase() === name.toLowerCase().replace(" ", "-")));
+      if (!found) {
+          logger.warn(`Category "${name}" not found, using fallback: ${fallbackCategory?.name || 'none'}`);
+          return fallbackCategory?.id || "";
+      }
+      return found.id;
   };
 
   // Variant attributes for shipping/customs (applied to all variants of a product)
@@ -743,7 +753,7 @@ export default async function seedDemoData({ container }: ExecArgs) {
           title: "The Bear Hug",
           category_ids: [getCategoryId("Bath Towels")],
           description: "Wrap yourself in a warm embrace...",
-          handle: "the-bearhug",
+          handle: "the-bear-hug",
           weight: 700,
           status: ProductStatus.PUBLISHED,
           shipping_profile_id: shippingProfile.id,
@@ -775,6 +785,14 @@ export default async function seedDemoData({ container }: ExecArgs) {
       }
   ];
 
+  // Cleanup legacy handles if they exist to facilitate rename
+  const legacyHandles = ["the-bearhug"];
+  const legacyProducts = await productModuleService.listProducts({ handle: legacyHandles });
+  if (legacyProducts.length > 0) {
+      logger.info(`Deleting legacy products: ${legacyProducts.map(p => p.handle).join(", ")}`);
+      await productModuleService.deleteProducts(legacyProducts.map(p => p.id));
+  }
+
   const existingProducts = await productModuleService.listProducts({
       handle: productsToCreate.map(p => p.handle)
   });
@@ -793,13 +811,13 @@ export default async function seedDemoData({ container }: ExecArgs) {
   const variantAttrsByHandle: Record<string, typeof nuzzleVariantAttrs> = {
     "the-nuzzle": nuzzleVariantAttrs,
     "the-cradle": cradleVariantAttrs,
-    "the-bearhug": bearhugVariantAttrs,
+    "the-bear-hug": bearhugVariantAttrs,
     "the-wool-dryer-ball": dryerBallsVariantAttrs,
   };
   const priceConfigByHandle: Record<string, { usd: number; eur: number; cad: number }> = {
     "the-nuzzle": { usd: 18, eur: 16, cad: 24 },
     "the-cradle": { usd: 25, eur: 22, cad: 34 },
-    "the-bearhug": { usd: 35, eur: 30, cad: 48 },
+    "the-bear-hug": { usd: 35, eur: 30, cad: 48 },
     "the-wool-dryer-ball": { usd: 18, eur: 16, cad: 24 },
   };
 

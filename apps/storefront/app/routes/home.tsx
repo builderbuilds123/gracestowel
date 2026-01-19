@@ -93,7 +93,7 @@ export default function Home() {
       description: "Wrap yourself in a warm embrace with our oversized, ultra-plush bath towel.",
       price: "$35.00",
       image: "/bath-towel-bearhug.jpg",
-      handle: "the-bearhug",
+      handle: "the-bear-hug",
       variantId: undefined,
       sku: undefined,
     },

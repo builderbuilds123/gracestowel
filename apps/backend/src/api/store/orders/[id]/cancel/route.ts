@@ -110,7 +110,7 @@ export async function POST(
 
     try {
         // Run the cancellation workflow - Story 3.5: Pass grace period status for branching
-        const { result } = await cancelOrderWithRefundWorkflow(req.scope).run({
+        const { result, errors } = await cancelOrderWithRefundWorkflow(req.scope).run({
             input: {
                 orderId: id,
                 paymentIntentId: validation.payload.payment_intent_id,
@@ -119,7 +119,16 @@ export async function POST(
                     : "Customer requested cancellation after modification window"),
                 isWithinGracePeriod,
             },
+            throwOnError: false, // Handle errors manually for precise status codes
         });
+
+        if (errors?.length > 0) {
+            throw errors[0].error;
+        }
+
+        if (!result) {
+            throw new Error("the post order cancellation flow failed");
+        }
 
         // Story 3.4: Response schema per AC
         res.status(200).json({

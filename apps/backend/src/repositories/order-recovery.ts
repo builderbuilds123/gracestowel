@@ -41,8 +41,12 @@ export async function getPendingRecoveryOrders(
   `;
 
   // Standard Medusa v2 PG_CONNECTION can be a Pool or a Knex instance
+  if (!pgConnection) {
+    throw new Error("Database connection (PG_CONNECTION) not found in container");
+  }
+
   if (typeof (pgConnection as any).query === 'function') {
-    const result = await pgConnection.query<RecoveryOrderRow>(sql, params);
+    const result = await (pgConnection as any).query(sql, params);
     return result.rows;
   } else if (typeof (pgConnection as any).raw === 'function') {
     const result = await (pgConnection as any).raw(sql.replace(/\$(\d+)/g, '?'), params);
