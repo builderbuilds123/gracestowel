@@ -97,7 +97,10 @@ export default async function fixProductPrices({ container }: ExecArgs) {
 
       try {
         if (priceSetId) {
-          await pricingModuleService.addPrices(priceSetId, pricesToAdd);
+          await pricingModuleService.addPrices({
+            priceSetId,
+            prices: pricesToAdd,
+          });
           logger.info(`  ✓ Added missing prices for ${variant.sku} on existing price set.`);
           updatedCount++;
           continue;
