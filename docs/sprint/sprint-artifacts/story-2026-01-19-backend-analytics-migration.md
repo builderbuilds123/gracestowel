@@ -157,3 +157,36 @@ Prod:
 - No direct PostHog calls remain
 - Log policy applied and all info logs captured
 
+---
+
+## Context: Relationship with Storefront `monitoredFetch`
+
+### Current State
+The storefront (`apps/storefront`) uses a custom `monitoredFetch` utility that wraps native `fetch` to track API request metrics (latency, status codes, errors) to PostHog. This is **complementary** to the Medusa Analytics Module, not redundant.
+
+### Key Differences
+
+| Aspect | Medusa Analytics Module (Backend) | monitoredFetch (Storefront) |
+|--------|----------------------------------|---------------------------|
+| **Location** | Server-side (Medusa) | Client-side (Cloudflare Workers) |
+| **Events** | Business events (order.placed, cart.updated) | HTTP metrics (api_request) |
+| **Data** | Rich context (order totals, items, customer_id) | Shallow (URL, status, duration_ms) |
+| **Blocking** | Cannot be ad-blocked | Can be ad-blocked |
+
+### Recommendation: Keep Both, Simplify Over Time
+
+1. **After this migration:** Medusa Analytics Module handles all backend business events with rich context
+2. **Storefront simplification (future):** 
+   - Remove business event tracking from `monitoredFetch` (e.g., order completion)
+   - Keep `monitoredFetch` for pure performance monitoring only
+   - Business events will be captured server-side with richer data
+3. **Long-term:** Consider making `monitoredFetch` opt-in per endpoint rather than default-on
+
+### Files Affected (for reference)
+Storefront files currently using `monitoredFetch` for Medusa API calls:
+- `api.carts.ts`, `api.payment-collections.ts`, `api.shipping-rates.ts`
+- `order_.status.$id.tsx`, `checkout.success.tsx`
+- Hooks: `usePaymentSession.ts`, `usePaymentCollection.ts`, `useMedusaProducts.ts`
+
+These do NOT need to change as part of this backend migration. The backend Analytics Module will capture the same business events with richer context, making the storefront's shallow tracking redundant for business analytics (but still useful for client-side performance monitoring).
+
