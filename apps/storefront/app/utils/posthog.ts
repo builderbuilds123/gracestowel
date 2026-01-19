@@ -61,18 +61,18 @@ export function initPostHog() {
   // Initialize PostHog
   posthog.init(apiKey, {
     api_host: host,
-    
+
     // Enable session recording
     session_recording: {
       recordCrossOriginIframes: true,
     },
-    
+
     // Automatically capture pageviews
     capture_pageview: true,
-    
+
     // Automatically capture performance metrics
     capture_performance: true,
-    
+
     // Enable autocapture for clicks and form submissions
     autocapture: true,
 
@@ -82,11 +82,20 @@ export function initPostHog() {
     // Enable surveys (PostHog native surveys)
     disable_surveys: false,
 
+    // Load feature flags on init (required for surveys to work)
+    bootstrap: {
+      featureFlags: {},
+    },
+
     // Debugging (only in development)
     loaded: (posthog) => {
       if (import.meta.env.MODE === 'development') {
+        console.log('[PostHog] Successfully initialized');
+        console.log('[PostHog] Surveys enabled');
         posthog.debug();
       }
+      // Manually reload feature flags to ensure surveys work
+      posthog.reloadFeatureFlags();
     },
   });
 }
@@ -262,13 +271,38 @@ export function triggerErrorFeedbackSurvey() {
       }
     }
 
-    // Mark as shown
-    sessionStorage.setItem(COOLDOWN_KEY, Date.now().toString());
+    const client = posthog as unknown as {
+      capture: (event: string, properties?: Record<string, unknown>) => void;
+      getActiveMatchingSurveys?: (cb: (surveys: Array<{ id: string }>) => void, forceReload?: boolean) => void;
+      displaySurvey?: (id: string, options?: Record<string, unknown>) => void;
+    };
 
-    // Capture survey shown event - PostHog will render the survey
-    posthog.capture('survey shown', {
-      $survey_id: POSTHOG_SURVEY_IDS.ERROR_FEEDBACK,
-    });
+    const markCooldown = () => {
+      sessionStorage.setItem(COOLDOWN_KEY, Date.now().toString());
+    };
+
+    const fallbackCapture = () => {
+      client.capture('survey shown', { $survey_id: POSTHOG_SURVEY_IDS.ERROR_FEEDBACK });
+      markCooldown();
+    };
+
+    if (typeof client.getActiveMatchingSurveys === 'function') {
+      client.getActiveMatchingSurveys((surveys) => {
+        const survey = surveys?.find((s) => s.id === POSTHOG_SURVEY_IDS.ERROR_FEEDBACK);
+        if (!survey) {
+          fallbackCapture();
+          return;
+        }
+        if (typeof client.displaySurvey === 'function') {
+          client.displaySurvey(survey.id);
+          markCooldown();
+          return;
+        }
+        fallbackCapture();
+      }, true);
+    } else {
+      fallbackCapture();
+    }
   } catch {
     // Storage access failed (private mode, etc.) - skip survey
   }

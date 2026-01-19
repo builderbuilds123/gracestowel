@@ -74,9 +74,15 @@ export function PostHogSurveyTrigger() {
   });
 
   const handleClick = () => {
-    triggerFeatureRequest();
-    // Hide button after triggering survey
-    setShowButton(false);
+    const triggered = triggerFeatureRequest();
+    // Only hide button if survey was actually triggered (not on cooldown)
+    // The PostHog survey popup will appear separately
+    if (triggered) {
+      // Small delay to let the survey appear before hiding button
+      setTimeout(() => {
+        setShowButton(false);
+      }, 500);
+    }
   };
 
   const handleDismiss = (e: React.MouseEvent) => {

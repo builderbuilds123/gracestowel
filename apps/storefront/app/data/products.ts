@@ -68,9 +68,9 @@ export const products: Record<string, Product> = {
         ],
         colors: ["Cloud White", "Charcoal", "Navy"]
     },
-    "the-bearhug": {
+    "the-bear-hug": {
         id: 3,
-        handle: "the-bearhug",
+        handle: "the-bear-hug",
         title: "The Bear Hug",
         price: 35.00,
         formattedPrice: "$35.00",
