@@ -5,6 +5,10 @@
   "compatibility_flags": ["nodejs_compat"],
   "main": "./workers/app.ts",
 
+  // IMPORTANT: Preserve secrets/vars set via Dashboard or `wrangler secret put`
+  // Without this, deployments may erase existing secrets!
+  "keep_vars": true,
+
   // Shared configuration (inherited by all environments)
   // NOTE: Do NOT define MEDUSA_BACKEND_URL, MEDUSA_PUBLISHABLE_KEY, STRIPE_* here!
   // These are set as secrets via `wrangler secret put` or Cloudflare Dashboard.
@@ -15,8 +19,8 @@
     {
       "binding": "HYPERDRIVE",
       "id": "43cb3470f0b5446c881a7b30aa87eb3e",
-      "localConnectionString": "postgresql://postgres:password@localhost:5432/medusa-db"
-    }
+      "localConnectionString": "postgresql://postgres:password@localhost:5432/medusa-db",
+    },
   ],
 
   // Observability configuration
@@ -27,13 +31,13 @@
       "enabled": true,
       "head_sampling_rate": 1,
       "persist": true,
-      "invocation_logs": true
+      "invocation_logs": true,
     },
     "traces": {
       "enabled": true,
       "persist": true,
-      "head_sampling_rate": 1
-    }
+      "head_sampling_rate": 1,
+    },
   },
 
   // Environment-specific configurations
@@ -43,8 +47,8 @@
     "staging": {
       "name": "gracestowelstorefront-staging",
       "vars": {
-        "ENVIRONMENT": "staging"
-      }
+        "ENVIRONMENT": "staging",
+      },
       // Hyperdrive is injected by CI from HYPERDRIVE_ID secret
       // Secrets are set via: wrangler secret put <NAME> --env staging
     },
@@ -53,20 +57,20 @@
     "production": {
       "name": "gracestowelstorefront",
       "vars": {
-        "ENVIRONMENT": "production"
-      }
+        "ENVIRONMENT": "production",
+      },
       // Hyperdrive is injected by CI from HYPERDRIVE_ID secret
       // Secrets are set via: wrangler secret put <NAME> --env production
     },
-    
+
     // CI/Local testing environment
     "ci": {
       "name": "gracestowelstorefront-ci",
       "vars": {
         "ENVIRONMENT": "development",
         "MEDUSA_BACKEND_URL": "http://backend:8080",
-        "MEDUSA_PUBLISHABLE_KEY": "placeholder"
-      }
-    }
-  }
+        "MEDUSA_PUBLISHABLE_KEY": "placeholder",
+      },
+    },
+  },
 }
