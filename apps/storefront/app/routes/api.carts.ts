@@ -1,6 +1,5 @@
 import { type ActionFunctionArgs, data } from "react-router";
-import { monitoredFetch } from "../utils/monitored-fetch";
-import type { CloudflareEnv } from "../utils/monitored-fetch";
+import { medusaFetch } from "../lib/medusa-fetch";
 import { MedusaCartService } from "../services/medusa-cart";
 import { createLogger, getTraceIdFromRequest } from "../lib/logger";
 
@@ -19,7 +18,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
     return data({ error: "Method not allowed" }, { status: 405 });
   }
 
-  const env = context.cloudflare.env as CloudflareEnv & {
+  const env = context.cloudflare.env as {
     MEDUSA_BACKEND_URL?: string;
     MEDUSA_PUBLISHABLE_KEY?: string;
   };
@@ -45,11 +44,10 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
   try {
     // Fetch regions to find appropriate region
-    const regionsResponse = await monitoredFetch(`${medusaBackendUrl}/store/regions`, {
+    const regionsResponse = await medusaFetch(`/store/regions`, {
       method: "GET",
-      headers: { "x-publishable-api-key": medusaPublishableKey },
       label: "medusa-regions",
-      cloudflareEnv: env,
+      context,
     });
 
     if (!regionsResponse.ok) {
