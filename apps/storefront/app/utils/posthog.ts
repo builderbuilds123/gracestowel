@@ -61,18 +61,18 @@ export function initPostHog() {
   // Initialize PostHog
   posthog.init(apiKey, {
     api_host: host,
-    
+
     // Enable session recording
     session_recording: {
       recordCrossOriginIframes: true,
     },
-    
+
     // Automatically capture pageviews
     capture_pageview: true,
-    
+
     // Automatically capture performance metrics
     capture_performance: true,
-    
+
     // Enable autocapture for clicks and form submissions
     autocapture: true,
 
@@ -82,11 +82,20 @@ export function initPostHog() {
     // Enable surveys (PostHog native surveys)
     disable_surveys: false,
 
+    // Load feature flags on init (required for surveys to work)
+    bootstrap: {
+      featureFlags: {},
+    },
+
     // Debugging (only in development)
     loaded: (posthog) => {
       if (import.meta.env.MODE === 'development') {
+        console.log('[PostHog] Successfully initialized');
+        console.log('[PostHog] Surveys enabled');
         posthog.debug();
       }
+      // Manually reload feature flags to ensure surveys work
+      posthog.reloadFeatureFlags();
     },
   });
 }

@@ -53,24 +53,128 @@ function recordSurveyShown(surveyId: string): void {
 }
 
 /**
- * Trigger a PostHog survey programmatically
- * Only works for API-type surveys (Feature Request, Error Feedback, Beta Feedback)
+ * Type for PostHog client with survey methods
+ */
+interface PostHogSurveyClient {
+  capture: (event: string, properties?: Record<string, unknown>) => void;
+  getActiveMatchingSurveys?: (
+    callback: (surveys: Array<{ id: string; name: string }>) => void,
+    forceReload?: boolean
+  ) => void;
+  renderSurvey?: (surveyId: string) => void;
+}
+
+/**
+ * Extended PostHog client type with feature flag methods
+ */
+interface PostHogClientExtended extends PostHogSurveyClient {
+  featureFlags?: {
+    receivedFeatureFlags?: () => boolean;
+  };
+  onFeatureFlags?: (callback: () => void) => void;
+  isFeatureEnabled?: (key: string) => boolean | undefined;
+}
+
+/**
+ * Wait for PostHog feature flags to be loaded
+ * Returns a promise that resolves when flags are ready or times out
+ */
+function waitForFeatureFlags(timeoutMs = 3000): Promise<boolean> {
+  return new Promise((resolve) => {
+    const client = posthog as unknown as PostHogClientExtended;
+
+    // Check if flags are already loaded
+    if (client.featureFlags?.receivedFeatureFlags?.()) {
+      resolve(true);
+      return;
+    }
+
+    // Set up timeout
+    const timeout = setTimeout(() => {
+      console.warn('[PostHog Survey] Feature flags load timeout');
+      resolve(false);
+    }, timeoutMs);
+
+    // Wait for flags to load
+    if (typeof client.onFeatureFlags === 'function') {
+      client.onFeatureFlags(() => {
+        clearTimeout(timeout);
+        resolve(true);
+      });
+    } else {
+      // Fallback: poll for flags
+      let attempts = 0;
+      const maxAttempts = timeoutMs / 100;
+      const poll = setInterval(() => {
+        attempts++;
+        if (client.featureFlags?.receivedFeatureFlags?.() || attempts >= maxAttempts) {
+          clearInterval(poll);
+          clearTimeout(timeout);
+          resolve(client.featureFlags?.receivedFeatureFlags?.() || false);
+        }
+      }, 100);
+    }
+  });
+}
+
+/**
+ * Trigger a PostHog survey programmatically using the proper API
+ * Uses getActiveMatchingSurveys + renderSurvey for proper display
+ * Waits for feature flags to be loaded first (required for surveys)
  */
 function triggerSurvey(surveyId: string, properties?: Record<string, unknown>): boolean {
   if (typeof window === 'undefined') return false;
 
   // Check cooldown
   if (isSurveyOnCooldown(surveyId)) {
+    console.log('[PostHog Survey] Survey on cooldown:', surveyId);
     return false;
   }
 
-  // Record that we're showing the survey
-  recordSurveyShown(surveyId);
+  const client = posthog as unknown as PostHogSurveyClient;
 
-  // Capture survey shown event - PostHog will render the survey
-  posthog.capture('survey shown', {
-    $survey_id: surveyId,
-    ...properties,
+  // Helper to mark cooldown and capture event
+  const showSurvey = () => {
+    recordSurveyShown(surveyId);
+    client.capture('survey shown', {
+      $survey_id: surveyId,
+      ...properties,
+    });
+  };
+
+  // Wait for feature flags then render survey
+  waitForFeatureFlags().then((flagsLoaded) => {
+    if (!flagsLoaded) {
+      console.warn('[PostHog Survey] Feature flags not loaded, attempting survey render anyway');
+    }
+
+    // Try to use the proper survey rendering API
+    if (typeof client.getActiveMatchingSurveys === 'function') {
+      client.getActiveMatchingSurveys((surveys) => {
+        console.log('[PostHog Survey] Active surveys:', surveys?.map(s => s.name));
+
+        const survey = surveys?.find((s) => s.id === surveyId);
+        if (!survey) {
+          console.warn('[PostHog Survey] Survey not found in active surveys:', surveyId);
+          // Still capture the event as fallback
+          showSurvey();
+          return;
+        }
+
+        // Use renderSurvey if available (PostHog JS SDK method)
+        if (typeof client.renderSurvey === 'function') {
+          console.log('[PostHog Survey] Rendering survey:', survey.name);
+          client.renderSurvey(surveyId);
+          recordSurveyShown(surveyId);
+        } else {
+          console.log('[PostHog Survey] renderSurvey not available, using capture fallback');
+          showSurvey();
+        }
+      }, true); // forceReload = true to get fresh survey list
+    } else {
+      console.log('[PostHog Survey] getActiveMatchingSurveys not available, using capture fallback');
+      showSurvey();
+    }
   });
 
   return true;
