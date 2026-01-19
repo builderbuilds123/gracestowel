@@ -97,11 +97,11 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
         }))
       });
       
-      const validItems = items.filter(item => {
-        const hasVariantId = !!item.variantId;
-        const isMedusaVariant = item.variantId ? isMedusaId(item.variantId) : false;
-        return hasVariantId && isMedusaVariant && item.quantity > 0;
-      });
+      const isMedusaVariantId = (id?: string) =>
+        typeof id === "string" && id.startsWith("variant_");
+      const validItems = items.filter(item =>
+        isMedusaVariantId(item.variantId) && item.quantity > 0
+      );
 
       if (validItems.length === 0) {
         logger.warn('[Cart Sync] No valid cart items provided', {

@@ -35,8 +35,11 @@ export async function loader({
   // Support both Cloudflare (context.env) and Node/Vite (process.env)
   const cloudflareEnv = context?.cloudflare?.env;
   const nodeEnv = typeof process !== 'undefined' ? process.env : {};
-  const env = (cloudflareEnv || nodeEnv) as { STRIPE_PUBLISHABLE_KEY?: string; VITE_STRIPE_PUBLISHABLE_KEY?: string };
-  const stripeKey = env.STRIPE_PUBLISHABLE_KEY || env.VITE_STRIPE_PUBLISHABLE_KEY;
+  const stripeKey =
+    cloudflareEnv?.STRIPE_PUBLISHABLE_KEY ??
+    cloudflareEnv?.VITE_STRIPE_PUBLISHABLE_KEY ??
+    nodeEnv?.STRIPE_PUBLISHABLE_KEY ??
+    nodeEnv?.VITE_STRIPE_PUBLISHABLE_KEY;
   return {
     stripePublishableKey: stripeKey || "",
   };

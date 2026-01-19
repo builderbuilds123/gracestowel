@@ -262,32 +262,37 @@ export function triggerErrorFeedbackSurvey() {
       }
     }
 
-    // Mark as shown
-    sessionStorage.setItem(COOLDOWN_KEY, Date.now().toString());
-
     const client = posthog as unknown as {
       capture: (event: string, properties?: Record<string, unknown>) => void;
       getActiveMatchingSurveys?: (cb: (surveys: Array<{ id: string }>) => void, forceReload?: boolean) => void;
-      showSurvey?: (id: string) => void;
-      renderSurvey?: (survey: { id: string }) => void;
+      displaySurvey?: (id: string, options?: Record<string, unknown>) => void;
+    };
+
+    const markCooldown = () => {
+      sessionStorage.setItem(COOLDOWN_KEY, Date.now().toString());
+    };
+
+    const fallbackCapture = () => {
+      client.capture('survey shown', { $survey_id: POSTHOG_SURVEY_IDS.ERROR_FEEDBACK });
+      markCooldown();
     };
 
     if (typeof client.getActiveMatchingSurveys === 'function') {
       client.getActiveMatchingSurveys((surveys) => {
         const survey = surveys?.find((s) => s.id === POSTHOG_SURVEY_IDS.ERROR_FEEDBACK);
-        if (!survey) return;
-        if (typeof client.showSurvey === 'function') {
-          client.showSurvey(survey.id);
+        if (!survey) {
+          fallbackCapture();
           return;
         }
-        if (typeof client.renderSurvey === 'function') {
-          client.renderSurvey(survey);
+        if (typeof client.displaySurvey === 'function') {
+          client.displaySurvey(survey.id);
+          markCooldown();
           return;
         }
-        client.capture('survey shown', { $survey_id: POSTHOG_SURVEY_IDS.ERROR_FEEDBACK });
+        fallbackCapture();
       }, true);
     } else {
-      client.capture('survey shown', { $survey_id: POSTHOG_SURVEY_IDS.ERROR_FEEDBACK });
+      fallbackCapture();
     }
   } catch {
     // Storage access failed (private mode, etc.) - skip survey
