@@ -88,21 +88,27 @@ describe('Payment Collections API', () => {
         expect(data.payment_collection.id).toBe(paymentCollectionId);
 
         // Verify both calls were made (idempotency check GET, then POST)
+        // Verify both calls were made (idempotency check GET, then POST)
         expect(fetchSpy).toHaveBeenCalledTimes(2);
-        expect(fetchSpy).toHaveBeenNthCalledWith(1,
-            `http://localhost:9000/store/payment-collections?cart_id=${cartId}`,
-            expect.objectContaining({ method: 'GET' })
-        );
-        expect(fetchSpy).toHaveBeenNthCalledWith(2,
-            'http://localhost:9000/store/payment-collections',
-            expect.objectContaining({
-                method: 'POST',
-                body: JSON.stringify({ cart_id: cartId }),
-                headers: expect.objectContaining({
-                    'x-publishable-api-key': 'pk_test_123'
-                })
-            })
-        );
+
+        // 1st call inspection
+        const [firstUrl, firstOptions] = fetchSpy.mock.calls[0];
+        expect(firstUrl).toBe(`http://localhost:9000/store/payment-collections?cart_id=${cartId}`);
+        expect(firstOptions.method).toBe('GET');
+        // medusaFetch adds cloudflareEnv
+        expect(firstOptions.cloudflareEnv).toEqual(mockContext.cloudflare.env);
+
+        // 2nd call inspection
+        const [secondUrl, secondOptions] = fetchSpy.mock.calls[1];
+        expect(secondUrl).toBe('http://localhost:9000/store/payment-collections');
+        expect(secondOptions.method).toBe('POST');
+        expect(secondOptions.body).toBe(JSON.stringify({ cart_id: cartId }));
+        expect(secondOptions.cloudflareEnv).toEqual(mockContext.cloudflare.env);
+
+        // Verify headers (it's a Headers object now)
+        const headers = secondOptions.headers as Headers;
+        expect(headers).toBeInstanceOf(Headers);
+        expect(headers.get('x-publishable-api-key')).toBe('pk_test_123');
     });
 
     it('should return 400 if cartId is missing', async () => {
@@ -194,19 +200,31 @@ describe('Payment Collections API', () => {
         expect(data.payment_collection.id).toBe(existingCollectionId);
         
         // Verify all three calls were made
+        // Verify all three calls were made
         expect(fetchSpy).toHaveBeenCalledTimes(3);
-        expect(fetchSpy).toHaveBeenNthCalledWith(1,
-            `http://localhost:9000/store/payment-collections?cart_id=${cartId}`,
-            expect.objectContaining({ method: 'GET' })
-        );
-        expect(fetchSpy).toHaveBeenNthCalledWith(2,
-            'http://localhost:9000/store/payment-collections',
-            expect.objectContaining({ method: 'POST' })
-        );
-        expect(fetchSpy).toHaveBeenNthCalledWith(3,
-            `http://localhost:9000/store/payment-collections?cart_id=${cartId}`,
-            expect.objectContaining({ method: 'GET' })
-        );
+
+        // 1. Initial GET
+        const [url1, opt1] = fetchSpy.mock.calls[0];
+        expect(url1).toBe(`http://localhost:9000/store/payment-collections?cart_id=${cartId}`);
+        expect(opt1.method).toBe('GET');
+
+        // 2. POST (failed with 409)
+        const [url2, opt2] = fetchSpy.mock.calls[1];
+        expect(url2).toBe('http://localhost:9000/store/payment-collections');
+        expect(opt2.method).toBe('POST');
+        const headers2 = opt2.headers as Headers;
+        expect(headers2.get('x-publishable-api-key')).toBe('pk_test_123');
+
+        // 3. Retry GET
+        const [url3, opt3] = fetchSpy.mock.calls[2];
+        expect(url3).toBe(`http://localhost:9000/store/payment-collections?cart_id=${cartId}`);
+        expect(opt3.method).toBe('GET');
+        // Check header on GET too (medusaFetch always adds it if missing, though typically GET args are smaller)
+        // With medusaFetch, it might have headers even for GET if we pass options, but medusaGet passes options.
+        // Let's check headers if present.
+        if (opt3.headers) {
+             expect((opt3.headers as Headers).get('x-publishable-api-key')).toBe('pk_test_123');
+        }
     });
 
     it('should return 400 for invalid cartId format', async () => {

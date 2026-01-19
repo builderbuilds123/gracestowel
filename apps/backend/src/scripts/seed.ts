@@ -631,26 +631,58 @@ export default async function seedDemoData({ container }: ExecArgs) {
 
   // Fetch all existing categories first to avoid case sensitivity issues in query
   // listProductCategories signature: (filters, config)
-  const existingCategories = await productModuleService.listProductCategories({}, { take: 1000 });
-  const existingCategoryMap = new Map(existingCategories.map(c => [(c.name || "").toLowerCase(), c]));
-
-  let allCategories: any[] = [...existingCategories];
+  const allCategories: any[] = [];
 
   for (const cat of categories) {
-      if (!existingCategoryMap.has(cat.name.toLowerCase())) {
-          try {
-            logger.info(`Creating missing category: ${cat.name}`);
-             const { result } = await createProductCategoriesWorkflow(container).run({
-                 input: { product_categories: [cat] }, // Create one by one to isolate failures
-             });
-             const createdCat = Array.isArray(result) ? result[0] : result;
-             allCategories.push(createdCat);
-             logger.info(`✓ Created category: ${cat.name} (${createdCat.id}) (Handle: ${createdCat.handle})`);
-          } catch (e) {
-              logger.warn(`Failed to create category ${cat.name}, might have been created concurrently or handle conflict.`);
-              // Attempt to fetch it again just in case
-              const [refetched] = await productModuleService.listProductCategories({ name: cat.name });
-              if (refetched) allCategories.push(refetched);
+      // Try to find by handle first
+      let [existingCat] = await productModuleService.listProductCategories(
+          { handle: cat.handle }, 
+          { 
+              take: 1,
+              select: ["id", "name", "handle"] 
+          }
+      );
+      
+      if (existingCat) {
+          allCategories.push(existingCat);
+          logger.info(`Found existing category by handle: ${existingCat.name} - ${existingCat.id} (${existingCat.handle})`);
+          continue;
+      }
+      
+      // Try by name if handle not found
+      [existingCat] = await productModuleService.listProductCategories(
+          { name: cat.name }, 
+          { 
+              take: 1,
+              select: ["id", "name", "handle"]
+          }
+      );
+       if (existingCat) {
+          allCategories.push(existingCat);
+          logger.info(`Found existing category by name: ${existingCat.name} - ${existingCat.id} (${existingCat.handle})`);
+          continue;
+      }
+
+      // If not found, create it
+      try {
+        logger.info(`Creating missing category: ${cat.name}`);
+        const { result } = await createProductCategoriesWorkflow(container).run({
+            input: { product_categories: [cat] },
+        });
+        const createdCat = Array.isArray(result) ? result[0] : result;
+        allCategories.push(createdCat);
+        logger.info(`✓ Created category: ${cat.name} (${createdCat.id})`);
+      } catch (e) {
+         logger.warn(`Failed to create category ${cat.name}, attempting to fetch again: ${(e as Error).message}`);
+         // Final attempt to fetch
+          const [refetched] = await productModuleService.listProductCategories(
+              { handle: cat.handle },
+              { select: ["id", "name", "handle"] }
+          );
+          if (refetched) {
+             allCategories.push(refetched);
+          } else {
+             logger.error(`Could not resolve category ${cat.name}`);
           }
       }
   }
@@ -674,7 +706,7 @@ export default async function seedDemoData({ container }: ExecArgs) {
   const getCategoryId = (name: string) => {
       const found = allCategories.find(c => c && (c.name?.toLowerCase() === name.toLowerCase() || c.handle?.toLowerCase() === name.toLowerCase().replace(" ", "-")));
       if (!found) {
-          logger.warn(`Category "${name}" not found, using fallback: ${fallbackCategory?.name || 'none'}`);
+          logger.warn(`Category "${name}" not found in available: ${allCategories.map(c => c.name || c.id).join(', ')}. Using fallback: ${fallbackCategory?.name || 'none'}`);
           return fallbackCategory?.id || "";
       }
       return found.id;
@@ -880,97 +912,9 @@ export default async function seedDemoData({ container }: ExecArgs) {
       }
     }
 
-    // Update existing variants with shipping/customs attributes
-    const variantAttrs = variantAttrsByHandle[existingProduct.handle as string];
-    if (variantAttrs) {
-      try {
-        // Get product variants
-        const productWithVariants = await productModuleService.retrieveProduct(existingProduct.id, {
-          relations: ["variants", "variants.prices"],
-        });
-
-        for (const variant of productWithVariants.variants || []) {
-          try {
-            // Check if variant needs updating (if weight is null or 0, it likely needs attrs)
-            const needsUpdate = !variant.weight || !variant.height || !variant.origin_country;
-            if (needsUpdate) {
-              await productModuleService.updateProductVariants(variant.id, {
-                weight: variantAttrs.weight,
-                height: variantAttrs.height,
-                width: variantAttrs.width,
-                length: variantAttrs.length,
-                hs_code: variantAttrs.hs_code,
-                origin_country: variantAttrs.origin_country,
-                mid_code: variantAttrs.mid_code,
-                material: variantAttrs.material,
-              });
-              logger.info(`Updated variant "${variant.sku}" with shipping/customs attributes.`);
-            }
-          } catch (e) {
-            logger.warn(`Could not update variant "${variant.sku}" for "${existingProduct.handle}": ${(e as Error).message}`);
-          }
-
-          const priceConfig = priceConfigByHandle[existingProduct.handle as string];
-          if (priceConfig) {
-            const existingPrices = (variant as { prices?: Array<{ amount?: number; price_set_id?: string | null; currency_code?: string | null }> }).prices || [];
-            const hasValidPrice = existingPrices.some((price) => typeof price.amount === "number" && price.amount > 0);
-            let priceSetId = existingPrices.find((price) => price.price_set_id)?.price_set_id || null;
-            if (!priceSetId) {
-              try {
-                const variantPriceSetLinksResult = await query.graph({
-                  entity: "product_variant_price_set",
-                  fields: ["price_set_id"],
-                  filters: { variant_id: variant.id },
-                }) as { data: Array<{ price_set_id?: string | null }> };
-                const variantPriceSetLinks = variantPriceSetLinksResult.data || [];
-                if (variantPriceSetLinks.length > 0) {
-                  priceSetId = variantPriceSetLinks[0].price_set_id || null;
-                }
-              } catch (e) {
-                logger.warn(`Could not check price set link for "${variant.sku}": ${(e as Error).message}`);
-              }
-            }
-
-            if (!hasValidPrice) {
-              try {
-                if (priceSetId) {
-                  await pricingModuleService.updatePriceSets(priceSetId, {
-                    prices: [
-                      { amount: priceConfig.usd, currency_code: "usd" },
-                      { amount: priceConfig.eur, currency_code: "eur" },
-                      { amount: priceConfig.cad, currency_code: "cad" },
-                    ],
-                  });
-                  logger.info(`Updated prices for "${variant.sku}" on "${existingProduct.handle}" (existing price set).`);
-                  continue;
-                }
-                const [priceSet] = await pricingModuleService.createPriceSets([
-                  {
-                    prices: [
-                      { amount: priceConfig.usd, currency_code: "usd" },
-                      { amount: priceConfig.eur, currency_code: "eur" },
-                      { amount: priceConfig.cad, currency_code: "cad" },
-                    ],
-                  },
-                ]);
-
-                if (priceSet) {
-                  await link.create({
-                    [Modules.PRODUCT]: { variant_id: variant.id },
-                    [Modules.PRICING]: { price_set_id: priceSet.id },
-                  });
-                  logger.info(`Added prices for "${variant.sku}" on "${existingProduct.handle}".`);
-                }
-              } catch (e) {
-                logger.warn(`Could not add prices for "${variant.sku}": ${(e as Error).message}`);
-              }
-            }
-          }
-        }
-      } catch (e) {
-        logger.warn(`Could not update variants for "${existingProduct.handle}": ${(e as Error).message}`);
-      }
-    }
+    // Variant attribute updates disabled due to Medusa v2 issues
+    // const variantAttrs = variantAttrsByHandle[existingProduct.handle as string];
+    // if (variantAttrs) { ... }
   }
 
   logger.info("Finished seeding product data (" + newProducts.length + " new).");
