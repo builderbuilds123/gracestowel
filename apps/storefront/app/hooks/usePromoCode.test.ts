@@ -30,6 +30,8 @@ describe("usePromoCode", () => {
         cart: {
           id: mockCartId,
           discount_total: 10,
+          promotions: [{ code: "TEST10", is_automatic: false, id: "promo_1" }],
+          items: []
         },
       });
 
@@ -44,13 +46,13 @@ describe("usePromoCode", () => {
 
       expect(result.current.appliedCodes).toHaveLength(1);
       expect(result.current.appliedCodes[0].code).toBe("TEST10");
-      expect(result.current.successMessage).toBe("Promo code applied!");
+      expect(result.current.successMessage).toBe('Promo code "TEST10" applied!');
       expect(result.current.error).toBeNull();
     });
 
     it("should normalize code to uppercase", async () => {
       mockCartUpdate.mockResolvedValue({
-        cart: { id: mockCartId, discount_total: 5 },
+        cart: { id: mockCartId, discount_total: 5, promotions: [{ code: "TEST10", is_automatic: false, id: "promo_1" }], items: [] },
       });
 
       const { result } = renderHook(() =>
@@ -93,8 +95,8 @@ describe("usePromoCode", () => {
     });
 
     it("should prevent duplicate promo codes", async () => {
-      mockCartUpdate.mockResolvedValue({
-        cart: { id: mockCartId, discount_total: 10 },
+      mockCartUpdate.mockResolvedValueOnce({
+        cart: { id: mockCartId, discount_total: 10, promotions: [{ code: "TEST10", is_automatic: false, id: "promo_1" }], items: [] },
       });
 
       const { result } = renderHook(() =>
@@ -134,7 +136,7 @@ describe("usePromoCode", () => {
 
     it("should call onCartUpdate callback on success", async () => {
       mockCartUpdate.mockResolvedValue({
-        cart: { id: mockCartId, discount_total: 10 },
+        cart: { id: mockCartId, discount_total: 10, promotions: [{ code: "TEST10", is_automatic: false, id: "promo_1" }], items: [] },
       });
 
       const onCartUpdate = vi.fn();
@@ -152,8 +154,13 @@ describe("usePromoCode", () => {
 
   describe("removePromoCode", () => {
     it("should remove an applied promo code", async () => {
-      mockCartUpdate.mockResolvedValue({
-        cart: { id: mockCartId, discount_total: 0 },
+      // 1. Initial Apply TEST10
+      mockCartUpdate.mockResolvedValueOnce({
+        cart: { id: mockCartId, discount_total: 10, promotions: [{ code: "TEST10", is_automatic: false, id: "promo_1" }], items: [] },
+      });
+      // 2. Remove TEST10
+      mockCartUpdate.mockResolvedValueOnce({
+        cart: { id: mockCartId, discount_total: 0, promotions: [], items: [] },
       });
 
       const { result } = renderHook(() =>
@@ -194,7 +201,7 @@ describe("usePromoCode", () => {
   describe("clearMessages", () => {
     it("should clear error and success messages", async () => {
       mockCartUpdate.mockResolvedValue({
-        cart: { id: mockCartId, discount_total: 10 },
+        cart: { id: mockCartId, discount_total: 10, promotions: [{ code: "TEST10", is_automatic: false, id: "promo_1" }], items: [] },
       });
 
       const { result } = renderHook(() =>
@@ -205,7 +212,7 @@ describe("usePromoCode", () => {
         await result.current.applyPromoCode("TEST10");
       });
 
-      expect(result.current.successMessage).toBe("Promo code applied!");
+      expect(result.current.successMessage).toBe('Promo code "TEST10" applied!');
 
       act(() => {
         result.current.clearMessages();
@@ -240,7 +247,7 @@ describe("usePromoCode", () => {
       });
 
       await act(async () => {
-        resolvePromise!({ cart: { id: mockCartId, discount_total: 10 } });
+        resolvePromise!({ cart: { id: mockCartId, discount_total: 10, promotions: [{ code: "TEST10", is_automatic: false, id: "promo_1" }], items: [] } });
       });
 
       await waitFor(() => {
@@ -325,8 +332,11 @@ describe("usePromoCode", () => {
 
   describe("multiple codes", () => {
     it("should send all codes when adding new one", async () => {
-      mockCartUpdate.mockResolvedValue({
-        cart: { id: mockCartId, discount_total: 15 },
+      mockCartUpdate.mockResolvedValueOnce({
+        cart: { id: mockCartId, discount_total: 5, promotions: [{ code: "CODE1", is_automatic: false, id: "p1" }], items: [] },
+      });
+      mockCartUpdate.mockResolvedValueOnce({
+        cart: { id: mockCartId, discount_total: 15, promotions: [{ code: "CODE1", is_automatic: false, id: "p1" }, { code: "CODE2", is_automatic: false, id: "p2" }], items: [] },
       });
 
       const { result } = renderHook(() =>
@@ -350,8 +360,17 @@ describe("usePromoCode", () => {
     });
 
     it("should send remaining codes when removing one", async () => {
-      mockCartUpdate.mockResolvedValue({
-        cart: { id: mockCartId, discount_total: 10 },
+      // 1. Initial Apply CODE1
+      mockCartUpdate.mockResolvedValueOnce({
+        cart: { id: mockCartId, discount_total: 10, promotions: [{ code: "CODE1", is_automatic: false, id: "p1" }], items: [] },
+      });
+      // 2. Add CODE2
+      mockCartUpdate.mockResolvedValueOnce({
+        cart: { id: mockCartId, discount_total: 15, promotions: [{ code: "CODE1", is_automatic: false, id: "p1" }, { code: "CODE2", is_automatic: false, id: "p2" }], items: [] },
+      });
+      // 3. Remove CODE1 -> should return only CODE2
+      mockCartUpdate.mockResolvedValueOnce({
+        cart: { id: mockCartId, discount_total: 5, promotions: [{ code: "CODE2", is_automatic: false, id: "p2" }], items: [] },
       });
 
       const { result } = renderHook(() =>
@@ -368,10 +387,11 @@ describe("usePromoCode", () => {
 
       // Remove first code
       await act(async () => {
-        await result.current.removePromoCode("CODE1");
+        const success = await result.current.removePromoCode("CODE1");
+        expect(success).toBe(true);
       });
 
-      // Should only send CODE2
+      // Should only send CODE2 in the last update call
       expect(mockCartUpdate).toHaveBeenLastCalledWith(mockCartId, {
         promo_codes: ["CODE2"],
       });

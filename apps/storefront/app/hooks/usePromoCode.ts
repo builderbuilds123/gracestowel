@@ -48,6 +48,11 @@ function extractAppliedCodesFromCart(
         promoIdToCode.set(p.id, upCode);
         if (p.is_automatic) {
           automaticCodes.add(upCode);
+        } else {
+          // Ensure manual codes are shown even if they don't have adjustments yet
+          if (!codeDiscounts.has(upCode)) {
+            codeDiscounts.set(upCode, 0);
+          }
         }
       }
     });

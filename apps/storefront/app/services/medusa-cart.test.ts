@@ -55,7 +55,9 @@ describe("MedusaCartService", () => {
 
       const result = await service.getCart("cart_123");
 
-      expect(mockCartRetrieve).toHaveBeenCalledWith("cart_123");
+      expect(mockCartRetrieve).toHaveBeenCalledWith("cart_123", {
+        fields: "+promotions,+items.adjustments,+shipping_methods.adjustments",
+      });
       expect(result).toEqual(mockCart);
     });
 
