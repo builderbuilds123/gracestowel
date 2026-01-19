@@ -512,4 +512,9 @@ development_status:
     status: in-progress
     meta: "Enhance existing Resend notification provider. New templates (order-modified, refund, password-reset), optional SMS via Twilio, admin alerts. 5-8 points estimated."
     created: "2026-01-13"
+  notif-2-local-admin-notifications:
+    path: docs/sprint/sprint-artifacts/notif-2-local-admin-notifications.md
+    status: ready-for-dev
+    meta: "Local notification module for admin feed. 2-3 points. Implements Phase 3 from NOTIF-1."
+    created: "2026-01-19"
   notif-epic-1-retrospective: optional
