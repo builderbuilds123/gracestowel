@@ -2,9 +2,26 @@ import { type ActionFunctionArgs, data } from "react-router";
 import { createLogger, getTraceIdFromRequest } from "../lib/logger";
 import { monitoredFetch } from "../utils/monitored-fetch";
 
+// Helper types for Medusa responses
+type MedusaPaymentCollection = {
+  id: string;
+  payment_sessions?: Array<{
+    id: string;
+    provider_id: string;
+    data?: unknown;
+  }>;
+  [key: string]: unknown;
+};
+
+type MedusaError = {
+  type: string;
+  message: string;
+};
+
 /**
  * POST /api/payment-collections
  * Creates a new PaymentCollection for a cart via Medusa backend.
+ * OPTIMIZATION: Also initializes the Stripe payment session if missing, avoiding a second round-trip.
  */
 
 interface PaymentCollectionRequest {
@@ -39,7 +56,6 @@ export async function action({ request, context }: ActionFunctionArgs) {
     return data({ error: "Invalid cart ID format", traceId }, { status: 400 });
   }
 
-  // Access Cloudflare env
   const env = context.cloudflare.env as {
     MEDUSA_BACKEND_URL?: string;
     MEDUSA_PUBLISHABLE_KEY?: string;
@@ -54,98 +70,114 @@ export async function action({ request, context }: ActionFunctionArgs) {
     return data({ error: "Configuration error", traceId }, { status: 500 });
   }
 
-  logger.info("Creating Payment Collection", { cartId });
+  logger.info("Initializing Payment Collection & Session", { cartId });
+
+  /* 
+   * Helper to ensure Stripe session exists on a collection 
+   */
+  async function ensureStripeSession(collection: MedusaPaymentCollection): Promise<MedusaPaymentCollection> {
+    // 1. Check if Stripe session already exists
+    const hasStripeFn = (sessions: MedusaPaymentCollection['payment_sessions']) => 
+      sessions?.some(s => s.provider_id === "pp_stripe");
+
+    if (hasStripeFn(collection.payment_sessions)) {
+      return collection;
+    }
+
+    logger.info("Initial payment collection missing Stripe session, creating one...", { 
+      collectionId: collection.id 
+    });
+
+    // 2. Create Stripe session
+    const sessionRes = await monitoredFetch(`${medusaBackendUrl}/store/payment-collections/${collection.id}/sessions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-publishable-api-key": publishableKey!,
+      },
+      body: JSON.stringify({ provider_id: "pp_stripe" }),
+      label: "create-missing-stripe-session",
+      cloudflareEnv: env,
+    });
+
+    if (!sessionRes.ok) {
+       // Log warning but don't fail the whole request - client can retry session creation
+       const errText = await sessionRes.text();
+       logger.warn("Failed to auto-create Stripe session", { status: sessionRes.status, body: errText });
+       return collection; // Return original collection without session
+    }
+
+    // 3. Return updated collection from session response
+    const sessionData = await sessionRes.json() as { payment_collection: MedusaPaymentCollection };
+    return sessionData.payment_collection;
+  }
+
 
   try {
-    // Solution B: Check for existing payment collection first (Idempotency)
+    let paymentCollection: MedusaPaymentCollection | undefined;
+
+    // A. Check for existing payment collection first (Idempotency)
     const existingCheckResponse = await monitoredFetch(`${medusaBackendUrl}/store/payment-collections?cart_id=${cartId}`, {
       method: "GET",
-      headers: {
-        "x-publishable-api-key": publishableKey,
-      },
+      headers: { "x-publishable-api-key": publishableKey },
       label: "check-existing-payment-collection",
       cloudflareEnv: env,
     });
 
     if (existingCheckResponse.ok) {
       const existingData = await existingCheckResponse.json();
-      const paymentCollections = (existingData as { payment_collections?: unknown[] })?.payment_collections;
-      const existingPaymentCollection = Array.isArray(paymentCollections) && paymentCollections.length > 0
-        ? paymentCollections[0]
-        : undefined;
-
-      if (existingPaymentCollection) {
-        logger.info("Found existing payment collection, skipping creation", { cartId });
-        return data({ payment_collection: existingPaymentCollection });
+      const collections = (existingData as { payment_collections?: MedusaPaymentCollection[] })?.payment_collections;
+      if (Array.isArray(collections) && collections.length > 0) {
+        paymentCollection = collections[0];
+        logger.info("Found existing payment collection", { id: paymentCollection.id });
       }
     }
 
-    const response = await monitoredFetch(`${medusaBackendUrl}/store/payment-collections`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-publishable-api-key": publishableKey,
-      },
-      body: JSON.stringify({ cart_id: cartId }),
-      label: "create-payment-collection",
-      cloudflareEnv: env,
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      logger.error("Failed to create payment collection", new Error(errorText), { 
-        status: response.status,
-        statusText: response.statusText 
+    // B. Create logic if not found
+    if (!paymentCollection) {
+      const createRes = await monitoredFetch(`${medusaBackendUrl}/store/payment-collections`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-publishable-api-key": publishableKey,
+        },
+        body: JSON.stringify({ cart_id: cartId }),
+        label: "create-payment-collection",
+        cloudflareEnv: env,
       });
-      
-      // Handle idempotency: if collection already exists, return success with existing collection
-      if (response.status === 409) {
-        // Fetch existing collection for this cart
-        const existingResponse = await monitoredFetch(`${medusaBackendUrl}/store/payment-collections?cart_id=${cartId}`, {
-          method: "GET",
-          headers: {
-            "x-publishable-api-key": publishableKey,
-          },
-          label: "fetch-existing-payment-collection",
-          cloudflareEnv: env,
-        });
-        
-        if (existingResponse.ok) {
-          const existingData = await existingResponse.json();
-          
-          // Validate that the response contains at least one payment collection and
-          // normalize the shape to match the POST /store/payment-collections response.
-          const paymentCollections = (existingData as { payment_collections?: unknown[] })?.payment_collections;
-          const existingPaymentCollection = Array.isArray(paymentCollections) && paymentCollections.length > 0
-            ? paymentCollections[0]
-            : undefined;
 
-          if (existingPaymentCollection) {
-            logger.info("Payment collection already exists, returning existing", { cartId });
-            return data({ payment_collection: existingPaymentCollection });
+      if (!createRes.ok) {
+        // Handle 409 Conflict race condition (created by another request)
+        if (createRes.status === 409) {
+           const retryCheck = await monitoredFetch(`${medusaBackendUrl}/store/payment-collections?cart_id=${cartId}`, {
+            method: "GET",
+            headers: { "x-publishable-api-key": publishableKey },
+            label: "retry-fetch-payment-collection",
+            cloudflareEnv: env,
+          });
+          if (retryCheck.ok) {
+            const retryData = await retryCheck.json();
+            paymentCollection = (retryData as { payment_collections?: MedusaPaymentCollection[] })?.payment_collections?.[0];
           }
-
-          // If the structure is not as expected, log and fall through to generic error handling.
-          logger.error(
-            "Existing payment collection fetch returned unexpected structure",
-            undefined,
-            { cartId, existingData }
-          );
         }
+        
+        if (!paymentCollection) {
+           const errorText = await createRes.text();
+           logger.error("Failed to create payment collection", new Error(errorText), { status: createRes.status });
+           return data({ error: "Failed to create payment collection", traceId }, { status: createRes.status });
+        }
+      } else {
+        const createData = await createRes.json() as { payment_collection: MedusaPaymentCollection };
+        paymentCollection = createData.payment_collection;
       }
-      
-      // Don't expose internal error details to clients
-      const userMessage = response.status === 404 
-        ? "Cart not found"
-        : response.status === 409
-        ? "Payment collection already exists"
-        : "Failed to create payment collection";
-      
-      return data({ error: userMessage, traceId }, { status: response.status });
     }
 
-    const json = await response.json();
-    return data(json);
+    // C. OPTIMIZATION: Ensure Stripe Session Exists
+    if (paymentCollection) {
+      paymentCollection = await ensureStripeSession(paymentCollection);
+    }
+
+    return data({ payment_collection: paymentCollection });
 
   } catch (error) {
     logger.error("Error creating payment collection", error as Error);

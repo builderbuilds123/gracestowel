@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from "react";
 import { getMedusaClient } from "../lib/medusa";
+import { createLogger } from "../lib/logger";
 import type { AppliedPromoCode, CartWithPromotions, LineItemAdjustment, ShippingMethodAdjustment } from "../types/promotion";
 
 interface UsePromoCodeOptions {
@@ -72,9 +73,7 @@ function applyCartDiscountState(
   setTotalDiscount(discountTotal);
 
   const rebuiltCodes = extractAppliedCodesFromCart(cart);
-  if (rebuiltCodes.length > 0) {
-    setAppliedCodes(rebuiltCodes);
-  }
+  setAppliedCodes(rebuiltCodes);
 }
 
 /**
@@ -91,7 +90,10 @@ export function usePromoCode({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
   const refreshRequestIdRef = useRef(0);
+  
+  const logger = useRef(createLogger({ context: 'usePromoCode' })).current;
 
   const clearMessages = useCallback(() => {
     setError(null);
@@ -120,8 +122,8 @@ export function usePromoCode({
 
       applyCartDiscountState(cart, setTotalDiscount, setAppliedCodes);
     } catch (err) {
-      // Silent fail - don't disrupt user flow for refresh errors
-      console.warn('Failed to refresh discount:', err);
+      logger.warn('Failed to refresh discount', { error: err });
+      setError("Failed to refresh discounts. Please try again.");
     }
   }, [cartId]);
 
@@ -188,6 +190,7 @@ export function usePromoCode({
         onCartUpdate?.();
         return true;
       } catch (err: unknown) {
+        logger.error("Failed to apply promo code", err as Error);
         const errorMessage = extractErrorMessage(err);
         setError(errorMessage);
         return false;
@@ -248,6 +251,7 @@ export function usePromoCode({
         onCartUpdate?.();
         return true;
       } catch (err: unknown) {
+        logger.error("Failed to remove promo code", err as Error);
         const errorMessage = extractErrorMessage(err);
         setError(errorMessage);
         return false;

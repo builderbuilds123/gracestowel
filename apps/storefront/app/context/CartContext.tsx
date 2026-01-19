@@ -11,7 +11,7 @@ interface CartContextType {
     isOpen: boolean;
     isLoaded: boolean;
     addToCart: (item: Omit<CartItem, 'quantity'> & { quantity?: number }) => void;
-    removeFromCart: (id: ProductId, color?: string) => void;
+    removeFromCart: (id: ProductId, color?: string, variantId?: string) => void;
     updateQuantity: (id: ProductId, quantity: number, color?: string, variantId?: string) => void;
     toggleCart: () => void;
     clearCart: () => void;
@@ -72,12 +72,20 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
         setItems(prevItems => {
             const quantityToAdd = newItem.quantity || 1;
-            const existingItem = prevItems.find(item =>
-                productIdsEqual(item.id, newItem.id) && item.color === newItem.color
-            );
+            const existingItem = prevItems.find(item => {
+                if (newItem.variantId && item.variantId) {
+                    return item.variantId === newItem.variantId;
+                }
+                if (newItem.variantId || item.variantId) {
+                    return false;
+                }
+                return productIdsEqual(item.id, newItem.id) && item.color === newItem.color;
+            });
             if (existingItem) {
                 return prevItems.map(item =>
-                    productIdsEqual(item.id, newItem.id) && item.color === newItem.color
+                    ((newItem.variantId && item.variantId)
+                        ? item.variantId === newItem.variantId
+                        : !newItem.variantId && !item.variantId && productIdsEqual(item.id, newItem.id) && item.color === newItem.color)
                         ? { ...item, quantity: item.quantity + quantityToAdd }
                         : item
                 );
@@ -87,12 +95,15 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         setIsOpen(true);
     };
 
-    const removeFromCart = (id: ProductId, color?: string) => {
+    const removeFromCart = (id: ProductId, color?: string, variantId?: string) => {
         setItems(prevItems => prevItems.filter(item => {
-            if (color !== undefined) {
-                return !(productIdsEqual(item.id, id) && item.color === color);
+            if (variantId) {
+                return item.variantId !== variantId;
             }
-            return !productIdsEqual(item.id, id);
+            if (color !== undefined) {
+                return !(productIdsEqual(item.id, id) && item.color === color && !item.variantId);
+            }
+            return !(productIdsEqual(item.id, id) && !item.variantId);
         }));
     };
 
