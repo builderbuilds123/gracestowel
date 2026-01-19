@@ -77,23 +77,30 @@ function AnalyticsTracking() {
   return null;
 }
 
-export async function loader({ context }: Route.LoaderArgs) {
+import { createCSRFToken } from "./utils/csrf.server";
+import { data } from "react-router";
+
+// ... (existing imports)
+
+export async function loader({ request, context }: Route.LoaderArgs) {
   // Ensure we have access to Cloudflare env
   const env = context.cloudflare?.env;
 
   if (!env) {
-    // In dev mode or non-CF env, this might happen if not properly mocked/proxied.
-    // Throwing an error makes the dependency explicit and prevents runtime errors.
     throw new Error("Cloudflare environment context is not available.");
   }
 
   const { MEDUSA_BACKEND_URL, MEDUSA_PUBLISHABLE_KEY } = env;
+  const jwtSecret = (env as any).JWT_SECRET || "dev-secret-key";
 
   if (!MEDUSA_BACKEND_URL) {
     throw new Error("Missing MEDUSA_BACKEND_URL environment variable");
   }
 
-  // Initialize client server-side to verify config and connection (AC requirement)
+  // Generate CSRF Token
+  const { token: csrfToken, headers: csrfHeaders } = await createCSRFToken(request, jwtSecret);
+
+  // Initialize client server-side to verify config and connection
   try {
       const client = getMedusaClient({ cloudflare: { env } });
       await client.store.product.list({ limit: 1 });
@@ -102,23 +109,23 @@ export async function loader({ context }: Route.LoaderArgs) {
       console.error("❌ Failed to verify Medusa connection:", err);
   }
   
-  // Extract PostHog config from Cloudflare Workers env (runtime) or fallback to build-time
-  // Prioritize VITE_ prefixed vars as per policy
+  // Extract PostHog config
   const posthogApiKey = (env as any).VITE_POSTHOG_API_KEY || (env as any).POSTHOG_API_KEY || import.meta.env.VITE_POSTHOG_API_KEY;
   const posthogHost = (env as any).VITE_POSTHOG_HOST || (env as any).POSTHOG_HOST || import.meta.env.VITE_POSTHOG_HOST || 'https://us.i.posthog.com';
   
-  return { 
+  return data({ 
     env: { 
       MEDUSA_BACKEND_URL, 
       MEDUSA_PUBLISHABLE_KEY,
-      // Include PostHog config for client-side initialization
+      CSRF_TOKEN: csrfToken, // Expose CSRF token
       VITE_POSTHOG_API_KEY: posthogApiKey,
       VITE_POSTHOG_HOST: posthogHost,
-      // Keep legacy for compat if needed, but VITE_ is primary
       POSTHOG_API_KEY: posthogApiKey,
       POSTHOG_HOST: posthogHost,
     } 
-  };
+  }, {
+    headers: csrfHeaders // Set cookie header
+  });
 }
 
 export const links: Route.LinksFunction = () => [

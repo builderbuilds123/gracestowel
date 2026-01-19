@@ -34,6 +34,8 @@ interface CustomerContextType {
     register: (email: string, password: string, firstName?: string, lastName?: string) => Promise<{ success: boolean; error?: string }>;
     logout: () => Promise<void>;
     refreshCustomer: () => Promise<void>;
+    requestPasswordReset: (email: string) => Promise<{ success: boolean; error?: string }>;
+    updatePassword: (password: string, token: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 const CustomerContext = createContext<CustomerContextType | undefined>(undefined);
@@ -203,6 +205,51 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
+    const requestPasswordReset = async (email: string): Promise<{ success: boolean; error?: string }> => {
+        try {
+            const response = await medusaFetch(`/auth/customer/emailpass/reset-password`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ identifier: email }),
+                label: 'customer-reset-password-request',
+            });
+
+            if (!response.ok) {
+                const error = (await response.json()) as { message?: string };
+                return { success: false, error: error.message || 'Failed to request password reset' };
+            }
+
+            return { success: true };
+        } catch (error) {
+            console.error('Password reset request error:', error);
+            return { success: false, error: 'An error occurred while requesting password reset' };
+        }
+    };
+
+    const updatePassword = async (password: string, token: string): Promise<{ success: boolean; error?: string }> => {
+        try {
+            const response = await medusaFetch(`/auth/customer/emailpass/update-provider`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                },
+                body: JSON.stringify({ password }),
+                label: 'customer-update-password',
+            });
+
+            if (!response.ok) {
+                const error = (await response.json()) as { message?: string };
+                return { success: false, error: error.message || 'Failed to update password' };
+            }
+
+            return { success: true };
+        } catch (error) {
+            console.error('Password update error:', error);
+            return { success: false, error: 'An error occurred while updating password' };
+        }
+    };
+
     const refreshCustomer = useCallback(async () => {
         await fetchCustomer();
     }, [token]);
@@ -217,6 +264,8 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
                 register,
                 logout,
                 refreshCustomer,
+                requestPasswordReset,
+                updatePassword,
             }}
         >
             {children}

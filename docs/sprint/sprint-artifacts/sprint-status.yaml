@@ -247,7 +247,9 @@ development_status:
   7-1-secure-token-generation: backlog
   7-2-rate-limiting: backlog
   7-3-audit-logging: backlog
-  7-4-csrf-protection: backlog
+  7-4-csrf-protection:
+    status: done
+    meta: "Implemented across all API routes via double-submit cookie pattern. Integrated with root.tsx and monitored-fetch.ts."
   pi-epic-7-retrospective: optional
 
   pi-epic-8: in-progress
@@ -519,7 +521,7 @@ development_status:
   notif-1-notification-module-enhancement:
     path: docs/sprint/sprint-artifacts/notif-1-notification-module-enhancement.md
     status: in-progress
-    meta: "Enhance existing Resend notification provider. New templates (order-modified, refund, password-reset), optional SMS via Twilio, admin alerts. 5-8 points estimated."
+    meta: "Enhance existing Resend notification provider. Added password-reset template and general email queue refactoring. Next: order-modified, refund."
     created: "2026-01-13"
   notif-2-local-admin-notifications:
     path: docs/sprint/sprint-artifacts/notif-2-local-admin-notifications.md
@@ -540,8 +542,9 @@ development_status:
     created: "2026-01-19"
   cust-1-password-reset:
     path: docs/sprint/sprint-artifacts/cust-1-password-reset.md
-    status: backlog
-    meta: "Password reset flow: forgot-password page, reset-password page, email subscriber. 3-5 points. HIGH PRIORITY."
+    status: done
+    meta: "Password reset flow implemented: forgot-password, reset-password, and backend subscriber. Integrated with Resend service."
+    completed: "2026-01-19"
     created: "2026-01-19"
   cust-2-edit-profile:
     path: docs/sprint/sprint-artifacts/cust-2-edit-profile.md

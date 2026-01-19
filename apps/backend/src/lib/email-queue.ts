@@ -8,39 +8,13 @@ const QUEUE_NAME = "email-queue";
 let emailQueue: Queue | null = null;
 let logger: any = console; // Default to console, replaced by initEmailQueue
 
+import { Templates } from "../modules/resend/service";
+
 export interface EmailJobPayload {
-  orderId: string;
-  template: "order-placed"; // matches Templates.ORDER_PLACED enum in resend service
+  entityId: string; // e.g. order ID, customer ID
+  template: Templates; // matches Templates enum in resend service
   recipient: string;
-  data: {
-    order: {
-      id: string;
-      display_id?: string;
-      email?: string;
-      currency_code?: string;
-      total?: number;
-      subtotal?: number;
-      shipping_total?: number;
-      tax_total?: number;
-      items?: Array<{
-        title: string;
-        variant_title?: string;
-        quantity: number;
-        unit_price: number;
-      }>;
-      shipping_address?: {
-        first_name?: string;
-        last_name?: string;
-        address_1?: string;
-        address_2?: string;
-        city?: string;
-        province?: string;
-        postal_code?: string;
-        country_code?: string;
-      };
-    };
-    modification_token?: string;
-  };
+  data: Record<string, unknown>;
 }
 
 /**
@@ -78,7 +52,7 @@ export function getEmailQueue(): Queue {
 export async function enqueueEmail(payload: EmailJobPayload): Promise<Job | null> {
   try {
     const queue = getEmailQueue();
-    const jobId = `email-${payload.orderId}`;
+    const jobId = `email-${payload.entityId}`;
 
     const job = await queue.add(jobId, payload, {
       jobId, // idempotency key
@@ -89,11 +63,11 @@ export async function enqueueEmail(payload: EmailJobPayload): Promise<Job | null
       },
     });
 
-    logger.info(`[EMAIL][QUEUE] Enqueued ${payload.template} for order ${payload.orderId} to ${maskEmail(payload.recipient)}`);
+    logger.info(`[EMAIL][QUEUE] Enqueued ${payload.template} for entity ${payload.entityId} to ${maskEmail(payload.recipient)}`);
     return job;
   } catch (error: any) {
     // CRITICAL: Catch all errors - never throw from email queue
-    logger.error(`[EMAIL][ERROR] Failed to queue email for order ${payload.orderId}: ${error.message}`);
+    logger.error(`[EMAIL][ERROR] Failed to queue email for entity ${payload.entityId}: ${error.message}`);
     return null;
   }
 }

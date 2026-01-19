@@ -266,6 +266,20 @@ export async function monitoredFetch(
   const { host, path } = parseUrl(url);
   const sanitizedUrl = getSanitizedPath(url);
 
+  // CSRF Protection (Story 4.2)
+  if (typeof window !== 'undefined' && (window as any).ENV?.CSRF_TOKEN) {
+    const isRelative = !url.startsWith('http');
+    const isSameOrigin = isRelative || url.startsWith(window.location.origin);
+    
+    if (isSameOrigin) {
+      const headers = new Headers(fetchOptions.headers || {});
+      if (!headers.has('X-CSRF-Token')) {
+        headers.set('X-CSRF-Token', (window as any).ENV.CSRF_TOKEN);
+      }
+      fetchOptions.headers = headers;
+    }
+  }
+
   const shouldCapture = async () => {
     if (skipTracking) return false;
 

@@ -6,6 +6,7 @@ import { CHECKOUT_CONSTANTS } from "../constants/checkout";
 import { createLogger } from "../lib/logger";
 import type { ShippingOption } from "../components/CheckoutForm";
 import type { CartItem } from "../types/product";
+import type { CartWithPromotions } from "../types/promotion";
 
 // Check if in development mode
 const isDevelopment = import.meta.env.MODE === 'development';
@@ -26,6 +27,7 @@ interface ShippingRatesOptions {
   onCartCreated?: (cartId: string) => void;
   onCartSynced?: () => void;
   onCartSyncError?: (error: string | null) => void;
+  onCartUpdated?: (cart: CartWithPromotions) => void;
 }
 
 interface UseShippingRatesResult {
@@ -57,6 +59,7 @@ export function useShippingRates({
   onCartCreated,
   onCartSynced,
   onCartSyncError,
+  onCartUpdated,
 }: ShippingRatesOptions): UseShippingRatesResult {
   // Caching mechanism for shipping rates
   const shippingCache = useRef<Map<string, { options: ShippingOption[], cartId: string | undefined }>>(new Map());
@@ -206,6 +209,7 @@ export function useShippingRates({
           error?: string; 
           details?: string; 
           code?: string;
+          cart?: CartWithPromotions;
         };
 
         if (!updateResponse.ok) {
@@ -226,8 +230,7 @@ export function useShippingRates({
 
           // Handle completed cart error
           if (error.code === 'CART_COMPLETED') {
-            logger.warn('Cart already completed, clearing session');
-            sessionStorage.removeItem('medusa_cart_id');
+            logger.warn('Cart already completed, clearing cart id');
             setCartId(undefined);
             return;
           }
@@ -235,7 +238,10 @@ export function useShippingRates({
           throw new Error(error.details || error.error);
         }
         
-        onCartSyncError?.(null as any); // Clear previous errors
+        onCartSyncError?.(null); // Clear previous errors
+        if (updateResult.cart) {
+          onCartUpdated?.(updateResult.cart);
+        }
         setIsCartSynced(true);
         onCartSynced?.();
         

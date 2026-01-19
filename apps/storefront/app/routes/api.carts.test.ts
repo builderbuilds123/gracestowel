@@ -18,11 +18,18 @@ vi.mock("../utils/monitored-fetch", () => ({
   monitoredFetch: (...args: any[]) => mockMonitoredFetchFn(...args),
 }));
 
+// Mock validateCSRFToken
+const mockValidateCSRFToken = vi.fn();
+vi.mock("../utils/csrf.server", () => ({
+  validateCSRFToken: (...args: any[]) => mockValidateCSRFToken(...args),
+}));
+
 describe("API Carts - POST /api/carts", () => {
   let context: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockValidateCSRFToken.mockResolvedValue(true);
     context = {
       cloudflare: {
         env: {

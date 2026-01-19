@@ -17,6 +17,12 @@ vi.mock('../lib/logger', () => ({
     getTraceIdFromRequest: () => 'test-trace-id',
 }));
 
+// Mock validateCSRFToken
+const mockValidateCSRFToken = vi.fn();
+vi.mock("../utils/csrf.server", () => ({
+  validateCSRFToken: (...args: any[]) => mockValidateCSRFToken(...args),
+}));
+
 import { monitoredFetch } from '../utils/monitored-fetch';
 
 describe('Payment Sessions API', () => {
@@ -47,6 +53,7 @@ describe('Payment Sessions API', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+        mockValidateCSRFToken.mockResolvedValue(true);
     });
 
     it('should create payment session for valid collection ID', async () => {

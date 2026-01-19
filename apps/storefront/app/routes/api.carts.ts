@@ -9,6 +9,8 @@ interface CreateCartRequest {
   country_code?: string;
 }
 
+import { validateCSRFToken } from "../utils/csrf.server";
+
 /**
  * POST /api/carts
  * Create a new cart or validate an existing one
@@ -21,7 +23,15 @@ export async function action({ request, context }: ActionFunctionArgs) {
   const env = context.cloudflare.env as {
     MEDUSA_BACKEND_URL?: string;
     MEDUSA_PUBLISHABLE_KEY?: string;
+    JWT_SECRET?: string;
   };
+
+  // CSRF Check
+  const jwtSecret = env.JWT_SECRET || "dev-secret-key";
+  const isValidCSRF = await validateCSRFToken(request, jwtSecret);
+  if (!isValidCSRF) {
+    return data({ error: "Invalid CSRF token" }, { status: 403 });
+  }
 
   const medusaBackendUrl = env.MEDUSA_BACKEND_URL || "http://localhost:9000";
   const medusaPublishableKey = env.MEDUSA_PUBLISHABLE_KEY;

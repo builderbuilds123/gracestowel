@@ -4,6 +4,7 @@ import type { LoaderFunctionArgs, ActionFunctionArgs, MetaFunction } from "react
 import { CheckCircle2, Package, Truck, MapPin, XCircle, AlertTriangle } from "lucide-react";
 import { CancelOrderDialog } from "../components/CancelOrderDialog";
 import { useCart } from "../context/CartContext";
+import { useMedusaCart } from "../context/MedusaCartContext";
 import { posts } from "../data/blogPosts";
 import { getStripe, initStripe } from "../lib/stripe";
 import { monitoredFetch } from "../utils/monitored-fetch";
@@ -137,6 +138,7 @@ export default function CheckoutSuccess() {
     const { stripePublishableKey, medusaBackendUrl, medusaPublishableKey, initialParams } = useLoaderData<LoaderData>();
     const navigate = useNavigate();
     const { clearCart, items } = useCart();
+    const { cartId, setCartId, setCart: setMedusaCart } = useMedusaCart();
     const [paymentStatus, setPaymentStatus] = useState<'loading' | 'success' | 'error' | 'canceled'>('loading');
 
     // Create logger once at component top for log correlation across component lifecycle
@@ -445,19 +447,10 @@ export default function CheckoutSuccess() {
                         };
 
                         // CHK-01: Call Medusa cart completion API
-                        let cartIdFromSession: string | null = null;
-                        try {
-                            cartIdFromSession = sessionStorage.getItem('medusa_cart_id');
-                        } catch (error) {
-                            // Non-critical: storage access failures don't block cart completion
-                            logger.warn("Failed to read medusa_cart_id from sessionStorage", {
-                                error: error instanceof Error ? error.message : String(error),
-                            });
-                        }
-                        if (cartIdFromSession) {
+                        if (cartId) {
                             try {
                                 // SECURITY: Don't log cart IDs or completion data
-                                const completeResponse = await monitoredFetch(`/api/carts/${cartIdFromSession}/complete`, {
+                                const completeResponse = await monitoredFetch(`/api/carts/${cartId}/complete`, {
                                     method: "POST",
                                     headers: {
                                         "Content-Type": "application/json",
@@ -487,10 +480,9 @@ export default function CheckoutSuccess() {
                             clearCart();
                             // Clear checkout-related data but keep verifiedOrder for refresh
                             try {
+                                setMedusaCart(null);
+                                setCartId(undefined);
                                 sessionStorage.removeItem('lastOrder');
-                                // MED-3 FIX: Also clean up cart ID to prevent lingering session data
-                                sessionStorage.removeItem('medusa_cart_id');
-                                localStorage.removeItem('medusa_cart_id');
                             } catch (error) {
                                 logger.warn("Failed to cleanup sessionStorage", {
                                     error: error instanceof Error ? error.message : String(error),
@@ -535,8 +527,8 @@ export default function CheckoutSuccess() {
             sessionStorage.removeItem('lastOrder');
             sessionStorage.removeItem('orderId');
             if (!keepCart) {
-                sessionStorage.removeItem('medusa_cart_id');
-                localStorage.removeItem('medusa_cart_id');
+                setMedusaCart(null);
+                setCartId(undefined);
             }
             sessionStorage.removeItem('modificationToken');
             if (clearVerified) {

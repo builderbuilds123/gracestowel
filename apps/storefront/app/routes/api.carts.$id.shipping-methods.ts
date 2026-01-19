@@ -15,12 +15,24 @@ interface AddShippingMethodRequest {
  * 
  * This endpoint replaces any existing shipping method on the cart.
  */
+import { validateCSRFToken } from "../utils/csrf.server";
+
+// ... (imports)
+
 export async function action({ request, params, context }: ActionFunctionArgs) {
   const traceId = getTraceIdFromRequest(request);
   const logger = createLogger({ traceId });
 
   if (request.method !== "POST") {
     return data({ error: "Method not allowed" }, { status: 405 });
+  }
+
+  // CSRF Check
+  const env = context.cloudflare.env as any;
+  const jwtSecret = env.JWT_SECRET || "dev-secret-key";
+  const isValidCSRF = await validateCSRFToken(request, jwtSecret);
+  if (!isValidCSRF) {
+     return data({ error: "Invalid CSRF token" }, { status: 403 });
   }
 
   const cartId = params.id;

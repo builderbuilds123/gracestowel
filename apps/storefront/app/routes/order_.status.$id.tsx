@@ -1,4 +1,5 @@
 import { data } from "react-router";
+import { validateCSRFToken } from "../utils/csrf.server";
 import { useLoaderData, useRevalidator, useNavigate, useActionData, useSubmit } from "react-router";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { useState, useCallback, useEffect } from "react";
@@ -116,6 +117,13 @@ export async function action({ params, request, context }: ActionFunctionArgs) {
     const env = context.cloudflare.env as any;
     const medusaBackendUrl = env.MEDUSA_BACKEND_URL;
     const medusaPublishableKey = env.MEDUSA_PUBLISHABLE_KEY;
+
+    // CSRF Check
+    const jwtSecret = env.JWT_SECRET || "dev-secret-key";
+    const isValidCSRF = await validateCSRFToken(request, jwtSecret);
+    if (!isValidCSRF) {
+        return data({ error: "Invalid CSRF token" }, { status: 403 });
+    }
 
     // Get token from HttpOnly cookie (secure - not accessible to client JS)
     const { token } = await getGuestToken(request, id!);

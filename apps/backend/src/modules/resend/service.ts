@@ -6,6 +6,7 @@ import { orderPlacedEmail } from "./emails/order-placed"
 import { welcomeEmail } from "./emails/welcome"
 import { shippingConfirmationEmail } from "./emails/shipping-confirmation"
 import { orderCanceledEmail } from "./emails/order-canceled"
+import { passwordResetEmail } from "./emails/password-reset"
 
 // Template types enum
 export enum Templates {
@@ -13,6 +14,7 @@ export enum Templates {
   WELCOME = "welcome",
   SHIPPING_CONFIRMATION = "shipping-confirmation",
   ORDER_CANCELED = "order-canceled",
+  PASSWORD_RESET = "password-reset",
 }
 
 // Template mapping
@@ -21,6 +23,7 @@ const templates: { [key in Templates]?: (props: unknown) => React.ReactElement }
   [Templates.WELCOME]: welcomeEmail,
   [Templates.SHIPPING_CONFIRMATION]: shippingConfirmationEmail,
   [Templates.ORDER_CANCELED]: orderCanceledEmail,
+  [Templates.PASSWORD_RESET]: passwordResetEmail,
 }
 
 // Module options interface
@@ -129,6 +132,8 @@ class ResendNotificationProviderService extends AbstractNotificationProviderServ
         return `Your Order Has Shipped - Grace Stowel #${(data as { order?: { display_id?: string } }).order?.display_id || ""}`
       case Templates.ORDER_CANCELED:
         return `Order Canceled - Grace Stowel #${(data as { order?: { display_id?: string } }).order?.display_id || ""}`
+      case Templates.PASSWORD_RESET:
+        return `Reset Your Password - Grace Stowel`
       default:
         return "Grace Stowel Notification"
     }

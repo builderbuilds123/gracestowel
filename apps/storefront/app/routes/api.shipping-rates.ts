@@ -5,6 +5,9 @@ import type { CartItem, ProductId } from "../types/product";
 import { isMedusaId } from "../types/product";
 import { createLogger, getTraceIdFromRequest } from "../lib/logger";
 
+// CSRF Check
+import { validateCSRFToken } from "../utils/csrf.server"; 
+
 /**
  * @deprecated Use the new RESTful cart endpoints instead:
  * - POST /api/carts - Create cart
@@ -97,6 +100,13 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
   if (!medusaPublishableKey) {
     throw new Error("Missing MEDUSA_PUBLISHABLE_KEY environment variable");
+  }
+
+  // CSRF Check
+  const jwtSecret = (env as any).JWT_SECRET || "dev-secret-key";
+  const isValidCSRF = await validateCSRFToken(request, jwtSecret);
+  if (!isValidCSRF) {
+     return data({ message: "Invalid CSRF token" }, { status: 403 });
   }
 
   // Parse request body

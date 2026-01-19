@@ -7,6 +7,7 @@ import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
 import { schedulePaymentCapture, formatModificationWindow } from "../lib/payment-capture-queue"
 import { getPostHog } from "../utils/posthog"
 import { enqueueEmail } from "../lib/email-queue"
+import { Templates } from "../modules/resend/service"
 import type { ModificationTokenService } from "../services/modification-token"
 import { ensureStripeWorkerStarted } from "../loaders/stripe-event-worker"
 import { startPaymentCaptureWorker } from "../workers/payment-capture-worker"
@@ -231,8 +232,8 @@ export default async function orderPlacedHandler({
         // Template must be "order-placed" to match Templates.ORDER_PLACED enum
         // Note: Medusa v2 stores prices in MAJOR currency units (e.g., $34.00 not 3400 cents)
         const emailPayload = {
-            orderId: order.id,
-            template: "order-placed" as const,
+            entityId: order.id,
+            template: Templates.ORDER_PLACED,
             recipient: order.email || "",
             data: {
               order: {

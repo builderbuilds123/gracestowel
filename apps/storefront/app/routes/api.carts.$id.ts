@@ -35,6 +35,10 @@ interface UpdateCartRequest {
   metadata?: Record<string, any>;
 }
 
+import { validateCSRFToken } from "../utils/csrf.server";
+
+// ...
+
 /**
  * PATCH /api/carts/:id
  * Update cart items and/or shipping address
@@ -42,6 +46,14 @@ interface UpdateCartRequest {
 export async function action({ request, params, context }: ActionFunctionArgs) {
   if (request.method !== "PATCH") {
     return data({ error: "Method not allowed" }, { status: 405 });
+  }
+
+  // CSRF Check
+  const env = context.cloudflare.env as any;
+  const jwtSecret = env.JWT_SECRET || "dev-secret-key";
+  const isValidCSRF = await validateCSRFToken(request, jwtSecret);
+  if (!isValidCSRF) {
+     return data({ error: "Invalid CSRF token" }, { status: 403 });
   }
 
   const cartId = params.id;

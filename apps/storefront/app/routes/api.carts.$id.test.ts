@@ -16,11 +16,18 @@ vi.mock("../services/medusa-cart", () => ({
   },
 }));
 
+// Mock validateCSRFToken
+const mockValidateCSRFToken = vi.fn();
+vi.mock("../utils/csrf.server", () => ({
+  validateCSRFToken: (...args: any[]) => mockValidateCSRFToken(...args),
+}));
+
 describe("API Carts - PATCH /api/carts/:id", () => {
   let context: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockValidateCSRFToken.mockResolvedValue(true);
     context = {
       cloudflare: {
         env: {

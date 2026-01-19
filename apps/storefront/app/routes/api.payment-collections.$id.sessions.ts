@@ -11,6 +11,10 @@ interface PaymentSessionRequest {
   provider_id?: string;
 }
 
+import { validateCSRFToken } from "../utils/csrf.server";
+
+// ...
+
 export async function action({ request, params, context }: ActionFunctionArgs) {
   const traceId = getTraceIdFromRequest(request);
   const logger = createLogger({ traceId });
@@ -18,6 +22,14 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
 
   if (request.method !== "POST") {
     return data({ error: "Method not allowed" }, { status: 405 });
+  }
+
+  // CSRF Check
+  const env = context.cloudflare.env as any;
+  const jwtSecret = env.JWT_SECRET || "dev-secret-key";
+  const isValidCSRF = await validateCSRFToken(request, jwtSecret);
+  if (!isValidCSRF) {
+     return data({ error: "Invalid CSRF token", traceId }, { status: 403 });
   }
 
   if (!collectionId) {
@@ -54,12 +66,6 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
     logger.error("Invalid provider ID format", undefined, { provider_id });
     return data({ error: "Invalid provider ID format", traceId }, { status: 400 });
   }
-
-  const env = context.cloudflare.env as {
-    MEDUSA_BACKEND_URL?: string;
-    MEDUSA_PUBLISHABLE_KEY?: string;
-    [key: string]: unknown;
-  };
 
   const medusaBackendUrl = env.MEDUSA_BACKEND_URL || "http://localhost:9000";
   const publishableKey = env.MEDUSA_PUBLISHABLE_KEY;

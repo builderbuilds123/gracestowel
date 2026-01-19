@@ -3,6 +3,7 @@ import { calculateTotal } from '../lib/price';
 import type { ProductId, CartItem, EmbroideryData } from '../types/product';
 import { productIdsEqual } from '../types/product';
 import { monitoredFetch } from '../utils/monitored-fetch';
+import { useMedusaCart } from './MedusaCartContext';
 
 // Re-export CartItem for backwards compatibility
 export type { CartItem, EmbroideryData } from '../types/product';
@@ -26,6 +27,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     const [isOpen, setIsOpen] = useState(false);
     const [isLoaded, setIsLoaded] = useState(false);
     const cartCreateInFlight = React.useRef(false);
+    const { cartId, setCartId } = useMedusaCart();
 
     // Validate cart item integrity
     const validateCartItem = (item: any): boolean => {
@@ -101,8 +103,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         if (typeof window !== 'undefined' && !cartCreateInFlight.current) {
             void (async () => {
                 try {
-                    const existingCartId = localStorage.getItem('medusa_cart_id');
-                    if (existingCartId) {
+                    if (cartId) {
                         return;
                     }
                     cartCreateInFlight.current = true;
@@ -116,7 +117,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
                     }
                     const payload = await response.json() as { cart_id?: string };
                     if (payload.cart_id) {
-                        localStorage.setItem('medusa_cart_id', payload.cart_id);
+                        setCartId(payload.cart_id);
                     }
                 } catch {
                     // Non-blocking: cart creation failure should not prevent local cart updates

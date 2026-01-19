@@ -21,7 +21,6 @@ import { useShippingRates } from "../hooks/useShippingRates";
 import { useCheckoutError } from "../hooks/useCheckoutError";
 import { useCheckoutState } from "../hooks/useCheckoutState";
 import { CHECKOUT_CONSTANTS } from "../constants/checkout";
-import type { CartWithPromotions } from "../types/promotion";
 import type { CheckoutAddress } from "../types/checkout";
 import { useMedusaCart } from "../context/MedusaCartContext";
 
@@ -123,9 +122,14 @@ export default function Checkout() {
     setIsCartSynced: (synced) => { /* Optional: handle sync state in reducer if needed, or ignore if UI just needs shipping options */ },
     onCartCreated: (newCartId) => {
       logger.info('Cart created via hook', { cartId: newCartId });
+      setMedusaCart(null);
     },
     onCartSynced: () => {
       logger.info('Cart synced via hook');
+    },
+    onCartUpdated: (cart) => {
+      setMedusaCart(cart);
+      syncPromoFromCart(cart);
     },
     onCartSyncError: (err) => {
       if (err) {
@@ -220,6 +224,7 @@ export default function Checkout() {
   useEffect(() => {
     if (shippingPersistError?.includes('expired')) {
        setCartId(undefined);
+       setMedusaCart(null);
     }
   }, [shippingPersistError]);
 

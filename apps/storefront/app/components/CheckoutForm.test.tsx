@@ -1,4 +1,4 @@
-
+// @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // 1. Declare ALL mocks at the very top
@@ -49,6 +49,14 @@ vi.mock('@stripe/stripe-js', () => ({
         elements: vi.fn(),
         confirmPayment: vi.fn(),
     })),
+}));
+
+vi.mock('../context/LocaleContext', () => ({
+    useLocale: () => ({ 
+        currency: 'USD', 
+        regionId: 'reg_us',
+        formatPrice: (amount: number) => `$${amount.toFixed(2)}`
+    }),
 }));
 
 // 2. ONLY THEN import React and components
@@ -153,7 +161,7 @@ describe('CheckoutForm', () => {
         
         expect(screen.getByText('Delivery')).toBeInTheDocument();
         expect(screen.getByTestId('address-element')).toBeInTheDocument();
-        expect(screen.getByText('Shipping method')).toBeInTheDocument();
+        expect(screen.getByText('Delivery Method')).toBeInTheDocument();
         
         expect(screen.getByText('Payment')).toBeInTheDocument();
         expect(screen.getByTestId('payment-element')).toBeInTheDocument();
