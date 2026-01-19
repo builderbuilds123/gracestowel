@@ -68,7 +68,10 @@ describe('Payment Collections API', () => {
                 payment_collection: {
                     id: paymentCollectionId,
                     cart_id: cartId,
-                    amount: 5000
+                    amount: 5000,
+                    payment_sessions: [
+                        { id: 'ps_123', provider_id: 'pp_stripe' }
+                    ]
                 }
             })
         });
@@ -171,7 +174,10 @@ describe('Payment Collections API', () => {
                 payment_collections: [{
                     id: existingCollectionId,
                     cart_id: cartId,
-                    amount: 5000
+                    amount: 5000,
+                    payment_sessions: [
+                        { id: 'ps_existing', provider_id: 'pp_stripe' }
+                    ]
                 }]
             })
         });

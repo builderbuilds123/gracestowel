@@ -63,15 +63,16 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     }, [items]);
 
     const addToCart = (newItem: Omit<CartItem, 'quantity'> & { quantity?: number }) => {
+        const quantityToAdd = newItem.quantity ?? 1;
+        const itemToAdd = { ...newItem, quantity: quantityToAdd };
         // Fail loudly if inputs are invalid (User Requirement)
-        if (!validateCartItem(newItem)) {
-            const error = `Attempted to add invalid item to cart: ${JSON.stringify(newItem)}`;
+        if (!validateCartItem(itemToAdd)) {
+            const error = `Attempted to add invalid item to cart: ${JSON.stringify(itemToAdd)}`;
             console.error(error);
             throw new Error(error);
         }
 
         setItems(prevItems => {
-            const quantityToAdd = newItem.quantity || 1;
             const existingItem = prevItems.find(item => {
                 if (newItem.variantId && item.variantId) {
                     return item.variantId === newItem.variantId;
@@ -90,7 +91,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
                         : item
                 );
             }
-            return [...prevItems, { ...newItem, quantity: quantityToAdd }];
+            return [...prevItems, itemToAdd];
         });
         setIsOpen(true);
     };

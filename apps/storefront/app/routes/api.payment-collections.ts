@@ -163,8 +163,9 @@ export async function action({ request, context }: ActionFunctionArgs) {
         
         if (!paymentCollection) {
            const errorText = await createRes.text();
-           logger.error("Failed to create payment collection", new Error(errorText), { status: createRes.status });
-           return data({ error: "Failed to create payment collection", traceId }, { status: createRes.status });
+           const errorMessage = errorText || "Failed to create payment collection";
+           logger.error("Failed to create payment collection", new Error(errorMessage), { status: createRes.status });
+           return data({ error: errorMessage, traceId }, { status: createRes.status });
         }
       } else {
         const createData = await createRes.json() as { payment_collection: MedusaPaymentCollection };
