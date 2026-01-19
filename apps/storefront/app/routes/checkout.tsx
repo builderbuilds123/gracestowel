@@ -33,8 +33,10 @@ export async function loader({
   context,
 }: LoaderFunctionArgs): Promise<LoaderData> {
   // Support both Cloudflare (context.env) and Node/Vite (process.env)
-  const cloudflareEnv = context?.cloudflare?.env;
-  const nodeEnv = typeof process !== 'undefined' ? process.env : {};
+  const cloudflareEnv = context?.cloudflare?.env as { STRIPE_PUBLISHABLE_KEY?: string; VITE_STRIPE_PUBLISHABLE_KEY?: string } | undefined;
+  const nodeEnv = (typeof process !== 'undefined'
+    ? process.env
+    : {}) as { STRIPE_PUBLISHABLE_KEY?: string; VITE_STRIPE_PUBLISHABLE_KEY?: string };
   const stripeKey =
     cloudflareEnv?.STRIPE_PUBLISHABLE_KEY ??
     cloudflareEnv?.VITE_STRIPE_PUBLISHABLE_KEY ??
