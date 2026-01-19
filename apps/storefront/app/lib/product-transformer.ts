@@ -37,6 +37,7 @@ export interface ProductDetail {
     handle: string;
     title: string;
     price: number;           // Price in cents
+    originalPrice?: number;  // Original price in cents (optional, for discounts)
     formattedPrice: string;
     description: string;
     images: string[];
@@ -170,4 +171,3 @@ export function transformToListItems(
 ): ProductListItem[] {
     return products.map(p => transformToListItem(p, currency));
 }
-
