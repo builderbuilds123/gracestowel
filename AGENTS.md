@@ -59,6 +59,7 @@ See nested AGENTS.md files for app-specific patterns:
 4. **Handle errors properly** — Never ignore catch blocks
 5. **Async email only** — Use BullMQ queue, never sync
 6. **Mask PII in logs** — Especially email addresses
+7. **Use structured logging** — No `console.log`. Use `logger.info(msg, { context })`.
 
 ### Principles
 
@@ -182,6 +183,7 @@ CI runs: Lint → Type Check → Security Scan → Unit Tests → E2E → Deploy
 | Ignore catch errors | Log and handle properly |
 | Send email synchronously | Use BullMQ queue |
 | Log raw PII | Mask: `****@domain.com` |
+| Use `console.log` | Use structured logger |
 
 ---
 

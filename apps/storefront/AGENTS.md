@@ -147,6 +147,70 @@ export function getMedusaClient(env: Env) {
 
 ---
 
+## Fetch Patterns (Storefront)
+
+Choosing the right fetch utility is critical for security and observability.
+
+| Utility | Use Case | Features |
+|---------|----------|----------|
+| **`medusaFetch`** | **Medusa Store/Auth API** (`/store/*`, `/auth/*`) | ✅ Auto-injects `x-publishable-api-key`<br>✅ Handles separate `env` for Server vs Client |
+| **`monitoredFetch`** | **Internal API Routes** (`/api/*`) | ✅ PostHog Tracing & Analytics<br>❌ DOES NOT inject Medusa keys |
+| **`fetch` (Native)** | **Third-Party APIs** (Stripe, Maps, etc.) | ✅ Raw control<br>✅ No tracking headers (Privacy compliant) |
+
+### Usage Examples
+
+**1. Medusa API (Server-Side Loader):**
+```typescript
+import { medusaFetch } from "~/lib/medusa-fetch"
+
+// Pass `context.cloudflare.env` for server-side key resolution
+const response = await medusaFetch("/store/products", {
+  method: "GET", 
+  cloudflareEnv: context.cloudflare.env 
+})
+```
+
+**2. Medusa API (Client-Side):**
+```typescript
+// Uses `window.ENV` automatically
+const response = await medusaFetch("/store/cart", { method: "POST" })
+```
+
+**3. Internal API (Monitoring):**
+```typescript
+import { monitoredFetch } from "~/utils/monitored-fetch"
+
+// Tracks performance in PostHog
+await monitoredFetch("/api/shipping-rates", { ... })
+```
+
+**4. External API (Stripe/Other):**
+```typescript
+// Use native fetch to avoid leaking keys or headers
+await fetch("https://api.stripe.com/v1/...", {
+  headers: { Authorization: `Bearer ${STRIPE_KEY}` }
+})
+```
+
+---
+
+## Logging Standards
+
+🛑 **NEVER use `console.log`** in production code.  
+✅ **ALWAYS use structured logging.**
+
+In Cloudflare Workers/Storefront, use the provided logger or standard `console.error`/`console.warn` with rigid structure only if a logger isn't available, but prefer:
+
+```typescript
+// Good
+logger.info("Order created", { order_id: "ord_123", amount: 5000 })
+
+// Bad
+console.log("Order created", order_id) 
+```
+
+---
+
 ## Styling
 
 - **Tailwind CSS v4** — Configuration in CSS, not `tailwind.config.js`
