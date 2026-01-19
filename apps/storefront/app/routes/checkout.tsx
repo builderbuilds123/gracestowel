@@ -245,8 +245,8 @@ export default function Checkout() {
   // Combine payment errors for display
   const paymentError = collectionError || sessionError;
 
-  const buildUpdatePayload = useCallback((currentItems: typeof items, address: any) => {
-    const payload: any = {
+  const buildUpdatePayload = useCallback((currentItems: typeof items, address: { firstName?: string; lastName?: string; address?: { line1?: string; line2?: string; city?: string; country?: string; postal_code?: string; state?: string }; phone?: string }) => {
+    const payload: Record<string, unknown> = {
       items: currentItems,
       promo_codes: appliedPromoCodes
         .filter(code => !code.isAutomatic)
@@ -276,7 +276,7 @@ export default function Checkout() {
     }
 
     return payload;
-  }, [appliedPromoCodes, guestEmail, regionId, items]);
+  }, [appliedPromoCodes, guestEmail, regionId]);
 
   const updateCartAndSync = useCallback(async (
     currentCartId: string,

@@ -320,7 +320,7 @@ export default function ProductDetailPage({ loaderData }: Route.ComponentProps) 
                                     <h3 className="font-serif text-lg text-text-earthy mb-4">Features</h3>
                                     <ul className="space-y-2">
                                         {product.features.map((feature, i) => (
-                                            <li key={i} className="text-text-earthy/70 text-sm flex items-start gap-2">
+                                            <li key={`${feature}-${i}`} className="text-text-earthy/70 text-sm flex items-start gap-2">
                                                 <span className="text-accent-earthy">✓</span>
                                                 {feature}
                                             </li>
@@ -348,7 +348,7 @@ export default function ProductDetailPage({ loaderData }: Route.ComponentProps) 
                                     <h3 className="font-serif text-lg text-text-earthy mb-4">Care</h3>
                                     <ul className="space-y-2">
                                         {product.careInstructions.map((instruction, i) => (
-                                            <li key={i} className="text-text-earthy/70 text-sm flex items-start gap-2">
+                                            <li key={`${instruction}-${i}`} className="text-text-earthy/70 text-sm flex items-start gap-2">
                                                 <span className="text-accent-earthy">•</span>
                                                 {instruction}
                                             </li>

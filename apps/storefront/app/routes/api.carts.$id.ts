@@ -147,31 +147,32 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
     result.cart = refreshedCart || undefined;
     return data(result, { status: 200 });
 
-  } catch (error: any) {
-    logger.error(`Error updating cart ${cartId}`, error);
+  } catch (error: unknown) {
+    const err = error instanceof Error ? error : new Error(String(error));
+    logger.error(`Error updating cart ${cartId}`, err);
     
     // Determine status code from upstream error
-    const status = error.status || 500;
+    const status = (error as any).status || 500;
     
     // Check for region mismatch error (broad text matching or 422 status with country/region keywords)
     const isRegionMismatch = 
-      (error.message?.includes("Country") && error.message?.includes("not within region")) ||
-      (status === 422 && error.message?.toLowerCase().includes("region"));
+      (err.message?.includes("Country") && err.message?.includes("not within region")) ||
+      (status === 422 && err.message?.toLowerCase().includes("region"));
 
     if (isRegionMismatch) {
       return data({
         error: "Country not supported in cart region",
-        details: error.message,
+        details: err.message,
         code: "REGION_MISMATCH",
       }, { status: 400 }); // Return 400 so frontend can handle it
     }
 
     // Check for cart already completed error
-    const isCartCompleted = error.message?.toLowerCase().includes('already completed');
+    const isCartCompleted = err.message?.toLowerCase().includes('already completed');
     if (isCartCompleted) {
       return data({
         error: "Cart is already completed",
-        details: error.message,
+        details: err.message,
         code: "CART_COMPLETED",
       }, { status: 410 }); // 410 Gone - resource no longer available
     }
@@ -179,14 +180,14 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
     // Forward upstream 4xx errors
     if (status >= 400 && status < 500) {
        return data({
-        error: error.message || "Invalid request",
-        details: error.details || undefined,
+        error: err.message || "Invalid request",
+        details: (error as any).details || undefined,
       }, { status });
     }
 
     return data({
       error: "Failed to update cart",
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      details: process.env.NODE_ENV === 'development' ? err.message : undefined,
     }, { status: 502 }); // 502 indicates upstream (Medusa) failure
   }
 }
@@ -213,8 +214,8 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
     const logger = createLogger({ traceId, context: "api.carts.$id.loader" });
     logger.info(`Fetched cart ${cartId}`, {
       id: cart.id,
-      discount_total: (cart as any).discount_total,
-      promotions: (cart as any).promotions?.map((p: any) => p.code),
+      discount_total: cart.discount_total,
+      promotions: (cart as Cart & { promotions?: { code: string }[] }).promotions?.map((p) => p.code),
       items_count: cart.items?.length
     });
 
@@ -223,8 +224,8 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
       region_id: cart.region_id,
       items: cart.items,
       shipping_address: cart.shipping_address,
-      discount_total: (cart as any).discount_total,
-      promotions: (cart as any).promotions,
+      discount_total: cart.discount_total,
+      promotions: (cart as Cart & { promotions?: any[] }).promotions,
     });
 
   } catch (error: any) {

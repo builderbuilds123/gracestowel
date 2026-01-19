@@ -85,8 +85,6 @@ export function initPostHog() {
     // Debugging (only in development)
     loaded: (posthog) => {
       if (import.meta.env.MODE === 'development') {
-        console.log('[PostHog] Successfully initialized');
-        console.log('[PostHog] Surveys enabled');
         posthog.debug();
       }
     },

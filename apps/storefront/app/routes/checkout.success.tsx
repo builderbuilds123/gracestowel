@@ -292,7 +292,7 @@ export default function CheckoutSuccess() {
                             const parsedOrder = JSON.parse(savedOrder);
                             // DEBUG: Log what's being loaded
                             logger.info('Loaded from lastOrder', {
-                                hasDiscount: !!parsedOrder.discount,
+                                hasDiscount: Boolean(parsedOrder.discount),
                                 discount: parsedOrder.discount,
                                 appliedPromoCodesCount: parsedOrder.appliedPromoCodes?.length || 0
                             });
