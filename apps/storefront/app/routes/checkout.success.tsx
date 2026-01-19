@@ -488,6 +488,7 @@ export default function CheckoutSuccess() {
                                 sessionStorage.removeItem('lastOrder');
                                 // MED-3 FIX: Also clean up cart ID to prevent lingering session data
                                 sessionStorage.removeItem('medusa_cart_id');
+                                localStorage.removeItem('medusa_cart_id');
                             } catch (error) {
                                 logger.warn("Failed to cleanup sessionStorage", {
                                     error: error instanceof Error ? error.message : String(error),
@@ -533,6 +534,7 @@ export default function CheckoutSuccess() {
             sessionStorage.removeItem('orderId');
             if (!keepCart) {
                 sessionStorage.removeItem('medusa_cart_id');
+                localStorage.removeItem('medusa_cart_id');
             }
             sessionStorage.removeItem('modificationToken');
             if (clearVerified) {

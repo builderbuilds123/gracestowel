@@ -95,7 +95,11 @@ export default function Checkout() {
   // Initialize cartId from sessionStorage if available (client-side only)
   const [cartId, setCartId] = useState<string | undefined>(() => {
     if (typeof window !== 'undefined') {
-      return sessionStorage.getItem('medusa_cart_id') || undefined;
+      return (
+        sessionStorage.getItem('medusa_cart_id') ||
+        localStorage.getItem('medusa_cart_id') ||
+        undefined
+      );
     }
     return undefined;
   });
@@ -191,16 +195,18 @@ export default function Checkout() {
        setCartId(undefined);
        if (typeof window !== 'undefined') {
          sessionStorage.removeItem('medusa_cart_id');
+         localStorage.removeItem('medusa_cart_id');
        }
     }
   }, [shippingPersistError]);
 
 
-  // Persist cartId to sessionStorage
+  // Persist cartId to sessionStorage and localStorage
   useEffect(() => {
     if (typeof window !== 'undefined') {
       if (cartId) {
         sessionStorage.setItem('medusa_cart_id', cartId);
+        localStorage.setItem('medusa_cart_id', cartId);
         if (isDevelopment) {
           logger.info('cartId changed', { cartId });
         }
