@@ -36,7 +36,7 @@ async function getClient(context: CloudflareContext): Promise<Client> {
         return client;
     }
 
-    const url = context?.cloudflare?.env?.DATABASE_URL || process.env.DATABASE_URL;
+    const url = context?.cloudflare?.env?.DATABASE_URL || import.meta.env.DATABASE_URL;
     if (!url) {
         throw new Error("No database connection available");
     }
@@ -468,7 +468,7 @@ export function isHyperdriveAvailable(context: CloudflareContext): boolean {
     return !!(
         context?.cloudflare?.env?.HYPERDRIVE?.connectionString ||
         context?.cloudflare?.env?.DATABASE_URL ||
-        process.env.DATABASE_URL
+        import.meta.env.DATABASE_URL
     );
 }
 

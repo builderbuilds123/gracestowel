@@ -56,7 +56,7 @@ function calculateMaxAge(token: string): number {
 function createGuestCookie(orderId: string, maxAge: number) {
     return createCookie(`guest_order_${orderId}`, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
+        secure: import.meta.env.PROD,
         sameSite: "strict",
         maxAge,
         path: `/order/status/${orderId}`,

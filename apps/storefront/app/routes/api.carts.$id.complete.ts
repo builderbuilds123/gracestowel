@@ -74,7 +74,7 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
         console.error(`Error completing cart ${cartId}:`, error);
         return data({
             error: "An unexpected error occurred during cart completion",
-            details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+            details: import.meta.env.DEV ? error.message : undefined,
         }, { status: 500 });
     }
 }

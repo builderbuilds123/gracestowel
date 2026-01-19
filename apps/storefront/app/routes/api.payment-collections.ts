@@ -1,6 +1,6 @@
 import { type ActionFunctionArgs, data } from "react-router";
 import { createLogger, getTraceIdFromRequest } from "../lib/logger";
-import { monitoredFetch } from "../utils/monitored-fetch";
+import { medusaFetch } from "../lib/medusa-fetch";
 
 // Helper types for Medusa responses
 type MedusaPaymentCollection = {
@@ -89,15 +89,14 @@ export async function action({ request, context }: ActionFunctionArgs) {
     });
 
     // 2. Create Stripe session
-    const sessionRes = await monitoredFetch(`${medusaBackendUrl}/store/payment-collections/${collection.id}/sessions`, {
+    const sessionRes = await medusaFetch(`/store/payment-collections/${collection.id}/sessions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-publishable-api-key": publishableKey!,
       },
       body: JSON.stringify({ provider_id: "pp_stripe" }),
       label: "create-missing-stripe-session",
-      cloudflareEnv: env,
+      context,
     });
 
     if (!sessionRes.ok) {
@@ -117,11 +116,10 @@ export async function action({ request, context }: ActionFunctionArgs) {
     let paymentCollection: MedusaPaymentCollection | undefined;
 
     // A. Check for existing payment collection first (Idempotency)
-    const existingCheckResponse = await monitoredFetch(`${medusaBackendUrl}/store/payment-collections?cart_id=${cartId}`, {
+    const existingCheckResponse = await medusaFetch(`/store/payment-collections?cart_id=${cartId}`, {
       method: "GET",
-      headers: { "x-publishable-api-key": publishableKey },
       label: "check-existing-payment-collection",
-      cloudflareEnv: env,
+      context,
     });
 
     if (existingCheckResponse.ok) {
@@ -135,25 +133,23 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
     // B. Create logic if not found
     if (!paymentCollection) {
-      const createRes = await monitoredFetch(`${medusaBackendUrl}/store/payment-collections`, {
+      const createRes = await medusaFetch(`/store/payment-collections`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-publishable-api-key": publishableKey,
         },
         body: JSON.stringify({ cart_id: cartId }),
         label: "create-payment-collection",
-        cloudflareEnv: env,
+        context,
       });
 
       if (!createRes.ok) {
         // Handle 409 Conflict race condition (created by another request)
         if (createRes.status === 409) {
-           const retryCheck = await monitoredFetch(`${medusaBackendUrl}/store/payment-collections?cart_id=${cartId}`, {
+           const retryCheck = await medusaFetch(`/store/payment-collections?cart_id=${cartId}`, {
             method: "GET",
-            headers: { "x-publishable-api-key": publishableKey },
             label: "retry-fetch-payment-collection",
-            cloudflareEnv: env,
+            context,
           });
           if (retryCheck.ok) {
             const retryData = await retryCheck.json();

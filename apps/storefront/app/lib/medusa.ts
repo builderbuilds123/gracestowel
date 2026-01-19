@@ -4,7 +4,7 @@ import { clampAvailability } from "./inventory"
 export const createMedusaClient = (backendUrl: string, publishableKey: string) => {
   return new Medusa({
     baseUrl: backendUrl,
-    debug: process.env.NODE_ENV === "development",
+    debug: import.meta.env.DEV,
     publishableKey
   })
 }
@@ -260,8 +260,8 @@ export function getBackendUrl(context?: { cloudflare?: { env?: { MEDUSA_BACKEND_
         return window.ENV.MEDUSA_BACKEND_URL;
     }
 
-    // 3. Check process.env (build-time or Node.js)
-    return process.env.VITE_MEDUSA_BACKEND_URL || "http://localhost:9000";
+    // 3. Check import.meta.env (Vite build-time)
+    return import.meta.env.VITE_MEDUSA_BACKEND_URL || "http://localhost:9000";
 }
 
 /**
@@ -289,15 +289,11 @@ export function getMedusaClient(context?: { cloudflare?: { env?: { MEDUSA_BACKEN
 
     const backendUrl = getBackendUrl(context);
 
-    // Prioritize context key, then window.ENV, then process env
+    // Prioritize context key, then window.ENV
     let publishableKey = context?.cloudflare?.env?.MEDUSA_PUBLISHABLE_KEY;
     
     if (!publishableKey && typeof window !== "undefined") {
         publishableKey = window.ENV?.MEDUSA_PUBLISHABLE_KEY;
-    }
-
-    if (!publishableKey) {
-        publishableKey = process.env.MEDUSA_PUBLISHABLE_KEY;
     }
 
     if (!publishableKey) {

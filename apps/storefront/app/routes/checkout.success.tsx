@@ -3,11 +3,11 @@ import { Link, useNavigate, useLoaderData, useFetcher, redirect, data } from "re
 import type { LoaderFunctionArgs, ActionFunctionArgs, MetaFunction } from "react-router";
 import { CheckCircle2, Package, Truck, MapPin, XCircle, AlertTriangle } from "lucide-react";
 import { CancelOrderDialog } from "../components/CancelOrderDialog";
-import { monitoredFetch as serverMonitoredFetch } from "../utils/monitored-fetch";
 import { useCart } from "../context/CartContext";
 import { posts } from "../data/blogPosts";
 import { getStripe, initStripe } from "../lib/stripe";
 import { monitoredFetch } from "../utils/monitored-fetch";
+import { medusaFetch } from "../lib/medusa-fetch";
 import { createLogger } from "../lib/logger";
 import { migrateStorageItem } from "../lib/storage-migration";
 import { parsePrice } from "../lib/price";
@@ -367,10 +367,12 @@ export default function CheckoutSuccess() {
                             const addressString = `${address?.line1}, ${address?.city}, ${address?.state} ${address?.postal_code}, ${address?.country} `;
                             // SECURITY: Don't log addresses (PII) - removed debug log
 
-                            // Do not await this
-                            monitoredFetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addressString)}`, {
+                            // Use native fetch for third-party API (Nominatim)
+                            fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addressString)}`, {
                                 method: "GET",
-                                label: "geocode-shipping-address",
+                                headers: {
+                                    "User-Agent": "Grace's Towel E-Commerce/1.0 (https://gracestowel.com)",
+                                },
                             }).then(async (response) => {
                                 const data = await response.json() as any[];
                                 if (Array.isArray(data) && data.length > 0) {
@@ -392,14 +394,15 @@ export default function CheckoutSuccess() {
 
                         const fetchOrderWithToken = async (): Promise<void> => {
                             try {
-                                const response = await monitoredFetch(
-                                    `${medusaUrl}/store/orders/by-payment-intent?payment_intent_id=${encodeURIComponent(currentParams.paymentIntentId!)}`,
+                                // Use medusaFetch for Medusa Store API
+                                const response = await medusaFetch(
+                                    `/store/orders/by-payment-intent?payment_intent_id=${encodeURIComponent(currentParams.paymentIntentId!)}`,
                                     {
                                         method: "GET",
                                         headers: {
-                                            "x-publishable-api-key": medusaPublishableKey,
+                                            "x-modification-token": "request-new",
                                         },
-                                        label: "order-by-payment-intent",
+                                        label: "fetch-order-with-token",
                                     }
                                 );
 
@@ -546,12 +549,12 @@ export default function CheckoutSuccess() {
         setIsCanceling(true);
         try {
             const token = sessionStorage.getItem('modificationToken');
-            const response = await monitoredFetch(`${medusaBackendUrl}/store/orders/${orderId}/cancel`, {
+            // Use medusaFetch for Medusa Store API
+            const response = await medusaFetch(`/store/orders/${orderId}/cancel`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                     "x-modification-token": token || "",
-                    "x-publishable-api-key": medusaPublishableKey,
                 },
                 body: JSON.stringify({ reason: "Customer cancelled from success page" }),
                 label: "cancel-order-from-success",

@@ -10,8 +10,8 @@ import { ReviewRiver, StickyPurchaseBar } from "../components/product-experience
 
 import { useCart } from "../context/CartContext";
 import { getMedusaClient, castToMedusaProduct, type MedusaProduct, getBackendUrl, getStockStatus, validateMedusaProduct, getDefaultRegion } from "../lib/medusa";
+import { medusaFetch } from "../lib/medusa-fetch";
 import { transformToDetail, type ProductDetail } from "../lib/product-transformer";
-import { monitoredFetch } from "../utils/monitored-fetch";
 
 // Color hex mapping for swatches
 const COLOR_HEX: Record<string, string> = {
@@ -54,11 +54,12 @@ export function meta({ data }: Route.MetaArgs) {
     ];
 }
 
-async function fetchReviews(productId: string, backendUrl: string, sort = "newest") {
+async function fetchReviews(productId: string, context: any, sort = "newest") {
     try {
-        const response = await monitoredFetch(`${backendUrl}/store/products/${productId}/reviews?sort=${sort}&limit=10`, {
+        const response = await medusaFetch(`/store/products/${productId}/reviews?sort=${sort}&limit=10`, {
             method: "GET",
             label: "product-reviews",
+            context,
         });
         if (response.ok) {
             return await response.json();
@@ -120,19 +121,18 @@ export async function loader({ params, context }: Route.LoaderArgs) {
         }
     })();
 
-    const reviewsData = (await fetchReviews(medusaProduct.id, backendUrl)) as { reviews: Review[]; stats: ReviewStats };
+    const reviewsData = (await fetchReviews(medusaProduct.id, context)) as { reviews: Review[]; stats: ReviewStats };
 
     return {
         product,
         relatedProducts: relatedProductsPromise,
         reviews: reviewsData.reviews,
         reviewStats: reviewsData.stats,
-        backendUrl,
     };
 }
 
 export default function ProductDetailPage({ loaderData }: Route.ComponentProps) {
-    const { product, relatedProducts, reviews: initialReviews, reviewStats: initialStats, backendUrl } = loaderData;
+    const { product, relatedProducts, reviews: initialReviews, reviewStats: initialStats } = loaderData;
     const { addToCart, items: cartItems, toggleCart } = useCart();
 
     const [isReviewFormOpen, setIsReviewFormOpen] = useState(false);
@@ -174,7 +174,8 @@ export default function ProductDetailPage({ loaderData }: Route.ComponentProps) 
     const handleSortChange = useCallback(async (sort: string) => {
         setReviewSort(sort);
         try {
-            const response = await monitoredFetch(`${backendUrl}/store/products/${product.id}/reviews?sort=${sort}&limit=10`, {
+            // Client-side: medusaFetch will use window.ENV for publishable key
+            const response = await medusaFetch(`/store/products/${product.id}/reviews?sort=${sort}&limit=10`, {
                 method: "GET",
                 label: "product-reviews",
             });
@@ -185,12 +186,13 @@ export default function ProductDetailPage({ loaderData }: Route.ComponentProps) 
         } catch (error) {
             console.error("Failed to fetch reviews:", error);
         }
-    }, [backendUrl, product.id]);
+    }, [product.id]);
 
     const handleSubmitReview = async (reviewData: { rating: number; title: string; content: string; customer_name: string; customer_email?: string }) => {
         setIsSubmittingReview(true);
         try {
-            const response = await monitoredFetch(`${backendUrl}/store/products/${product.id}/reviews`, {
+            // Client-side: medusaFetch will use window.ENV for publishable key
+            const response = await medusaFetch(`/store/products/${product.id}/reviews`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(reviewData),

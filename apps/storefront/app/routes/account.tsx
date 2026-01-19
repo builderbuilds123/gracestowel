@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { useCustomer, getAuthToken } from '../context/CustomerContext';
-import { monitoredFetch } from '../utils/monitored-fetch';
+import { medusaFetch } from '../lib/medusa-fetch';
 import { Package, MapPin, User, LogOut, ChevronRight } from 'lucide-react';
 
 export function meta() {
@@ -26,9 +26,7 @@ interface Order {
     }>;
 }
 
-const MEDUSA_BACKEND_URL = typeof window !== 'undefined' 
-    ? (window as unknown as { ENV?: { MEDUSA_BACKEND_URL?: string } }).ENV?.MEDUSA_BACKEND_URL || 'http://localhost:9000'
-    : 'http://localhost:9000';
+
 
 export default function AccountPage() {
     const navigate = useNavigate();
@@ -51,7 +49,7 @@ export default function AccountPage() {
             if (!token) return;
 
             try {
-                const response = await monitoredFetch(`${MEDUSA_BACKEND_URL}/store/orders`, {
+                const response = await medusaFetch(`/store/orders`, {
                     method: 'GET',
                     headers: {
                         'Content-Type': 'application/json',

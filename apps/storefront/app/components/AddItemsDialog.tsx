@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { X, Loader2, Plus, Minus, ShoppingBag } from "lucide-react";
-import { monitoredFetch } from "../utils/monitored-fetch";
+import { medusaFetch } from "../lib/medusa-fetch";
 
 interface Product {
     id: string;
@@ -53,17 +53,14 @@ export function AddItemsDialog({ isOpen, onClose, onAdd, currencyCode, regionId 
     const fetchProducts = async () => {
         setIsLoadingProducts(true);
         try {
-            const medusaUrl = typeof window !== 'undefined'
-                ? (window as unknown as { ENV?: { MEDUSA_BACKEND_URL?: string } }).ENV?.MEDUSA_BACKEND_URL || 'http://localhost:9000'
-                : 'http://localhost:9000';
-            
             // Build URL with optional region_id for pricing
             const params = new URLSearchParams();
             params.append('limit', '20');
             if (regionId) {
                 params.append('region_id', regionId);
             }
-            const response = await monitoredFetch(`${medusaUrl}/store/products?${params.toString()}`, {
+            // Use medusaFetch which automatically injects the publishable key
+            const response = await medusaFetch(`/store/products?${params.toString()}`, {
                 method: "GET",
                 label: "add-items-products",
             });

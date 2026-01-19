@@ -365,6 +365,10 @@ development_status:
     status: done
     meta: "Code Review: All 4 ACs verified - [EMAIL][ALERT] with parseable key=value format"
     completed: "2025-12-16"
+  email-5-1-resend-remediation-plan:
+    path: docs/sprint/sprint-artifacts/story-2026-01-19-resend-email-remediation-plan.md
+    status: drafted
+    meta: "Prioritized remediation plan to align Resend integration with Medusa guide and email architecture"
   email-epic-4-retrospective: optional
 
   # --- Checkout Audit Fixes (from docs/analysis/checkout-flow-issues-audit.md) ---
@@ -508,4 +512,9 @@ development_status:
     status: in-progress
     meta: "Enhance existing Resend notification provider. New templates (order-modified, refund, password-reset), optional SMS via Twilio, admin alerts. 5-8 points estimated."
     created: "2026-01-13"
+  notif-2-local-admin-notifications:
+    path: docs/sprint/sprint-artifacts/notif-2-local-admin-notifications.md
+    status: ready-for-dev
+    meta: "Local notification module for admin feed. 2-3 points. Implements Phase 3 from NOTIF-1."
+    created: "2026-01-19"
   notif-epic-1-retrospective: optional

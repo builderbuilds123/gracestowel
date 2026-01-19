@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { monitoredFetch } from '../utils/monitored-fetch';
+import { medusaFetch } from '../lib/medusa-fetch';
 
 export interface CustomerAddress {
     id: string;
@@ -38,9 +38,7 @@ interface CustomerContextType {
 
 const CustomerContext = createContext<CustomerContextType | undefined>(undefined);
 
-const MEDUSA_BACKEND_URL = typeof window !== 'undefined' 
-    ? (window as unknown as { ENV?: { MEDUSA_BACKEND_URL?: string } }).ENV?.MEDUSA_BACKEND_URL || 'http://localhost:9000'
-    : 'http://localhost:9000';
+
 
 const TOKEN_KEY = 'medusa_customer_token';
 
@@ -73,7 +71,7 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
         }
 
         try {
-            const response = await monitoredFetch(`${MEDUSA_BACKEND_URL}/store/customers/me`, {
+            const response = await medusaFetch(`/store/customers/me`, {
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`,
@@ -113,7 +111,7 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
     const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
         try {
             // Step 1: Authenticate with email/password
-            const authResponse = await monitoredFetch(`${MEDUSA_BACKEND_URL}/auth/customer/emailpass`, {
+            const authResponse = await medusaFetch(`/auth/customer/emailpass`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, password }),
@@ -146,7 +144,7 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
     ): Promise<{ success: boolean; error?: string }> => {
         try {
             // Step 1: Register auth identity
-            const authResponse = await monitoredFetch(`${MEDUSA_BACKEND_URL}/auth/customer/emailpass/register`, {
+            const authResponse = await medusaFetch(`/auth/customer/emailpass/register`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, password }),
@@ -161,7 +159,7 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
             const { token: regToken } = (await authResponse.json()) as { token: string };
 
             // Step 2: Create customer profile
-            const customerResponse = await monitoredFetch(`${MEDUSA_BACKEND_URL}/store/customers`, {
+            const customerResponse = await medusaFetch(`/store/customers`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
