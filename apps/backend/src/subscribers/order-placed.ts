@@ -11,6 +11,7 @@ import type { ModificationTokenService } from "../services/modification-token"
 import { ensureStripeWorkerStarted } from "../loaders/stripe-event-worker"
 import { startPaymentCaptureWorker } from "../workers/payment-capture-worker"
 import { startEmailWorker } from "../workers/email-worker"
+import { sendAdminNotification, AdminNotificationType } from "../lib/admin-notifications"
 
 interface OrderPlacedEventData {
   id: string;
@@ -284,6 +285,18 @@ export default async function orderPlacedHandler({
   } catch (error: any) {
     // Log but don't throw - email failure shouldn't block order
     logger.error(`[EMAIL][ERROR] Failed to queue confirmation for order ${data.id}: ${error.message}`)
+  }
+
+  // Send admin notification for new order
+  try {
+    await sendAdminNotification(container, {
+      type: AdminNotificationType.ORDER_PLACED,
+      title: "New Order Received",
+      description: `Order ${data.id} has been placed`,
+      metadata: { order_id: data.id },
+    })
+  } catch (error: any) {
+    logger.error(`[ADMIN_NOTIF][ERROR] Failed to send admin notification for order ${data.id}: ${error.message}`)
   }
 
   // Schedule payment capture after modification window

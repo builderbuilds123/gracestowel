@@ -88,6 +88,13 @@ module.exports = defineConfig({
               from: process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev",
             },
           },
+          {
+            resolve: "@medusajs/medusa/notification-local",
+            id: "local",
+            options: {
+              channels: ["feed"],
+            },
+          },
         ],
       },
     },

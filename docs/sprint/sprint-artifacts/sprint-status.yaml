@@ -497,6 +497,12 @@ development_status:
     completed: "2026-01-09"
     depends_on: ["CHK-02-A", "CHK-02-B"]
     blocks: ["RET-02"]
+  checkout-remediation-2026-01-19:
+    path: docs/sprint/sprint-artifacts/story-2026-01-19-checkout-remediation.md
+    status: ready-for-dev
+    meta: "Checkout implementation remediation from Medusa documentation evaluation. Debug code removal, retry mechanism, constants extraction, rate limiting. Logging audit deferred to separate story."
+    created: "2026-01-19"
+    depends_on: ["CHK-02-A", "CHK-02-B", "CHK-02-C", "SHP-01"]
   audit-epic-1-retrospective: optional
 
   # --- Promotions & Discounts (from research 2026-01-13) ---
@@ -517,7 +523,7 @@ development_status:
     created: "2026-01-13"
   notif-2-local-admin-notifications:
     path: docs/sprint/sprint-artifacts/notif-2-local-admin-notifications.md
-    status: ready-for-dev
-    meta: "Local notification module for admin feed. 2-3 points. Implements Phase 3 from NOTIF-1."
+    status: review
+    meta: "Local notification module for admin feed. 2-3 points. Code complete, pending manual test."
     created: "2026-01-19"
   notif-epic-1-retrospective: optional
