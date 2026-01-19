@@ -165,8 +165,8 @@ import { medusaFetch } from "~/lib/medusa-fetch"
 
 // Pass `context.cloudflare.env` for server-side key resolution
 const response = await medusaFetch("/store/products", {
-  method: "GET", 
-  cloudflareEnv: context.cloudflare.env 
+  method: "GET",
+  context
 })
 ```
 

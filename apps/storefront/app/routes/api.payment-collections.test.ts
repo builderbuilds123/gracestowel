@@ -219,12 +219,10 @@ describe('Payment Collections API', () => {
         const [url3, opt3] = fetchSpy.mock.calls[2];
         expect(url3).toBe(`http://localhost:9000/store/payment-collections?cart_id=${cartId}`);
         expect(opt3.method).toBe('GET');
-        // Check header on GET too (medusaFetch always adds it if missing, though typically GET args are smaller)
-        // With medusaFetch, it might have headers even for GET if we pass options, but medusaGet passes options.
-        // Let's check headers if present.
-        if (opt3.headers) {
-             expect((opt3.headers as Headers).get('x-publishable-api-key')).toBe('pk_test_123');
-        }
+        // Check header on GET too (medusaFetch always adds it)
+        const headers3 = opt3.headers as Headers;
+        expect(headers3).toBeInstanceOf(Headers);
+        expect(headers3.get('x-publishable-api-key')).toBe('pk_test_123');
     });
 
     it('should return 400 for invalid cartId format', async () => {

@@ -289,15 +289,11 @@ export function getMedusaClient(context?: { cloudflare?: { env?: { MEDUSA_BACKEN
 
     const backendUrl = getBackendUrl(context);
 
-    // Prioritize context key, then window.ENV, then process env
+    // Prioritize context key, then window.ENV
     let publishableKey = context?.cloudflare?.env?.MEDUSA_PUBLISHABLE_KEY;
     
     if (!publishableKey && typeof window !== "undefined") {
         publishableKey = window.ENV?.MEDUSA_PUBLISHABLE_KEY;
-    }
-
-    if (!publishableKey) {
-        publishableKey = import.meta.env.MEDUSA_PUBLISHABLE_KEY || import.meta.env.VITE_MEDUSA_PUBLISHABLE_KEY;
     }
 
     if (!publishableKey) {

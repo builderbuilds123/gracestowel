@@ -158,6 +158,7 @@ export async function sendAdminNotification(
 
 ### Step 3: Update Existing Subscribers
 
+
 **3a. `apps/backend/src/subscribers/order-placed.ts`**
 - Import `sendAdminNotification`
 - Add call after email queue logic with title "New Order Received"
@@ -177,6 +178,7 @@ export async function sendAdminNotification(
 **3e. `apps/backend/src/subscribers/customer-created.ts`**
 - Import `sendAdminNotification`
 - Add call after email workflow with title "New Customer Signup"
+
 
 ### Step 4: Create Payment Failed Subscriber
 
@@ -229,4 +231,5 @@ Subscribe to `payment.capture_failed` event and send admin notification.
 
 ---
 
-*Created: 2026-01-19*
+#### Created
+2026-01-19

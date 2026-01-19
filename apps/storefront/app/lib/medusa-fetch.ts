@@ -47,7 +47,7 @@ function getBackendUrl(context?: MedusaFetchContext): string {
     }
 
     // 3. Build-time fallback
-    return process.env.VITE_MEDUSA_BACKEND_URL || 'http://localhost:9000';
+    return import.meta.env.VITE_MEDUSA_BACKEND_URL || 'http://localhost:9000';
 }
 
 /**
@@ -66,7 +66,7 @@ function getPublishableKey(context?: MedusaFetchContext): string | undefined {
     }
 
     // 3. Build-time fallback
-    return process.env.MEDUSA_PUBLISHABLE_KEY;
+    return import.meta.env.VITE_MEDUSA_PUBLISHABLE_KEY;
 }
 
 /**
@@ -91,11 +91,16 @@ export async function medusaFetch(
     const publishableKey = getPublishableKey(context);
     
     // Construct full URL
-    const url = path.startsWith('http') ? path : `${backendUrl}${path}`;
+    const url = path.startsWith('http')
+        ? path
+        : new URL(path, backendUrl).toString();
     
     // Build headers with publishable key
     const headers = new Headers(fetchOptions.headers || {});
     
+    if (!publishableKey && import.meta.env.DEV) {
+        console.warn("medusaFetch: missing MEDUSA_PUBLISHABLE_KEY; Medusa Store API calls may fail");
+    }
     if (publishableKey && !headers.has('x-publishable-api-key')) {
         headers.set('x-publishable-api-key', publishableKey);
     }

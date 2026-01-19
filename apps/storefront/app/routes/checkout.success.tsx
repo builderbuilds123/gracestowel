@@ -370,6 +370,9 @@ export default function CheckoutSuccess() {
                             // Use native fetch for third-party API (Nominatim)
                             fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addressString)}`, {
                                 method: "GET",
+                                headers: {
+                                    "User-Agent": "Grace's Towel E-Commerce/1.0 (https://gracestowel.com)",
+                                },
                             }).then(async (response) => {
                                 const data = await response.json() as any[];
                                 if (Array.isArray(data) && data.length > 0) {

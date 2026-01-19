@@ -592,7 +592,7 @@ export default async function seedDemoData({ container }: ExecArgs) {
   let publishableApiKey;
   if (existingApiKeys.length > 0) {
     publishableApiKey = existingApiKeys[0];
-    logger.info(`Using existing publishable API key: ${publishableApiKey.token}`);
+    logger.info(`Using existing publishable API key: ${publishableApiKey.id}`);
   } else {
     const { result: publishableApiKeyResult } = await createApiKeysWorkflow(
       container
@@ -608,7 +608,7 @@ export default async function seedDemoData({ container }: ExecArgs) {
       },
     });
     publishableApiKey = publishableApiKeyResult[0];
-    logger.info(`Created publishable API key: ${publishableApiKey.token}`);
+    logger.info(`Created publishable API key: ${publishableApiKey.id}`);
 
     await linkSalesChannelsToApiKeyWorkflow(container).run({
       input: {
@@ -945,7 +945,8 @@ export default async function seedDemoData({ container }: ExecArgs) {
     
       logger.info("Finished seeding inventory levels data.");
   } catch (e) {
-      logger.warn("Seeding inventory levels failed (likely already exist): " + e.message);
+      const errorMessage = e instanceof Error ? e.message : String(e);
+      logger.warn("Seeding inventory levels failed (likely already exist): " + errorMessage);
   }
 
   // Summary
@@ -954,6 +955,6 @@ export default async function seedDemoData({ container }: ExecArgs) {
   logger.info("========================================");
   logger.info(`Products: ${newProducts.length} created, ${existingProducts.length} existing`);
   logger.info(`Regions: ${regionsToCreate.length} created`);
-  logger.info(`Publishable API Key: ${publishableApiKey.token}`);
+  logger.info(`Publishable API Key: ${publishableApiKey.id}`);
   logger.info("========================================\n");
 }
