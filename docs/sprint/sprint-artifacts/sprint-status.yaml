@@ -85,9 +85,6 @@ development_status:
   backend-analytics-migration-2026-01-19:
     path: docs/sprint/sprint-artifacts/story-2026-01-19-backend-analytics-migration.md
     status: drafted
-  cart-migration-medusa-docs-2026-01-19:
-    path: docs/sprint/sprint-artifacts/story-2026-01-19-cart-migration-medusa-docs.md
-    status: drafted
   5-2-comprehensive-frontend-tracking:
     path: docs/sprint/sprint-artifacts/5-2-comprehensive-frontend-tracking.md
     status: done

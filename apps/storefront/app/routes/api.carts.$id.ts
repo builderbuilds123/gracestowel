@@ -229,14 +229,9 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
     return data({
       id: cart.id,
       region_id: cart.region_id,
-      currency_code: cart.currency_code,
-      subtotal: cart.subtotal,
-      discount_total: cart.discount_total,
-      shipping_total: cart.shipping_total,
-      tax_total: cart.tax_total,
-      total: cart.total,
       items: cart.items,
       shipping_address: cart.shipping_address,
+      discount_total: cart.discount_total,
       promotions: (cart as Cart & { promotions?: any[] }).promotions,
     });
 
