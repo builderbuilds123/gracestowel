@@ -499,8 +499,8 @@ development_status:
     blocks: ["RET-02"]
   checkout-remediation-2026-01-19:
     path: docs/sprint/sprint-artifacts/story-2026-01-19-checkout-remediation.md
-    status: ready-for-dev
-    meta: "Checkout implementation remediation from Medusa documentation evaluation. Debug code removal, retry mechanism, constants extraction, rate limiting. Logging audit deferred to separate story."
+    status: in-progress
+    meta: "Phase 1-2 complete: Removed debug code, added retry mechanism, extracted magic numbers to constants. Rate limiting pending Cloudflare config."
     created: "2026-01-19"
     depends_on: ["CHK-02-A", "CHK-02-B", "CHK-02-C", "SHP-01"]
   audit-epic-1-retrospective: optional
@@ -527,3 +527,30 @@ development_status:
     meta: "Local notification module for admin feed. 2-3 points. Code complete, pending manual test."
     created: "2026-01-19"
   notif-epic-1-retrospective: optional
+
+  # --- Customer Experience (from evaluation 2026-01-19) ---
+  # Evaluation: docs/sprint/sprint-artifacts/cust-0-customer-module-evaluation.md
+  # Overall Score: 5.5/10 - Missing password reset, edit profile, address management
+  # Reference: https://docs.medusajs.com/resources/storefront-development/customers/
+  cust-epic-1: backlog
+  cust-0-customer-module-evaluation:
+    path: docs/sprint/sprint-artifacts/cust-0-customer-module-evaluation.md
+    status: done
+    meta: "Evaluation of customers module vs Medusa v2 docs. Score: 5.5/10. Missing: password reset, edit profile, address CRUD."
+    created: "2026-01-19"
+  cust-1-password-reset:
+    path: docs/sprint/sprint-artifacts/cust-1-password-reset.md
+    status: backlog
+    meta: "Password reset flow: forgot-password page, reset-password page, email subscriber. 3-5 points. HIGH PRIORITY."
+    created: "2026-01-19"
+  cust-2-edit-profile:
+    path: docs/sprint/sprint-artifacts/cust-2-edit-profile.md
+    status: backlog
+    meta: "Edit customer profile: updateProfile context method, edit form in account page. 2-3 points. HIGH PRIORITY."
+    created: "2026-01-19"
+  cust-3-address-management:
+    path: docs/sprint/sprint-artifacts/cust-3-address-management.md
+    status: backlog
+    meta: "Customer address CRUD: reuse EditAddressDialog, add/edit/delete in account. 3-5 points. HIGH PRIORITY."
+    created: "2026-01-19"
+  cust-epic-1-retrospective: optional

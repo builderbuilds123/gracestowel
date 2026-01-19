@@ -11,6 +11,8 @@ import { medusaFetch } from "../lib/medusa-fetch";
 import { createLogger } from "../lib/logger";
 import { migrateStorageItem } from "../lib/storage-migration";
 import { parsePrice } from "../lib/price";
+import { CHECKOUT_CONSTANTS } from "../constants/checkout";
+import { sanitize } from "../utils/sanitize";
 import posthog from "posthog-js";
 
 // Lazy load Map component to avoid SSR issues with Leaflet
@@ -60,7 +62,7 @@ interface LoaderData {
  * 4. Cookie is cleared immediately after consumption
  */
 const serializeParamsCookie = (params: PaymentParams): string =>
-    `${CHECKOUT_PARAMS_COOKIE}=${encodeURIComponent(JSON.stringify(params))}; Max-Age=600; Path=/; SameSite=Lax; Secure; HttpOnly`;
+    `${CHECKOUT_PARAMS_COOKIE}=${encodeURIComponent(JSON.stringify(params))}; Max-Age=${CHECKOUT_CONSTANTS.CHECKOUT_PARAMS_MAX_AGE_SECONDS}; Path=/; SameSite=Lax; Secure; HttpOnly`;
 
 const clearParamsCookie = (): string =>
     `${CHECKOUT_PARAMS_COOKIE}=; Max-Age=0; Path=/; SameSite=Lax; Secure; HttpOnly`;
@@ -389,8 +391,8 @@ export default function CheckoutSuccess() {
                         // Poll until order is created (webhook may still be processing)
                         const medusaUrl = medusaBackendUrl;
                         let retries = 0;
-                        const maxRetries = 10;
-                        const retryDelay = 1000; // 1 second
+                        const maxRetries = CHECKOUT_CONSTANTS.ORDER_FETCH_MAX_RETRIES;
+                        const retryDelay = CHECKOUT_CONSTANTS.ORDER_FETCH_RETRY_DELAY_MS;
 
                         const fetchOrderWithToken = async (): Promise<void> => {
                             try {
@@ -494,7 +496,7 @@ export default function CheckoutSuccess() {
                                     error: error instanceof Error ? error.message : String(error),
                                 });
                             }
-                        }, 500);
+                        }, CHECKOUT_CONSTANTS.CART_CLEAR_DELAY_MS);
                     } else if (paymentIntent?.status === 'canceled') {
                         // SEC-07: Handle already-canceled payments gracefully (e.g. on refresh)
                         setPaymentStatus('canceled');

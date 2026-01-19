@@ -1,7 +1,7 @@
 import { ArrowLeft } from "lucide-react";
 import { Link, useLoaderData } from "react-router";
 import type { LoaderFunctionArgs } from "react-router";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useRef, useCallback, useState, useEffect } from "react";
 import { Elements } from "@stripe/react-stripe-js";
 import type { StripeAddressElementChangeEvent } from "@stripe/stripe-js";
 import { useCart } from "../context/CartContext";
@@ -12,14 +12,16 @@ import { CheckoutForm, type ShippingOption } from "../components/CheckoutForm";
 import { OrderSummary } from "../components/OrderSummary";
 import { parsePrice } from "../lib/price";
 import { generateTraceId, createLogger } from "../lib/logger";
-import { generateCartHash } from "../utils/cart-hash";
 import { useShippingPersistence } from "../hooks/useShippingPersistence";
 import { usePaymentCollection } from "../hooks/usePaymentCollection";
 import { usePaymentSession } from "../hooks/usePaymentSession";
 import { usePromoCode } from "../hooks/usePromoCode";
 import { useAutomaticPromotions } from "../hooks/useAutomaticPromotions";
-import { monitoredFetch } from "../utils/monitored-fetch";
+import { useShippingRates } from "../hooks/useShippingRates";
+import { useCheckoutError } from "../hooks/useCheckoutError";
+import { CHECKOUT_CONSTANTS } from "../constants/checkout";
 import type { CartWithPromotions } from "../types/promotion";
+import { useMedusaCart } from "../context/MedusaCartContext";
 
 
 // Check if in development mode (consistent with codebase pattern)
@@ -93,25 +95,46 @@ export default function Checkout() {
 
   // Shipping & Cart state
   // Initialize cartId from sessionStorage if available (client-side only)
-  const [cartId, setCartId] = useState<string | undefined>(() => {
-    if (typeof window !== 'undefined') {
-      return (
-        sessionStorage.getItem('medusa_cart_id') ||
-        localStorage.getItem('medusa_cart_id') ||
-        undefined
-      );
-    }
-    return undefined;
-  });
-  const [medusaCart, setMedusaCart] = useState<CartWithPromotions | null>(null);
+  const { cartId, cart: medusaCart, setCart: setMedusaCart, setCartId } = useMedusaCart();
 
-  const [shippingOptions, setShippingOptions] = useState<ShippingOption[]>([]);
-  const [selectedShipping, setSelectedShipping] =
-    useState<ShippingOption | null>(null);
-  const [isCalculatingShipping, setIsCalculatingShipping] = useState(false);
+  // Unified Error Handling
+  const { 
+    errorList, 
+    setError, 
+    clearError, 
+    hasBlockingError 
+  } = useCheckoutError();
+
+  // Shipping Rates Hook
+  const {
+    shippingOptions,
+    selectedShipping,
+    setSelectedShipping,
+    isCalculatingShipping,
+    isCartSynced,
+    fetchShippingRates,
+  } = useShippingRates({
+    currency,
+    regionId: regionId || "",
+    cartId,
+    setCartId,
+    onCartCreated: (newCartId) => {
+      logger.info('Cart created via hook', { cartId: newCartId });
+    },
+    onCartSynced: () => {
+      logger.info('Cart synced via hook');
+    },
+    onCartSyncError: (err) => {
+      if (err) {
+        setError('CART_SYNC', { message: err });
+      } else {
+        clearError('CART_SYNC');
+      }
+    }
+  });
+
   const [shippingAddress, setShippingAddress] = useState<any>(undefined);
-  const [isCartSynced, setIsCartSynced] = useState(false); // Track when cart items are synced to Medusa
-  const [cartSyncError, setCartSyncError] = useState<string | null>(null);
+  const cartSyncError = errorList.find(e => e.type === 'CART_SYNC')?.message || null;
 
   // SHP-01: Shipping persistence hook
   const { 
@@ -141,9 +164,9 @@ export default function Checkout() {
   // Prefer Medusa totals when available (fallback to local calculations)
   const displayCartTotal = medusaCart?.subtotal ?? cartTotal;
   const displayDiscountTotal = medusaCart?.discount_total ?? totalDiscount;
-  const displayShippingCost = selectedShipping
-    ? (medusaCart?.shipping_total ?? (selectedShipping?.amount ?? 0))
-    : (selectedShipping?.amount ?? 0);
+  const displayShippingCost = (selectedShipping && 'amount' in selectedShipping)
+    ? (medusaCart?.shipping_total ?? (selectedShipping.amount ?? 0))
+    : 0;
   const displayFinalTotal =
     medusaCart?.total ?? (displayCartTotal - displayDiscountTotal + displayShippingCost);
 
@@ -193,29 +216,11 @@ export default function Checkout() {
   useEffect(() => {
     if (shippingPersistError?.includes('expired')) {
        setCartId(undefined);
-       if (typeof window !== 'undefined') {
-         sessionStorage.removeItem('medusa_cart_id');
-         localStorage.removeItem('medusa_cart_id');
-       }
     }
   }, [shippingPersistError]);
 
 
-  // Persist cartId to sessionStorage and localStorage
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      if (cartId) {
-        sessionStorage.setItem('medusa_cart_id', cartId);
-        localStorage.setItem('medusa_cart_id', cartId);
-        if (isDevelopment) {
-          logger.info('cartId changed', { cartId });
-        }
-      } else {
-        // We generally don't remove it unless explicitly expired, but if cartId becomes undefined
-        // it means we lost context.
-      }
-    }
-  }, [cartId]);
+  // cartId persistence handled by MedusaCartContext
 
   // Calculate original total (before discount) using price utility
   const originalTotal = items.reduce((total, item) => {
@@ -275,260 +280,7 @@ export default function Checkout() {
   // Combine payment errors for display
   const paymentError = collectionError || sessionError;
 
-  const buildUpdatePayload = useCallback((currentItems: typeof items, address: { firstName?: string; lastName?: string; address?: { line1?: string; line2?: string; city?: string; country?: string; postal_code?: string; state?: string }; phone?: string }) => {
-    const payload: Record<string, unknown> = {
-      items: currentItems,
-      promo_codes: appliedPromoCodes
-        .filter(code => !code.isAutomatic)
-        .map((code) => code.code)
-    };
 
-    if (address) {
-      payload.shipping_address = {
-        first_name: address.firstName || '',
-        last_name: address.lastName || '',
-        address_1: address.address?.line1 || '',
-        address_2: address.address?.line2,
-        city: address.address?.city || '',
-        country_code: address.address?.country || '',
-        postal_code: address.address?.postal_code || '',
-        province: address.address?.state,
-        phone: address.phone,
-      };
-    }
-
-    if (guestEmail) {
-      payload.email = guestEmail;
-    }
-
-    if (regionId) {
-      payload.region_id = regionId;
-    }
-
-    return payload;
-  }, [appliedPromoCodes, guestEmail, regionId]);
-
-  const updateCartAndSync = useCallback(async (
-    currentCartId: string,
-    currentItems: typeof items,
-    address: any,
-    controller: AbortController,
-    currentRequestId: number
-  ): Promise<boolean> => {
-    if (isDevelopment) {
-      logger.info('Step 2: Updating cart items/address...');
-    }
-
-    const updatePayload = buildUpdatePayload(currentItems, address);
-    const updateResponse = await monitoredFetch(`/api/carts/${currentCartId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updatePayload),
-      label: 'update-cart',
-      signal: controller.signal,
-    });
-
-    const updateResult = await updateResponse.json() as { 
-      error?: string; 
-      details?: string; 
-      code?: string;
-      cart?: CartWithPromotions;
-    };
-
-    if (!updateResponse.ok) {
-      const error = updateResult as { error: string; details?: string; code?: string };
-      logger.error('Step 2 FAILED - Cart update', undefined, error as Record<string, unknown>);
-      
-      // Handle region mismatch - display error instead of creating new cart
-      // CRITICAL: Do NOT reset cartId here as it causes paymentCollectionId reset
-      // and Elements remount, clearing all form inputs
-      if (error.code === 'REGION_MISMATCH') {
-        if (isDevelopment) {
-          logger.info('Region mismatch detected', {
-            code: error.code,
-            details: error.details,
-            action: 'Displaying error without resetting cart to preserve form state',
-          });
-        }
-        setCartSyncError(`This country is not available for your cart region. Please select a different shipping address.`);
-        return false;
-      }
-
-      // Handle Inventory Errors
-      if (error.code === 'INVENTORY_ERROR') {
-        setCartSyncError(`${error.error}: ${error.details}`);
-        return false; 
-      }
-
-      // Handle completed cart error (from previous checkout)
-      // If cart is already completed, we need to create a fresh cart
-      if (error.code === 'CART_COMPLETED') {
-        logger.warn('Cart already completed, clearing session');
-        sessionStorage.removeItem('medusa_cart_id');
-        setCartId(undefined);
-        // Return false to trigger re-sync with new cart
-        return false;
-      }
-
-      throw new Error(error.details || error.error);
-    }
-    
-    // Clear previous errors if successful
-    setCartSyncError(null);
-
-    // NEW: Sync promo state immediately if return contains cart
-    if (updateResult.cart) {
-      logger.info('[Checkout] Syncing promo state from update result');
-      syncPromoFromCart(updateResult.cart);
-      setMedusaCart(updateResult.cart);
-    }
-
-    // Always refresh discount from Medusa to get accurate promo data
-    // The API cart response may not include full promotion/adjustment data
-    logger.info('[Checkout] Triggering discount refresh after cart update...');
-    await refreshDiscount(currentRequestId);
-    logger.info('[Checkout] Discount refresh completed.');
-
-    if (isDevelopment) {
-      logger.info('Step 2 SUCCESS - Cart updated');
-    }
-
-    // Mark cart as synced ONLY if update succeeded
-    setIsCartSynced(true);
-    return true;
-  }, [buildUpdatePayload, isDevelopment, logger, refreshDiscount, syncPromoFromCart]);
-
-  // Fetch shipping rates using new RESTful cart endpoints
-  const fetchShippingRates = useCallback(async (currentItems: typeof items, address: any, currentTotal: number) => {
-    // 1. Cancel previous pending request if exists
-    if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-    }
-
-    // 2. Create new controller for this request
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
-    const currentRequestId = ++cartUpdateRequestIdRef.current;
-
-    setIsCalculatingShipping(true);
-
-    const cacheKey = generateCartHash(currentItems, address ? {
-        country_code: address.address?.country,
-        province: address.address?.state,
-        postal_code: address.address?.postal_code
-    } : undefined, currency, currentTotal);
-    
-    if (shippingCache.current.has(cacheKey)) {
-        const cached = shippingCache.current.get(cacheKey)!;
-        setShippingOptions(cached.options);
-        if (cached.cartId) setCartId(cached.cartId);
-        setIsCalculatingShipping(false);
-        return;
-    }
-
-    try {
-      // Step 1: Create or get cart
-      let currentCartId = cartId;
-      if (!currentCartId) {
-        if (isDevelopment) {
-          logger.info('Step 1: Creating cart...');
-        }
-        const createResponse = await monitoredFetch("/api/carts", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            region_id: regionId, // MULTI-REGION: Pass explicit region from LocaleContext
-            currency,
-            country_code: address?.address?.country,
-          }),
-          label: 'create-cart',
-          signal: controller.signal,
-        });
-
-        if (!createResponse.ok) {
-          const error = await createResponse.json() as { error: string; details?: string };
-          logger.error('Step 1 FAILED - Cart creation', undefined, error as Record<string, unknown>);
-          throw new Error(`Cart creation failed: ${error.error}`);
-        }
-
-        const { cart_id } = await createResponse.json() as { cart_id: string };
-        currentCartId = cart_id;
-        setCartId(cart_id);
-        setMedusaCart(null);
-        setIsCartSynced(false); // Reset sync state for new cart
-        if (isDevelopment) {
-          logger.info('Step 1 SUCCESS - Cart created', { cart_id });
-        }
-      }
-
-      // Step 2: Update cart with items and address
-      if (currentItems.length > 0 || address || guestEmail) {
-        const didSync = await updateCartAndSync(currentCartId, currentItems, address, controller, currentRequestId);
-        if (!didSync) {
-          return;
-        }
-      } else {
-        // No items to sync, but cart exists - still mark as synced
-        setIsCartSynced(true);
-      }
-
-      // Step 3: Get shipping options (cacheable GET request)
-      if (isDevelopment) {
-        logger.info('Step 3: Fetching shipping options...');
-      }
-      const optionsResponse = await monitoredFetch(`/api/carts/${currentCartId}/shipping-options`, {
-        method: "GET",
-        label: 'get-shipping-options',
-        signal: controller.signal,
-      });
-
-      if (!optionsResponse.ok) {
-        const error = await optionsResponse.json() as { error: string; details?: string };
-        logger.error('Step 3 FAILED - Fetching shipping options', undefined, error as Record<string, unknown>);
-        throw new Error(`Shipping options fetch failed: ${error.error}`);
-      }
-
-      const { shipping_options } = await optionsResponse.json() as { 
-        shipping_options: ShippingOption[];
-        cart_id: string;
-      };
-      
-      if (isDevelopment) {
-        logger.info('Step 3 SUCCESS', { count: shipping_options.length });
-      }
-
-      setShippingOptions(shipping_options);
-
-      // If user has an existing valid selection, keep it
-      // Do NOT auto-select - user must explicitly choose shipping method
-      if (selectedShipping && shipping_options.length > 0) {
-        const found = shipping_options.find(o => o.id === selectedShipping.id);
-        if (!found) {
-          // Current selection is no longer valid, clear it
-          setSelectedShipping(null);
-        } else {
-            // FORCE UPDATE: Ensure we have the latest price/data even if ID is same
-            setSelectedShipping({ ...found });
-        }
-      }
-
-      // Cache results
-      shippingCache.current.set(cacheKey, { options: shipping_options, cartId: currentCartId });
-
-    } catch (error: any) {
-      if (error.name === 'AbortError') {
-          // Ignore abort errors as they are expected when typing fast
-          return;
-      }
-      logger.error('Shipping rates error', error as Error);
-    } finally {
-      // Only turn off loading if THIS was the latest request
-      // (Though with abort controller, effectively only one finishes)
-      if (abortControllerRef.current === controller) {
-         setIsCalculatingShipping(false);
-      }
-    }
-  }, [currency, cartId, selectedShipping, handleShippingSelect, guestEmail, updateCartAndSync, regionId]);
 
   // Effect to trigger shipping fetch when items or address change
   // Uses direct setTimeout architecture for robust debouncing
@@ -537,11 +289,17 @@ export default function Checkout() {
 
     // specific debounce for address changes
     const timer = setTimeout(() => {
-      fetchShippingRates(items, shippingAddress, cartTotal);
-    }, 600);
+      fetchShippingRates(
+        items, 
+        shippingAddress, 
+        cartTotal, 
+        guestEmail, 
+        appliedPromoCodes.map(c => ({ code: c.code, isAutomatic: c.isAutomatic ?? false }))
+      );
+    }, CHECKOUT_CONSTANTS.ADDRESS_DEBOUNCE_MS);
 
     return () => clearTimeout(timer);
-  }, [items, shippingAddress, cartTotal, fetchShippingRates, guestEmail]);
+  }, [items, shippingAddress, cartTotal, fetchShippingRates, guestEmail, appliedPromoCodes]);
 
   // PROMO-1: Promo discounts are synced from the cart update response to avoid stale reads.
 
