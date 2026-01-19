@@ -57,6 +57,9 @@ export interface CheckoutFormProps {
     paymentCollectionId: string | null;
     guestEmail?: string;
     cartId: string;
+    // Discount props for success page
+    discountTotal?: number;
+    appliedPromoCodes?: Array<{ code: string; discount: number; isAutomatic?: boolean }>;
 }
 
 export function CheckoutForm({
@@ -73,7 +76,9 @@ export function CheckoutForm({
     persistShippingOption,
     paymentCollectionId,
     guestEmail,
-    cartId
+    cartId,
+    discountTotal = 0,
+    appliedPromoCodes = [],
 }: CheckoutFormProps) {
     const stripe = useStripe();
     const elements = useElements();
@@ -142,20 +147,26 @@ export function CheckoutForm({
     // sessionStorage clears when tab closes, preventing shared device access
     const saveOrderToSessionStorage = () => {
         try {
-            sessionStorage.setItem(
-                'lastOrder',
-                JSON.stringify({
-                    items,
-                    subtotal: cartTotal,
-                    shipping: selectedShipping?.amount || 0,
-                    total: cartTotal + (selectedShipping?.amount || 0),
-                    date: new Date().toLocaleDateString('en-US', {
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric',
-                    }),
-                })
-            );
+            const orderData = {
+                items,
+                subtotal: cartTotal,
+                discount: discountTotal,
+                appliedPromoCodes: appliedPromoCodes,
+                shipping: selectedShipping?.amount || 0,
+                total: cartTotal - discountTotal + (selectedShipping?.amount || 0),
+                date: new Date().toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                }),
+            };
+            // DEBUG: Log what's being saved
+            logger.info('Saving order to sessionStorage', {
+                discountTotal,
+                appliedPromoCodes: appliedPromoCodes.length,
+                total: orderData.total
+            });
+            sessionStorage.setItem('lastOrder', JSON.stringify(orderData));
         } catch (error) {
             // Non-critical: storage failures don't block checkout
             // Errors can occur in private browsing mode, storage full, or storage disabled

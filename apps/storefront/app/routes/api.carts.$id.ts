@@ -2,6 +2,7 @@ import { type ActionFunctionArgs, type LoaderFunctionArgs, data } from "react-ro
 import { MedusaCartService, type Cart } from "../services/medusa-cart";
 import type { CartItem } from "../types/product";
 import { isMedusaId } from "../types/product";
+import { createLogger, getTraceIdFromRequest } from "../lib/logger";
 
 interface UpdateCartRequest {
   items?: CartItem[];
@@ -61,6 +62,8 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
     return data({ error: "No update fields provided" }, { status: 400 });
   }
 
+  const traceId = getTraceIdFromRequest(request);
+  const logger = createLogger({ traceId, context: "api.carts.$id" });
   const service = new MedusaCartService(context);
 
   try {
@@ -85,25 +88,34 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
     // Sync items if provided
     if (items && items.length > 0) {
       // Log incoming items for debugging
-      console.log(`[Cart Sync] Received ${items.length} items:`, items.map(i => ({ 
-        id: i.id, 
-        variantId: i.variantId, 
-        title: i.title,
-        isValidMedusaId: i.variantId ? isMedusaId(i.variantId) : false 
-      })));
+      logger.info(`[Cart Sync] Received ${items.length} items`, { 
+        items: items.map(i => ({ 
+          id: i.id, 
+          variantId: i.variantId, 
+          title: i.title,
+          isValidMedusaId: i.variantId ? isMedusaId(i.variantId) : false 
+        }))
+      });
       
-      const validItems = items.filter(item => item.variantId && isMedusaId(item.variantId) && item.quantity > 0);
+      const validItems = items.filter(item => {
+        const hasId = !!(item.variantId || item.id);
+        const isMedusa = isMedusaId(item.variantId || item.id);
+        return hasId && isMedusa && item.quantity > 0;
+      });
       
       if (validItems.length !== items.length) {
-        console.warn(`[Cart Sync] Filtered out ${items.length - validItems.length} items with invalid variantIds`);
+        const invalid = items.filter(i => !validItems.includes(i));
+        logger.warn(`[Cart Sync] Filtered out ${items.length - validItems.length} items`, {
+          reasons: invalid.map(i => ({ title: i.title, id: i.id, variantId: i.variantId }))
+        });
       }
       
       try {
         await service.syncCartItems(cartId, validItems);
         result.items_synced = validItems.length;
-        console.log(`Synced ${validItems.length} items to cart ${cartId}`);
+        logger.info(`Synced ${validItems.length} items to cart ${cartId}`);
       } catch (syncError: any) {
-        console.error("Cart sync failed:", syncError);
+        logger.error("Cart sync failed", syncError);
         // Check for inventory errors
         if (syncError.message?.includes("inventory") || syncError.type === "not_allowed") {
            return data({ 
@@ -128,7 +140,7 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
       
       await service.updateCart(cartId, updateData);
       if (shipping_address) result.address_updated = true;
-      console.log(`Updated cart ${cartId} properties:`, Object.keys(updateData));
+      logger.info(`Updated cart ${cartId} properties`, { keys: Object.keys(updateData) });
     }
 
     const refreshedCart = await service.getCart(cartId);
@@ -136,7 +148,7 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
     return data(result, { status: 200 });
 
   } catch (error: any) {
-    console.error(`Error updating cart ${cartId}:`, error);
+    logger.error(`Error updating cart ${cartId}`, error);
     
     // Determine status code from upstream error
     const status = error.status || 500;
@@ -152,6 +164,16 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
         details: error.message,
         code: "REGION_MISMATCH",
       }, { status: 400 }); // Return 400 so frontend can handle it
+    }
+
+    // Check for cart already completed error
+    const isCartCompleted = error.message?.toLowerCase().includes('already completed');
+    if (isCartCompleted) {
+      return data({
+        error: "Cart is already completed",
+        details: error.message,
+        code: "CART_COMPLETED",
+      }, { status: 410 }); // 410 Gone - resource no longer available
     }
 
     // Forward upstream 4xx errors
@@ -173,7 +195,7 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
  * GET /api/carts/:id
  * Get cart details
  */
-export async function loader({ params, context }: LoaderFunctionArgs) {
+export async function loader({ request, params, context }: LoaderFunctionArgs) {
   const cartId = params.id;
   if (!cartId) {
     return data({ error: "Cart ID is required" }, { status: 400 });
@@ -187,15 +209,28 @@ export async function loader({ params, context }: LoaderFunctionArgs) {
       return data({ error: "Cart not found" }, { status: 404 });
     }
 
+    const traceId = getTraceIdFromRequest(request);
+    const logger = createLogger({ traceId, context: "api.carts.$id.loader" });
+    logger.info(`Fetched cart ${cartId}`, {
+      id: cart.id,
+      discount_total: (cart as any).discount_total,
+      promotions: (cart as any).promotions?.map((p: any) => p.code),
+      items_count: cart.items?.length
+    });
+
     return data({
       id: cart.id,
       region_id: cart.region_id,
       items: cart.items,
       shipping_address: cart.shipping_address,
+      discount_total: (cart as any).discount_total,
+      promotions: (cart as any).promotions,
     });
 
   } catch (error: any) {
-    console.error(`Error fetching cart ${cartId}:`, error);
+    const traceId = getTraceIdFromRequest(request);
+    const logger = createLogger({ traceId, context: "api.carts.$id.loader" });
+    logger.error(`Error fetching cart ${cartId}`, error);
     return data({
       error: "Failed to fetch cart",
       details: error.message,

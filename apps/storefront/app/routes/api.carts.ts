@@ -2,6 +2,7 @@ import { type ActionFunctionArgs, data } from "react-router";
 import { monitoredFetch } from "../utils/monitored-fetch";
 import type { CloudflareEnv } from "../utils/monitored-fetch";
 import { MedusaCartService } from "../services/medusa-cart";
+import { createLogger, getTraceIdFromRequest } from "../lib/logger";
 
 interface CreateCartRequest {
   region_id?: string;
@@ -39,6 +40,9 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
   const { region_id, currency = "CAD", country_code } = body;
 
+  const traceId = getTraceIdFromRequest(request);
+  const logger = createLogger({ traceId, context: "api.carts" });
+
   try {
     // Fetch regions to find appropriate region
     const regionsResponse = await monitoredFetch(`${medusaBackendUrl}/store/regions`, {
@@ -49,7 +53,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
     });
 
     if (!regionsResponse.ok) {
-      console.error("Failed to fetch regions:", await regionsResponse.text());
+      logger.error("Failed to fetch regions", undefined, { status: regionsResponse.status });
       return data({ error: "Failed to fetch regions" }, { status: 500 });
     }
 
@@ -60,9 +64,9 @@ export async function action({ request, context }: ActionFunctionArgs) {
     if (region_id) {
       region = regions.find((r: any) => r.id === region_id);
       if (region) {
-        console.log(`[api.carts] Using explicit region_id: "${region.name}" (${region_id})`);
+        logger.info(`[api.carts] Using explicit region_id: "${region.name}" (${region_id})`);
       } else {
-        console.warn(`[api.carts] Provided region_id "${region_id}" not found, falling back`);
+        logger.warn(`[api.carts] Provided region_id "${region_id}" not found, falling back`);
       }
     }
 
@@ -76,7 +80,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
         )
       );
       if (region) {
-        console.log(`[api.carts] Found region "${region.name}" for country ${country_code}`);
+        logger.info(`[api.carts] Found region "${region.name}" for country ${country_code}`);
       }
     }
 
@@ -86,14 +90,14 @@ export async function action({ request, context }: ActionFunctionArgs) {
         r.currency_code.toUpperCase() === currency.toUpperCase()
       );
       if (region) {
-        console.log(`[api.carts] Using region "${region.name}" based on currency ${currency}`);
+        logger.info(`[api.carts] Using region "${region.name}" based on currency ${currency}`);
       }
     }
 
     // Priority 3: Use first available region
     if (!region && regions.length > 0) {
       region = regions[0];
-      console.log(`[api.carts] Using fallback region "${region.name}"`);
+      logger.info(`[api.carts] Using fallback region "${region.name}"`);
     }
 
     if (!region) {
@@ -112,7 +116,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
     }, { status: 201 });
 
   } catch (error: any) {
-    console.error("Error creating cart:", error);
+    logger.error("Error creating cart", error);
     return data({
       error: "Failed to create cart",
       details: error.message,

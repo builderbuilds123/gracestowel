@@ -193,10 +193,21 @@ export async function POST(
             return;
         }
 
-        logger.error("order-cancel", "Error canceling order", { orderId: id }, error instanceof Error ? error : new Error(String(error)));
+        const errorDetails = error instanceof Error ? {
+            message: error.message,
+            stack: error.stack,
+            name: error.name
+        } : { message: String(error) };
+
+        logger.error("order-cancel", "Unhandled error during order cancellation", { 
+            orderId: id,
+            ...errorDetails
+        });
+
         res.status(500).json({
             code: "CANCELLATION_FAILED",
-            message: "An error occurred while processing the cancellation. Please try again or contact support.",
+            message: "An internal error occurred while processing the cancellation.",
+            details: process.env.NODE_ENV === "development" ? errorDetails.message : undefined
         });
     }
 }

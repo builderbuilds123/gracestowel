@@ -1,36 +1,29 @@
 import type { Route } from "./+types/products.$handle";
 import { useState, useEffect, useCallback, Suspense } from "react";
 import { Await } from "react-router";
-import { Sparkles } from "lucide-react";
-import { Towel } from "@phosphor-icons/react";
 
-// Legacy components (still used for some functionality)
 import { type Review, type ReviewStats } from "../components/ReviewSection";
 import { ReviewForm } from "../components/ReviewForm";
 import { RelatedProducts } from "../components/RelatedProducts";
-
-
-// New immersive experience components
-import {
-  HeroCanvas,
-  ProductReveal,
-  TextureDiscovery,
-  ColorMorpher,
-  JourneyCarousel,
-  ReviewRiver,
-  StickyPurchaseBar,
-} from "../components/product-experience";
-
-
+import { ProductGallery, ProductInfo } from "../components/product";
+import { ReviewRiver, StickyPurchaseBar } from "../components/product-experience";
 
 import { useCart } from "../context/CartContext";
 import { getMedusaClient, castToMedusaProduct, type MedusaProduct, getBackendUrl, getStockStatus, validateMedusaProduct, getDefaultRegion } from "../lib/medusa";
 import { transformToDetail, type ProductDetail } from "../lib/product-transformer";
 import { monitoredFetch } from "../utils/monitored-fetch";
 
+// Color hex mapping for swatches
+const COLOR_HEX: Record<string, string> = {
+    "Cloud White": "#F5F5F5",
+    "Sage": "#9CAF88",
+    "Terra Cotta": "#E2725B",
+    "Charcoal": "#36454F",
+    "Navy": "#202A44",
+    "Sand": "#E6DCD0",
+    "Stone": "#9EA3A8",
+};
 
-
-// SEO Meta tags for product pages
 export function meta({ data }: Route.MetaArgs) {
     if (!data?.product) {
         return [
@@ -47,24 +40,20 @@ export function meta({ data }: Route.MetaArgs) {
     return [
         { title },
         { name: "description", content: description },
-        // Open Graph
         { property: "og:title", content: title },
         { property: "og:description", content: description },
         { property: "og:type", content: "product" },
         { property: "og:image", content: product.images?.[0] || "" },
         { property: "og:url", content: `https://gracestowel.com/products/${product.handle}` },
-        // Twitter Card
         { name: "twitter:card", content: "summary_large_image" },
         { name: "twitter:title", content: title },
         { name: "twitter:description", content: description },
         { name: "twitter:image", content: product.images?.[0] || "" },
-        // Product specific
         { property: "product:price:amount", content: String(product.price / 100) },
         { property: "product:price:currency", content: "CAD" },
     ];
 }
 
-// Fetch reviews from the backend
 async function fetchReviews(productId: string, backendUrl: string, sort = "newest") {
     try {
         const response = await monitoredFetch(`${backendUrl}/store/products/${productId}/reviews?sort=${sort}&limit=10`, {
@@ -82,12 +71,6 @@ async function fetchReviews(productId: string, backendUrl: string, sort = "newes
 
 export async function loader({ params, context }: Route.LoaderArgs) {
     const { handle } = params;
-    
-    // Debug Logging for CI
-    const medusaPk = context?.cloudflare?.env?.MEDUSA_PUBLISHABLE_KEY;
-    console.log(`[DEBUG] Loader products.$handle: handle=${handle}`);
-    console.log(`[DEBUG] MEDUSA_BACKEND_URL: ${context?.cloudflare?.env?.MEDUSA_BACKEND_URL}`);
-    console.log(`[DEBUG] MEDUSA_PUBLISHABLE_KEY: ${medusaPk ? medusaPk.substring(0, 10) + '...' : 'UNDEFINED'}`);
 
     if (!handle) {
         throw new Response("Product not found", { status: 404 });
@@ -97,23 +80,20 @@ export async function loader({ params, context }: Route.LoaderArgs) {
     const backendUrl = getBackendUrl(context);
 
     let medusaProduct: MedusaProduct | null = null;
-    let dataSource: "hyperdrive" | "medusa" = "medusa";
 
-    // Get default region for price calculation (CAD/Canada preferred)
     const regionInfo = await getDefaultRegion(medusa);
     const regionId = regionInfo?.region_id;
     const currencyCode = regionInfo?.currency_code || "cad";
 
     try {
-        // Fetch product with region_id to get calculated prices
-        const { products } = await medusa.store.product.list({ 
-            handle, 
-            limit: 1, 
+        const { products } = await medusa.store.product.list({
+            handle,
+            limit: 1,
             region_id: regionId,
-            fields: "+variants,+variants.calculated_price,+variants.prices,*variants.inventory_quantity,+options,+options.values,+images,+categories,+metadata" 
+            fields: "+variants,+variants.calculated_price,+variants.prices,*variants.inventory_quantity,+options,+options.values,+images,+categories,+metadata"
         });
         medusaProduct = validateMedusaProduct(products[0]);
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Failed to fetch product from Medusa:", error);
     }
 
@@ -123,14 +103,12 @@ export async function loader({ params, context }: Route.LoaderArgs) {
 
     const product = transformToDetail(medusaProduct);
 
-    // Fetch related products (Deferred)
-    // We start the promise but don't await it
     const relatedProductsPromise = (async () => {
         try {
-            const res = await medusa.store.product.list({ 
-                limit: 4, 
+            const res = await medusa.store.product.list({
+                limit: 4,
                 region_id: regionId,
-                fields: "+variants.calculated_price,+variants.prices,*variants.inventory_quantity,+images" 
+                fields: "+variants.calculated_price,+variants.prices,*variants.inventory_quantity,+images"
             });
             return (res.products as unknown[]).map(castToMedusaProduct)
                 .filter(p => p.id !== medusaProduct!.id)
@@ -142,7 +120,6 @@ export async function loader({ params, context }: Route.LoaderArgs) {
         }
     })();
 
-    // Fetch reviews (Blocking, to allow simpler state management in component)
     const reviewsData = (await fetchReviews(medusaProduct.id, backendUrl)) as { reviews: Review[]; stats: ReviewStats };
 
     return {
@@ -151,26 +128,13 @@ export async function loader({ params, context }: Route.LoaderArgs) {
         reviews: reviewsData.reviews,
         reviewStats: reviewsData.stats,
         backendUrl,
-        _dataSource: dataSource,
     };
 }
 
-// Color mapping for swatches and ColorMorpher
-const COLOR_MAP: Record<string, { hex: string; mood: string }> = {
-    "Cloud White": { hex: "#F5F5F5", mood: "Pure and refreshing, like a crisp morning" },
-    "Sage": { hex: "#9CAF88", mood: "Calm and grounding, inspired by morning gardens" },
-    "Terra Cotta": { hex: "#E2725B", mood: "Warm and inviting, earthy elegance" },
-    "Charcoal": { hex: "#36454F", mood: "Bold and sophisticated, modern luxury" },
-    "Navy": { hex: "#202A44", mood: "Deep and serene, timeless classic" },
-    "Sand": { hex: "#E6DCD0", mood: "Soft and natural, beach-house vibes" },
-    "Stone": { hex: "#9EA3A8", mood: "Cool and contemporary, understated beauty" },
-};
-
-export default function ProductDetail({ loaderData }: Route.ComponentProps) {
+export default function ProductDetailPage({ loaderData }: Route.ComponentProps) {
     const { product, relatedProducts, reviews: initialReviews, reviewStats: initialStats, backendUrl } = loaderData;
     const { addToCart, items: cartItems, toggleCart } = useCart();
 
-    // State
     const [isReviewFormOpen, setIsReviewFormOpen] = useState(false);
     const [reviews, setReviews] = useState<Review[]>(initialReviews || []);
     const [reviewStats, setReviewStats] = useState<ReviewStats>(initialStats || { average: 0, count: 0, distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 } });
@@ -179,7 +143,6 @@ export default function ProductDetail({ loaderData }: Route.ComponentProps) {
     const [selectedColor, setSelectedColor] = useState(product.colors?.[0] || "");
     const [quantity, setQuantity] = useState(1);
 
-    // Find the actual variant for the selected color
     const selectedVariant = product.variants?.find(v =>
         v.options?.some(o => o.value === selectedColor)
     ) || product.variants?.[0];
@@ -187,16 +150,13 @@ export default function ProductDetail({ loaderData }: Route.ComponentProps) {
     const stockStatus = getStockStatus(selectedVariant?.inventory_quantity);
     const isOutOfStock = stockStatus === "out_of_stock";
 
-    // Calculate cart total for shipping progress (in dollars)
     const cartTotal = cartItems.reduce((sum, item) => {
         const priceNum = parseFloat(item.price.replace(/[^0-9.]/g, ''));
         return sum + (priceNum * item.quantity);
     }, 0);
 
-    // Calculate total item count in cart
     const cartItemCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
 
-    // Track product view in PostHog
     useEffect(() => {
         if (typeof window !== 'undefined') {
             import('../utils/posthog').then(({ default: posthog }) => {
@@ -211,7 +171,6 @@ export default function ProductDetail({ loaderData }: Route.ComponentProps) {
         }
     }, [product.id, product.handle, product.title, product.price, stockStatus]);
 
-    // Review handlers
     const handleSortChange = useCallback(async (sort: string) => {
         setReviewSort(sort);
         try {
@@ -248,7 +207,6 @@ export default function ProductDetail({ loaderData }: Route.ComponentProps) {
         }
     };
 
-    // Add to cart handler
     const handleAddToCart = useCallback(() => {
         const variantId = selectedVariant?.id;
 
@@ -263,7 +221,6 @@ export default function ProductDetail({ loaderData }: Route.ComponentProps) {
             color: selectedColor,
         });
 
-        // Track in PostHog
         if (typeof window !== 'undefined') {
             import('../utils/posthog').then(({ default: posthog }) => {
                 posthog.capture('product_added_to_cart', {
@@ -278,16 +235,11 @@ export default function ProductDetail({ loaderData }: Route.ComponentProps) {
         }
     }, [addToCart, product, selectedVariant, quantity, selectedColor]);
 
-
-
-    // Transform colors for ColorMorpher
     const colorOptions = product.colors?.map(name => ({
         name,
-        hex: COLOR_MAP[name]?.hex || "#ccc",
-        mood: COLOR_MAP[name]?.mood || "A beautiful choice",
+        hex: COLOR_HEX[name] || "#ccc",
     })) || [];
 
-    // JSON-LD structured data for SEO
     const jsonLd = {
         "@context": "https://schema.org",
         "@type": "Product",
@@ -322,137 +274,94 @@ export default function ProductDetail({ loaderData }: Route.ComponentProps) {
     };
 
     return (
-        <div className="min-h-screen">
-            {/* JSON-LD Structured Data */}
+        <div className="min-h-screen bg-bg-earthy">
+            {/* JSON-LD */}
             <script
                 type="application/ld+json"
                 dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
             />
 
-            {/* ============================================
-                SECTION 1: HERO CANVAS - "First Touch"
-                Full-viewport texture immersion
-               ============================================ */}
-            <HeroCanvas
-                image={product.images[0] || "/placeholder-towel.jpg"}
-                title={product.title}
-                subtitle="Feel the Difference"
-            />
+            {/* Main Product Section */}
+            <section className="py-8 md:py-12 px-6">
+                <div className="max-w-6xl mx-auto">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
+                        {/* Left: Image Gallery */}
+                        <ProductGallery
+                            images={product.images}
+                            title={product.title}
+                        />
 
-            {/* ============================================
-                SECTION 2: PRODUCT REVEAL - "The Unfold"
-                Theatrical product introduction
-               ============================================ */}
-            <ProductReveal
-                images={product.images}
-                title={product.title}
-                price={product.price}
-                currencySymbol="$"
-            />
-
-            {/* ============================================
-                SECTION 3: TEXTURE DISCOVERY - "Touch Without Touching"
-                Interactive zoom lens and hotspots
-               ============================================ */}
-            {product.images[1] && (
-                <TextureDiscovery
-                    image={product.images[1] || product.images[0]}
-                />
-            )}
-
-            {/* ============================================
-                SECTION 4: COLOR MORPHER - "Your Color, Your Vibe"
-                Emotional color selection
-               ============================================ */}
-            {colorOptions.length > 0 && (
-                <ColorMorpher
-                    colors={colorOptions}
-                    selectedColor={selectedColor}
-                    onColorChange={setSelectedColor}
-                    productImage={product.images[0]}
-                />
-            )}
-
-
-
-            {/* ============================================
-                SECTION 6: JOURNEY CAROUSEL - "From Field to Fold"
-                Craftsmanship storytelling
-               ============================================ */}
-            <JourneyCarousel />
-
-            {/* ============================================
-                SECTION 7: PRODUCT DETAILS
-                Features, dimensions, care
-               ============================================ */}
-            <section className="py-16 px-6">
-                <div className="max-w-5xl mx-auto">
-                    <h2 className="text-3xl md:text-4xl font-serif text-text-earthy text-center mb-12">
-                        The Details
-                    </h2>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                        {/* Features */}
-                        {product.features && product.features.length > 0 && (
-                            <div className="p-6 bg-card-earthy/10 rounded-3xl">
-                                <h3 className="font-serif text-xl text-text-earthy mb-4 flex items-center gap-2">
-                                    <span className="text-2xl">✨</span>
-                                    Features
-                                </h3>
-                                <ul className="space-y-2">
-                                    {product.features.map((feature, i) => (
-                                        <li key={i} className="text-text-earthy/70 flex items-start gap-2">
-                                            <span className="text-accent-earthy mt-1">•</span>
-                                            {feature}
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
-                        )}
-
-                        {/* Dimensions */}
-                        {product.dimensions && Object.keys(product.dimensions).length > 0 && (
-                            <div className="p-6 bg-card-earthy/10 rounded-3xl">
-                                <h3 className="font-serif text-xl text-text-earthy mb-4 flex items-center gap-2">
-                                    <span className="text-2xl">📐</span>
-                                    Dimensions
-                                </h3>
-                                <dl className="space-y-2">
-                                    {Object.entries(product.dimensions).map(([key, value]) => (
-                                        <div key={key} className="flex justify-between text-text-earthy/70">
-                                            <dt className="capitalize">{key}:</dt>
-                                            <dd className="font-medium">{value}</dd>
-                                        </div>
-                                    ))}
-                                </dl>
-                            </div>
-                        )}
-
-                        {/* Care Instructions */}
-                        {product.careInstructions && product.careInstructions.length > 0 && (
-                            <div className="p-6 bg-card-earthy/10 rounded-3xl">
-                                <h3 className="font-serif text-xl text-text-earthy mb-4 flex items-center gap-2">
-                                    <span className="text-2xl">🧺</span>
-                                    Care
-                                </h3>
-                                <ul className="space-y-2">
-                                    {product.careInstructions.map((instruction, i) => (
-                                        <li key={i} className="text-text-earthy/70 flex items-start gap-2">
-                                            <span className="text-accent-earthy mt-1">•</span>
-                                            {instruction}
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
-                        )}
+                        {/* Right: Product Info */}
+                        <ProductInfo
+                            product={product}
+                            colors={colorOptions}
+                            selectedColor={selectedColor}
+                            onColorChange={setSelectedColor}
+                            quantity={quantity}
+                            onQuantityChange={setQuantity}
+                            onAddToCart={handleAddToCart}
+                            isOutOfStock={isOutOfStock}
+                        />
                     </div>
                 </div>
             </section>
 
-            {/* ============================================
-                SECTION 8: REVIEW RIVER - "Happy Homes"
-                Animated testimonials
-               ============================================ */}
+            {/* Product Details */}
+            {(product.features?.length || product.dimensions || product.careInstructions?.length) && (
+                <section className="py-12 px-6 border-t border-card-earthy/20">
+                    <div className="max-w-5xl mx-auto">
+                        <h2 className="text-2xl md:text-3xl font-serif text-text-earthy text-center mb-10">
+                            Product Details
+                        </h2>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            {product.features && product.features.length > 0 && (
+                                <div className="p-6 bg-card-earthy/10 rounded-2xl">
+                                    <h3 className="font-serif text-lg text-text-earthy mb-4">Features</h3>
+                                    <ul className="space-y-2">
+                                        {product.features.map((feature, i) => (
+                                            <li key={i} className="text-text-earthy/70 text-sm flex items-start gap-2">
+                                                <span className="text-accent-earthy">✓</span>
+                                                {feature}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+
+                            {product.dimensions && Object.keys(product.dimensions).length > 0 && (
+                                <div className="p-6 bg-card-earthy/10 rounded-2xl">
+                                    <h3 className="font-serif text-lg text-text-earthy mb-4">Dimensions</h3>
+                                    <dl className="space-y-2">
+                                        {Object.entries(product.dimensions).map(([key, value]) => (
+                                            <div key={key} className="flex justify-between text-sm text-text-earthy/70">
+                                                <dt className="capitalize">{key}:</dt>
+                                                <dd className="font-medium">{value}</dd>
+                                            </div>
+                                        ))}
+                                    </dl>
+                                </div>
+                            )}
+
+                            {product.careInstructions && product.careInstructions.length > 0 && (
+                                <div className="p-6 bg-card-earthy/10 rounded-2xl">
+                                    <h3 className="font-serif text-lg text-text-earthy mb-4">Care</h3>
+                                    <ul className="space-y-2">
+                                        {product.careInstructions.map((instruction, i) => (
+                                            <li key={i} className="text-text-earthy/70 text-sm flex items-start gap-2">
+                                                <span className="text-accent-earthy">•</span>
+                                                {instruction}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </section>
+            )}
+
+            {/* Reviews */}
             <div id="reviews">
                 <ReviewRiver
                     reviews={reviews}
@@ -461,34 +370,28 @@ export default function ProductDetail({ loaderData }: Route.ComponentProps) {
                 />
             </div>
 
-            {/* ============================================
-                SECTION 9: RELATED PRODUCTS - "Complete the Set"
-                Curated companions
-               ============================================ */}
+            {/* Related Products */}
             <Suspense fallback={
-                <section className="py-16 px-6">
+                <section className="py-12 px-6">
                     <div className="max-w-6xl mx-auto">
-                        <h2 className="text-3xl font-serif text-text-earthy text-center mb-12">
-                            Complete Your Sanctuary
+                        <h2 className="text-2xl font-serif text-text-earthy text-center mb-8">
+                            You May Also Like
                         </h2>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                             {[1, 2, 3].map(i => (
-                                <div key={i} className="aspect-[3/4] bg-card-earthy/20 rounded-3xl animate-pulse" />
+                                <div key={i} className="aspect-[3/4] bg-card-earthy/20 rounded-2xl animate-pulse" />
                             ))}
                         </div>
                     </div>
                 </section>
             }>
                 <Await resolve={relatedProducts} errorElement={null}>
-                    {(resolvedRelated) => (
-                        <section className="py-16 px-6">
+                    {(resolvedRelated) => resolvedRelated.length > 0 && (
+                        <section className="py-12 px-6 border-t border-card-earthy/20">
                             <div className="max-w-6xl mx-auto">
-                                <h2 className="text-3xl md:text-4xl font-serif text-text-earthy text-center mb-4">
-                                    Complete Your Sanctuary
+                                <h2 className="text-2xl md:text-3xl font-serif text-text-earthy text-center mb-8">
+                                    You May Also Like
                                 </h2>
-                                <p className="text-text-earthy/60 text-center mb-12">
-                                    Curated pieces to elevate your bathroom experience
-                                </p>
                                 <RelatedProducts products={resolvedRelated} />
                             </div>
                         </section>
@@ -496,30 +399,23 @@ export default function ProductDetail({ loaderData }: Route.ComponentProps) {
                 </Await>
             </Suspense>
 
-            {/* ============================================
-                STICKY PURCHASE BAR
-                Always accessible, appears after scroll
-               ============================================ */}
+            {/* Sticky Purchase Bar */}
             <StickyPurchaseBar
                 productTitle={product.title}
-                price={product.price}
+                price={product.price / 100}
                 currencySymbol="$"
                 selectedColor={selectedColor}
-                colorHex={COLOR_MAP[selectedColor]?.hex}
+                colorHex={COLOR_HEX[selectedColor]}
                 quantity={quantity}
                 onQuantityChange={setQuantity}
                 onAddToCart={handleAddToCart}
                 isOutOfStock={isOutOfStock}
-                showAfterScroll={600}
+                showAfterScroll={400}
                 freeShippingThreshold={75}
                 cartTotal={cartTotal}
                 onViewCart={toggleCart}
                 cartItemCount={cartItemCount}
             />
-
-            {/* ============================================
-                MODALS
-               ============================================ */}
 
             {/* Review Form Modal */}
             {isReviewFormOpen && (
@@ -531,8 +427,6 @@ export default function ProductDetail({ loaderData }: Route.ComponentProps) {
                     isSubmitting={isSubmittingReview}
                 />
             )}
-
-
         </div>
     );
 }

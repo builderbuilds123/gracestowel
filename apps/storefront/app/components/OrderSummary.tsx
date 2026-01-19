@@ -1,4 +1,4 @@
-import { X, Minus, Plus } from 'lucide-react';
+import { X, Minus, Plus, Loader2 } from 'lucide-react';
 import { ProductPrice } from './ProductPrice';
 import { PromoCodeInput } from './PromoCodeInput';
 import { AutomaticPromotionBanner } from './AutomaticPromotionBanner';
@@ -113,12 +113,19 @@ export function OrderSummary({
                 </div>
 
                 {/* Discount (from promo codes) */}
-                {discountTotal > 0 && (
+                {(discountTotal > 0 || isPromoLoading) && (
                     <div className="flex justify-between text-sm">
                         <span className="text-gray-600">Discount</span>
-                        <span className="font-medium text-green-600">
-                            -${discountTotal.toFixed(2)}
-                        </span>
+                        {isPromoLoading ? (
+                            <span className="flex items-center gap-1 text-gray-500">
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                                <span className="text-xs">Calculating...</span>
+                            </span>
+                        ) : (
+                            <span className="font-medium text-green-600">
+                                -${discountTotal.toFixed(2)}
+                            </span>
+                        )}
                     </div>
                 )}
 

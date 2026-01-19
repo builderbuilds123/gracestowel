@@ -4,6 +4,7 @@ import type { CloudflareEnv } from "../utils/monitored-fetch";
 import { MedusaCartService } from "../services/medusa-cart";
 import type { CartItem, ProductId } from "../types/product";
 import { isMedusaId } from "../types/product";
+import { createLogger, getTraceIdFromRequest } from "../lib/logger";
 
 /**
  * @deprecated Use the new RESTful cart endpoints instead:
@@ -114,6 +115,8 @@ export async function action({ request, context }: ActionFunctionArgs) {
     return data({ message: "cartItems array is required" }, { status: 400 });
   }
 
+  const traceId = getTraceIdFromRequest(request);
+  const logger = createLogger({ traceId, context: "api.shipping-rates" });
   const service = new MedusaCartService(context);
 
   try {
@@ -164,14 +167,14 @@ export async function action({ request, context }: ActionFunctionArgs) {
             );
             
             if (!countryInRegion) {
-              console.log(`Cart region "${cartRegion.name}" does not contain country ${shippingAddress.country_code}, creating new cart`);
+              logger.info(`Cart region "${cartRegion.name}" does not contain country ${shippingAddress.country_code}, creating new cart`);
               needNewCart = true;
               cartId = undefined;
             }
           }
         }
       } catch (e) {
-        console.warn("Error checking cart:", e);
+        logger.warn("Error checking cart", { error: e });
         cartId = undefined;
       }
     }
@@ -185,7 +188,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
         if (shippingAddress?.country_code) {
             region = findRegionForCountry(regions, shippingAddress.country_code);
             if (region) {
-                console.log(`Found region "${region.name}" for country ${shippingAddress.country_code}`);
+                logger.info(`Found region "${region.name}" for country ${shippingAddress.country_code}`);
             }
         }
         
@@ -193,14 +196,14 @@ export async function action({ request, context }: ActionFunctionArgs) {
         if (!region) {
             region = regions.find((r: any) => r.currency_code.toUpperCase() === currency.toUpperCase());
             if (region) {
-                console.log(`Using region "${region.name}" based on currency ${currency}`);
+                logger.info(`Using region "${region.name}" based on currency ${currency}`);
             }
         }
         
         // Priority 3: Use first available region
         if (!region && regions.length > 0) {
             region = regions[0];
-            console.log(`Using fallback region "${region.name}"`);
+            logger.info(`Using fallback region "${region.name}"`);
         }
 
         if (region) {
@@ -264,7 +267,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
                 regionOptions = data.shipping_options;
             }
         } catch (e) {
-            console.warn("Failed to fetch region options for enrichment", e);
+            logger.warn("Failed to fetch region options for enrichment", { error: e });
         }
     }
 
@@ -282,7 +285,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
   } catch (error: any) {
     // Log the actual error for debugging
-    console.error("Cart-based shipping failed:", error);
+    logger.error("Cart-based shipping failed", error);
     
     // Return clear error - Medusa v2 requires cart_id for shipping options,
     // so there's no valid fallback without a cart. Surface the real error.

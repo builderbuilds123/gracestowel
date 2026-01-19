@@ -3,6 +3,8 @@ import { getMedusaClient } from "../lib/medusa";
 import { createLogger } from "../lib/logger";
 import type { AppliedPromoCode, CartWithPromotions, LineItemAdjustment, ShippingMethodAdjustment } from "../types/promotion";
 
+const isDevelopment = process.env.NODE_ENV === 'development';
+
 interface UsePromoCodeOptions {
   cartId: string | undefined;
   onCartUpdate?: () => void;
@@ -25,54 +27,128 @@ interface UsePromoCodeReturn {
  * Rebuild applied promo codes from cart adjustments
  * This ensures accurate discount display when stacking rules apply
  */
-function extractAppliedCodesFromCart(cart: CartWithPromotions): AppliedPromoCode[] {
+function extractAppliedCodesFromCart(
+  cart: CartWithPromotions,
+  debugLogger?: { info: (msg: string, data?: Record<string, unknown>) => void }
+): AppliedPromoCode[] {
   const codeDiscounts = new Map<string, number>();
+  const automaticCodes = new Set<string>();
+  
+  // Create a map of promotion_id to code for reverse lookup
+  const promoIdToCode = new Map<string, string>();
+  if (cart.promotions) {
+    debugLogger?.info('[PromoCode] Cart promotions found', {
+      count: cart.promotions.length,
+      promotions: cart.promotions.map(p => ({ code: p.code, isAutomatic: p.is_automatic, id: p.id })),
+    });
+    cart.promotions.forEach(p => {
+      // Map ID to Code for reverse lookup when adjustments don't include the code
+      if (p.id && p.code) {
+        const upCode = p.code.toUpperCase();
+        promoIdToCode.set(p.id, upCode);
+        if (p.is_automatic) {
+          automaticCodes.add(upCode);
+        }
+      }
+    });
+  }
 
-  // Sum line item adjustments by code
+  // DEEP TRACE: Log adjustments per item
   if (cart.items) {
-    cart.items.forEach((item) => {
-      if (item.adjustments) {
-        item.adjustments.forEach((adj) => {
-          if (adj.code) {
-            const current = codeDiscounts.get(adj.code) || 0;
-            codeDiscounts.set(adj.code, current + (adj.amount || 0));
-          }
+    cart.items.forEach((item, idx) => {
+      if (item.adjustments && item.adjustments.length > 0) {
+        debugLogger?.info(`[PromoCode] Item ${idx} adjustments`, {
+          itemId: item.id,
+          title: (item as any).title,
+          adjustments: item.adjustments.map(a => ({
+            code: a.code,
+            promotion_id: a.promotion_id,
+            amount: a.amount
+          }))
         });
       }
     });
   }
 
-  // Sum shipping method adjustments by code
+  // Helper to process adjustments
+  const processAdjustments = (adjustments: (LineItemAdjustment | ShippingMethodAdjustment)[]) => {
+    adjustments.forEach((adj) => {
+      // Try to get code directly, or via promotion_id mapping
+      let code = adj.code?.toUpperCase();
+      if (!code && adj.promotion_id) {
+        code = promoIdToCode.get(adj.promotion_id);
+      }
+
+      if (code) {
+        const current = codeDiscounts.get(code) || 0;
+        // Medusa is returning amounts in major units (dollars)
+        codeDiscounts.set(code, current + (adj.amount || 0));
+      }
+    });
+  };
+
+  if (cart.items) {
+    cart.items.forEach((item, idx) => {
+      if (item.adjustments && item.adjustments.length > 0) {
+        debugLogger?.info(`[PromoCode] Processing adjustments for item ${idx}`, { 
+          itemId: item.id, 
+          adjCount: item.adjustments.length 
+        });
+        processAdjustments(item.adjustments);
+      }
+    });
+  }
+
   if (cart.shipping_methods) {
-    cart.shipping_methods.forEach((method) => {
-      if (method.adjustments) {
-        method.adjustments.forEach((adj) => {
-          if (adj.code) {
-            const current = codeDiscounts.get(adj.code) || 0;
-            codeDiscounts.set(adj.code, current + (adj.amount || 0));
-          }
+    cart.shipping_methods.forEach((method, idx) => {
+      if (method.adjustments && method.adjustments.length > 0) {
+        debugLogger?.info(`[PromoCode] Processing adjustments for shipping ${idx}`, { 
+          methodId: method.id, 
+          adjCount: method.adjustments.length 
         });
+        processAdjustments(method.adjustments);
       }
     });
   }
 
-  // Convert to array
-  return Array.from(codeDiscounts.entries()).map(([code, discount]) => ({
+  debugLogger?.info('[PromoCode] Adjustments processed', {
+    codesFound: Array.from(codeDiscounts.keys()),
+    automaticCodes: Array.from(automaticCodes),
+  });
+
+  const finalCodes = Array.from(codeDiscounts.entries()).map(([code, discount]) => ({
     code,
     discount,
     description: `Promo code ${code}`,
+    isAutomatic: automaticCodes.has(code),
   }));
+
+  debugLogger?.info('[PromoCode] Final extracted codes', {
+    codes: finalCodes.map(c => ({ code: c.code, discount: c.discount, isAuto: c.isAutomatic })),
+    totalSummed: Array.from(codeDiscounts.values()).reduce((a, b) => a + b, 0)
+  });
+
+  return finalCodes;
 }
 
 function applyCartDiscountState(
   cart: CartWithPromotions,
   setTotalDiscount: (value: number) => void,
-  setAppliedCodes: (codes: AppliedPromoCode[]) => void
+  setAppliedCodes: (codes: AppliedPromoCode[]) => void,
+  debugLogger?: { info: (msg: string, data?: Record<string, unknown>) => void }
 ) {
+  // Medusa is returning discount_total in major units (dollars)
   const discountTotal = cart.discount_total || 0;
   setTotalDiscount(discountTotal);
 
-  const rebuiltCodes = extractAppliedCodesFromCart(cart);
+  const rebuiltCodes = extractAppliedCodesFromCart(cart, debugLogger);
+  
+  debugLogger?.info('[PromoCode] Applied discount state', {
+    discountTotal,
+    codesCount: rebuiltCodes.length,
+    codes: rebuiltCodes.map(c => ({ code: c.code, discount: c.discount, isAutomatic: c.isAutomatic })),
+  });
+  
   setAppliedCodes(rebuiltCodes);
 }
 
@@ -112,24 +188,59 @@ export function usePromoCode({
       refreshRequestIdRef.current = requestId;
     }
 
+    setIsLoading(true);
     try {
       const client = getMedusaClient();
-      const { cart } = await client.store.cart.retrieve(cartId);
+      logger.info('[PromoCode] Refreshing discount from cart', { cartId });
+      
+      const { cart } = await client.store.cart.retrieve(cartId, {
+        fields: '+promotions,+promotions.application_method,+items.adjustments,+shipping_methods.adjustments',
+      });
+
+      // DEEP DEBUG: Log full cart structure for promo investigation
+      logger.info('[PromoCode] RAW Cart Data Received', {
+        cartId: cart.id,
+        discountTotal: cart.discount_total,
+        promotions: (cart as any).promotions,
+        itemsCount: cart.items?.length,
+        hasAdjustments: cart.items?.some(i => i.adjustments && i.adjustments.length > 0)
+      });
+      
+      if (isDevelopment) {
+        // Use structured logger for the full cart object in development
+        logger.info('[PromoCode] Full Cart Object', { cart });
+      }
+
+      logger.info('[PromoCode] Cart retrieved for discount refresh', {
+        cartId,
+        discountTotal: cart.discount_total,
+        hasPromotions: !!(cart as any).promotions,
+        promotionsCount: (cart as any).promotions?.length || 0,
+        itemsCount: cart.items?.length || 0,
+      });
 
       if (currentRequestId !== refreshRequestIdRef.current) {
+        logger.info('[PromoCode] Stale request, skipping', { currentRequestId, latestRequestId: refreshRequestIdRef.current });
         return;
       }
 
-      applyCartDiscountState(cart, setTotalDiscount, setAppliedCodes);
+      applyCartDiscountState(cart as any, setTotalDiscount, setAppliedCodes, logger);
     } catch (err) {
       logger.warn('Failed to refresh discount', { error: err });
       setError("Failed to refresh discounts. Please try again.");
+    } finally {
+      setIsLoading(false);
     }
-  }, [cartId]);
+  }, [cartId, logger]);
 
   const syncFromCart = useCallback((cart: CartWithPromotions) => {
-    applyCartDiscountState(cart, setTotalDiscount, setAppliedCodes);
-  }, []);
+    logger.info('[PromoCode] Syncing from provided cart object', {
+      cartId: cart.id,
+      discountTotal: cart.discount_total,
+      promotionsCount: cart.promotions?.length || 0
+    });
+    applyCartDiscountState(cart, setTotalDiscount, setAppliedCodes, logger);
+  }, [logger]);
 
   const applyPromoCode = useCallback(
     async (code: string): Promise<boolean> => {
@@ -156,37 +267,39 @@ export function usePromoCode({
 
       try {
         const client = getMedusaClient();
+        logger.info('[PromoCode] Applying promo code', { code: normalizedCode });
         
-        // Send all codes including new one (Medusa handles stacking validation)
-        const allCodes = [...appliedCodes.map((c) => c.code), normalizedCode];
+        // Manual codes must be sent in the promo_codes array to Medusa update
+        const manualCodes = appliedCodes
+          .filter(c => !c.isAutomatic)
+          .map(c => c.code);
         
+        const allManualCodes = [...manualCodes, normalizedCode];
+
         const { cart } = await client.store.cart.update(cartId, {
-          promo_codes: allCodes,
+          promo_codes: allManualCodes,
         });
 
-        // Rebuild applied codes from cart response for accuracy
-        const rebuiltCodes = extractAppliedCodesFromCart(cart);
+        logger.info('[PromoCode] Promo code application response received', { 
+            cartId: cart.id,
+            discountTotal: cart.discount_total 
+        });
 
-        // Store the total discount from cart
-        const discountTotal = cart.discount_total || 0;
-        setTotalDiscount(discountTotal);
-
-        // If adjustments not available, fall back to simple approach
-        if (rebuiltCodes.length > 0) {
-          setAppliedCodes(rebuiltCodes);
-        } else {
-          // Fallback: use discount_total with simple distribution
-          const numCodes = allCodes.length;
-          setAppliedCodes(
-            allCodes.map((c) => ({
-              code: c,
-              discount: discountTotal / numCodes,
-              description: `Promo code ${c}`,
-            }))
-          );
+        // Verify if it was actually applied
+        const rebuiltCodes = extractAppliedCodesFromCart(cart as any, logger);
+        const wasApplied = rebuiltCodes.some(c => c.code.toUpperCase() === normalizedCode);
+        
+        if (!wasApplied) {
+          logger.warn('[PromoCode] Code accepted by API but not found in adjustments - possibly requirements not met', {
+            code: normalizedCode,
+            availableCodes: rebuiltCodes.map(c => c.code)
+          });
+          setError(`Promo code "${normalizedCode}" could not be applied. Check requirements (e.g. minimum spend).`);
+          return false;
         }
 
-        setSuccessMessage("Promo code applied!");
+        applyCartDiscountState(cart as any, setTotalDiscount, setAppliedCodes, logger);
+        setSuccessMessage(`Promo code "${normalizedCode}" applied!`);
         onCartUpdate?.();
         return true;
       } catch (err: unknown) {
@@ -198,7 +311,7 @@ export function usePromoCode({
         setIsLoading(false);
       }
     },
-    [cartId, appliedCodes, onCartUpdate]
+    [cartId, appliedCodes, onCartUpdate, logger]
   );
 
   const removePromoCode = useCallback(
@@ -214,39 +327,24 @@ export function usePromoCode({
 
       try {
         const client = getMedusaClient();
+        logger.info('[PromoCode] Removing promo code', { code });
         
-        // Send remaining codes (excluding the one being removed)
-        const remainingCodes = appliedCodes
-          .filter((c) => c.code !== code)
-          .map((c) => c.code);
+        // Filter out the code being removed and any automatic codes 
+        // (automatic codes shouldn't be in the manual promo_codes array)
+        const remainingManualCodes = appliedCodes
+          .filter(c => c.code !== code && !c.isAutomatic)
+          .map(c => c.code);
         
         const { cart } = await client.store.cart.update(cartId, {
-          promo_codes: remainingCodes,
+          promo_codes: remainingManualCodes,
         });
 
-        // Rebuild applied codes from cart response for accurate discount amounts
-        const rebuiltCodes = extractAppliedCodesFromCart(cart);
+        logger.info('[PromoCode] Promo code removal response received', { 
+            cartId: cart.id,
+            discountTotal: cart.discount_total 
+        });
 
-        // Update total discount from cart
-        const discountTotal = cart.discount_total || 0;
-        setTotalDiscount(discountTotal);
-
-        if (rebuiltCodes.length > 0) {
-          setAppliedCodes(rebuiltCodes);
-        } else if (remainingCodes.length > 0) {
-          // Fallback: distribute total discount across remaining codes
-          const perCodeDiscount = Math.floor(discountTotal / remainingCodes.length);
-          setAppliedCodes(
-            remainingCodes.map((c) => ({
-              code: c,
-              discount: perCodeDiscount,
-              description: `Promo code ${c}`,
-            }))
-          );
-        } else {
-          setAppliedCodes([]);
-        }
-
+        applyCartDiscountState(cart as any, setTotalDiscount, setAppliedCodes, logger);
         setSuccessMessage("Promo code removed");
         onCartUpdate?.();
         return true;
@@ -259,7 +357,7 @@ export function usePromoCode({
         setIsLoading(false);
       }
     },
-    [cartId, appliedCodes, onCartUpdate]
+    [cartId, appliedCodes, onCartUpdate, logger]
   );
 
   return {
@@ -278,7 +376,8 @@ export function usePromoCode({
 
 /**
  * Extract user-friendly error message from Medusa API errors
- * Handles stacking rules and campaign date validation errors
+ * Handles stacking rules, campaign date validation, eligibility, and other errors
+ * @see https://docs.medusajs.com/api/store#carts_postcartsidpromotions
  */
 function extractErrorMessage(err: unknown): string {
   if (err instanceof Error) {
@@ -297,20 +396,52 @@ function extractErrorMessage(err: unknown): string {
       return "This promo code has expired";
     }
     
-    // Common errors
-    if (message.includes("not found") || message.includes("invalid")) {
+    // Invalid or not found errors
+    if (message.includes("not found") || message.includes("invalid") || message.includes("does not exist")) {
       return "Invalid or expired promo code";
     }
-    if (message.includes("already applied")) {
+    
+    // Already applied
+    if (message.includes("already applied") || message.includes("already exists")) {
       return "This promo code is already applied";
     }
-    if (message.includes("not eligible") || message.includes("conditions not met")) {
+    
+    // Eligibility errors
+    if (message.includes("not eligible") || message.includes("conditions not met") || message.includes("does not meet")) {
       return "Your cart is not eligible for this promotion";
     }
-    if (message.includes("usage limit") || message.includes("budget exceeded")) {
+    
+    // Usage limit errors
+    if (message.includes("usage limit") || message.includes("budget exceeded") || message.includes("max uses")) {
       return "This promo code has reached its usage limit";
     }
     
+    // Minimum order requirements
+    if (message.includes("minimum") || message.includes("min_subtotal") || message.includes("cart total")) {
+      return "Your cart does not meet the minimum order requirement for this promotion";
+    }
+    
+    // Customer-specific restrictions
+    if (message.includes("customer") || message.includes("user") || message.includes("group")) {
+      return "This promo code is not available for your account";
+    }
+    
+    // Region/shipping restrictions
+    if (message.includes("region") || message.includes("country") || message.includes("shipping")) {
+      return "This promo code is not valid for your shipping region";
+    }
+    
+    // Product-specific restrictions
+    if (message.includes("product") || message.includes("item") || message.includes("collection")) {
+      return "This promo code does not apply to the items in your cart";
+    }
+    
+    // General API errors
+    if (message.includes("invalid_data") || message.includes("validation")) {
+      return "Invalid promo code format";
+    }
+    
+    // Return original message if no pattern matched (may still be useful)
     return err.message;
   }
   return "Failed to apply promo code. Please try again.";
