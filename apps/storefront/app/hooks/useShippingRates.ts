@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef } from "react";
 import { monitoredFetch } from "../utils/monitored-fetch";
 import { retry } from "../utils/retry";
 import { generateCartHash } from "../utils/cart-hash";
@@ -14,18 +14,21 @@ interface ShippingRatesOptions {
   currency: string;
   regionId: string;
   cartId: string | undefined;
+  // State from Reducer
+  selectedShipping: ShippingOption | null;
+  // Setters/Actions
   setCartId: (id: string | undefined) => void;
+  setShippingOptions: (options: ShippingOption[]) => void;
+  setSelectedShipping: (option: ShippingOption | null) => void;
+  setIsCalculating: (isCalculating: boolean) => void;
+  setIsCartSynced: (isSynced: boolean) => void;
+  
   onCartCreated?: (cartId: string) => void;
   onCartSynced?: () => void;
   onCartSyncError?: (error: string | null) => void;
 }
 
 interface UseShippingRatesResult {
-  shippingOptions: ShippingOption[];
-  selectedShipping: ShippingOption | null;
-  setSelectedShipping: (option: ShippingOption | null) => void;
-  isCalculatingShipping: boolean;
-  isCartSynced: boolean;
   fetchShippingRates: (
     items: CartItem[],
     address: any,
@@ -37,32 +40,24 @@ interface UseShippingRatesResult {
 }
 
 /**
- * Hook to manage shipping rates fetching, caching, and cart synchronization.
+ * Hook to manage shipping rates fetching logic.
  * 
- * Extracted from checkout.tsx for better maintainability.
- * Handles:
- * - Cart creation/update with Medusa
- * - Shipping options fetching with retry logic
- * - Request deduplication via AbortController
- * - Result caching to minimize API calls
- * 
- * @param options - Configuration options including currency, regionId, and callbacks
- * @returns Shipping state and control functions
+ * Refactored to be stateless (controlled by parent reducer).
  */
 export function useShippingRates({
   currency,
   regionId,
   cartId,
+  selectedShipping,
   setCartId,
+  setShippingOptions,
+  setSelectedShipping,
+  setIsCalculating,
+  setIsCartSynced,
   onCartCreated,
   onCartSynced,
   onCartSyncError,
 }: ShippingRatesOptions): UseShippingRatesResult {
-  const [shippingOptions, setShippingOptions] = useState<ShippingOption[]>([]);
-  const [selectedShipping, setSelectedShipping] = useState<ShippingOption | null>(null);
-  const [isCalculatingShipping, setIsCalculatingShipping] = useState(false);
-  const [isCartSynced, setIsCartSynced] = useState(false);
-  
   // Caching mechanism for shipping rates
   const shippingCache = useRef<Map<string, { options: ShippingOption[], cartId: string | undefined }>>(new Map());
 
@@ -93,9 +88,9 @@ export function useShippingRates({
     // 2. Create new controller for this request
     const controller = new AbortController();
     abortControllerRef.current = controller;
-    const currentRequestId = ++requestIdRef.current;
+    const currentRequestId = ++requestIdRef.current; // access ref to increment, though variable unused locally
 
-    setIsCalculatingShipping(true);
+    setIsCalculating(true);
 
     const cacheKey = generateCartHash(items, address ? {
       country_code: address.address?.country,
@@ -110,7 +105,7 @@ export function useShippingRates({
         setCartId(cached.cartId);
         onCartCreated?.(cached.cartId);
       }
-      setIsCalculatingShipping(false);
+      setIsCalculating(false);
       return;
     }
 
@@ -129,7 +124,7 @@ export function useShippingRates({
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
-                region_id: regionId,
+                region_id: regionId, // MULTI-REGION: Pass explicit region from LocaleContext
                 currency,
                 country_code: address?.address?.country,
               }),
@@ -156,7 +151,7 @@ export function useShippingRates({
         const { cart_id } = await createResponse.json() as { cart_id: string };
         currentCartId = cart_id;
         setCartId(cart_id);
-        setIsCartSynced(false);
+        setIsCartSynced(false); // Reset sync state for new cart
         onCartCreated?.(cart_id);
         
         if (isDevelopment) {
@@ -292,12 +287,15 @@ export function useShippingRates({
       setShippingOptions(shipping_options);
 
       // If user has an existing valid selection, keep it
+      // Do NOT auto-select - user must explicitly choose shipping method
       if (selectedShipping && shipping_options.length > 0) {
         const found = shipping_options.find(o => o.id === selectedShipping.id);
         if (!found) {
+          // Current selection is no longer valid, clear it
           setSelectedShipping(null);
         } else {
-          setSelectedShipping({ ...found });
+            // FORCE UPDATE: Ensure we have the latest price/data even if ID is same
+            setSelectedShipping({ ...found });
         }
       }
 
@@ -309,23 +307,31 @@ export function useShippingRates({
         return;
       }
       logger.error('Shipping rates error', error as Error);
+      onCartSyncError?.(error.message);
     } finally {
       if (abortControllerRef.current === controller) {
-        setIsCalculatingShipping(false);
+         setIsCalculating(false);
       }
     }
-  }, [currency, cartId, regionId, selectedShipping, onCartCreated, onCartSynced, onCartSyncError, logger]);
+  }, [
+    currency, 
+    cartId, 
+    selectedShipping, 
+    setShippingOptions,
+    setSelectedShipping,
+    setIsCalculating,
+    setIsCartSynced,
+    onCartCreated,
+    onCartSynced,
+    onCartSyncError,
+    logger
+  ]);
 
   const clearCache = useCallback(() => {
     shippingCache.current.clear();
   }, []);
 
   return {
-    shippingOptions,
-    selectedShipping,
-    setSelectedShipping,
-    isCalculatingShipping,
-    isCartSynced,
     fetchShippingRates,
     clearCache,
   };

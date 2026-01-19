@@ -19,8 +19,10 @@ import { usePromoCode } from "../hooks/usePromoCode";
 import { useAutomaticPromotions } from "../hooks/useAutomaticPromotions";
 import { useShippingRates } from "../hooks/useShippingRates";
 import { useCheckoutError } from "../hooks/useCheckoutError";
+import { useCheckoutState } from "../hooks/useCheckoutState";
 import { CHECKOUT_CONSTANTS } from "../constants/checkout";
 import type { CartWithPromotions } from "../types/promotion";
+import type { CheckoutAddress } from "../types/checkout";
 import { useMedusaCart } from "../context/MedusaCartContext";
 
 
@@ -74,9 +76,6 @@ export default function Checkout() {
   const { currency, regionId } = useLocale(); // MULTI-REGION: Get both currency and regionId
   const { customer, isAuthenticated } = useCustomer();
 
-  // Guest email state
-  const [guestEmail, setGuestEmail] = useState<string | undefined>(undefined);
-
   // Session trace ID for logging
   const sessionTraceId = useRef(generateTraceId());
   
@@ -85,13 +84,6 @@ export default function Checkout() {
     traceId: sessionTraceId.current,
     context: 'CheckoutPage' 
   })).current;
-
-  // Caching mechanism for shipping rates
-  const shippingCache = useRef<Map<string, { options: ShippingOption[], cartId: string | undefined }>>(new Map());
-
-  // AbortController for cancelling stale shipping requests
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const cartUpdateRequestIdRef = useRef(0);
 
   // Shipping & Cart state
   // Initialize cartId from sessionStorage if available (client-side only)
@@ -105,19 +97,30 @@ export default function Checkout() {
     hasBlockingError 
   } = useCheckoutError();
 
-  // Shipping Rates Hook
+  // Checkout State Machine
+  const { state: checkoutState, actions: checkoutActions } = useCheckoutState();
+  // Map reducer state to local variables for compatibility
+  const { 
+    shippingOptions, 
+    selectedShippingOption: selectedShipping,
+    shippingAddress,
+    email: guestEmail
+  } = checkoutState;
+
+  // Shipping Rates Hook (Controlled)
   const {
-    shippingOptions,
-    selectedShipping,
-    setSelectedShipping,
-    isCalculatingShipping,
-    isCartSynced,
     fetchShippingRates,
+    clearCache
   } = useShippingRates({
     currency,
     regionId: regionId || "",
     cartId,
+    selectedShipping,
     setCartId,
+    setShippingOptions: checkoutActions.setShippingOptions,
+    setSelectedShipping: checkoutActions.selectShippingOption,
+    setIsCalculating: (isCalc) => checkoutActions.setStatus(isCalc ? 'fetching_shipping' : 'ready'),
+    setIsCartSynced: (synced) => { /* Optional: handle sync state in reducer if needed, or ignore if UI just needs shipping options */ },
     onCartCreated: (newCartId) => {
       logger.info('Cart created via hook', { cartId: newCartId });
     },
@@ -133,10 +136,11 @@ export default function Checkout() {
     }
   });
 
-  const [shippingAddress, setShippingAddress] = useState<any>(undefined);
+  // Derived state
+  const isCalculatingShipping = checkoutState.status === 'fetching_shipping';
+  // Assume cart is synced if we are not in initial states
+  const isCartSynced = checkoutState.status !== 'idle' && checkoutState.status !== 'initializing' && checkoutState.status !== 'syncing_cart';
   const cartSyncError = errorList.find(e => e.type === 'CART_SYNC')?.message || null;
-
-  // SHP-01: Shipping persistence hook
   const { 
     isShippingPersisted, 
 // ... (lines 83-263 skipped for brevity in thought, but must match in replacement or multi-replace)
@@ -208,8 +212,8 @@ export default function Checkout() {
    * Decoupled from persistence to prevent PaymentElement reload
    */
   const handleShippingSelect = useCallback((option: ShippingOption) => {
-    setSelectedShipping(option);
-  }, []);
+    checkoutActions.selectShippingOption(option);
+  }, [checkoutActions]);
 
   // Handle cart expiration logic which was previously inside the inline function
   // We need to watch for specific error messages that indicate expiration
@@ -323,10 +327,19 @@ export default function Checkout() {
         lastName = parts.length > 1 ? parts.slice(1).join(' ') : '';
     }
 
-    setShippingAddress({
+    checkoutActions.setAddress({
         ...addressValue,
         firstName,
-        lastName
+        lastName,
+        address: {
+            line1: addressValue.address?.line1 || '',
+            line2: addressValue.address?.line2,
+            city: addressValue.address?.city || '',
+            state: addressValue.address?.state || '',
+            postal_code: addressValue.address?.postal_code || '',
+            country: addressValue.address?.country || '',
+        },
+        phone: addressValue.phone || undefined
     });
   };
 
@@ -456,7 +469,7 @@ export default function Checkout() {
                     items={items}
                     cartTotal={displayCartTotal}
                     onAddressChange={handleAddressChange}
-                    onEmailChange={setGuestEmail}
+                    onEmailChange={(email) => checkoutActions.setEmail(email)}
                     shippingOptions={shippingOptions}
                     selectedShipping={selectedShipping}
                     setSelectedShipping={handleShippingSelect}
