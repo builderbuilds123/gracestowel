@@ -8,6 +8,7 @@
  * - "not_paid": Initial state, no payment attempted
  * - "awaiting": Payment is being processed
  * - "authorized": Payment authorized but not captured (manual capture mode)
+ * - "partially_authorized": Partial amount authorized
  * - "partially_captured": Partial amount captured
  * - "completed": Full payment captured
  * - "canceled": Payment canceled/voided
@@ -21,6 +22,7 @@ export const PaymentCollectionStatus = {
     NOT_PAID: "not_paid",
     AWAITING: "awaiting",
     AUTHORIZED: "authorized",
+    PARTIALLY_AUTHORIZED: "partially_authorized",
     PARTIALLY_CAPTURED: "partially_captured",
     COMPLETED: "completed",
     CANCELED: "canceled",
@@ -125,6 +127,5 @@ export function isTerminalStatus(status: PaymentCollectionStatusType): boolean {
 export function isCancellableStatus(status: PaymentCollectionStatusType): boolean {
     return CANCELLABLE_STATUSES.includes(status);
 }
-
 
 

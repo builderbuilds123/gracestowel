@@ -81,7 +81,7 @@ export function CartDrawer() {
                                                 )}
                                             </div>
                                             <button
-                                                onClick={() => removeFromCart(item.id, item.color)}
+                                                onClick={() => removeFromCart(item.id, item.color, item.variantId)}
                                                 className="text-text-earthy/40 hover:text-red-500 transition-colors"
                                                 aria-label={`Remove ${item.title} from cart`}
                                             >
@@ -152,6 +152,7 @@ export function CartDrawer() {
                         <Link
                             to="/checkout"
                             onClick={toggleCart}
+                            prefetch="intent"
                             className="block w-full py-4 bg-accent-earthy text-white text-center font-semibold rounded hover:bg-accent-earthy/90 transition-colors shadow-lg"
                         >
                             {t('cart.checkout')}

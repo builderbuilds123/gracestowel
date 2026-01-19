@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect } from "react";
 import { monitoredFetch } from "../utils/monitored-fetch";
+import { createLogger } from "../lib/logger";
 
 // Check if in development mode
 const isDevelopment = import.meta.env.MODE === 'development';
 
 interface PaymentCollectionResult {
   paymentCollectionId: string | null;
+  initialPaymentSession: any | null;
   isCreating: boolean;
   error: string | null;
 }
@@ -18,15 +20,18 @@ interface PaymentCollectionResult {
  * 
  * @param cartId - The Medusa cart ID
  * @param isCartSynced - Whether the cart items have been synced to Medusa
- * @returns PaymentCollection state (id, loading, error)
+ * @returns PaymentCollection state (id, loading, error, initialSession)
  */
 export function usePaymentCollection(
   cartId: string | undefined,
   isCartSynced: boolean
 ): PaymentCollectionResult {
   const [paymentCollectionId, setPaymentCollectionId] = useState<string | null>(null);
+  const [initialPaymentSession, setInitialPaymentSession] = useState<any | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  const logger = useRef(createLogger({ context: 'usePaymentCollection' })).current;
 
   // Request ID pattern: ensures only the latest request's result is applied
   const requestIdRef = useRef(0);
@@ -58,7 +63,7 @@ export function usePaymentCollection(
 
       try {
         if (isDevelopment) {
-          console.log("[usePaymentCollection] Creating Payment Collection...", { cartId });
+          logger.info("Creating Payment Collection...", { cartId });
         }
 
         const response = await monitoredFetch("/api/payment-collections", {
@@ -72,7 +77,7 @@ export function usePaymentCollection(
         // Check if this request is still relevant
         if (currentRequestId !== requestIdRef.current) {
           if (isDevelopment) {
-            console.log("[usePaymentCollection] Discarding stale response", { 
+            logger.info("Discarding stale response", { 
               currentRequestId, 
               latestRequestId: requestIdRef.current 
             });
@@ -88,7 +93,7 @@ export function usePaymentCollection(
 
             if (contentType.includes("application/json")) {
               const errorData = await response.json() as { error?: string };
-              console.error("[usePaymentCollection] API Error:", errorData);
+              logger.error("API Error", undefined, errorData as Record<string, unknown>);
               if (errorData) {
                 if (typeof errorData.error === "string" && errorData.error.trim()) {
                   errorMessage = errorData.error;
@@ -98,32 +103,54 @@ export function usePaymentCollection(
               }
             } else {
               const errorText = await response.text().catch(() => "");
-              console.error("[usePaymentCollection] Non-JSON API Error Response:", {
+              logger.error("Non-JSON API Error Response", undefined, {
                 status: response.status,
                 statusText: response.statusText,
                 body: errorText,
               });
             }
           } catch (parseError) {
-            console.error("[usePaymentCollection] Failed to parse error response:", parseError);
+            logger.error("Failed to parse error response", parseError as Error);
           }
 
           throw new Error(errorMessage);
         }
 
-        const data = await response.json() as { payment_collection: { id: string } };
+        const data = await response.json() as { 
+          payment_collection: { 
+            id: string;
+            payment_sessions?: Array<{
+              id: string;
+              provider_id: string;
+              data?: {
+                client_secret?: string;
+                id?: string;
+                [key: string]: unknown;
+              }
+            }>
+          } 
+        };
         
         // Final safety check before state update
         if (currentRequestId !== requestIdRef.current) {
           return;
         }
 
-        const collectionId = data.payment_collection.id;
+        const collection = data.payment_collection;
+        const collectionId = collection.id;
         setPaymentCollectionId(collectionId);
         lastCartIdRef.current = cartId;
 
+        // Optimization: Capture initial Stripe session if present
+        if (collection.payment_sessions?.length) {
+          const stripeSession = collection.payment_sessions.find(s => s.provider_id === "pp_stripe");
+          if (stripeSession) {
+             setInitialPaymentSession(stripeSession);
+          }
+        }
+
         if (isDevelopment) {
-          console.log("[usePaymentCollection] Created:", collectionId);
+          logger.info("Created payment collection", { collectionId });
         }
       } catch (err) {
         // Ignore abort errors
@@ -135,7 +162,7 @@ export function usePaymentCollection(
         if (currentRequestId === requestIdRef.current) {
           const message = err instanceof Error ? err.message : "Failed to initialize payment";
           setError(message);
-          console.error("[usePaymentCollection] Error:", err);
+          logger.error("Error creating payment collection", err as Error);
         }
       } finally {
         // Only update loading state if we're still the relevant request
@@ -159,12 +186,13 @@ export function usePaymentCollection(
   useEffect(() => {
     if (cartId !== lastCartIdRef.current && lastCartIdRef.current !== null) {
       if (isDevelopment) {
-        console.log("[usePaymentCollection] RESET - cartId changed", {
+        logger.info("RESET - cartId changed", {
           oldCartId: lastCartIdRef.current,
           newCartId: cartId,
         });
       }
       setPaymentCollectionId(null);
+      setInitialPaymentSession(null);
       setError(null);
       lastCartIdRef.current = null;
     }
@@ -172,6 +200,7 @@ export function usePaymentCollection(
 
   return {
     paymentCollectionId,
+    initialPaymentSession,
     isCreating,
     error,
   };

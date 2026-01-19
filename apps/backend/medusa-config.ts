@@ -111,5 +111,8 @@ module.exports = defineConfig({
         ],
       },
     },
+    {
+      resolve: "@medusajs/translation",
+    },
   ],
 })

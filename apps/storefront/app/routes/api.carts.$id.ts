@@ -1,10 +1,11 @@
 import { type ActionFunctionArgs, type LoaderFunctionArgs, data } from "react-router";
-import { MedusaCartService } from "../services/medusa-cart";
+import { MedusaCartService, type Cart } from "../services/medusa-cart";
 import type { CartItem } from "../types/product";
 import { isMedusaId } from "../types/product";
 
 interface UpdateCartRequest {
   items?: CartItem[];
+  promo_codes?: string[];
   shipping_address?: {
     first_name: string;
     last_name: string;
@@ -54,9 +55,9 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
     return data({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { items, shipping_address, billing_address, email, region_id, sales_channel_id, metadata } = body;
+  const { items, promo_codes, shipping_address, billing_address, email, region_id, sales_channel_id, metadata } = body;
 
-  if (!items && !shipping_address && !billing_address && !email && !region_id && !sales_channel_id && !metadata) {
+  if (!items && !promo_codes && !shipping_address && !billing_address && !email && !region_id && !sales_channel_id && !metadata) {
     return data({ error: "No update fields provided" }, { status: 400 });
   }
 
@@ -73,7 +74,13 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
       success: boolean;
       items_synced?: number;
       address_updated?: boolean;
+      cart?: Cart | null;
     } = { success: true };
+
+    // Update region first if provided to ensure pricing context for line items
+    if (region_id) {
+      await service.updateCart(cartId, { region_id });
+    }
 
     // Sync items if provided
     if (items && items.length > 0) {
@@ -85,7 +92,7 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
         isValidMedusaId: i.variantId ? isMedusaId(i.variantId) : false 
       })));
       
-      const validItems = items.filter(item => item.variantId && isMedusaId(item.variantId));
+      const validItems = items.filter(item => item.variantId && isMedusaId(item.variantId) && item.quantity > 0);
       
       if (validItems.length !== items.length) {
         console.warn(`[Cart Sync] Filtered out ${items.length - validItems.length} items with invalid variantIds`);
@@ -110,20 +117,22 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
     }
 
     // Update cart details
-    if (shipping_address || billing_address || email || region_id || sales_channel_id || metadata) {
+    if (shipping_address || billing_address || email || sales_channel_id || metadata || promo_codes) {
       const updateData: any = {};
       if (shipping_address)    updateData.shipping_address = shipping_address;
       if (billing_address)     updateData.billing_address = billing_address;
       if (email)               updateData.email = email;
-      if (region_id)           updateData.region_id = region_id;
       if (sales_channel_id)    updateData.sales_channel_id = sales_channel_id;
       if (metadata)            updateData.metadata = metadata;
+      if (promo_codes)         updateData.promo_codes = promo_codes;
       
       await service.updateCart(cartId, updateData);
       if (shipping_address) result.address_updated = true;
       console.log(`Updated cart ${cartId} properties:`, Object.keys(updateData));
     }
 
+    const refreshedCart = await service.getCart(cartId);
+    result.cart = refreshedCart || undefined;
     return data(result, { status: 200 });
 
   } catch (error: any) {

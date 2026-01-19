@@ -11,7 +11,7 @@ import { initStripe, getStripe } from "../lib/stripe";
 import { CheckoutForm, type ShippingOption } from "../components/CheckoutForm";
 import { OrderSummary } from "../components/OrderSummary";
 import { parsePrice } from "../lib/price";
-import { generateTraceId } from "../lib/logger";
+import { generateTraceId, createLogger } from "../lib/logger";
 import { generateCartHash } from "../utils/cart-hash";
 import { useShippingPersistence } from "../hooks/useShippingPersistence";
 import { usePaymentCollection } from "../hooks/usePaymentCollection";
@@ -19,6 +19,7 @@ import { usePaymentSession } from "../hooks/usePaymentSession";
 import { usePromoCode } from "../hooks/usePromoCode";
 import { useAutomaticPromotions } from "../hooks/useAutomaticPromotions";
 import { monitoredFetch } from "../utils/monitored-fetch";
+import type { CartWithPromotions } from "../types/promotion";
 
 
 // Check if in development mode (consistent with codebase pattern)
@@ -56,12 +57,19 @@ export default function Checkout() {
 
   // Session trace ID for logging
   const sessionTraceId = useRef(generateTraceId());
+  
+  // Initialize structured logger
+  const logger = useRef(createLogger({ 
+    traceId: sessionTraceId.current,
+    context: 'CheckoutPage' 
+  })).current;
 
   // Caching mechanism for shipping rates
   const shippingCache = useRef<Map<string, { options: ShippingOption[], cartId: string | undefined }>>(new Map());
 
   // AbortController for cancelling stale shipping requests
   const abortControllerRef = useRef<AbortController | null>(null);
+  const cartUpdateRequestIdRef = useRef(0);
 
   // Shipping & Cart state
   // Initialize cartId from sessionStorage if available (client-side only)
@@ -95,11 +103,14 @@ export default function Checkout() {
   // PROMO-1: Promo code hook for managing promotional codes
   const {
     appliedCodes: appliedPromoCodes,
+    totalDiscount,
     isLoading: isPromoLoading,
     error: promoError,
     successMessage: promoSuccessMessage,
     applyPromoCode,
     removePromoCode,
+    refreshDiscount,
+    syncFromCart: syncPromoFromCart,
   } = usePromoCode({ cartId });
 
   // PROMO-1 Phase 2: Automatic promotions hook
@@ -138,7 +149,7 @@ export default function Checkout() {
       if (cartId) {
         sessionStorage.setItem('medusa_cart_id', cartId);
         if (isDevelopment) {
-          console.log('[Checkout] cartId changed:', cartId);
+          logger.info('cartId changed', { cartId });
         }
       } else {
         // We generally don't remove it unless explicitly expired, but if cartId becomes undefined
@@ -155,7 +166,8 @@ export default function Checkout() {
 
   // Shipping amount from Medusa is in dollars
   const shippingCost = selectedShipping?.amount ?? 0;
-  const finalTotal = cartTotal + shippingCost;
+  // PROMO-1: Subtract discount from final total
+  const finalTotal = cartTotal - totalDiscount + shippingCost;
 
   const hasFiredCheckoutStarted = useRef(false);
 
@@ -187,6 +199,7 @@ export default function Checkout() {
   // Step 1: Create PaymentCollection (once per cart, with request ID pattern)
   const { 
     paymentCollectionId, 
+    initialPaymentSession,
     error: collectionError 
   } = usePaymentCollection(cartId, isCartSynced);
 
@@ -195,14 +208,134 @@ export default function Checkout() {
   // We intentionally do NOT refresh immediately after shipping selection because
   // changing the clientSecret causes Elements to remount and lose user input.
   // The shipping persistence will happen during handleSubmit.
+  // OPTIMIZATION: Pass the initial session from step 1 to avoid a second fetch.
   const shouldCreateSession = isCartSynced;
   const { 
     clientSecret, 
     error: sessionError 
-  } = usePaymentSession(paymentCollectionId, shouldCreateSession);
+  } = usePaymentSession(paymentCollectionId, shouldCreateSession, initialPaymentSession);
 
   // Combine payment errors for display
   const paymentError = collectionError || sessionError;
+
+  const buildUpdatePayload = useCallback((currentItems: typeof items, address: any) => {
+    const payload: {
+      items: typeof currentItems;
+      promo_codes?: string[];
+      region_id?: string;
+      shipping_address?: {
+        first_name: string;
+        last_name: string;
+        address_1: string;
+        address_2?: string;
+        city: string;
+        country_code: string;
+        postal_code: string;
+        province?: string;
+        phone?: string;
+      };
+      email?: string;
+    } = {
+      items: currentItems,
+      shipping_address: address ? {
+        first_name: address.firstName || '',
+        last_name: address.lastName || '',
+        address_1: address.address?.line1 || '',
+        address_2: address.address?.line2,
+        city: address.address?.city || '',
+        country_code: address.address?.country || '',
+        postal_code: address.address?.postal_code || '',
+        province: address.address?.state,
+        phone: address.phone,
+      } : undefined,
+      email: guestEmail,
+    };
+
+    if (regionId) {
+      payload.region_id = regionId;
+    }
+
+    if (appliedPromoCodes.length > 0) {
+      payload.promo_codes = appliedPromoCodes.map((code) => code.code);
+    }
+
+    return payload;
+  }, [appliedPromoCodes, guestEmail, regionId]);
+
+  const updateCartAndSync = useCallback(async (
+    currentCartId: string,
+    currentItems: typeof items,
+    address: any,
+    controller: AbortController,
+    currentRequestId: number
+  ): Promise<boolean> => {
+    if (isDevelopment) {
+      logger.info('Step 2: Updating cart items/address...');
+    }
+
+    const updatePayload = buildUpdatePayload(currentItems, address);
+    const updateResponse = await monitoredFetch(`/api/carts/${currentCartId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updatePayload),
+      label: 'update-cart',
+      signal: controller.signal,
+    });
+
+    const updateResult = await updateResponse.json() as { 
+      error?: string; 
+      details?: string; 
+      code?: string;
+      cart?: CartWithPromotions;
+    };
+
+    if (!updateResponse.ok) {
+      const error = updateResult as { error: string; details?: string; code?: string };
+      logger.error('Step 2 FAILED - Cart update', undefined, error as Record<string, unknown>);
+      
+      // Handle region mismatch - display error instead of creating new cart
+      // CRITICAL: Do NOT reset cartId here as it causes paymentCollectionId reset
+      // and Elements remount, clearing all form inputs
+      if (error.code === 'REGION_MISMATCH') {
+        if (isDevelopment) {
+          logger.info('Region mismatch detected', {
+            code: error.code,
+            details: error.details,
+            action: 'Displaying error without resetting cart to preserve form state',
+          });
+        }
+        setCartSyncError(`This country is not available for your cart region. Please select a different shipping address.`);
+        return false;
+      }
+
+      // Handle Inventory Errors
+      if (error.code === 'INVENTORY_ERROR') {
+        setCartSyncError(`${error.error}: ${error.details}`);
+        return false; 
+      }
+
+      throw new Error(`Cart update failed: ${error.error}`);
+    }
+    
+    // Clear previous errors if successful
+    setCartSyncError(null);
+
+    if (updateResult.cart && typeof updateResult.cart.discount_total === "number") {
+      if (currentRequestId === cartUpdateRequestIdRef.current) {
+        syncPromoFromCart(updateResult.cart);
+      }
+    } else {
+      await refreshDiscount(currentRequestId);
+    }
+
+    if (isDevelopment) {
+      logger.info('Step 2 SUCCESS - Cart updated');
+    }
+
+    // Mark cart as synced ONLY if update succeeded
+    setIsCartSynced(true);
+    return true;
+  }, [buildUpdatePayload, isDevelopment, logger, refreshDiscount, syncPromoFromCart]);
 
   // Fetch shipping rates using new RESTful cart endpoints
   const fetchShippingRates = useCallback(async (currentItems: typeof items, address: any, currentTotal: number) => {
@@ -214,6 +347,7 @@ export default function Checkout() {
     // 2. Create new controller for this request
     const controller = new AbortController();
     abortControllerRef.current = controller;
+    const currentRequestId = ++cartUpdateRequestIdRef.current;
 
     setIsCalculatingShipping(true);
 
@@ -236,7 +370,7 @@ export default function Checkout() {
       let currentCartId = cartId;
       if (!currentCartId) {
         if (isDevelopment) {
-          console.log('[Checkout] Step 1: Creating cart...');
+          logger.info('Step 1: Creating cart...');
         }
         const createResponse = await monitoredFetch("/api/carts", {
           method: "POST",
@@ -252,7 +386,7 @@ export default function Checkout() {
 
         if (!createResponse.ok) {
           const error = await createResponse.json() as { error: string; details?: string };
-          console.error('[Checkout] Step 1 FAILED - Cart creation:', error);
+          logger.error('Step 1 FAILED - Cart creation', undefined, error as Record<string, unknown>);
           throw new Error(`Cart creation failed: ${error.error}`);
         }
 
@@ -261,77 +395,16 @@ export default function Checkout() {
         setCartId(cart_id);
         setIsCartSynced(false); // Reset sync state for new cart
         if (isDevelopment) {
-          console.log('[Checkout] Step 1 SUCCESS - Cart created:', cart_id);
+          logger.info('Step 1 SUCCESS - Cart created', { cart_id });
         }
       }
 
       // Step 2: Update cart with items and address
       if (currentItems.length > 0 || address || guestEmail) {
-        if (isDevelopment) {
-          console.log('[Checkout] Step 2: Updating cart items/address...');
+        const didSync = await updateCartAndSync(currentCartId, currentItems, address, controller, currentRequestId);
+        if (!didSync) {
+          return;
         }
-        const updateResponse = await monitoredFetch(`/api/carts/${currentCartId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            items: currentItems,
-            shipping_address: address ? {
-              first_name: address.firstName || '',
-              last_name: address.lastName || '',
-              address_1: address.address?.line1 || '',
-              address_2: address.address?.line2,
-              city: address.address?.city || '',
-              country_code: address.address?.country || '',
-              postal_code: address.address?.postal_code || '',
-              province: address.address?.state,
-              phone: address.phone,
-            } : undefined,
-            email: guestEmail, // CUST-01 FIX: Sync email to cart
-          }),
-          label: 'update-cart',
-          signal: controller.signal,
-        });
-
-        if (!updateResponse.ok) {
-          const error = await updateResponse.json() as { error: string; details?: string; code?: string };
-          console.error('[Checkout] Step 2 FAILED - Cart update:', error);
-          
-          // Handle region mismatch - display error instead of creating new cart
-          // CRITICAL: Do NOT reset cartId here as it causes paymentCollectionId reset
-          // and Elements remount, clearing all form inputs
-          if (error.code === 'REGION_MISMATCH') {
-            if (isDevelopment) {
-              console.log('[Checkout] Region mismatch detected:', {
-                code: error.code,
-                details: error.details,
-                action: 'Displaying error without resetting cart to preserve form state',
-              });
-            }
-            setCartSyncError(`This country is not available for your cart region. Please select a different shipping address.`);
-            // Don't throw - let user correct the address
-            return;
-          }
-
-          // Handle Inventory Errors
-          if (error.code === 'INVENTORY_ERROR') {
-             setCartSyncError(`${error.error}: ${error.details}`);
-             // Don't throw, just let the user know and maybe block checkout or allow them to fix
-             // If we throw, it might retry loops. We want to stop and show error.
-             return; 
-          }
-
-          throw new Error(`Cart update failed: ${error.error}`);
-        }
-        
-        // Clear previous errors if successful
-        setCartSyncError(null);
-
-        if (isDevelopment) {
-          console.log('[Checkout] Step 2 SUCCESS - Cart updated');
-        }
-
-        // Mark cart as synced ONLY if update succeeded
-        setIsCartSynced(true);
       } else {
         // No items to sync, but cart exists - still mark as synced
         setIsCartSynced(true);
@@ -339,7 +412,7 @@ export default function Checkout() {
 
       // Step 3: Get shipping options (cacheable GET request)
       if (isDevelopment) {
-        console.log('[Checkout] Step 3: Fetching shipping options...');
+        logger.info('Step 3: Fetching shipping options...');
       }
       const optionsResponse = await monitoredFetch(`/api/carts/${currentCartId}/shipping-options`, {
         method: "GET",
@@ -349,7 +422,7 @@ export default function Checkout() {
 
       if (!optionsResponse.ok) {
         const error = await optionsResponse.json() as { error: string; details?: string };
-        console.error('[Checkout] Step 3 FAILED - Fetching shipping options:', error);
+        logger.error('Step 3 FAILED - Fetching shipping options', undefined, error as Record<string, unknown>);
         throw new Error(`Shipping options fetch failed: ${error.error}`);
       }
 
@@ -359,7 +432,7 @@ export default function Checkout() {
       };
       
       if (isDevelopment) {
-        console.log('[Checkout] Step 3 SUCCESS - Got', shipping_options.length, 'shipping options');
+        logger.info('Step 3 SUCCESS', { count: shipping_options.length });
       }
 
       setShippingOptions(shipping_options);
@@ -385,7 +458,7 @@ export default function Checkout() {
           // Ignore abort errors as they are expected when typing fast
           return;
       }
-      console.error("[Checkout] Shipping rates error:", error);
+      logger.error('Shipping rates error', error as Error);
     } finally {
       // Only turn off loading if THIS was the latest request
       // (Though with abort controller, effectively only one finishes)
@@ -393,7 +466,7 @@ export default function Checkout() {
          setIsCalculatingShipping(false);
       }
     }
-  }, [currency, cartId, selectedShipping, handleShippingSelect, guestEmail]);
+  }, [currency, cartId, selectedShipping, handleShippingSelect, guestEmail, updateCartAndSync, regionId]);
 
   // Effect to trigger shipping fetch when items or address change
   // Uses direct setTimeout architecture for robust debouncing
@@ -407,6 +480,8 @@ export default function Checkout() {
 
     return () => clearTimeout(timer);
   }, [items, shippingAddress, cartTotal, fetchShippingRates, guestEmail]);
+
+  // PROMO-1: Promo discounts are synced from the cart update response to avoid stale reads.
 
   // Handler for address changes from Stripe Address Element
   const handleAddressChange = async (event: StripeAddressElementChangeEvent) => {
@@ -629,6 +704,7 @@ export default function Checkout() {
             isPromoLoading={isPromoLoading}
             promoError={promoError}
             promoSuccessMessage={promoSuccessMessage}
+            discountTotal={totalDiscount}
             automaticPromotions={automaticPromotions}
           />
         </div>

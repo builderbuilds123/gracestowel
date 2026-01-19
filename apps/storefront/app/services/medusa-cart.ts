@@ -221,6 +221,7 @@ export class MedusaCartService {
     region_id?: string;
     sales_channel_id?: string;
     metadata?: Record<string, any>;
+    promo_codes?: string[];
   }): Promise<Cart> {
     return retry(async () => {
         try {

@@ -30,6 +30,9 @@ export default defineConfig({
   esbuild: {
     jsx: "automatic",
   },
+  server: {
+    host: process.env.VITE_DEV_HOST || "127.0.0.1",
+  },
   // Pre-bundle dependencies that are dynamically imported to prevent
   // Vite from triggering hot reload during user flows (e.g., checkout)
   optimizeDeps: {
@@ -39,4 +42,3 @@ export default defineConfig({
     ],
   },
 });
-

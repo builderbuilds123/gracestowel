@@ -1,7 +1,7 @@
 import { data } from "react-router";
-import { useLoaderData, useRevalidator, useNavigate } from "react-router";
+import { useLoaderData, useRevalidator, useNavigate, useActionData, useSubmit } from "react-router";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { CheckCircle2, MapPin, Package, Truck, AlertCircle } from "lucide-react";
 import { OrderTimer } from "../components/order/OrderTimer";
 import { OrderModificationDialogs } from "../components/order/OrderModificationDialogs";
@@ -10,6 +10,7 @@ import { monitoredFetch } from "../utils/monitored-fetch";
 
 interface LoaderData {
     order: any;
+    token: string;
     modification_window: {
         status: "active" | "expired";
         expires_at: string;
@@ -203,63 +204,53 @@ export async function action({ params, request, context }: ActionFunctionArgs) {
                 return data({ success: false, error: "No changes to save" }, { status: 400 });
             }
 
-            let lastResult: { new_total?: number } | null = null;
+            // Story 15: Migration to Order Edit API
             let itemsUpdated = 0;
 
             for (const update of updates) {
-                const response = await monitoredFetch(`${medusaBackendUrl}/store/orders/${id}/line-items/update`, {
+                // /store/orders/:id/edit/items/:item_id
+                const response = await monitoredFetch(`${medusaBackendUrl}/store/orders/${id}/edit/items/${update.item_id}`, {
                     method: "POST",
                     headers,
-                    body: JSON.stringify({ item_id: update.item_id, quantity: update.quantity }),
-                    label: "order-update-quantity",
+                    body: JSON.stringify({ quantity: update.quantity }),
+                    label: "order-edit-update-quantity",
                     cloudflareEnv: env,
                 });
 
                 if (!response.ok) {
-                    const errorData = await response.json() as { message?: string; type?: string; retryable?: boolean };
-                    if (response.status === 401 || response.status === 403) {
-                         return data(
-                            { success: false, error: errorData.message || "Authorization failed", itemsUpdated },
-                            { status: response.status, headers: { "Set-Cookie": await clearGuestToken(id!) } }
-                        );
-                    }
-                    
-                    if (response.status === 402) {
-                         const partialNote = itemsUpdated > 0 
-                            ? ` (${itemsUpdated} item${itemsUpdated > 1 ? 's' : ''} updated before this error)`
-                            : '';
-                        return data({ 
-                            success: false, 
-                            error: `${errorData.message}${partialNote}`,
-                            retryable: errorData.retryable,
-                            errorType: "payment_error",
-                            itemsUpdated
-                        }, { status: 402 });
-                    }
-
-                    const partialNote = itemsUpdated > 0 
-                        ? ` (${itemsUpdated} item${itemsUpdated > 1 ? 's' : ''} updated before this error)`
-                        : '';
-                    return data({ success: false, error: `${errorData.message || "Failed to update item"}${partialNote}`, itemsUpdated }, { status: 400 });
+                    const errorData = await response.json() as { message?: string };
+                    return data({ success: false, error: errorData.message || "Failed to update item", itemsUpdated }, { status: 400 });
                 }
-
-                lastResult = await response.json() as { new_total?: number };
                 itemsUpdated++;
             }
 
-            return data({ 
-                success: true, 
-                action: "items_updated", 
-                new_total: lastResult?.new_total,
-                itemsUpdated
+            // After all updates, attempt to auto-confirm (or check if payment needed)
+            const confirmRes = await monitoredFetch(`${medusaBackendUrl}/store/orders/${id}/edit/confirm`, {
+                method: "POST",
+                headers,
+                label: "order-edit-confirm",
+                cloudflareEnv: env,
             });
+
+            if (!confirmRes.ok) {
+                const errorData = await confirmRes.json() as { message?: string };
+                 return data({ success: false, error: errorData.message || "Failed to confirm changes" }, { status: 400 });
+            }
+
+            const confirmData = await confirmRes.json() as { status: string; payment_collection?: any };
+            
+            if (confirmData.status === "payment_required") {
+                return data({ 
+                    success: true, 
+                    action: "payment_required", 
+                    payment_collection: confirmData.payment_collection 
+                });
+            }
+
+            return data({ success: true, action: "items_updated", itemsUpdated });
         }
 
         if (intent === "ADD_ITEMS") {
-            // JIT logistics: Process all items for smooth UX
-            // Each item is added sequentially to maintain order integrity
-            // Note: If item N fails after items 1..N-1 succeed, partial state is committed
-            // TODO: Backlog item for batch endpoint with atomic multi-item support
             let items: Array<{ variant_id: string; quantity: number }>;
             try {
                 const itemsData = JSON.parse(formData.get("items") as string);
@@ -277,57 +268,64 @@ export async function action({ params, request, context }: ActionFunctionArgs) {
                 return data({ success: false, error: "No items to add" }, { status: 400 });
             }
 
-            let lastResult: { order?: { total?: number } } | null = null;
             let itemsAdded = 0;
             
             for (const item of items) {
-                const response = await monitoredFetch(`${medusaBackendUrl}/store/orders/${id}/line-items`, {
+                const response = await monitoredFetch(`${medusaBackendUrl}/store/orders/${id}/edit/items`, {
                     method: "POST",
                     headers,
                     body: JSON.stringify({ variant_id: item.variant_id, quantity: item.quantity }),
-                    label: "order-add-line-item",
+                    label: "order-edit-add-item",
                     cloudflareEnv: env,
                 });
 
                 if (!response.ok) {
-                    const errorData = await response.json() as { message?: string; type?: string; retryable?: boolean };
-                    if (response.status === 401 || response.status === 403) {
-                        return data(
-                            { success: false, error: errorData.message || "Authorization failed", itemsAdded },
-                            { status: response.status, headers: { "Set-Cookie": await clearGuestToken(id!) } }
-                        );
-                    }
-                    // Story 6.4: Handle payment declined errors with user-friendly message
-                    // Note: itemsAdded > 0 means partial success - those items ARE committed
-                    if (response.status === 402 && errorData.type === "payment_error") {
-                        const partialNote = itemsAdded > 0 
-                            ? ` (${itemsAdded} item${itemsAdded > 1 ? 's' : ''} added successfully before this error)`
-                            : '';
-                        return data({ 
-                            success: false, 
-                            error: `${errorData.message}${partialNote}`,
-                            retryable: errorData.retryable,
-                            errorType: "payment_error",
-                            itemsAdded
-                        }, { status: 402 });
-                    }
-                    const partialNote = itemsAdded > 0 
-                        ? ` (${itemsAdded} item${itemsAdded > 1 ? 's' : ''} added successfully before this error)`
-                        : '';
-                    return data({ success: false, error: `${errorData.message || "Failed to add item"}${partialNote}`, itemsAdded }, { status: 400 });
+                    const errorData = await response.json() as { message?: string };
+                    return data({ success: false, error: errorData.message || "Failed to add item", itemsAdded }, { status: 400 });
                 }
-
-                lastResult = await response.json() as { order?: { total?: number } };
                 itemsAdded++;
             }
 
-            // All items added successfully
-            return data({ 
-                success: true, 
-                action: "items_added", 
-                new_total: lastResult?.order?.total,
-                itemsAdded
+            // Confirm
+            const confirmRes = await monitoredFetch(`${medusaBackendUrl}/store/orders/${id}/edit/confirm`, {
+                method: "POST",
+                headers,
+                label: "order-edit-confirm",
+                cloudflareEnv: env,
             });
+
+            if (!confirmRes.ok) {
+                const errorData = await confirmRes.json() as { message?: string };
+                 return data({ success: false, error: errorData.message || "Failed to confirm changes" }, { status: 400 });
+            }
+
+            const confirmData = await confirmRes.json() as { status: string; payment_collection?: any };
+            
+            if (confirmData.status === "payment_required") {
+                return data({ 
+                    success: true, 
+                    action: "payment_required", 
+                    payment_collection: confirmData.payment_collection 
+                });
+            }
+
+            return data({ success: true, action: "items_added", itemsAdded });
+        }
+
+        if (intent === "CONFIRM_EDIT") {
+            const confirmRes = await monitoredFetch(`${medusaBackendUrl}/store/orders/${id}/edit/confirm`, {
+                method: "POST",
+                headers,
+                label: "order-edit-auto-confirm",
+                cloudflareEnv: env,
+            });
+
+            if (!confirmRes.ok) {
+                const errorData = await confirmRes.json() as { message?: string };
+                 return data({ success: false, error: errorData.message || "Failed to confirm changes" }, { status: 400 });
+            }
+
+            return data({ success: true, action: "items_updated" });
         }
 
         return data({ success: false, error: "Unknown intent" }, { status: 400 });
@@ -370,6 +368,28 @@ export default function OrderStatus() {
     const [orderDetails, setOrderDetails] = useState(order);
     const [shippingAddress, setShippingAddress] = useState(order.shipping_address);
     const isModificationActive = modification_window.status === "active";
+    const submit = useSubmit();
+    const actionData = useActionData<any>();
+
+    // Handle automatic confirmation after successful payment redirect
+    useEffect(() => {
+        const url = new URL(window.location.href);
+        if (url.searchParams.get("payment_success") === "true") {
+            // Remove the query param to prevent multiple submissions
+            url.searchParams.delete("payment_success");
+            window.history.replaceState({}, "", url.pathname + url.search);
+            
+            // Confirm the order edit
+            submit({ intent: "CONFIRM_EDIT" }, { method: "POST" });
+        }
+    }, [submit]);
+
+    // Handle generic action success (like auto-confirm)
+    useEffect(() => {
+        if (actionData?.success) {
+            revalidator.revalidate();
+        }
+    }, [actionData, revalidator]);
 
     // Callbacks to update local state
     const handleOrderUpdate = (newTotal?: number) => {
@@ -409,6 +429,8 @@ export default function OrderStatus() {
                             currencyCode={orderDetails.currency_code}
                             items={orderDetails.items}
                             currentAddress={shippingAddress}
+                            token={loaderData.token}
+                            stripePublishableKey={loaderData.env?.STRIPE_PUBLISHABLE_KEY || ""}
                             onOrderUpdated={handleOrderUpdate}
                             onAddressUpdated={setShippingAddress}
                             onOrderCanceled={() => navigate("/")}

@@ -11,7 +11,7 @@ interface CartContextType {
     isOpen: boolean;
     isLoaded: boolean;
     addToCart: (item: Omit<CartItem, 'quantity'> & { quantity?: number }) => void;
-    removeFromCart: (id: ProductId, color?: string) => void;
+    removeFromCart: (id: ProductId, color?: string, variantId?: string) => void;
     updateQuantity: (id: ProductId, quantity: number, color?: string, variantId?: string) => void;
     toggleCart: () => void;
     clearCart: () => void;
@@ -30,6 +30,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         if (!item.id) return false;
         if (!item.title || typeof item.title !== 'string') return false;
         if (!item.price || typeof item.price !== 'string') return false;
+        if (typeof item.quantity !== 'number' || item.quantity <= 0) return false;
         return true;
     };
 
@@ -62,40 +63,57 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     }, [items]);
 
     const addToCart = (newItem: Omit<CartItem, 'quantity'> & { quantity?: number }) => {
+        const quantityToAdd = newItem.quantity ?? 1;
+        const itemToAdd = { ...newItem, quantity: quantityToAdd };
         // Fail loudly if inputs are invalid (User Requirement)
-        if (!validateCartItem(newItem)) {
-            const error = `Attempted to add invalid item to cart: ${JSON.stringify(newItem)}`;
+        if (!validateCartItem(itemToAdd)) {
+            const error = `Attempted to add invalid item to cart: ${JSON.stringify(itemToAdd)}`;
             console.error(error);
             throw new Error(error);
         }
 
         setItems(prevItems => {
-            const quantityToAdd = newItem.quantity || 1;
-            const existingItem = prevItems.find(item =>
-                productIdsEqual(item.id, newItem.id) && item.color === newItem.color
-            );
+            const existingItem = prevItems.find(item => {
+                if (newItem.variantId && item.variantId) {
+                    return item.variantId === newItem.variantId;
+                }
+                if (newItem.variantId || item.variantId) {
+                    return false;
+                }
+                return productIdsEqual(item.id, newItem.id) && item.color === newItem.color;
+            });
             if (existingItem) {
                 return prevItems.map(item =>
-                    productIdsEqual(item.id, newItem.id) && item.color === newItem.color
+                    ((newItem.variantId && item.variantId)
+                        ? item.variantId === newItem.variantId
+                        : !newItem.variantId && !item.variantId && productIdsEqual(item.id, newItem.id) && item.color === newItem.color)
                         ? { ...item, quantity: item.quantity + quantityToAdd }
                         : item
                 );
             }
-            return [...prevItems, { ...newItem, quantity: quantityToAdd }];
+            return [...prevItems, itemToAdd];
         });
         setIsOpen(true);
     };
 
-    const removeFromCart = (id: ProductId, color?: string) => {
+    const removeFromCart = (id: ProductId, color?: string, variantId?: string) => {
         setItems(prevItems => prevItems.filter(item => {
-            if (color !== undefined) {
-                return !(productIdsEqual(item.id, id) && item.color === color);
+            if (variantId) {
+                return item.variantId !== variantId;
             }
-            return !productIdsEqual(item.id, id);
+            if (color !== undefined) {
+                return !(productIdsEqual(item.id, id) && item.color === color && !item.variantId);
+            }
+            return !(productIdsEqual(item.id, id) && !item.variantId);
         }));
     };
 
     const updateQuantity = (id: ProductId, quantity: number, color?: string, variantId?: string) => {
+        if (quantity <= 0) {
+            removeFromCart(id, color);
+            return;
+        }
+
         setItems(prevItems =>
             prevItems.map(item => {
                 let isMatch = false;

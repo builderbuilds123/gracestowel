@@ -5,6 +5,7 @@ import { CancelRejectedModal } from "./CancelRejectedModal";
 import { EditAddressDialog } from "../EditAddressDialog";
 import { AddItemsDialog } from "../AddItemsDialog";
 import { EditItemsDialog } from "./EditItemsDialog";
+import { OrderEditPaymentDialog } from "./OrderEditPaymentDialog";
 import { Pencil, Plus, ShoppingBag } from "lucide-react";
 
 interface Address {
@@ -31,6 +32,14 @@ interface ActionData {
     errorType?: string;
     itemsAdded?: number;
     itemsUpdated?: number;
+    payment_collection?: {
+        amount: number;
+        payment_sessions?: Array<{
+            data?: {
+                client_secret?: string;
+            };
+        }>;
+    };
 }
 
 interface OrderItem {
@@ -49,6 +58,8 @@ interface OrderModificationDialogsProps {
     currencyCode: string;
     items?: OrderItem[]; // Made optional to prevent breaking if not passed yet
     currentAddress?: Address;
+    token: string;
+    stripePublishableKey: string;
     onOrderUpdated: (newTotal?: number) => void;
     onAddressUpdated: (address: Address) => void;
     onOrderCanceled: () => void;
@@ -68,6 +79,8 @@ export function OrderModificationDialogs({
     currencyCode,
     items = [],
     currentAddress,
+    token,
+    stripePublishableKey,
     onOrderUpdated,
     onAddressUpdated,
     onOrderCanceled,
@@ -77,6 +90,8 @@ export function OrderModificationDialogs({
     const [showEditAddressDialog, setShowEditAddressDialog] = useState(false);
     const [showAddItemsDialog, setShowAddItemsDialog] = useState(false);
     const [showEditItemsDialog, setShowEditItemsDialog] = useState(false);
+    const [showPaymentDialog, setShowPaymentDialog] = useState(false);
+    const [pendingPayment, setPendingPayment] = useState<{ amount: number; clientSecret: string } | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [isRetryable, setIsRetryable] = useState<boolean>(false);
     const [isPaymentError, setIsPaymentError] = useState<boolean>(false);
@@ -102,6 +117,21 @@ export function OrderModificationDialogs({
                 } else if (fetcher.data.action === "items_updated") {
                     setShowEditItemsDialog(false);
                     onOrderUpdated(fetcher.data.new_total);
+                } else if (fetcher.data.action === "payment_required" && fetcher.data.payment_collection) {
+                    const paymentSession = fetcher.data.payment_collection.payment_sessions?.[0];
+                    const clientSecret = paymentSession?.data?.client_secret;
+                    if (clientSecret) {
+                        setPendingPayment({
+                            amount: fetcher.data.payment_collection.amount,
+                            clientSecret
+                        });
+                        setShowPaymentDialog(true);
+                        // Close other dialogs
+                        setShowAddItemsDialog(false);
+                        setShowEditItemsDialog(false);
+                    } else {
+                        setError("Payment session initialized but client secret missing.");
+                    }
                 }
             } else if (fetcher.data.error) {
                 // Story 3.5: Handle order_shipped error specifically with a modal
@@ -256,6 +286,19 @@ export function OrderModificationDialogs({
                 items={items}
                 currencyCode={currencyCode}
             />
+
+            {pendingPayment && (
+                <OrderEditPaymentDialog
+                    isOpen={showPaymentDialog}
+                    onClose={() => setShowPaymentDialog(false)}
+                    clientSecret={pendingPayment.clientSecret}
+                    stripePublishableKey={stripePublishableKey}
+                    orderId={orderId}
+                    token={token}
+                    amount={pendingPayment.amount}
+                    currencyCode={currencyCode}
+                />
+            )}
         </>
     );
 }

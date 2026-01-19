@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { monitoredFetch } from "../utils/monitored-fetch";
+import { createLogger } from "../lib/logger";
 
 // Check if in development mode
 const isDevelopment = import.meta.env.MODE === 'development';
@@ -40,12 +41,16 @@ interface PaymentSessionResponse {
  */
 export function usePaymentSession(
   paymentCollectionId: string | null,
-  shouldCreateSession: boolean
+  shouldCreateSession: boolean,
+  initialSession: PaymentSessionData | null = null
 ): PaymentSessionResult {
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [paymentIntentId, setPaymentIntentId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
   const [error, setError] = useState<string | null>(null);
+  
+  const logger = useRef(createLogger({ context: 'usePaymentSession' })).current;
 
   // Track if we've created the initial session (to avoid re-creating)
   const hasCreatedSession = useRef(false);
@@ -69,6 +74,24 @@ export function usePaymentSession(
     // Determine if we should create a new session or refresh existing
     const isRefresh = hasCreatedSession.current;
 
+    // Optimization: Use initial session if provided and not yet created
+    if (initialSession && !hasCreatedSession.current && !clientSecret) {
+       if (isDevelopment) {
+         logger.info("Using initial session from collection", { 
+           id: initialSession.id 
+         });
+       }
+       
+       if (initialSession.data?.client_secret) {
+          setClientSecret(initialSession.data.client_secret);
+          setPaymentIntentId(initialSession.id);
+          hasCreatedSession.current = true;
+          return;
+       }
+    }
+
+
+
     const syncPaymentSession = async () => {
       // Safety check: ensure we're still the latest request
       if (currentRequestId !== requestIdRef.current) {
@@ -80,7 +103,7 @@ export function usePaymentSession(
 
       try {
         if (isDevelopment) {
-          console.log("[usePaymentSession] Syncing Payment Session...", {
+          logger.info("Syncing Payment Session...", {
             paymentCollectionId,
             isRefresh,
           });
@@ -101,7 +124,7 @@ export function usePaymentSession(
         // Check if this request is still relevant
         if (currentRequestId !== requestIdRef.current) {
           if (isDevelopment) {
-            console.log("[usePaymentSession] Discarding stale response", {
+            logger.info("Discarding stale response", {
               currentRequestId,
               latestRequestId: requestIdRef.current,
             });
@@ -130,13 +153,13 @@ export function usePaymentSession(
               errorBody = await response.text();
             }
           } catch (parseError) {
-            console.error(
-              "[usePaymentSession] Failed to parse error response",
-              parseError
+            logger.error(
+              "Failed to parse error response",
+              parseError as Error
             );
           }
 
-          console.error("[usePaymentSession] API Error:", errorBody);
+          logger.error("API Error", undefined, errorBody as Record<string, unknown>);
           throw new Error(errorMessage);
         }
 
@@ -169,7 +192,7 @@ export function usePaymentSession(
         setClientSecret(stripeSession.data.client_secret);
         
         if (isDevelopment) {
-          console.log("[usePaymentSession] clientSecret updated", {
+          logger.info("clientSecret updated", {
             isRefresh,
             secretPrefix: stripeSession.data.client_secret.substring(0, 8) + "****",
           });
@@ -181,7 +204,7 @@ export function usePaymentSession(
         }
 
         if (isDevelopment) {
-          console.log("[usePaymentSession] Session synced successfully");
+          logger.info("Session synced successfully");
         }
       } catch (err) {
         // Ignore abort errors
@@ -195,7 +218,7 @@ export function usePaymentSession(
             ? err.message 
             : "Failed to initialize payment session";
           setError(message);
-          console.error("[usePaymentSession] Error:", err);
+          logger.error("Error", err as Error);
         }
       } finally {
         // Only update loading state if we're still the relevant request
@@ -211,7 +234,7 @@ export function usePaymentSession(
     return () => {
       controller.abort();
     };
-  }, [paymentCollectionId, shouldCreateSession]);
+  }, [paymentCollectionId, shouldCreateSession, initialSession]);
 
   return {
     clientSecret,

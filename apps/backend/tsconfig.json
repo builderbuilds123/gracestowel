@@ -17,15 +17,9 @@
     "forceConsistentCasingInFileNames": true,
     "baseUrl": ".",
     "paths": {
-      "@medusajs/framework/utils": [
-        "node_modules/@medusajs/framework/utils"
-      ],
-      "@medusajs/framework/*": [
-        "node_modules/@medusajs/framework/*"
-      ],
-      "@medusajs/*": [
-        "node_modules/@medusajs/*"
-      ]
+      "@medusajs/framework/utils": ["node_modules/@medusajs/framework/utils"],
+      "@medusajs/framework/*": ["node_modules/@medusajs/framework/*"],
+      "@medusajs/*": ["node_modules/@medusajs/*"]
     },
     "checkJs": false,
     "strictNullChecks": true,
@@ -34,15 +28,13 @@
   "ts-node": {
     "swc": true
   },
-  "include": [
-    "**/*",
-    ".medusa/types/*"
-  ],
+  "include": ["**/*", ".medusa/types/*"],
   "exclude": [
     "node_modules",
     ".medusa/server",
     ".medusa/admin",
     ".cache",
+    ".medusa/types/policy-bindings.d.ts",
     "**/__tests__",
     "**/*.spec.ts",
     "**/*.test.ts"
