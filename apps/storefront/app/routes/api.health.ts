@@ -12,8 +12,8 @@ export async function loader({ context }: LoaderFunctionArgs) {
     const health: Record<string, unknown> = {
         status: "ok",
         timestamp: new Date().toISOString(),
-        environment: process.env.NODE_ENV || "unknown",
-        medusaUrl: env?.MEDUSA_BACKEND_URL || process.env.MEDUSA_BACKEND_URL || "not configured",
+        environment: import.meta.env.MODE || "unknown",
+        medusaUrl: env?.MEDUSA_BACKEND_URL || import.meta.env.VITE_MEDUSA_BACKEND_URL || "not configured",
     };
 
     // Test Medusa API connection

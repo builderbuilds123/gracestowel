@@ -194,7 +194,7 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
 
     return data({
       error: "Failed to update cart",
-      details: process.env.NODE_ENV === 'development' ? err.message : undefined,
+      details: import.meta.env.DEV ? err.message : undefined,
     }, { status: 502 }); // 502 indicates upstream (Medusa) failure
   }
 }

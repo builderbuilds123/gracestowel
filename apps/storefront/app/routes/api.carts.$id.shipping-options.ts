@@ -55,7 +55,7 @@ export async function loader({ params, context }: LoaderFunctionArgs) {
     
     return data({
       error: status === 404 ? "Resource not found" : "Failed to fetch shipping options",
-      details: (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test') ? error.message : undefined,
+      details: (import.meta.env.DEV || import.meta.env.MODE === 'test') ? error.message : undefined,
     }, { status });
   }
 }

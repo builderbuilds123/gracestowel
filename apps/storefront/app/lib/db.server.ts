@@ -28,7 +28,7 @@ export const getDbClient = async (context: CloudflareContext) => {
     }
 
     // Fallback to direct connection (local development)
-    const url = context?.cloudflare?.env?.DATABASE_URL || process.env.DATABASE_URL;
+    const url = context?.cloudflare?.env?.DATABASE_URL || import.meta.env.DATABASE_URL;
     if (!url) {
         throw new Error("DATABASE_URL not set – ensure .dev.vars is configured or Hyperdrive is bound");
     }

@@ -56,7 +56,8 @@ describe('Medusa Client Factory', () => {
       expect(getBackendUrl()).toBe('https://api.window.com');
     });
 
-    it('should fallback to process.env', () => {
+    it('should fallback to build-time env vars (import.meta.env)', () => {
+      // Vitest polyfills import.meta.env from process.env
       process.env.VITE_MEDUSA_BACKEND_URL = 'https://api.process.com';
       expect(getBackendUrl()).toBe('https://api.process.com');
     });
