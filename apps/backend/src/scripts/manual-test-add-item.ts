@@ -1,23 +1,41 @@
 
+/* eslint-disable es/no-modules, es/no-async-functions, es/no-destructuring, es/no-block-scoping */
 import { ExecArgs } from "@medusajs/framework/types";
-import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
+import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import { createOrdersWorkflow } from "@medusajs/core-flows";
 import { guestOrderEditService } from "../services/guest-order-edit";
 
-export default async function manualTestAddItem({ container }: ExecArgs) {
+type QueryService = {
+    graph: <T>(input: unknown) => Promise<{ data: T[] }>;
+};
+
+export default async function manualTestAddItem(args: ExecArgs): Promise<null> {
+    const container = args.container;
+    if (!container || typeof container.resolve !== "function") {
+        throw new Error("Container is not available");
+    }
     const logger = container.resolve(ContainerRegistrationKeys.LOGGER);
-    const query = container.resolve(ContainerRegistrationKeys.QUERY);
+    const query = container.resolve(ContainerRegistrationKeys.QUERY) as QueryService;
+    if (!query || typeof query.graph !== "function") {
+        throw new Error("Query service is not available");
+    }
     
     // 1. Get Variant
-    const { data: variants } = await query.graph({
+    const variantsResult = await query.graph<{ id: string }>({
         entity: "product_variant",
         fields: ["id"],
         pagination: { take: 1 }
     });
-    const variantId = variants[0].id;
+    const variants = variantsResult.data || [];
+    const variantId = variants[0]?.id;
+    if (!variantId) {
+        logger.error("Variant ID missing from query result");
+        return null;
+    }
 
     // 2. Create Order
-    const { data: regions } = await query.graph({ entity: "region", fields: ["id"], pagination: { take: 1 } });
+    const regionsResult = await query.graph<{ id: string }>({ entity: "region", fields: ["id"], pagination: { take: 1 } });
+    const regions = regionsResult.data || [];
     const regionId = regions[0].id;
 
     const { result: order } = await createOrdersWorkflow(container).run({
@@ -37,12 +55,16 @@ export default async function manualTestAddItem({ container }: ExecArgs) {
     // 4. Add Item (Service) with Try/Catch
     try {
         logger.info("Adding Item...");
-        const res = await guestOrderEditService.addItem(container, edit.id, variantId, 1);
+        const res = await guestOrderEditService.addItem(container, order.id, variantId, 1);
         logger.info("Item Added Successfully");
         console.log(res);
-    } catch (e: any) {
-        logger.error("Failed to Add Item");
-        console.error("Full Error:", e);
-        if (e.errors) console.error("Validation Errors:", JSON.stringify(e.errors, null, 2));
+    } catch (err: unknown) {
+        const error = err instanceof Error ? err : new Error(String(err));
+        logger.error("Failed to Add Item", error);
+        const errors = typeof err === "object" && err !== null && "errors" in err ? (err as { errors?: unknown }).errors : undefined;
+        if (errors) {
+            console.error("Validation Errors:", JSON.stringify(errors, null, 2));
+        }
     }
+    return null;
 }

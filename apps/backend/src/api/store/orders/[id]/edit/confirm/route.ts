@@ -1,6 +1,7 @@
 
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { guestOrderEditService } from "../../../../../../services/guest-order-edit";
+import { logger } from "../../../../../../utils/logger";
 
 export async function POST(
     req: MedusaRequest,
@@ -44,13 +45,11 @@ export async function POST(
         res.status(200).json(result);
 
     } catch (error) {
-        const errorDetail = error instanceof Error ? error.message : JSON.stringify(error, Object.getOwnPropertyNames(error));
-        console.error("Confirm Edit Error:", JSON.stringify(error, null, 2));
+        const safeError = error instanceof Error ? error : new Error(String(error));
+        logger.error("order-edit-confirm", "Failed to confirm order edit", { orderId: id }, safeError);
         res.status(500).json({
             code: "INTERNAL_ERROR",
             message: "Failed to confirm order edit",
-            details: errorDetail,
-            raw: JSON.stringify(error) 
         });
     }
 }

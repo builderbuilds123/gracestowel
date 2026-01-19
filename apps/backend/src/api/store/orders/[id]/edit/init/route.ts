@@ -1,6 +1,7 @@
 
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { guestOrderEditService } from "../../../../../../services/guest-order-edit";
+import { logger } from "../../../../../../utils/logger";
 
 export async function POST(
     req: MedusaRequest,
@@ -32,10 +33,11 @@ export async function POST(
             order_edit: orderEdit,
         });
     } catch (error) {
+        const safeError = error instanceof Error ? error : new Error(String(error));
+        logger.error("order-edit-init", "Failed to initialize order edit", { orderId: id }, safeError);
         res.status(500).json({
             code: "INTERNAL_ERROR",
             message: "Failed to initialize order edit",
-            details: error instanceof Error ? error.message : String(error),
         });
     }
 }

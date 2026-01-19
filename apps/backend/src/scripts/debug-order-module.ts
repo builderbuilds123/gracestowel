@@ -16,13 +16,13 @@ export default async function debugOrderModule({ container }: ExecArgs) {
        await query.graph({ entity: "order_edit", fields: ["id"], pagination: { take: 1 } });
        console.log("Query 'order_edit': Success");
     } catch (e) {
-       console.log("Query 'order_edit': Failed -", e.message);
+       console.log("Query 'order_edit': Failed -", e instanceof Error ? e.message : String(e));
     }
     
     try {
        await query.graph({ entity: "order_change", fields: ["id"], pagination: { take: 1 } });
        console.log("Query 'order_change': Success");
     } catch (e) {
-       console.log("Query 'order_change': Failed -", e.message);
+       console.log("Query 'order_change': Failed -", e instanceof Error ? e.message : String(e));
     }
 }

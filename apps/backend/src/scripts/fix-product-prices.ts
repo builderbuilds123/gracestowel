@@ -92,14 +92,12 @@ export default async function fixProductPrices({ container }: ExecArgs) {
           : currency === "eur"
             ? priceConfig.eur
             : priceConfig.cad;
-        return { amount, currency_code: currency };
+        return { amount: Math.round(amount * 100), currency_code: currency };
       });
 
       try {
         if (priceSetId) {
-          await pricingModuleService.updatePriceSets(priceSetId, {
-            prices: pricesToAdd,
-          });
+          await pricingModuleService.addPrices(priceSetId, pricesToAdd);
           logger.info(`  ✓ Added missing prices for ${variant.sku} on existing price set.`);
           updatedCount++;
           continue;
@@ -109,9 +107,9 @@ export default async function fixProductPrices({ container }: ExecArgs) {
         const priceSet = await pricingModuleService.createPriceSets([
           {
             prices: [
-              { amount: priceConfig.usd, currency_code: "usd" },
-              { amount: priceConfig.eur, currency_code: "eur" },
-              { amount: priceConfig.cad, currency_code: "cad" },
+              { amount: Math.round(priceConfig.usd * 100), currency_code: "usd" },
+              { amount: Math.round(priceConfig.eur * 100), currency_code: "eur" },
+              { amount: Math.round(priceConfig.cad * 100), currency_code: "cad" },
             ],
           },
         ]);

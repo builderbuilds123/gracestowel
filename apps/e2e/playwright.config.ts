@@ -1,9 +1,23 @@
 import path from "path";
+import os from "os";
 import dotenv from "dotenv";
 
 dotenv.config({ path: path.resolve(__dirname, ".env") });
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 import { defineConfig, devices } from "@playwright/test";
+
+if (
+  process.platform === "darwin" &&
+  process.arch === "arm64" &&
+  (!os.cpus().length || !os.cpus().some((cpu) => cpu.model.includes("Apple")))
+) {
+  process.env.PLAYWRIGHT_HOST_PLATFORM_OVERRIDE ??= "mac15-arm64";
+}
+
+const isMacArm = process.platform === "darwin" && process.arch === "arm64";
+const shouldUseHeadless = process.env.CI ? true : !isMacArm;
+const chromiumLaunchArgs = isMacArm ? ["--no-crashpad", "--disable-crash-reporter"] : [];
+const chromiumChannel = isMacArm ? "chrome" : undefined;
 
 /**
  * Playwright configuration for Grace Stowel E2E tests
@@ -35,6 +49,9 @@ export default defineConfig({
   use: {
     /* Base URL to use in actions like `await page.goto('/')` */
     baseURL: process.env.STOREFRONT_URL || "http://localhost:5173",
+    headless: shouldUseHeadless,
+    channel: chromiumChannel,
+    launchOptions: chromiumLaunchArgs.length > 0 ? { args: chromiumLaunchArgs } : undefined,
     /* Collect trace when retrying the failed test */
     trace: "retain-on-failure",
     /* Capture screenshot on failure */

@@ -31,7 +31,7 @@ export default defineConfig({
     jsx: "automatic",
   },
   server: {
-    host: "0.0.0.0",
+    host: process.env.VITE_DEV_HOST || "127.0.0.1",
   },
   // Pre-bundle dependencies that are dynamically imported to prevent
   // Vite from triggering hot reload during user flows (e.g., checkout)
@@ -42,4 +42,3 @@ export default defineConfig({
     ],
   },
 });
-

@@ -12,6 +12,8 @@ import {
 } from "@medusajs/core-flows";
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
 import { modificationTokenService } from "./modification-token";
+import { logger } from "../utils/logger";
+import { isCapturedStatus, isValidPaymentCollectionStatus } from "../types/payment-collection-status";
 
 type ValidationResult = {
     valid: boolean;
@@ -22,6 +24,13 @@ type ValidationResult = {
 };
 
 class GuestOrderEditService {
+    private logAudit(action: string, data: Record<string, unknown>, error?: Error) {
+        if (error) {
+            logger.error("order-edit-audit", `${action} failed`, { ...data, action, outcome: "failure" }, error);
+            return;
+        }
+        logger.info("order-edit-audit", `${action} success`, { ...data, action, outcome: "success" });
+    }
     
     validateRequest(req: MedusaRequest, orderIdParam: string): ValidationResult {
         const token = (req.query.token as string) || (req.headers["x-modification-token"] as string);
@@ -62,71 +71,107 @@ class GuestOrderEditService {
         });
 
         if (existingEdits.length > 0) {
-            return existingEdits[existingEdits.length - 1];
+            const edit = existingEdits[existingEdits.length - 1];
+            this.logAudit("order_edit_init", { orderId, userId, orderEditId: edit.id, source: "existing" });
+            return edit;
         }
 
         // Create new Order Change (Edit)
-        const { result } = await createOrderChangeWorkflow(container).run({
-            input: {
-                order_id: orderId,
-                change_type: "edit",
-                created_by: userId || "guest_user",
-                description: "Guest Order Modification", 
-            },
-        });
-        
-        return result;
-    }
-
-    async addItem(container: any, orderId: string, variantId: string, quantity: number) {
-        // Input: { order_id: string (PARENT ORDER ID), items: Array<{ variant_id, quantity }> }
-        const { result } = await orderEditAddNewItemWorkflow(container).run({
-            input: {
-                order_id: orderId, 
-                items: [{
-                    variant_id: variantId,
-                    quantity: quantity,
-                }]
-            }
-        });
-        return result;
-    }
-
-    async removeItem(container: any, orderId: string, actionId: string) {
-        // removeItemOrderEditActionWorkflow expects { order_id, action_id }
-        const { result } = await removeItemOrderEditActionWorkflow(container).run({
-            input: {
-                order_id: orderId,
-                action_id: actionId,
-            }
-        });
-        return result;
-    }
-
-    async updateItemQuantity(container: any, orderId: string, itemIdOrActionId: string, quantity: number) {
-        // Determine if it's an action or a line item
-        if (itemIdOrActionId.startsWith("orchact_")) {
-            // It's an action (item added during edit)
-            const { result } = await updateOrderEditItemQuantityWorkflow(container).run({
+        try {
+            const { result } = await createOrderChangeWorkflow(container).run({
                 input: {
                     order_id: orderId,
-                    action_id: itemIdOrActionId,
-                    data: { quantity }
-                }
+                    change_type: "edit",
+                    created_by: userId || "guest_user",
+                    description: "Guest Order Modification", 
+                },
             });
+            this.logAudit("order_edit_init", { orderId, userId, orderEditId: result.id, source: "created" });
             return result;
-        } else {
-            // It's an original line item
-            const { result } = await orderEditUpdateItemQuantityWorkflow(container).run({
+        } catch (error) {
+            const safeError = error instanceof Error ? error : new Error(String(error));
+            this.logAudit("order_edit_init", { orderId, userId, source: "create_failed" }, safeError);
+            throw error;
+        }
+    }
+
+    async addItem(container: any, orderId: string, variantId: string, quantity: number, userId = "guest") {
+        // Input: { order_id: string (PARENT ORDER ID), items: Array<{ variant_id, quantity }> }
+        try {
+            const { result } = await orderEditAddNewItemWorkflow(container).run({
                 input: {
-                    order_id: orderId,
+                    order_id: orderId, 
                     items: [{
-                        id: itemIdOrActionId,
-                        quantity
+                        variant_id: variantId,
+                        quantity: quantity,
                     }]
                 }
             });
+            this.logAudit("order_edit_add_item", { orderId, userId, variantId, quantity });
             return result;
+        } catch (error) {
+            const safeError = error instanceof Error ? error : new Error(String(error));
+            this.logAudit("order_edit_add_item", { orderId, userId, variantId, quantity }, safeError);
+            throw error;
+        }
+    }
+
+    async removeItem(container: any, orderId: string, actionId: string, userId = "guest") {
+        // removeItemOrderEditActionWorkflow expects { order_id, action_id }
+        try {
+            const { result } = await removeItemOrderEditActionWorkflow(container).run({
+                input: {
+                    order_id: orderId,
+                    action_id: actionId,
+                }
+            });
+            this.logAudit("order_edit_remove_item", { orderId, userId, actionId });
+            return result;
+        } catch (error) {
+            const safeError = error instanceof Error ? error : new Error(String(error));
+            this.logAudit("order_edit_remove_item", { orderId, userId, actionId }, safeError);
+            throw error;
+        }
+    }
+
+    async updateItemQuantity(container: any, orderId: string, itemIdOrActionId: string, quantity: number, userId = "guest") {
+        // Determine if it's an action or a line item
+        if (itemIdOrActionId.startsWith("orchact_")) {
+            // It's an action (item added during edit)
+            try {
+                const { result } = await updateOrderEditItemQuantityWorkflow(container).run({
+                    input: {
+                        order_id: orderId,
+                        action_id: itemIdOrActionId,
+                        data: { quantity }
+                    }
+                });
+                this.logAudit("order_edit_update_item_quantity", { orderId, userId, actionId: itemIdOrActionId, quantity, source: "action" });
+                return result;
+            } catch (error) {
+                const safeError = error instanceof Error ? error : new Error(String(error));
+                this.logAudit("order_edit_update_item_quantity", { orderId, userId, actionId: itemIdOrActionId, quantity, source: "action" }, safeError);
+                throw error;
+            }
+        } else {
+            // It's an original line item
+            try {
+                const { result } = await orderEditUpdateItemQuantityWorkflow(container).run({
+                    input: {
+                        order_id: orderId,
+                        items: [{
+                            id: itemIdOrActionId,
+                            quantity
+                        }]
+                    }
+                });
+                this.logAudit("order_edit_update_item_quantity", { orderId, userId, itemId: itemIdOrActionId, quantity, source: "item" });
+                return result;
+            } catch (error) {
+                const safeError = error instanceof Error ? error : new Error(String(error));
+                this.logAudit("order_edit_update_item_quantity", { orderId, userId, itemId: itemIdOrActionId, quantity, source: "item" }, safeError);
+                throw error;
+            }
         }
     }
     
@@ -160,7 +205,9 @@ class GuestOrderEditService {
             });
         } catch (e: any) {
             // Log but don't expose
-            console.error("requestOrderEditRequestWorkflow Failed:", e);
+            const safeError = e instanceof Error ? e : new Error(String(e));
+            logger.error("order-edit-confirm", "requestOrderEditRequestWorkflow failed", { orderId: parentOrderId, orderEditId: orderEditId }, safeError);
+            this.logAudit("order_edit_confirm", { orderId: parentOrderId, orderEditId, userId }, safeError);
             throw e;
         }
 
@@ -180,7 +227,8 @@ class GuestOrderEditService {
             }
         }
         
-        const isPaid = paymentCollection?.status === 'authorized';
+        const paymentStatus = paymentCollection?.status;
+        const isPaid = isValidPaymentCollectionStatus(paymentStatus) && isCapturedStatus(paymentStatus);
 
         if (differenceDue > 0 && !isPaid && paymentCollection) {
             // Check if Stripe session already exists
@@ -205,6 +253,13 @@ class GuestOrderEditService {
                 paymentSession = newSession;
             }
 
+            this.logAudit("order_edit_confirm", {
+                orderId: parentOrderId,
+                orderEditId,
+                userId,
+                status: "payment_required",
+                paymentCollectionId: edit.payment_collection_id,
+            });
             return {
                 status: "payment_required",
                 order_edit: edit,
@@ -221,12 +276,15 @@ class GuestOrderEditService {
                     confirmed_by: userId,
                 }
             });
+            this.logAudit("order_edit_confirm", { orderId: parentOrderId, orderEditId, userId, outcome: "confirmed" });
             return {
                 status: "confirmed",
                 order_edit: confirmedEdit
             };
         } catch (e: any) {
-             console.error("confirmOrderEditRequestWorkflow Failed:", e);
+             const safeError = e instanceof Error ? e : new Error(String(e));
+             logger.error("order-edit-confirm", "confirmOrderEditRequestWorkflow failed", { orderId: parentOrderId, orderEditId }, safeError);
+             this.logAudit("order_edit_confirm", { orderId: parentOrderId, orderEditId, userId }, safeError);
              throw e;
         }
     }

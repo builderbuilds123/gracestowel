@@ -1,29 +1,48 @@
 
+/* eslint-disable es/no-modules, es/no-async-functions, es/no-destructuring, es/no-block-scoping */
 import { ExecArgs } from "@medusajs/framework/types";
-import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
+import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import { createOrdersWorkflow } from "@medusajs/core-flows";
 import { modificationTokenService } from "../services/modification-token";
 
-export default async function verifyOrderEditApi({ container }: ExecArgs) {
+type QueryService = {
+    graph: <T>(input: unknown) => Promise<{ data: T[] }>;
+};
+
+type ActionPayload = {
+    id: string;
+    action: string;
+};
+
+export default async function verifyOrderEditApi(args: ExecArgs): Promise<null> {
+    const container = args.container;
+    if (!container || typeof container.resolve !== "function") {
+        throw new Error("Container is not available");
+    }
     const logger = container.resolve(ContainerRegistrationKeys.LOGGER);
-    const query = container.resolve(ContainerRegistrationKeys.QUERY);
+    const query = container.resolve(ContainerRegistrationKeys.QUERY) as QueryService;
+    if (!query || typeof query.graph !== "function") {
+        throw new Error("Query service is not available");
+    }
     
     // 1. Setup: Get a Variant
-    const { data: variants } = await query.graph({
+    const variantsResult = await query.graph<{ id: string }>({
         entity: "product_variant",
         fields: ["id", "price_set.prices.*"],
         pagination: { take: 1 }
     });
+    const variants = variantsResult.data || [];
     
     if (!variants.length) {
         logger.error("No variants found. customized seed required.");
-        return;
+        return null;
     }
     const variantId = variants[0].id;
     logger.info(`Using Variant ID: ${variantId}`);
 
     // 2. Create a Dummy Order
-    const { data: regions } = await query.graph({ entity: "region", fields: ["id"], pagination: { take: 1 } });
+    const regionsResult = await query.graph<{ id: string }>({ entity: "region", fields: ["id"], pagination: { take: 1 } });
+    const regions = regionsResult.data || [];
     const regionId = regions[0].id;
 
     const { result: order } = await createOrdersWorkflow(container).run({
@@ -46,7 +65,7 @@ export default async function verifyOrderEditApi({ container }: ExecArgs) {
     const paymentIntentId = "pi_test_123456789"; 
     
     const token = modificationTokenService.generateToken(order.id, paymentIntentId, orderCreatedAt);
-    logger.info(`Generated Token: ${token}`);
+    logger.info(`Generated Token (suffix): ****${token.slice(-6)}`);
 
     // 4. Test API via Fetch
     const baseUrl = "http://127.0.0.1:9000/store";
@@ -55,7 +74,8 @@ export default async function verifyOrderEditApi({ container }: ExecArgs) {
         "Content-Type": "application/json"
     };
 
-    const { data: keys } = await query.graph({ entity: "api_key", fields: ["token"], filters: { type: "publishable" } });
+    const keysResult = await query.graph<{ token: string }>({ entity: "api_key", fields: ["token"], filters: { type: "publishable" } });
+    const keys = keysResult.data || [];
     if (keys.length) headers["x-publishable-api-key"] = keys[0].token;
 
     // INIT
@@ -79,8 +99,8 @@ export default async function verifyOrderEditApi({ container }: ExecArgs) {
 
     // FIND ACTION ID
     // Look for ITEM_ADD action or query DB if missing in response
-    let actions = item1Json.actions || [];
-    let addAction = actions.find((a: any) => a.action === "ITEM_ADD");
+    const actions = (item1Json.actions || []) as ActionPayload[];
+    const addAction = actions.find((action) => action.action === "ITEM_ADD");
     
     if (!addAction) {
         // Fallback or skip
@@ -124,11 +144,13 @@ export default async function verifyOrderEditApi({ container }: ExecArgs) {
     logger.info("Confirm Response OK: " + JSON.stringify(confirmJson, null, 2));
 
     // CHECK FINAL ORDER
-    const { data: finalOrders } = await query.graph({
+    const finalOrdersResult = await query.graph<{ total?: number; items?: unknown[] }>({
         entity: "order",
         fields: ["total", "items.*"],
         filters: { id: order.id }
     });
+    const finalOrders = finalOrdersResult.data || [];
     logger.info(`Final Order Total: ${finalOrders?.[0]?.total}`);
     logger.info(`Final Item Count: ${finalOrders?.[0]?.items?.length}`);
+    return null;
 }

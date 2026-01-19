@@ -1,4 +1,5 @@
 
+/* eslint-disable es/no-modules, es/no-async-functions, es/no-block-scoping */
 import { Client } from 'pg';
 import * as dotenv from 'dotenv';
 import path from 'path';
@@ -6,39 +7,50 @@ import path from 'path';
 // Load .env
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
-async function checkTables() {
+type TableRow = { table_name: string };
+type ColumnRow = { column_name: string; data_type: string };
+
+async function checkTables(): Promise<void> {
+  const sslEnabled = process.env.DATABASE_SSL !== "false";
+  const allowInsecure = process.env.DATABASE_SSL_ALLOW_INSECURE === "true";
+
   const client = new Client({
     connectionString: process.env.DATABASE_URL,
-    ssl: process.env.DATABASE_SSL !== "false" ? { rejectUnauthorized: false } : false
+    ssl: sslEnabled ? { rejectUnauthorized: !allowInsecure } : false
   });
+  if (sslEnabled && allowInsecure) {
+    console.warn("DATABASE_SSL_ALLOW_INSECURE=true: TLS verification is disabled for this debug script.");
+  }
 
   try {
     await client.connect();
     console.log('Connected to DB');
 
-    const resTables = await client.query(`
+    const resTables = await client.query<TableRow>(`
       SELECT table_name 
       FROM information_schema.tables 
       WHERE table_schema = 'public'
       ORDER BY table_name;
     `);
 
-    console.log('Tables:', resTables.rows.map(r => r.table_name));
+    console.log('Tables:', resTables.rows.map((row) => row.table_name));
 
     // Check specific tables
     const tablesToCheck = ['store_locale', 'locale', 'store'];
     
-    for (const table of tablesToCheck) {
-        if (resTables.rows.find(r => r.table_name === table)) {
-            console.log(`\nColumns for ${table}:`);
-            const resCols = await client.query(`
-                SELECT column_name, data_type 
-                FROM information_schema.columns 
-                WHERE table_name = '${table}';
-            `);
+    for (const tableName of tablesToCheck) {
+        const hasTable = resTables.rows.some((row) => row.table_name === tableName);
+        if (hasTable) {
+            console.log(`\nColumns for ${tableName}:`);
+            const resCols = await client.query<ColumnRow>(
+                `SELECT column_name, data_type 
+                 FROM information_schema.columns 
+                 WHERE table_name = $1;`,
+                [tableName]
+            );
             console.table(resCols.rows);
         } else {
-            console.log(`\nTable ${table} DOES NOT EXIST`);
+            console.log(`\nTable ${tableName} DOES NOT EXIST`);
         }
     }
 

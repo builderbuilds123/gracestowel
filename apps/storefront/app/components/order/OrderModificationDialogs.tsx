@@ -32,8 +32,14 @@ interface ActionData {
     errorType?: string;
     itemsAdded?: number;
     itemsUpdated?: number;
-    payment_collection?: any;
-    payment_session?: any;
+    payment_collection?: {
+        amount: number;
+        payment_sessions?: Array<{
+            data?: {
+                client_secret?: string;
+            };
+        }>;
+    };
 }
 
 interface OrderItem {
@@ -111,8 +117,9 @@ export function OrderModificationDialogs({
                 } else if (fetcher.data.action === "items_updated") {
                     setShowEditItemsDialog(false);
                     onOrderUpdated(fetcher.data.new_total);
-                } else if (fetcher.data.action === "payment_required" && fetcher.data.payment_collection && fetcher.data.payment_session) {
-                    const clientSecret = fetcher.data.payment_session.data?.client_secret;
+                } else if (fetcher.data.action === "payment_required" && fetcher.data.payment_collection) {
+                    const paymentSession = fetcher.data.payment_collection.payment_sessions?.[0];
+                    const clientSecret = paymentSession?.data?.client_secret;
                     if (clientSecret) {
                         setPendingPayment({
                             amount: fetcher.data.payment_collection.amount,

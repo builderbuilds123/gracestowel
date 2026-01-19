@@ -2,6 +2,7 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { guestOrderEditService } from "../../../../../../services/guest-order-edit";
 import { z } from "zod";
+import { logger } from "../../../../../../utils/logger";
 
 const AddItemSchema = z.object({
     variant_id: z.string(),
@@ -50,13 +51,11 @@ export async function POST(
             order_edit: result,
         });
     } catch (error) {
-        const errorDetail = error instanceof Error ? error.message : JSON.stringify(error, Object.getOwnPropertyNames(error));
-        console.error("Add Item Error:", JSON.stringify(error, null, 2)); // Detailed server log
+        const safeError = error instanceof Error ? error : new Error(String(error));
+        logger.error("order-edit-items", "Failed to add item to order edit", { orderId: id, variantId: variant_id, quantity }, safeError);
         res.status(500).json({
             code: "INTERNAL_ERROR",
             message: "Failed to add item to order edit",
-            details: errorDetail,
-            raw: JSON.stringify(error) // Send to client for debug script to see
         });
     }
 }

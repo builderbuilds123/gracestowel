@@ -712,7 +712,7 @@ export default async function seedDemoData({ container }: ExecArgs) {
           status: ProductStatus.PUBLISHED,
           shipping_profile_id: shippingProfile.id,
           images: [{ url: "/washcloth-nuzzle.jpg" }],
-          metadata: { dimensions: '13" x 13"', features: JSON.stringify(["100% Long-Staple Cotton", "Perfect Face Cloth Size", "Oeko-Tex Certified", "Made in Portugal"]), care_instructions: JSON.stringify(["Machine wash warm", "Tumble dry low", "Do not bleach", "Avoid fabric softeners"]) },
+          metadata: { dimensions: '13" x 13"', features: ["100% Long-Staple Cotton", "Perfect Face Cloth Size", "Oeko-Tex Certified", "Made in Portugal"], care_instructions: ["Machine wash warm", "Tumble dry low", "Do not bleach", "Avoid fabric softeners"] },
           options: [{ title: "Color", values: ["Cloud White", "Sage", "Terra Cotta"] }],
           variants: [
               { title: "Cloud White", sku: "NUZZLE-WHITE", options: { Color: "Cloud White" }, ...nuzzleVariantAttrs, prices: [{ amount: 16, currency_code: "eur" }, { amount: 18, currency_code: "usd" }, { amount: 24, currency_code: "cad" }] },
@@ -730,7 +730,7 @@ export default async function seedDemoData({ container }: ExecArgs) {
           status: ProductStatus.PUBLISHED,
           shipping_profile_id: shippingProfile.id,
           images: [{ url: "/hand-towel-cradle.jpg" }],
-          metadata: { dimensions: '20" x 30"', features: JSON.stringify(["High Absorbency", "Quick Drying", "Double-Stitched Hems", "Sustainably Sourced"]), care_instructions: JSON.stringify(["Machine wash warm", "Tumble dry low", "Do not bleach", "Avoid fabric softeners"]) },
+          metadata: { dimensions: '20" x 30"', features: ["High Absorbency", "Quick Drying", "Double-Stitched Hems", "Sustainably Sourced"], care_instructions: ["Machine wash warm", "Tumble dry low", "Do not bleach", "Avoid fabric softeners"] },
           options: [{ title: "Color", values: ["Cloud White", "Charcoal", "Navy"] }],
           variants: [
               { title: "Cloud White", sku: "CRADLE-WHITE", options: { Color: "Cloud White" }, ...cradleVariantAttrs, prices: [{ amount: 22, currency_code: "eur" }, { amount: 25, currency_code: "usd" }, { amount: 34, currency_code: "cad" }] },
@@ -748,7 +748,7 @@ export default async function seedDemoData({ container }: ExecArgs) {
           status: ProductStatus.PUBLISHED,
           shipping_profile_id: shippingProfile.id,
           images: [{ url: "/bath-towel-bearhug.jpg" }, { url: "/white_bathtowel_laidout_product.png" }, { url: "/white_bathtowel_folded_product.png" }],
-          metadata: { dimensions: '30" x 58"', features: JSON.stringify(["Oversized for Comfort", "700 GSM Weight", "Cloud-like Softness", "Fade Resistant"]), care_instructions: JSON.stringify(["Machine wash warm", "Tumble dry low", "Do not bleach", "Avoid fabric softeners"]) },
+          metadata: { dimensions: '30" x 58"', features: ["Oversized for Comfort", "700 GSM Weight", "Cloud-like Softness", "Fade Resistant"], care_instructions: ["Machine wash warm", "Tumble dry low", "Do not bleach", "Avoid fabric softeners"] },
           options: [{ title: "Color", values: ["Cloud White", "Sand", "Stone"] }],
           variants: [
               { title: "Cloud White", sku: "BEARHUG-WHITE", options: { Color: "Cloud White" }, ...bearhugVariantAttrs, prices: [{ amount: 30, currency_code: "eur" }, { amount: 35, currency_code: "usd" }, { amount: 48, currency_code: "cad" }] },
@@ -766,7 +766,7 @@ export default async function seedDemoData({ container }: ExecArgs) {
           status: ProductStatus.PUBLISHED,
           shipping_profile_id: shippingProfile.id,
           images: [{ url: "/wood_dryer_balls.png" }],
-          metadata: { dimensions: '3" Diameter', features: JSON.stringify(["100% New Zealand Wool", "Reduces Drying Time", "Hypoallergenic", "Lasts for 1000+ Loads"]), care_instructions: JSON.stringify(["Store in a dry place", "Recharge in sun monthly"]), disable_embroidery: "true" },
+          metadata: { dimensions: '3" Diameter', features: ["100% New Zealand Wool", "Reduces Drying Time", "Hypoallergenic", "Lasts for 1000+ Loads"], care_instructions: ["Store in a dry place", "Recharge in sun monthly"], disable_embroidery: "true" },
           options: [{ title: "Type", values: ["Natural"] }],
           variants: [
               { title: "Natural", sku: "DRYER-BALLS-3", options: { Type: "Natural" }, ...dryerBallsVariantAttrs, prices: [{ amount: 16, currency_code: "eur" }, { amount: 18, currency_code: "usd" }, { amount: 24, currency_code: "cad" }] }
@@ -880,11 +880,38 @@ export default async function seedDemoData({ container }: ExecArgs) {
 
           const priceConfig = priceConfigByHandle[existingProduct.handle as string];
           if (priceConfig) {
-            const existingPrices = (variant as { prices?: Array<{ amount?: number }> }).prices || [];
+            const existingPrices = (variant as { prices?: Array<{ amount?: number; price_set_id?: string | null; currency_code?: string | null }> }).prices || [];
             const hasValidPrice = existingPrices.some((price) => typeof price.amount === "number" && price.amount > 0);
+            let priceSetId = existingPrices.find((price) => price.price_set_id)?.price_set_id || null;
+            if (!priceSetId) {
+              try {
+                const variantPriceSetLinksResult = await query.graph({
+                  entity: "product_variant_price_set",
+                  fields: ["price_set_id"],
+                  filters: { variant_id: variant.id },
+                }) as { data: Array<{ price_set_id?: string | null }> };
+                const variantPriceSetLinks = variantPriceSetLinksResult.data || [];
+                if (variantPriceSetLinks.length > 0) {
+                  priceSetId = variantPriceSetLinks[0].price_set_id || null;
+                }
+              } catch (e) {
+                logger.warn(`Could not check price set link for "${variant.sku}": ${(e as Error).message}`);
+              }
+            }
 
             if (!hasValidPrice) {
               try {
+                if (priceSetId) {
+                  await pricingModuleService.updatePriceSets(priceSetId, {
+                    prices: [
+                      { amount: priceConfig.usd, currency_code: "usd" },
+                      { amount: priceConfig.eur, currency_code: "eur" },
+                      { amount: priceConfig.cad, currency_code: "cad" },
+                    ],
+                  });
+                  logger.info(`Updated prices for "${variant.sku}" on "${existingProduct.handle}" (existing price set).`);
+                  continue;
+                }
                 const [priceSet] = await pricingModuleService.createPriceSets([
                   {
                     prices: [

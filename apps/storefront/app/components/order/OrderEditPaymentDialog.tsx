@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { X, Loader2, ShieldCheck } from "lucide-react";
 import {
     PaymentElement,
@@ -7,7 +7,7 @@ import {
     useElements,
     Elements
 } from "@stripe/react-stripe-js";
-import { getStripe } from "../../lib/stripe";
+import { initStripe, getStripe } from "../../lib/stripe";
 
 interface OrderEditPaymentDialogProps {
     isOpen: boolean;
@@ -121,7 +121,58 @@ export function OrderEditPaymentDialog({
     amount,
     currencyCode
 }: OrderEditPaymentDialogProps) {
+    const [stripePromise, setStripePromise] = useState<ReturnType<typeof getStripe> | null>(null);
+
+    useEffect(() => {
+        if (stripePublishableKey) {
+            initStripe(stripePublishableKey);
+            setStripePromise(getStripe());
+        } else {
+            setStripePromise(null);
+        }
+    }, [stripePublishableKey]);
     if (!isOpen) return null;
+
+    if (!stripePublishableKey) {
+        return (
+            <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+                <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+                <div className="relative bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden">
+                    <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-card-earthy/5">
+                        <h2 className="text-xl font-serif text-text-earthy">Complete Modification</h2>
+                        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
+                            <X className="w-5 h-5" />
+                        </button>
+                    </div>
+                    <div className="p-6">
+                        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                            Payment is unavailable because the Stripe publishable key is missing.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+    if (!stripePromise) {
+        return (
+            <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+                <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+                <div className="relative bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden">
+                    <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-card-earthy/5">
+                        <h2 className="text-xl font-serif text-text-earthy">Complete Modification</h2>
+                        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
+                            <X className="w-5 h-5" />
+                        </button>
+                    </div>
+                    <div className="p-6">
+                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-sm">
+                            Initializing secure payment…
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     const options = {
         clientSecret,
@@ -148,7 +199,7 @@ export function OrderEditPaymentDialog({
                     </button>
                 </div>
                 <div className="p-6">
-                    <Elements stripe={getStripe()} options={options}>
+                    <Elements stripe={stripePromise} options={options}>
                         <PaymentForm 
                             amount={amount} 
                             currencyCode={currencyCode} 
