@@ -11,6 +11,7 @@ import type { Route } from "./+types/root";
 import { getMedusaClient } from "./lib/medusa";
 import { useLoaderData } from "react-router";
 import { CartProvider } from "./context/CartContext";
+import { MedusaCartProvider } from "./context/MedusaCartContext";
 import { LocaleProvider } from "./context/LocaleContext";
 import { CustomerProvider } from "./context/CustomerContext";
 import { WishlistProvider } from "./context/WishlistContext";
@@ -137,30 +138,32 @@ export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <LocaleProvider>
       <CustomerProvider>
-        <CartProvider>
-          <WishlistProvider>
-            <html lang="en">
-              <head>
-                <meta charSet="utf-8" />
-                <meta name="viewport" content="width=device-width, initial-scale=1" />
-                <Meta />
-                <Links />
-              </head>
-              <body className="flex flex-col min-h-screen font-sans text-text-earthy bg-background-earthy antialiased selection:bg-accent-earthy/20">
-                <Header />
-                <main className="flex-grow">
-                  {children}
-                </main>
-                <Footer />
-                <CartDrawer />
-                <PostHogSurveyTrigger />
-                <ScrollRestoration />
-                <EnvScript />
-                <Scripts />
-              </body>
-            </html>
-          </WishlistProvider>
-        </CartProvider>
+        <MedusaCartProvider>
+          <CartProvider>
+            <WishlistProvider>
+              <html lang="en">
+                <head>
+                  <meta charSet="utf-8" />
+                  <meta name="viewport" content="width=device-width, initial-scale=1" />
+                  <Meta />
+                  <Links />
+                </head>
+                <body className="flex flex-col min-h-screen font-sans text-text-earthy bg-background-earthy antialiased selection:bg-accent-earthy/20">
+                  <Header />
+                  <main className="flex-grow">
+                    {children}
+                  </main>
+                  <Footer />
+                  <CartDrawer />
+                  <PostHogSurveyTrigger />
+                  <ScrollRestoration />
+                  <EnvScript />
+                  <Scripts />
+                </body>
+              </html>
+            </WishlistProvider>
+          </CartProvider>
+        </MedusaCartProvider>
       </CustomerProvider>
     </LocaleProvider>
   );
