@@ -581,28 +581,42 @@ export default async function seedDemoData({ container }: ExecArgs) {
   logger.info("Finished seeding stock location data.");
 
   logger.info("Seeding publishable API key data...");
-  const { result: publishableApiKeyResult } = await createApiKeysWorkflow(
-    container
-  ).run({
-    input: {
-      api_keys: [
-        {
-          title: "Webshop E2E",
-          type: "publishable",
-          created_by: "seed-script",
-        },
-      ],
-    },
+  
+  // Check for existing publishable API key (idempotency)
+  const apiKeyModuleService = container.resolve(Modules.API_KEY);
+  const existingApiKeys = await apiKeyModuleService.listApiKeys({
+    title: "Webshop E2E",
+    type: "publishable",
   });
-  const publishableApiKey = publishableApiKeyResult[0];
-  logger.info(`PUBLISHABLE_API_KEY: ${publishableApiKey.token}`);
 
-  await linkSalesChannelsToApiKeyWorkflow(container).run({
-    input: {
-      id: publishableApiKey.id,
-      add: [defaultSalesChannel[0].id],
-    },
-  });
+  let publishableApiKey;
+  if (existingApiKeys.length > 0) {
+    publishableApiKey = existingApiKeys[0];
+    logger.info(`Using existing publishable API key: ${publishableApiKey.token}`);
+  } else {
+    const { result: publishableApiKeyResult } = await createApiKeysWorkflow(
+      container
+    ).run({
+      input: {
+        api_keys: [
+          {
+            title: "Webshop E2E",
+            type: "publishable",
+            created_by: "seed-script",
+          },
+        ],
+      },
+    });
+    publishableApiKey = publishableApiKeyResult[0];
+    logger.info(`Created publishable API key: ${publishableApiKey.token}`);
+
+    await linkSalesChannelsToApiKeyWorkflow(container).run({
+      input: {
+        id: publishableApiKey.id,
+        add: [defaultSalesChannel[0].id],
+      },
+    });
+  }
   logger.info("Finished seeding publishable API key data.");
 
   logger.info("Seeding product data...");
@@ -990,5 +1004,12 @@ export default async function seedDemoData({ container }: ExecArgs) {
       logger.warn("Seeding inventory levels failed (likely already exist): " + e.message);
   }
 
-
+  // Summary
+  logger.info("\n========================================");
+  logger.info("SEED SCRIPT COMPLETED SUCCESSFULLY");
+  logger.info("========================================");
+  logger.info(`Products: ${newProducts.length} created, ${existingProducts.length} existing`);
+  logger.info(`Regions: ${regionsToCreate.length} created`);
+  logger.info(`Publishable API Key: ${publishableApiKey.token}`);
+  logger.info("========================================\n");
 }
