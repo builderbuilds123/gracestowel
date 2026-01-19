@@ -132,6 +132,13 @@ export function transformToDetail(
     const priceData = getProductPrice(product, currency);
     const metadata = product.metadata || {};
     const colors = extractColors(product);
+    const firstVariant = product.variants?.[0];
+    const originalPriceCandidate = firstVariant?.calculated_price?.original_amount
+        ?? firstVariant?.compare_at_price
+        ?? firstVariant?.original_price;
+    const originalPrice = typeof originalPriceCandidate === "number" && originalPriceCandidate > 0
+        ? originalPriceCandidate
+        : undefined;
     
     // Parse metadata arrays
     const features = parseMetadataArray(metadata.features);
@@ -142,6 +149,7 @@ export function transformToDetail(
         handle: product.handle,
         title: product.title,
         price: priceData?.amount || 0,
+        originalPrice,
         formattedPrice: priceData?.formatted || "$0.00",
         description: product.description || "",
         images: product.images?.map(img => img.url) || [product.thumbnail || "/placeholder.jpg"],
