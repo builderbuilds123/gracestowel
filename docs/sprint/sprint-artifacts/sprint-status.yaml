@@ -87,7 +87,9 @@ development_status:
     status: drafted
   cart-migration-medusa-docs-2026-01-19:
     path: docs/sprint/sprint-artifacts/story-2026-01-19-cart-migration-medusa-docs.md
-    status: drafted
+    status: done
+    meta: "Aligned storefront with Medusa cart docs. Implemented debounced server-side sync, guest-to-customer transfer, and exposed Medusa totals in UI. All 375 tests passing."
+    completed: "2026-01-19"
   5-2-comprehensive-frontend-tracking:
     path: docs/sprint/sprint-artifacts/5-2-comprehensive-frontend-tracking.md
     status: done

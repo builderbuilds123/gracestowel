@@ -4,6 +4,7 @@ import type { ProductId, CartItem, EmbroideryData } from '../types/product';
 import { productIdsEqual } from '../types/product';
 import { monitoredFetch } from '../utils/monitored-fetch';
 import { useMedusaCart } from './MedusaCartContext';
+import { useLocale } from './LocaleContext';
 
 // Re-export CartItem for backwards compatibility
 export type { CartItem, EmbroideryData } from '../types/product';
@@ -18,6 +19,8 @@ interface CartContextType {
     toggleCart: () => void;
     clearCart: () => void;
     cartTotal: number;
+    medusaCart?: any | null;
+    isLoading: boolean;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -27,7 +30,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     const [isOpen, setIsOpen] = useState(false);
     const [isLoaded, setIsLoaded] = useState(false);
     const cartCreateInFlight = React.useRef(false);
-    const { cartId, setCartId } = useMedusaCart();
+    const { cartId, cart: medusaCart, setCartId, isLoading, refreshCart } = useMedusaCart();
+    const { regionId } = useLocale();
 
     // Validate cart item integrity
     const validateCartItem = (item: any): boolean => {
@@ -61,10 +65,32 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         setIsLoaded(true);
     }, []);
 
-    // Save cart to local storage whenever it changes
     useEffect(() => {
         localStorage.setItem('cart', JSON.stringify(items));
     }, [items]);
+
+    // Debounced sync with Medusa backend
+    useEffect(() => {
+        if (!cartId || !isLoaded) return;
+
+        const timeoutId = setTimeout(async () => {
+            try {
+                const response = await monitoredFetch(`/api/carts/${cartId}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ items }),
+                    label: 'sync-cart-items-debounced',
+                });
+                if (response.ok) {
+                    void refreshCart();
+                }
+            } catch (err) {
+                console.error('[CartContext] Failed to sync items with Medusa:', err);
+            }
+        }, 1000); // 1 second debounce
+
+        return () => clearTimeout(timeoutId);
+    }, [items, cartId, isLoaded]);
 
     const addToCart = (newItem: Omit<CartItem, 'quantity'> & { quantity?: number }) => {
         const quantityToAdd = newItem.quantity ?? 1;
@@ -110,6 +136,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
                     const response = await monitoredFetch('/api/carts', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ region_id: regionId }),
                         label: 'create-cart-on-add',
                     });
                     if (!response.ok) {
@@ -168,10 +195,23 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     };
 
     // Use the centralized price calculation utility
-    const cartTotal = calculateTotal(items);
+    // Prefer Medusa subtotal for the main cart total display if available
+    const displayCartTotal = medusaCart?.subtotal ?? calculateTotal(items);
 
     return (
-        <CartContext.Provider value={{ items, isOpen, isLoaded, addToCart, removeFromCart, updateQuantity, toggleCart, clearCart, cartTotal }}>
+        <CartContext.Provider value={{ 
+            items, 
+            isOpen, 
+            isLoaded, 
+            addToCart, 
+            removeFromCart, 
+            updateQuantity, 
+            toggleCart, 
+            clearCart, 
+            cartTotal: displayCartTotal,
+            medusaCart,
+            isLoading
+        }}>
             {children}
         </CartContext.Provider>
     );

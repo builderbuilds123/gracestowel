@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { monitoredFetch } from "../utils/monitored-fetch";
 import type { CartWithPromotions } from "../types/promotion";
+import { useLocale } from "./LocaleContext";
 
 interface MedusaCartContextValue {
   cartId?: string;
@@ -26,6 +27,7 @@ export function MedusaCartProvider({ children }: { children: React.ReactNode }) 
   const [cart, setCart] = useState<CartWithPromotions | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { regionId } = useLocale();
 
   const persistCartId = useCallback((nextId?: string) => {
     if (typeof window === "undefined") return;
@@ -85,6 +87,27 @@ export function MedusaCartProvider({ children }: { children: React.ReactNode }) 
   useEffect(() => {
     void refreshCart();
   }, [refreshCart]);
+
+  // Sync region if it changes and cart exists
+  useEffect(() => {
+    if (cart && cartId && regionId && cart.region_id !== regionId) {
+      void (async () => {
+        try {
+          const response = await monitoredFetch(`/api/carts/${cartId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ region_id: regionId }),
+            label: "medusa-cart-sync-region",
+          });
+          if (response.ok) {
+            void refreshCart();
+          }
+        } catch (err) {
+          console.error("Failed to sync cart region:", err);
+        }
+      })();
+    }
+  }, [cart, cartId, regionId, refreshCart]);
 
   const value = useMemo(
     () => ({

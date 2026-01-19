@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { medusaFetch } from '../lib/medusa-fetch';
+import { monitoredFetch } from '../utils/monitored-fetch';
 
 export interface CustomerAddress {
     id: string;
@@ -30,8 +31,8 @@ interface CustomerContextType {
     customer: Customer | null;
     isAuthenticated: boolean;
     isLoading: boolean;
-    login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
-    register: (email: string, password: string, firstName?: string, lastName?: string) => Promise<{ success: boolean; error?: string }>;
+    login: (email: string, password: string, cartId?: string) => Promise<{ success: boolean; error?: string }>;
+    register: (email: string, password: string, firstName?: string, lastName?: string, cartId?: string) => Promise<{ success: boolean; error?: string }>;
     logout: () => Promise<void>;
     refreshCustomer: () => Promise<void>;
     requestPasswordReset: (email: string) => Promise<{ success: boolean; error?: string }>;
@@ -110,7 +111,7 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
-    const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+    const login = async (email: string, password: string, cartId?: string): Promise<{ success: boolean; error?: string }> => {
         try {
             // Step 1: Authenticate with email/password
             const authResponse = await medusaFetch(`/auth/customer/emailpass`, {
@@ -131,6 +132,24 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
             localStorage.setItem(TOKEN_KEY, newToken);
             setToken(newToken);
 
+            // Step 2: Transfer cart if guest cart exists
+            if (cartId) {
+                try {
+                    await monitoredFetch(`/api/carts/${cartId}/transfer`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${newToken}`,
+                        },
+                        label: 'cart-transfer-on-login',
+                    });
+                    console.log('[CustomerContext] Cart transferred successfully:', cartId);
+                } catch (err) {
+                    console.error('[CustomerContext] Failed to transfer cart during login:', err);
+                    // Continue anyway, as login was successful
+                }
+            }
+
             return { success: true };
         } catch (error) {
             console.error('Login error:', error);
@@ -142,7 +161,8 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
         email: string, 
         password: string, 
         firstName?: string, 
-        lastName?: string
+        lastName?: string,
+        cartId?: string
     ): Promise<{ success: boolean; error?: string }> => {
         try {
             // Step 1: Register auth identity
@@ -183,6 +203,23 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
             // Store token and update state
             localStorage.setItem(TOKEN_KEY, regToken);
             setToken(regToken);
+
+            // Step 3: Transfer cart if guest cart exists
+            if (cartId) {
+                try {
+                    await monitoredFetch(`/api/carts/${cartId}/transfer`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${regToken}`,
+                        },
+                        label: 'cart-transfer-on-register',
+                    });
+                    console.log('[CustomerContext] Cart transferred successfully:', cartId);
+                } catch (err) {
+                    console.error('[CustomerContext] Failed to transfer cart during registration:', err);
+                }
+            }
 
             return { success: true };
         } catch (error) {

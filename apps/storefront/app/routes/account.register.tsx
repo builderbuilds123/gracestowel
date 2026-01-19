@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { useCustomer } from '../context/CustomerContext';
+import { useMedusaCart } from '../context/MedusaCartContext';
 import { Eye, EyeOff, Mail, Lock, User } from 'lucide-react';
 
 export function meta() {
@@ -13,6 +14,7 @@ export function meta() {
 export default function RegisterPage() {
     const navigate = useNavigate();
     const { register, isLoading: authLoading } = useCustomer();
+    const { cartId } = useMedusaCart();
     
     const [formData, setFormData] = useState({
         firstName: '',
@@ -51,7 +53,8 @@ export default function RegisterPage() {
             formData.email, 
             formData.password, 
             formData.firstName, 
-            formData.lastName
+            formData.lastName,
+            cartId
         );
         
         if (result.success) {

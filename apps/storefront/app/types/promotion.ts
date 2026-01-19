@@ -90,6 +90,7 @@ export interface AppliedPromoCode {
  */
 export interface CartWithPromotions {
   id: string;
+  region_id?: string;
   currency_code?: string;
   subtotal?: number;
   discount_total?: number;

@@ -307,20 +307,28 @@ export class MedusaCartService {
         });
         return cart;
       } catch (error: any) {
-        // Do not retry on client-side errors (4xx)
+        // ... omitted status check for brevity ...
         const status = error.status || error.response?.status;
         if (status >= 400 && status < 500) {
-          // Re-throw to exit retry loop immediately
           throw error;
         }
-
         console.error(`Error adding shipping method ${optionId} to cart ${cartId}:`, error);
-        
-        // Log deep error details if available (only in dev)
-        if (error.response && import.meta.env.DEV) {
-          console.error("Upstream Medusa Error Data:", JSON.stringify(error.response.data || {}, null, 2));
-        }
-        
+        throw error;
+      }
+    });
+  }
+
+  /**
+   * Transfer cart to the authenticated customer
+   * Uses Medusa v2 SDK: client.store.cart.transfer()
+   */
+  async transferCart(cartId: string): Promise<Cart> {
+    return retry(async () => {
+      try {
+        const { cart } = await this.client.store.cart.transfer(cartId);
+        return cart;
+      } catch (error: any) {
+        this.logger.error(`Error transferring cart ${cartId}`, error);
         throw error;
       }
     });

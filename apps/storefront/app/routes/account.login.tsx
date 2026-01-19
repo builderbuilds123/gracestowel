@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { useCustomer } from '../context/CustomerContext';
+import { useMedusaCart } from '../context/MedusaCartContext';
 import { Eye, EyeOff, Mail, Lock } from 'lucide-react';
 
 export function meta() {
@@ -13,6 +14,7 @@ export function meta() {
 export default function LoginPage() {
     const navigate = useNavigate();
     const { login, isLoading: authLoading } = useCustomer();
+    const { cartId } = useMedusaCart();
     
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -25,7 +27,7 @@ export default function LoginPage() {
         setError(null);
         setIsSubmitting(true);
 
-        const result = await login(email, password);
+        const result = await login(email, password, cartId);
         
         if (result.success) {
             navigate('/account');
