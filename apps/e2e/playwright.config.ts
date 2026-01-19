@@ -15,7 +15,7 @@ if (
 }
 
 const isMacArm = process.platform === "darwin" && process.arch === "arm64";
-const shouldUseHeadless = process.env.CI ? true : !isMacArm;
+const shouldUseHeadless = process.env.CI ? true : true; // Default to headless even on Mac ARM to avoid popups
 const chromiumLaunchArgs = isMacArm ? ["--no-crashpad", "--disable-crash-reporter"] : [];
 const chromiumChannel = isMacArm ? "chrome" : undefined;
 

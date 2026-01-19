@@ -40,6 +40,14 @@ export async function getPendingRecoveryOrders(
      WHERE ${where}
   `;
 
-  const result = await pgConnection.query<RecoveryOrderRow>(sql, params);
-  return result.rows;
+  // Standard Medusa v2 PG_CONNECTION can be a Pool or a Knex instance
+  if (typeof (pgConnection as any).query === 'function') {
+    const result = await pgConnection.query<RecoveryOrderRow>(sql, params);
+    return result.rows;
+  } else if (typeof (pgConnection as any).raw === 'function') {
+    const result = await (pgConnection as any).raw(sql.replace(/\$(\d+)/g, '?'), params);
+    return result.rows;
+  }
+  
+  throw new Error("Unsupported database connection type: neither .query() nor .raw() found");
 }

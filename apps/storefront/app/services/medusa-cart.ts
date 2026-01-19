@@ -1,6 +1,7 @@
 import { getMedusaClient } from "../lib/medusa";
 import type { CartItem } from "../types/product";
 import { retry } from "../utils/retry";
+import { createLogger } from "../lib/logger";
 
 // Medusa Cart Types (v2 API structure)
 export interface Cart {
@@ -59,6 +60,7 @@ export interface ShippingOption {
 
 export class MedusaCartService {
   private client: any;
+  private logger = createLogger({ context: "MedusaCartService" });
 
   constructor(context?: { cloudflare?: { env?: any } }) {
     this.client = getMedusaClient(context);
@@ -91,12 +93,14 @@ export class MedusaCartService {
   async getCart(cartId: string): Promise<Cart | null> {
     return retry(async () => {
       try {
-        const { cart } = await this.client.store.cart.retrieve(cartId);
+        const { cart } = await this.client.store.cart.retrieve(cartId, {
+          fields: '+promotions,+items.adjustments,+shipping_methods.adjustments'
+        });
         return cart;
       } catch (error: any) {
         // Check for 404 in various error formats (cart expired or doesn't exist)
         if (error.status === 404 || error.response?.status === 404) {
-          console.warn(`[Cart] Cart ${cartId} not found (possibly expired)`);
+          this.logger.warn(`[Cart] Cart ${cartId} not found (possibly expired)`);
           return null; // Don't retry on 404 - allows caller to create new cart
         }
         throw error;
@@ -136,7 +140,7 @@ export class MedusaCartService {
             this.client.store.cart.updateLineItem(cartId, remoteItem.id, {
               quantity: localItem.quantity,
             }).catch((e: any) => {
-               console.error(`Failed to update item ${localItem.variantId}:`, e);
+               this.logger.error(`Failed to update item ${localItem.variantId}`, e);
                // Re-throw to ensure caller knows update failed
                throw e;
             })
@@ -150,7 +154,7 @@ export class MedusaCartService {
             quantity: localItem.quantity,
             metadata: localItem.embroidery ? { embroidery: localItem.embroidery } : undefined
           }).catch((e: any) => {
-             console.error(`Failed to add item ${localItem.variantId}:`, e);
+             this.logger.error(`Failed to add item ${localItem.variantId}`, e);
              // Re-throw so API returns error (e.g. inventory missing)
              throw e;
           })
@@ -167,13 +171,13 @@ export class MedusaCartService {
         promises.push(
           this.client.store.cart.deleteLineItem(cartId, remoteItem.id)
             .catch((e: any) => {
-               console.error(`Failed to delete item ${remoteItem.id}:`, e);
+               this.logger.error(`Failed to delete item ${remoteItem.id}`, e);
             })
         );
       }
     }
 
-    // Execute all updates in parallel
+    // Execute all updates in parallel for better performance
     await Promise.all(promises);
 
     // Return updated cart
@@ -198,11 +202,11 @@ export class MedusaCartService {
         });
         return cart;
         } catch (error: any) {
-        console.error("Error updating shipping address:", error);
+        this.logger.error("Error updating shipping address", error);
         
         // Log deep error details if available (only in dev)
         if (error.response && import.meta.env.DEV) {
-            console.error("Upstream Medusa Error Data:", JSON.stringify(error.response.data || {}, null, 2));
+            this.logger.error("Upstream Medusa Error Data", error, { data: error.response.data });
         }
 
         throw error;
@@ -238,9 +242,9 @@ export class MedusaCartService {
             const { cart } = await this.client.store.cart.update(cartId, payload);
             return cart;
         } catch (error: any) {
-            console.error("Error updating cart:", error);
+            this.logger.error("Error updating cart", error);
             if (error.response && import.meta.env.DEV) {
-                console.error("Upstream Medusa Error Data:", JSON.stringify(error.response.data || {}, null, 2));
+                this.logger.error("Upstream Medusa Error Data", error, { data: error.response.data });
             }
             throw error;
         }

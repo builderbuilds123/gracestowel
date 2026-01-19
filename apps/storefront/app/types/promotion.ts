@@ -81,6 +81,7 @@ export interface AppliedPromoCode {
   code: string;
   discount: number;
   description?: string;
+  isAutomatic?: boolean;
 }
 
 /**
@@ -90,6 +91,16 @@ export interface AppliedPromoCode {
 export interface CartWithPromotions {
   id: string;
   discount_total?: number;
+  promotions?: Array<{
+    id?: string;
+    code?: string;
+    is_automatic?: boolean;
+    application_method?: {
+      target_type?: string;
+      type?: string;
+      value?: string | number;
+    };
+  }>;
   items?: Array<{
     id: string;
     adjustments?: LineItemAdjustment[];

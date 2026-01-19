@@ -37,6 +37,7 @@ export interface ProductDetail {
     handle: string;
     title: string;
     price: number;           // Price in cents
+    originalPrice?: number;  // Original price in cents (optional, for discounts)
     formattedPrice: string;
     description: string;
     images: string[];
@@ -131,6 +132,13 @@ export function transformToDetail(
     const priceData = getProductPrice(product, currency);
     const metadata = product.metadata || {};
     const colors = extractColors(product);
+    const firstVariant = product.variants?.[0];
+    const originalPriceCandidate = firstVariant?.calculated_price?.original_amount
+        ?? firstVariant?.compare_at_price
+        ?? firstVariant?.original_price;
+    const originalPrice = typeof originalPriceCandidate === "number" && originalPriceCandidate > 0
+        ? originalPriceCandidate
+        : undefined;
     
     // Parse metadata arrays
     const features = parseMetadataArray(metadata.features);
@@ -141,6 +149,7 @@ export function transformToDetail(
         handle: product.handle,
         title: product.title,
         price: priceData?.amount || 0,
+        originalPrice,
         formattedPrice: priceData?.formatted || "$0.00",
         description: product.description || "",
         images: product.images?.map(img => img.url) || [product.thumbnail || "/placeholder.jpg"],
@@ -170,4 +179,3 @@ export function transformToListItems(
 ): ProductListItem[] {
     return products.map(p => transformToListItem(p, currency));
 }
-

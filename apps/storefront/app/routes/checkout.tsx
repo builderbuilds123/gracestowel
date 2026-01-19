@@ -32,9 +32,11 @@ interface LoaderData {
 export async function loader({
   context,
 }: LoaderFunctionArgs): Promise<LoaderData> {
-  const env = context.cloudflare.env as { STRIPE_PUBLISHABLE_KEY: string };
+  // Support both Cloudflare (context.env) and Node/Vite (process.env)
+  const env = (context?.cloudflare?.env || process.env) as { STRIPE_PUBLISHABLE_KEY?: string; VITE_STRIPE_PUBLISHABLE_KEY?: string };
+  const stripeKey = env.STRIPE_PUBLISHABLE_KEY || env.VITE_STRIPE_PUBLISHABLE_KEY;
   return {
-    stripePublishableKey: env.STRIPE_PUBLISHABLE_KEY,
+    stripePublishableKey: stripeKey || "",
   };
 }
 
@@ -45,6 +47,17 @@ export default function Checkout() {
   useEffect(() => {
     if (stripePublishableKey) {
       initStripe(stripePublishableKey);
+    }
+    
+    // Clear stale verifiedOrder from previous checkouts
+    // This prevents old order data from appearing on the success page
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.removeItem('verifiedOrder');
+        sessionStorage.removeItem('lastOrder'); // Also clear lastOrder to ensure fresh data
+      } catch (e) {
+        // Non-critical: ignore storage errors
+      }
     }
   }, [stripePublishableKey]);
 
@@ -112,6 +125,20 @@ export default function Checkout() {
     refreshDiscount,
     syncFromCart: syncPromoFromCart,
   } = usePromoCode({ cartId });
+
+  // Add a dedicated effect to log checkout state changes for debugging auto-promo
+  useEffect(() => {
+    if (isDevelopment) {
+      logger.info('[Checkout] State Sync Trace', {
+        itemsCount: items.length,
+        cartTotal,
+        totalDiscount,
+        finalTotal: (cartTotal - totalDiscount + (selectedShipping?.amount ?? 0)),
+        isPromoLoading,
+        appliedCodes: appliedPromoCodes.map(c => c.code)
+      });
+    }
+  }, [items, cartTotal, totalDiscount, isPromoLoading, appliedPromoCodes, isDevelopment, logger, selectedShipping]);
 
   // PROMO-1 Phase 2: Automatic promotions hook
   const {
@@ -218,26 +245,16 @@ export default function Checkout() {
   // Combine payment errors for display
   const paymentError = collectionError || sessionError;
 
-  const buildUpdatePayload = useCallback((currentItems: typeof items, address: any) => {
-    const payload: {
-      items: typeof currentItems;
-      promo_codes?: string[];
-      region_id?: string;
-      shipping_address?: {
-        first_name: string;
-        last_name: string;
-        address_1: string;
-        address_2?: string;
-        city: string;
-        country_code: string;
-        postal_code: string;
-        province?: string;
-        phone?: string;
-      };
-      email?: string;
-    } = {
+  const buildUpdatePayload = useCallback((currentItems: typeof items, address: { firstName?: string; lastName?: string; address?: { line1?: string; line2?: string; city?: string; country?: string; postal_code?: string; state?: string }; phone?: string }) => {
+    const payload: Record<string, unknown> = {
       items: currentItems,
-      shipping_address: address ? {
+      promo_codes: appliedPromoCodes
+        .filter(code => !code.isAutomatic)
+        .map((code) => code.code)
+    };
+
+    if (address) {
+      payload.shipping_address = {
         first_name: address.firstName || '',
         last_name: address.lastName || '',
         address_1: address.address?.line1 || '',
@@ -247,16 +264,15 @@ export default function Checkout() {
         postal_code: address.address?.postal_code || '',
         province: address.address?.state,
         phone: address.phone,
-      } : undefined,
-      email: guestEmail,
-    };
+      };
+    }
+
+    if (guestEmail) {
+      payload.email = guestEmail;
+    }
 
     if (regionId) {
       payload.region_id = regionId;
-    }
-
-    if (appliedPromoCodes.length > 0) {
-      payload.promo_codes = appliedPromoCodes.map((code) => code.code);
     }
 
     return payload;
@@ -314,19 +330,33 @@ export default function Checkout() {
         return false; 
       }
 
-      throw new Error(`Cart update failed: ${error.error}`);
+      // Handle completed cart error (from previous checkout)
+      // If cart is already completed, we need to create a fresh cart
+      if (updateResult.code === 'CART_COMPLETED') {
+        logger.warn('Cart already completed, clearing session');
+        sessionStorage.removeItem('medusa_cart_id');
+        setCartId(undefined);
+        // Return false to trigger re-sync with new cart
+        return false;
+      }
+
+      throw new Error(updateResult.details || updateResult.error);
     }
     
     // Clear previous errors if successful
     setCartSyncError(null);
 
-    if (updateResult.cart && typeof updateResult.cart.discount_total === "number") {
-      if (currentRequestId === cartUpdateRequestIdRef.current) {
-        syncPromoFromCart(updateResult.cart);
-      }
-    } else {
-      await refreshDiscount(currentRequestId);
+    // NEW: Sync promo state immediately if return contains cart
+    if (updateResult.cart) {
+      logger.info('[Checkout] Syncing promo state from update result');
+      syncPromoFromCart(updateResult.cart);
     }
+
+    // Always refresh discount from Medusa to get accurate promo data
+    // The API cart response may not include full promotion/adjustment data
+    logger.info('[Checkout] Triggering discount refresh after cart update...');
+    await refreshDiscount(currentRequestId);
+    logger.info('[Checkout] Discount refresh completed.');
 
     if (isDevelopment) {
       logger.info('Step 2 SUCCESS - Cart updated');
@@ -492,7 +522,7 @@ export default function Checkout() {
     }
 
     const addressValue = event.value;
-    
+
     // Parse name into first/last name for Medusa
     let firstName = '';
     let lastName = '';
@@ -646,6 +676,8 @@ export default function Checkout() {
                     paymentCollectionId={paymentCollectionId}
                     guestEmail={guestEmail}
                     cartId={cartId || ""}
+                    discountTotal={totalDiscount}
+                    appliedPromoCodes={appliedPromoCodes}
                     customerData={
                       isAuthenticated && customer
                         ? {

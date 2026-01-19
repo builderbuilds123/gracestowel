@@ -26,6 +26,13 @@ export interface MedusaProduct {
         id: string;
         title: string;
         sku: string | null;
+        compare_at_price?: number;
+        original_price?: number;
+        calculated_price?: {
+            calculated_amount: number;
+            original_amount?: number;
+            currency_code?: string;
+        };
         prices: Array<{
             id: string;
             amount: number;

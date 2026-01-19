@@ -503,14 +503,14 @@ const prepareReservationReleaseStep = createStep(
         // 2. Find reservations linked to these line items
         // Uses the module link defined in Phase 1
         const { data: reservations } = await query.graph({
-            entity: "reservation_item",
+            entity: "reservation",
             fields: ["id"],
             filters: {
                 line_item_id: lineItemIds
             }
         });
         
-        const ids = reservations.map((r: any) => r.id);
+        const ids = (reservations || []).map((r: any) => r.id);
         
         if (ids.length > 0) {
             logger.info(`[CancelOrder] Found ${ids.length} reservations to release for order ${input.orderId}`);

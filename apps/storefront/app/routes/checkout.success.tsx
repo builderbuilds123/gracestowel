@@ -10,6 +10,8 @@ import { getStripe, initStripe } from "../lib/stripe";
 import { monitoredFetch } from "../utils/monitored-fetch";
 import { createLogger } from "../lib/logger";
 import { migrateStorageItem } from "../lib/storage-migration";
+import { parsePrice } from "../lib/price";
+import posthog from "posthog-js";
 
 // Lazy load Map component to avoid SSR issues with Leaflet
 const Map = lazy(() => import("../components/Map.client"));
@@ -175,6 +177,40 @@ export default function CheckoutSuccess() {
 
     useEffect(() => {
         if (!urlSanitized) return;
+        
+        // REFRESH FIX: Check for stored verified order FIRST (before checking params)
+        // This allows the success page to survive hard refreshes when cookie is gone
+        try {
+            const storedVerifiedOrder = sessionStorage.getItem('verifiedOrder');
+            if (storedVerifiedOrder) {
+                const parsed = JSON.parse(storedVerifiedOrder);
+                
+                if (parsed.isCanceled) {
+                    setPaymentStatus('canceled');
+                    return;
+                }
+
+                if (parsed.orderDetails) {
+                    setOrderDetails(parsed.orderDetails);
+                    setShippingAddress(parsed.shippingAddress);
+                    setPaymentStatus('success');
+                    
+                    // Restore orderId if available
+                    const storedOrderId = sessionStorage.getItem('orderId');
+                    if (storedOrderId) setOrderId(storedOrderId);
+                    
+                    // Ensure cart is cleared (may have been missed on initial load)
+                    clearCart();
+                    
+                    logger.info('Restored verified order from sessionStorage');
+                    return;
+                }
+            }
+        } catch (error) {
+            // Non-critical: if parsing fails, continue with Stripe verification
+            logger.warn('Failed to restore verified order', { error: error instanceof Error ? error.message : String(error) });
+        }
+        
         const paymentIntentId = initialParamsRef.current?.paymentIntentId;
         const paymentIntentClientSecret = initialParamsRef.current?.paymentIntentClientSecret;
         const redirectStatus = initialParamsRef.current?.redirectStatus;
@@ -185,7 +221,12 @@ export default function CheckoutSuccess() {
         }
 
         const currentParams = initialParamsRef.current;
-        if (!currentParams) return;
+        if (!currentParams) {
+            // No params and no cached order - show error
+            setPaymentStatus("error");
+            setMessage("No payment information found. Please return to checkout.");
+            return;
+        }
 
         // Prevent double processing
         if (processedRef.current === currentParams.paymentIntentId) {
@@ -193,37 +234,6 @@ export default function CheckoutSuccess() {
         }
 
         const fetchPaymentDetails = async () => {
-            // SECURITY: Don't log sensitive payment data (paymentIntentId, clientSecret)
-            // DEBUG REFRESH FIX: Check for stored verified order first
-            // This allows the success page to survive refreshes
-            try {
-                const storedVerifiedOrder = sessionStorage.getItem('verifiedOrder');
-                if (storedVerifiedOrder) {
-                    const parsed = JSON.parse(storedVerifiedOrder);
-                    
-                    if (parsed.isCanceled) {
-                        setPaymentStatus('canceled');
-                        return;
-                    }
-
-                    if (parsed.orderDetails) {
-                        setOrderDetails(parsed.orderDetails);
-                        setShippingAddress(parsed.shippingAddress);
-                        setPaymentStatus('success');
-                        
-                        // Restore orderId if available
-                        const storedOrderId = sessionStorage.getItem('orderId');
-                        if (storedOrderId) setOrderId(storedOrderId);
-                        
-                        logger.info('Restored verified order from sessionStorage');
-                        return;
-                    }
-                }
-            } catch (error) {
-                // Non-critical: if parsing fails, continue with Stripe verification
-                logger.warn('Failed to restore verified order', { error: error instanceof Error ? error.message : String(error) });
-            }
-
             if (!currentParams.paymentIntentClientSecret) {
                 setPaymentStatus("error");
                 setMessage("No payment intent found");
@@ -280,6 +290,12 @@ export default function CheckoutSuccess() {
 
                         if (savedOrder) {
                             const parsedOrder = JSON.parse(savedOrder);
+                            // DEBUG: Log what's being loaded
+                            logger.info('Loaded from lastOrder', {
+                                hasDiscount: Boolean(parsedOrder.discount),
+                                discount: parsedOrder.discount,
+                                appliedPromoCodesCount: parsedOrder.appliedPromoCodes?.length || 0
+                            });
                             // Update with actual order number from Stripe
                             orderData = {
                                 ...parsedOrder,
@@ -301,10 +317,7 @@ export default function CheckoutSuccess() {
                                     day: 'numeric'
                                 }),
                                 items: [...items],
-                                total: items.reduce((sum, item) => {
-                                    const price = parseFloat(item.price.replace('$', ''));
-                                    return sum + (price * item.quantity);
-                                }, 0)
+                                total: paymentIntent.amount / 100
                             };
                         } else {
                             // Final fallback: just show total from Stripe
@@ -321,9 +334,20 @@ export default function CheckoutSuccess() {
                         if (paymentIntent.shipping) {
                             setShippingAddress(paymentIntent.shipping);
                         }
-                        
+
                         // RENDER SUCCESS IMMEDIATELY
                         setPaymentStatus('success');
+
+                        // Capture purchase_completed event for PostHog survey targeting
+                        // PostHog will auto-show post-purchase survey based on URL targeting
+                        if (typeof window !== 'undefined') {
+                            posthog.capture('purchase_completed', {
+                                order_total: orderData.total,
+                                item_count: orderData.items?.length || 0,
+                                has_discount: (orderData.discount || 0) > 0,
+                                has_promo_codes: (orderData.appliedPromoCodes?.length || 0) > 0,
+                            });
+                        }
 
                         // REFRESH FIX: Store verified order data so success page survives refresh
                         try {
@@ -697,8 +721,38 @@ export default function CheckoutSuccess() {
                         <div className="border-t border-gray-200 pt-4">
                             <div className="flex justify-between items-center mb-2">
                                 <span className="text-text-earthy/80">Subtotal</span>
-                                <span className="text-text-earthy font-medium">${orderDetails?.subtotal?.toFixed(2) || orderDetails?.items.reduce((acc: number, item: any) => acc + parseFloat(item.price.replace('$', '')) * item.quantity, 0).toFixed(2)}</span>
+                                <span className="text-text-earthy font-medium">${orderDetails?.subtotal?.toFixed(2) || orderDetails?.items.reduce((acc: number, item: any) => acc + parsePrice(item.price) * item.quantity, 0).toFixed(2)}</span>
                             </div>
+                            
+                            {/* Applied Promo Codes */}
+                            {orderDetails?.appliedPromoCodes && orderDetails.appliedPromoCodes.length > 0 && (
+                                <div className="mb-3">
+                                    <div className="flex flex-wrap gap-2">
+                                        {orderDetails.appliedPromoCodes.map((promo: { code: string; discount: number; isAutomatic?: boolean }) => (
+                                            <span 
+                                                key={promo.code}
+                                                className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${
+                                                    promo.isAutomatic 
+                                                        ? 'bg-purple-100 text-purple-800' 
+                                                        : 'bg-green-100 text-green-800'
+                                                }`}
+                                            >
+                                                {promo.code}
+                                                {promo.isAutomatic && <span className="text-purple-500">Auto</span>}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                            
+                            {/* Discount Row */}
+                            {orderDetails?.discount > 0 && (
+                                <div className="flex justify-between items-center mb-2">
+                                    <span className="text-text-earthy/80">Discount</span>
+                                    <span className="text-green-600 font-medium">-${orderDetails.discount.toFixed(2)}</span>
+                                </div>
+                            )}
+                            
                             <div className="flex justify-between items-center mb-4">
                                 <span className="text-text-earthy/80">Shipping</span>
                                 <span className="text-text-earthy font-medium">

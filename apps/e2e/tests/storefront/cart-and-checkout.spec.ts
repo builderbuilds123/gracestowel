@@ -32,7 +32,7 @@ test.describe("Storefront cart + checkout flows", () => {
     await expect(page.getByRole("heading", { name: /towel rack/i })).toBeVisible({ timeout: 30000 });
 
     // Increase quantity
-    const increaseButton = page.getByLabel("Increase quantity");
+    const increaseButton = page.getByLabel(/Increase .* quantity/i).first();
     await increaseButton.scrollIntoViewIfNeeded();
     await increaseButton.evaluate((el: any) => el.click());
     await increaseButton.evaluate((el: any) => el.click());
