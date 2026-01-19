@@ -265,10 +265,30 @@ export function triggerErrorFeedbackSurvey() {
     // Mark as shown
     sessionStorage.setItem(COOLDOWN_KEY, Date.now().toString());
 
-    // Capture survey shown event - PostHog will render the survey
-    posthog.capture('survey shown', {
-      $survey_id: POSTHOG_SURVEY_IDS.ERROR_FEEDBACK,
-    });
+    const client = posthog as unknown as {
+      capture: (event: string, properties?: Record<string, unknown>) => void;
+      getActiveMatchingSurveys?: (cb: (surveys: Array<{ id: string }>) => void, forceReload?: boolean) => void;
+      showSurvey?: (id: string) => void;
+      renderSurvey?: (survey: { id: string }) => void;
+    };
+
+    if (typeof client.getActiveMatchingSurveys === 'function') {
+      client.getActiveMatchingSurveys((surveys) => {
+        const survey = surveys?.find((s) => s.id === POSTHOG_SURVEY_IDS.ERROR_FEEDBACK);
+        if (!survey) return;
+        if (typeof client.showSurvey === 'function') {
+          client.showSurvey(survey.id);
+          return;
+        }
+        if (typeof client.renderSurvey === 'function') {
+          client.renderSurvey(survey);
+          return;
+        }
+        client.capture('survey shown', { $survey_id: POSTHOG_SURVEY_IDS.ERROR_FEEDBACK });
+      }, true);
+    } else {
+      client.capture('survey shown', { $survey_id: POSTHOG_SURVEY_IDS.ERROR_FEEDBACK });
+    }
   } catch {
     // Storage access failed (private mode, etc.) - skip survey
   }

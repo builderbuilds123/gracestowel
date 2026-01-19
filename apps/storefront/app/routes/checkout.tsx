@@ -33,7 +33,9 @@ export async function loader({
   context,
 }: LoaderFunctionArgs): Promise<LoaderData> {
   // Support both Cloudflare (context.env) and Node/Vite (process.env)
-  const env = (context?.cloudflare?.env || process.env) as { STRIPE_PUBLISHABLE_KEY?: string; VITE_STRIPE_PUBLISHABLE_KEY?: string };
+  const cloudflareEnv = context?.cloudflare?.env;
+  const nodeEnv = typeof process !== 'undefined' ? process.env : {};
+  const env = (cloudflareEnv || nodeEnv) as { STRIPE_PUBLISHABLE_KEY?: string; VITE_STRIPE_PUBLISHABLE_KEY?: string };
   const stripeKey = env.STRIPE_PUBLISHABLE_KEY || env.VITE_STRIPE_PUBLISHABLE_KEY;
   return {
     stripePublishableKey: stripeKey || "",
@@ -332,7 +334,7 @@ export default function Checkout() {
 
       // Handle completed cart error (from previous checkout)
       // If cart is already completed, we need to create a fresh cart
-      if (updateResult.code === 'CART_COMPLETED') {
+      if (error.code === 'CART_COMPLETED') {
         logger.warn('Cart already completed, clearing session');
         sessionStorage.removeItem('medusa_cart_id');
         setCartId(undefined);
@@ -340,7 +342,7 @@ export default function Checkout() {
         return false;
       }
 
-      throw new Error(updateResult.details || updateResult.error);
+      throw new Error(error.details || error.error);
     }
     
     // Clear previous errors if successful

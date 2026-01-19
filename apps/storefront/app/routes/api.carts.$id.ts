@@ -98,10 +98,17 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
       });
       
       const validItems = items.filter(item => {
-        const hasId = !!(item.variantId || item.id);
-        const isMedusa = isMedusaId(item.variantId || item.id);
-        return hasId && isMedusa && item.quantity > 0;
+        const hasVariantId = !!item.variantId;
+        const isMedusaVariant = item.variantId ? isMedusaId(item.variantId) : false;
+        return hasVariantId && isMedusaVariant && item.quantity > 0;
       });
+
+      if (validItems.length === 0) {
+        logger.warn('[Cart Sync] No valid cart items provided', {
+          received: items.length,
+        });
+        return data({ error: "No valid cart items provided" }, { status: 400 });
+      }
       
       if (validItems.length !== items.length) {
         const invalid = items.filter(i => !validItems.includes(i));
