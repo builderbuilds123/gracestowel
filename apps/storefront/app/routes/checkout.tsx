@@ -99,6 +99,7 @@ export default function Checkout() {
     }
     return undefined;
   });
+  const [medusaCart, setMedusaCart] = useState<CartWithPromotions | null>(null);
 
   const [shippingOptions, setShippingOptions] = useState<ShippingOption[]>([]);
   const [selectedShipping, setSelectedShipping] =
@@ -133,28 +134,46 @@ export default function Checkout() {
     syncFromCart: syncPromoFromCart,
   } = usePromoCode({ cartId });
 
+  // Prefer Medusa totals when available (fallback to local calculations)
+  const displayCartTotal = medusaCart?.subtotal ?? cartTotal;
+  const displayDiscountTotal = medusaCart?.discount_total ?? totalDiscount;
+  const displayShippingCost = selectedShipping
+    ? (medusaCart?.shipping_total ?? (selectedShipping?.amount ?? 0))
+    : (selectedShipping?.amount ?? 0);
+  const displayFinalTotal =
+    medusaCart?.total ?? (displayCartTotal - displayDiscountTotal + displayShippingCost);
+
   // Add a dedicated effect to log checkout state changes for debugging auto-promo
   useEffect(() => {
     if (isDevelopment) {
       logger.info('[Checkout] State Sync Trace', {
         itemsCount: items.length,
-        cartTotal,
-        totalDiscount,
-        finalTotal: (cartTotal - totalDiscount + (selectedShipping?.amount ?? 0)),
+        cartTotal: displayCartTotal,
+        totalDiscount: displayDiscountTotal,
+        finalTotal: displayFinalTotal,
         isPromoLoading,
         appliedCodes: appliedPromoCodes.map(c => c.code)
       });
     }
-  }, [items, cartTotal, totalDiscount, isPromoLoading, appliedPromoCodes, isDevelopment, logger, selectedShipping]);
+  }, [
+    items,
+    displayCartTotal,
+    displayDiscountTotal,
+    displayFinalTotal,
+    isPromoLoading,
+    appliedPromoCodes,
+    isDevelopment,
+    logger,
+  ]);
 
   // PROMO-1 Phase 2: Automatic promotions hook
   const {
     promotions: automaticPromotions,
     hasFreeShipping,
   } = useAutomaticPromotions({ 
-    cartSubtotal: cartTotal,
+    cartSubtotal: displayCartTotal,
     currencyCode: currency,
-    enabled: cartTotal > 0,
+    enabled: displayCartTotal > 0,
   });
 
   /**
@@ -200,21 +219,19 @@ export default function Checkout() {
 
   // Shipping amount from Medusa is in dollars
   const shippingCost = selectedShipping?.amount ?? 0;
-  // PROMO-1: Subtract discount from final total
-  const finalTotal = cartTotal - totalDiscount + shippingCost;
 
   const hasFiredCheckoutStarted = useRef(false);
 
   // Track checkout started event in PostHog
   useEffect(() => {
     if (
-      cartTotal > 0 &&
+      displayCartTotal > 0 &&
       typeof window !== "undefined" &&
       !hasFiredCheckoutStarted.current
     ) {
       import("../utils/posthog").then(({ default: posthog }) => {
         posthog.capture("checkout_started", {
-          cart_total: cartTotal,
+          cart_total: displayCartTotal,
           item_count: items.length,
           currency,
           items: items.map((item) => ({
@@ -227,7 +244,7 @@ export default function Checkout() {
       });
       hasFiredCheckoutStarted.current = true;
     }
-  }, [cartTotal, items, currency]);
+  }, [displayCartTotal, items, currency]);
 
   // CHK-02-B M1 FIX: Payment hooks with race condition protection
   // Step 1: Create PaymentCollection (once per cart, with request ID pattern)
@@ -357,6 +374,7 @@ export default function Checkout() {
     if (updateResult.cart) {
       logger.info('[Checkout] Syncing promo state from update result');
       syncPromoFromCart(updateResult.cart);
+      setMedusaCart(updateResult.cart);
     }
 
     // Always refresh discount from Medusa to get accurate promo data
@@ -430,6 +448,7 @@ export default function Checkout() {
         const { cart_id } = await createResponse.json() as { cart_id: string };
         currentCartId = cart_id;
         setCartId(cart_id);
+        setMedusaCart(null);
         setIsCartSynced(false); // Reset sync state for new cart
         if (isDevelopment) {
           logger.info('Step 1 SUCCESS - Cart created', { cart_id });
@@ -611,7 +630,7 @@ export default function Checkout() {
     );
   }
 
-  if (cartTotal <= 0) {
+  if (displayCartTotal <= 0) {
     return (
       <div className="min-h-screen bg-card-earthy/10 flex items-center justify-center">
         <div className="text-center">
@@ -671,7 +690,7 @@ export default function Checkout() {
                 <div className="bg-white p-6 lg:p-8 rounded-lg shadow-sm border border-card-earthy/20">
                   <CheckoutForm
                     items={items}
-                    cartTotal={cartTotal}
+                    cartTotal={displayCartTotal}
                     onAddressChange={handleAddressChange}
                     onEmailChange={setGuestEmail}
                     shippingOptions={shippingOptions}
@@ -683,7 +702,7 @@ export default function Checkout() {
                     paymentCollectionId={paymentCollectionId}
                     guestEmail={guestEmail}
                     cartId={cartId || ""}
-                    discountTotal={totalDiscount}
+                    discountTotal={displayDiscountTotal}
                     appliedPromoCodes={appliedPromoCodes}
                     customerData={
                       isAuthenticated && customer
@@ -728,11 +747,11 @@ export default function Checkout() {
           {/* Order Summary */}
           <OrderSummary
             items={items}
-            cartTotal={cartTotal}
+            cartTotal={displayCartTotal}
             originalTotal={originalTotal}
             selectedShipping={selectedShipping}
-            shippingCost={shippingCost}
-            finalTotal={finalTotal}
+            shippingCost={displayShippingCost}
+            finalTotal={displayFinalTotal}
             onUpdateQuantity={updateQuantity}
             onRemoveFromCart={removeFromCart}
             // PROMO-1: Promo code props
@@ -743,7 +762,7 @@ export default function Checkout() {
             isPromoLoading={isPromoLoading}
             promoError={promoError}
             promoSuccessMessage={promoSuccessMessage}
-            discountTotal={totalDiscount}
+            discountTotal={displayDiscountTotal}
             automaticPromotions={automaticPromotions}
           />
         </div>
