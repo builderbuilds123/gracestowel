@@ -42,7 +42,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
   }
 
   // CSRF Check
-  const env = context.cloudflare.env as CloudflareEnv;
+  const env = context.cloudflare.env as unknown as CloudflareEnv;
   const jwtSecret = resolveCSRFSecret(env.JWT_SECRET);
   if (!jwtSecret) {
     logger.error("JWT_SECRET not configured for CSRF validation");

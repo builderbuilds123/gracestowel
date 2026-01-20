@@ -21,7 +21,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
     return data({ error: "Method not allowed" }, { status: 405 });
   }
 
-  const env = context.cloudflare.env as CloudflareEnv;
+  const env = context.cloudflare.env as unknown as CloudflareEnv;
 
   // CSRF Check
   const jwtSecret = resolveCSRFSecret(env.JWT_SECRET);

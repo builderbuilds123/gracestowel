@@ -91,7 +91,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
     return data({ message: "Method not allowed" }, { status: 405 });
   }
 
-  const env = context.cloudflare.env as CloudflareEnv;
+  const env = context.cloudflare.env as unknown as CloudflareEnv;
 
   const medusaBackendUrl = env.MEDUSA_BACKEND_URL || "http://localhost:9000";
   const medusaPublishableKey = env.MEDUSA_PUBLISHABLE_KEY;

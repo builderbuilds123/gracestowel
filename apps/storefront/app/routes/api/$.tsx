@@ -9,7 +9,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
 export async function action({ request, params, context }: ActionFunctionArgs) {
     // CSRF Check
     const env =
-        (context.cloudflare?.env as CloudflareEnv | undefined) ||
+        (context.cloudflare?.env as unknown as CloudflareEnv | undefined) ||
         ((context as { env?: CloudflareEnv }).env ?? {});
     const jwtSecret = resolveCSRFSecret(env.JWT_SECRET);
     if (!jwtSecret) {

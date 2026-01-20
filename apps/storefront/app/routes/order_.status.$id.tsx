@@ -31,7 +31,7 @@ interface ErrorData {
 
 export async function loader({ params, request, context }: LoaderFunctionArgs) {
     const { id } = params;
-    const env = context.cloudflare.env as CloudflareEnv;
+    const env = context.cloudflare.env as unknown as CloudflareEnv;
     const medusaBackendUrl = env.MEDUSA_BACKEND_URL;
     const medusaPublishableKey = env.MEDUSA_PUBLISHABLE_KEY;
 

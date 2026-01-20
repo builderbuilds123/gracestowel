@@ -79,12 +79,14 @@ function AnalyticsTracking() {
 
 import { createCSRFToken, resolveCSRFSecret } from "./utils/csrf.server";
 import { data } from "react-router";
+import type { CloudflareEnv } from "./utils/monitored-fetch";
 
 // ... (existing imports)
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   // Ensure we have access to Cloudflare env
-  const env = context.cloudflare?.env;
+  // Cast to CloudflareEnv which includes secrets not in wrangler.json (set via dashboard)
+  const env = context.cloudflare?.env as unknown as CloudflareEnv | undefined;
 
   if (!env) {
     throw new Error("Cloudflare environment context is not available.");
