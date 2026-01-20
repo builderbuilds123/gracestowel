@@ -16,7 +16,7 @@ import { parsePrice } from '../../lib/price';
 import { CHECKOUT_CONSTANTS } from '../../constants/checkout';
 import { type ShippingOption } from '../CheckoutForm';
 import type { CartItem, ProductId } from '../../types/product';
-import type { CartWithPromotions } from '../../types/promotion';
+import type { CartWithPromotions, AppliedPromoCode } from '../../types/promotion';
 import type { CheckoutState } from '../../types/checkout';
 import type { CheckoutError, CheckoutErrorType } from '../../hooks/useCheckoutError';
 
