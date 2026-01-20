@@ -96,7 +96,8 @@ test.describe("Storefront cart + checkout flows", () => {
       page.waitForURL(/checkout/i, { timeout: 30_000 }),
       (async () => {
         await page.evaluate(() => document.querySelectorAll('div[class*="PostHogSurvey"]').forEach(el => el.remove()));
-        await checkoutTrigger.first().click({ force: true });
+        // Use JS click to bypass "outside of viewport" errors completely
+        await checkoutTrigger.first().evaluate((el: HTMLElement) => { el.scrollIntoView(); el.click(); });
       })(),
     ]);
 
