@@ -56,11 +56,31 @@ export const backendEnvSchema = z.object({
   CAPTURE_BUFFER_SECONDS: z.coerce.number().optional(),
 
   // === Optional: Analytics ===
+  POSTHOG_EVENTS_API_KEY: z.string().optional(),
+  POSTHOG_HOST: z.string().optional(),
   POSTHOG_LOG_INFO: z.string().optional(),
+  LOG_LEVEL: z.string().optional(),
 
   // === Optional: Medusa Feature Flags ===
   MEDUSA_FF_TRANSLATION: z.string().optional(),
   MEDUSA_FF_RBAC: z.string().optional(),
+}).superRefine((data, ctx) => {
+  if (data.NODE_ENV === 'production') {
+    if (!data.POSTHOG_EVENTS_API_KEY) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['POSTHOG_EVENTS_API_KEY'],
+        message: 'POSTHOG_EVENTS_API_KEY is required in production for analytics.',
+      });
+    }
+    if (!data.POSTHOG_HOST) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['POSTHOG_HOST'],
+        message: 'POSTHOG_HOST is required in production for analytics.',
+      });
+    }
+  }
 });
 
 export type BackendEnv = z.infer<typeof backendEnvSchema>;
