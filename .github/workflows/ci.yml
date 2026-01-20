@@ -239,8 +239,8 @@ jobs:
 
       - name: Start backend and database
         env:
-          STRIPE_SECRET_KEY: sk_test_placeholder_for_ci_testing # Pattern: sk_test_placeholder_for_ci_testing
-          STRIPE_WEBHOOK_SECRET: whsec_test_placeholder_for_ci
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
         run: docker compose -f docker-compose.test.yml up -d postgres redis backend
 
       - name: Wait for backend to be ready
@@ -274,6 +274,8 @@ jobs:
         env:
           MEDUSA_PUBLISHABLE_KEY: ${{ steps.get-api-key.outputs.MEDUSA_PUBLISHABLE_KEY }}
           JWT_SECRET: "test-secret-must-be-at-least-32-characters-long-for-security"
+          STRIPE_PUBLISHABLE_KEY: ${{ secrets.STRIPE_PUBLISHABLE_KEY }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
         run: docker compose -f docker-compose.test.yml up -d storefront
 
       - name: Wait for storefront to be ready
