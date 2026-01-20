@@ -29,7 +29,8 @@ module.exports = defineConfig({
     }
   },
   admin: {
-    disable: process.env.DISABLE_MEDUSA_ADMIN === "true",
+    // Disable admin for worker instances (saves ~100MB RAM)
+    disable: process.env.DISABLE_MEDUSA_ADMIN === "true" || process.env.MEDUSA_WORKER_MODE === "worker",
     backendUrl: process.env.RAILWAY_PUBLIC_DOMAIN || process.env.MEDUSA_BACKEND_URL || "/"
   },
   modules: [

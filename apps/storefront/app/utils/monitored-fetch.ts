@@ -18,11 +18,18 @@ type ServerPostHogConfig = {
  * In Workers, env vars are accessed via context.cloudflare.env, not process.env
  */
 export type CloudflareEnv = {
+  ENVIRONMENT?: string;
+  DATABASE_URL?: string;
+  MEDUSA_BACKEND_URL?: string;
+  MEDUSA_PUBLISHABLE_KEY?: string;
+  STRIPE_SECRET_KEY?: string;
+  STRIPE_PUBLISHABLE_KEY?: string;
   VITE_POSTHOG_API_KEY?: string;
   VITE_POSTHOG_HOST?: string;
   POSTHOG_API_KEY?: string;
   POSTHOG_HOST?: string;
   JWT_SECRET?: string;
+  JWE_SECRET?: string;
   NODE_ENV?: string;
   POSTHOG_SERVER_CAPTURE_ENABLED?: string | boolean;
   [key: string]: unknown;

@@ -28,6 +28,10 @@ export const storefrontEnvSchema = z.object({
     .string()
     .min(32, 'JWT_SECRET should be at least 32 characters for security')
     .optional(),
+  JWE_SECRET: z
+    .string()
+    .min(32, 'JWE_SECRET should be at least 32 characters for security')
+    .optional(),
 
   // === Optional: Analytics (PostHog) ===
   VITE_POSTHOG_API_KEY: z.string().optional(),

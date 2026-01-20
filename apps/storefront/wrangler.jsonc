@@ -70,6 +70,8 @@
         "ENVIRONMENT": "development",
         "MEDUSA_BACKEND_URL": "http://backend:8080",
         "MEDUSA_PUBLISHABLE_KEY": "placeholder",
+        "JWT_SECRET": "placeholder",
+        "JWE_SECRET": "placeholder",
       },
     },
   },
