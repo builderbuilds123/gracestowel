@@ -39,6 +39,7 @@ The checkout implementation scored **A-** against Medusa.js documentation with *
 ```
 
 **Acceptance Criteria:**
+
 - [x] Debug div removed from CheckoutForm.tsx
 - [x] No "Debug:" text visible on checkout page
 
@@ -67,6 +68,7 @@ const createResponse = await retry(
 ```
 
 **Acceptance Criteria:**
+
 - [x] `retry` utility imported in checkout.tsx
 - [x] Cart creation wrapped with retry (3 attempts, 1s delay)
 - [ ] Cart update wrapped with retry (3 attempts, 1s delay) - Not needed, uses same cart sync pattern
@@ -118,6 +120,7 @@ export const CHECKOUT_CONSTANTS = {
 | `api.carts.$id.shipping-options.ts` | 46 | `60` | `SHIPPING_OPTIONS_CACHE_SECONDS` |
 
 **Acceptance Criteria:**
+
 - [x] `constants/checkout.ts` file created with all constants
 - [x] All 7 magic numbers replaced with named constants
 - [x] Constants exported as `const` for type safety
@@ -135,6 +138,7 @@ export const CHECKOUT_CONSTANTS = {
 
 **Option A - Cloudflare Rate Limiting (Recommended):**
 Configure via Cloudflare dashboard or wrangler.toml:
+
 - `/api/payment-collections*`: 10 requests/minute per IP
 - `/api/carts/*/complete`: 5 requests/minute per IP
 
@@ -149,6 +153,7 @@ export async function checkRateLimit(
 ```
 
 **Acceptance Criteria:**
+
 - [ ] Rate limiting configured for payment-collections endpoints
 - [ ] Rate limiting configured for cart-complete endpoint
 - [ ] Rate limit response returns proper 429 status with Retry-After header

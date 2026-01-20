@@ -184,6 +184,7 @@ export const config: SubscriberConfig = {
 **File:** `apps/backend/src/modules/resend/templates/password-reset.tsx` (NEW)
 
 React Email template with:
+
 - Grace's Towel branding
 - Reset button/link
 - Expiration warning

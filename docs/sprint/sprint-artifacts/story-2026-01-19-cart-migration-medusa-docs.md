@@ -5,6 +5,7 @@ Owner: Engineering
 Status: Draft
 
 ## Objective
+
 Align the storefront cart implementation with Medusa’s cart docs for create/retrieve/context/update/promotions/totals, while preserving current checkout behavior.
 
 ## Scope
@@ -37,6 +38,7 @@ Align the storefront cart implementation with Medusa’s cart docs for create/re
 ## Plan (Prioritized)
 
 ### Priority 0 — Correctness & User Trust
+
 1) **Expose Medusa cart totals**
    - Add `subtotal`, `discount_total`, `shipping_total`, `tax_total`, `total`, `currency_code` to `GET /api/carts/:id` response.
 
@@ -44,6 +46,7 @@ Align the storefront cart implementation with Medusa’s cart docs for create/re
    - Prefer Medusa totals when available, keep local totals as fallback.
 
 ### Priority 1 — Core Alignment
+
 3) **Create cart on first cart interaction**
    - Create cart when the user adds the first item and persist `cart_id` in localStorage.
 

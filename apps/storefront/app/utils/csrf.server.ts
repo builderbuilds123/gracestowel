@@ -19,7 +19,7 @@ export function resolveCSRFSecret(secret?: string): string | null {
 export const getCSRFCookie = (secret: string) => createCookie("csrf_token", {
   path: "/",
   httpOnly: true,
-  secure: process.env.NODE_ENV === "production" || import.meta.env.PROD,
+  secure: (process.env.NODE_ENV === "production" || import.meta.env.PROD) && !process.env.CI,
   sameSite: "lax",
   secrets: [secret],
   maxAge: 60 * 60 * 24, // 1 day
