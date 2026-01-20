@@ -18,11 +18,17 @@ test.describe("Full Checkout Flow (Happy Path)", () => {
     await page.goto(`/products/${product.handle}`);
     await page.waitForLoadState("networkidle");
 
+    // Remove PostHog survey popup from DOM if present (it blocks interactions)
+    await page.evaluate(() => {
+      const popups = document.querySelectorAll('[class*="PostHogSurvey"], [class*="posthog-survey"]');
+      popups.forEach(popup => popup.remove());
+    });
+
     // 2. Add to cart
     const addToCartButton = page
       .getByRole("button", { name: /hang it up|add to cart/i })
       .first();
-    await addToCartButton.click();
+    await addToCartButton.click({ force: true }); // Force click in case of any remaining overlays
 
     // Verify item in cart
     await expect(page.getByText(product.title).first()).toBeVisible({
