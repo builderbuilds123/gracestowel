@@ -174,6 +174,7 @@ export async function checkRateLimit(
 - `OrderSummary.tsx`: Simplified to consume context.
  
 **Acceptance Criteria:**
+
 - [x] `checkout.tsx` reduced to 52 lines (Target was < 250)
 - [x] Each extracted component has single responsibility
 - [x] All existing tests pass
@@ -188,6 +189,7 @@ export async function checkRateLimit(
 **Status:** Completed
  
 **Acceptance Criteria:**
+
 - [x] `useCheckoutError` hook created
 - [x] Error types defined: CART_SYNC, SHIPPING, PAYMENT_COLLECTION, PAYMENT_SESSION
 - [x] Recoverable vs blocking error distinction
@@ -281,7 +283,7 @@ Created `apps/e2e/tests/full-checkout.happy.spec.ts` covering the complete guest
 
 ## References
 
-- Medusa Checkout Docs: https://docs.medusajs.com/resources/storefront-development/checkout/
+- Medusa Checkout Docs: <https://docs.medusajs.com/resources/storefront-development/checkout/>
 - Evaluation Report: See conversation history (2026-01-19)
 - Related: `fix-SEC-05-localstorage-token.md` (session storage migration)
 - Related: `fix-CHK-02-B-storefront-payment-ui.md` (payment UI)

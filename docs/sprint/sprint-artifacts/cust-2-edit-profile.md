@@ -40,19 +40,23 @@ Enable customers to edit their profile information (name, phone, company) from t
 ## Acceptance Criteria
 
 ### AC1: Edit Mode Toggle
+
 **Given** a customer is on the profile tab
 **When** they click "Edit Profile" button
 **Then** the profile fields become editable inputs
 
 ### AC2: Editable Fields
+
 **Given** the profile is in edit mode
 **Then** the following fields are editable:
+
 - First Name
 - Last Name
 - Phone Number
 - Company Name (optional)
 
 ### AC3: Save Changes
+
 **Given** a customer modifies their profile
 **When** they click "Save"
 **Then** the changes are sent to `POST /store/customers/me`
@@ -60,18 +64,21 @@ Enable customers to edit their profile information (name, phone, company) from t
 **And** a success message is shown
 
 ### AC4: Cancel Edit
+
 **Given** the profile is in edit mode
 **When** the customer clicks "Cancel"
 **Then** changes are discarded
 **And** the profile returns to read-only mode
 
 ### AC5: Validation
+
 **Given** a customer submits the profile form
 **When** first_name or last_name is empty
 **Then** an error message is shown
 **And** the form is not submitted
 
 ### AC6: Loading State
+
 **Given** the profile form is being submitted
 **Then** the Save button shows a loading indicator
 **And** inputs are disabled

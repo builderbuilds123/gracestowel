@@ -8,11 +8,13 @@ Status: Draft
 Align the storefront cart implementation with Medusa’s cart docs for create/retrieve/context/update/promotions/totals, while preserving current checkout behavior.
 
 ## Scope
+
 - Storefront only (`apps/storefront`)
 - Medusa cart API routes + cart state management
 - No backend business logic changes
 
 ## References
+
 - Medusa Cart Create: <https://docs.medusajs.com/resources/storefront-development/cart/create>
 - Medusa Cart Retrieve: <https://docs.medusajs.com/resources/storefront-development/cart/retrieve>
 - Medusa Cart Context: <https://docs.medusajs.com/resources/storefront-development/cart/context>
@@ -24,6 +26,7 @@ Align the storefront cart implementation with Medusa’s cart docs for create/re
 ---
 
 ## Current State Summary
+
 - Local cart state lives in `CartContext` and localStorage.
 - Medusa cart exists but is created primarily in checkout flows and stored in sessionStorage.
 - Totals are computed locally instead of using Medusa cart totals.
@@ -51,6 +54,7 @@ Align the storefront cart implementation with Medusa’s cart docs for create/re
    - When user authenticates, transfer guest cart to customer using Medusa flow.
 
 ### Priority 2 — Maintainability & Performance
+
 6) **Reduce sync chatter**
    - Optimize `syncCartItems` to avoid unnecessary calls and reduce N+1 updates.
 
@@ -60,6 +64,7 @@ Align the storefront cart implementation with Medusa’s cart docs for create/re
 ---
 
 ## Acceptance Criteria
+
 - Medusa totals are returned and used for display when available.
 - Cart ID persists across sessions (localStorage), and cart is recreated only when expired.
 - Cart is transferred when the user logs in.
@@ -69,4 +74,3 @@ Align the storefront cart implementation with Medusa’s cart docs for create/re
 ## Risks & Notes
 - Ensure UI never regresses during migration; keep local totals as fallback until stable.
 - Cart transfer must avoid duplicate carts for logged-in users.
-

@@ -54,7 +54,7 @@ describe("Email Queue Service", () => {
 
   it("enqueueEmail() adds job with correct options", async () => {
     const payload = {
-      orderId: "ord_123",
+      entityId: "ord_123",
       template: "order-placed" as const,
       recipient: "test@example.com",
       data: {
@@ -91,7 +91,7 @@ describe("Email Queue Service", () => {
     ;(queue.add as any).mockRejectedValueOnce(new Error("Redis offline"))
 
     const payload = {
-        orderId: "ord_fail",
+        entityId: "ord_fail",
         template: "order-placed" as const,
         recipient: "test@example.com",
         data: {

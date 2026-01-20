@@ -42,39 +42,46 @@ Enable customers to manage their saved addresses from the account page. Currentl
 ## Acceptance Criteria
 
 ### AC1: Add Address Button
+
 **Given** a customer is on the addresses tab
 **When** they click "Add Address"
 **Then** an address form dialog opens
 
 ### AC2: Create New Address
+
 **Given** a customer fills out the address form
 **When** they click "Save"
 **Then** the address is created via `POST /store/customers/me/addresses`
 **And** the address list refreshes to show the new address
 
 ### AC3: Edit Existing Address
+
 **Given** a customer clicks "Edit" on an address card
 **When** the dialog opens
 **Then** it's pre-filled with the existing address data
 **And** saving updates via `POST /store/customers/me/addresses/{id}`
 
 ### AC4: Delete Address
+
 **Given** a customer clicks "Delete" on an address card
 **When** they confirm the deletion
 **Then** the address is deleted via `DELETE /store/customers/me/addresses/{id}`
 **And** the address list refreshes
 
 ### AC5: Set Default Address
+
 **Given** a customer has multiple addresses
 **When** they click "Set as Default" on an address
 **Then** that address is marked as the default shipping address
 
 ### AC6: Address Validation
+
 **Given** a customer submits the address form
 **When** required fields are missing (first_name, last_name, address_1, city, country_code, postal_code)
 **Then** validation errors are shown
 
 ### AC7: Empty State
+
 **Given** a customer has no saved addresses
 **Then** they see a message "No saved addresses" with an "Add Address" button
 

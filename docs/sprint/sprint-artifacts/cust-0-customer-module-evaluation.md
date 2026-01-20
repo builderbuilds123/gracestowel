@@ -38,11 +38,13 @@ Comprehensive evaluation of the Grace's Towel customers module implementation ag
 ### 1. Registration ✅ (9/10)
 
 **Documentation Requirements:**
+
 - Two-step flow: Auth registration → Profile creation
 - Handle existing email gracefully
 - Use JWT token for profile creation
 
 **Current Implementation:**
+
 - ✅ Two-step registration flow in `CustomerContext.register()`
 - ✅ Auth: `POST /auth/customer/emailpass/register`
 - ✅ Profile: `POST /store/customers` with bearer token
@@ -56,11 +58,13 @@ Comprehensive evaluation of the Grace's Towel customers module implementation ag
 ### 2. Login ✅ (9/10)
 
 **Documentation Requirements:**
+
 - JWT or Cookie session authentication
 - Token exchange for session (optional)
 - Auto-fetch customer profile after login
 
 **Current Implementation:**
+
 - ✅ JWT token authentication via `POST /auth/customer/emailpass`
 - ✅ Token stored in localStorage
 - ✅ Automatic profile fetch after login
@@ -74,12 +78,14 @@ Comprehensive evaluation of the Grace's Towel customers module implementation ag
 ### 3. Third-Party (Social) Login ❌ (0/10)
 
 **Documentation Requirements:**
+
 - Login initiation page with OAuth button
 - Callback handler page for token exchange
 - Support for Google, GitHub, etc.
 - Handle new vs returning customers
 
 **Current Implementation:**
+
 - ❌ No OAuth providers configured
 - ❌ No callback route (`/account/callback`)
 - ❌ No social login buttons
@@ -194,6 +200,7 @@ interface CustomerContextType {
 - ⚠️ `EditAddressDialog.tsx` exists but only used for ORDER modification, not account
 
 **Existing Component (Unused for Account):**
+
 - `apps/storefront/app/components/EditAddressDialog.tsx` - designed for order modification window
 
 **File:** `apps/storefront/app/routes/account.tsx` (Addresses tab)
@@ -203,10 +210,12 @@ interface CustomerContextType {
 ### 9. Logout ✅ (10/10)
 
 **Documentation Requirements:**
+
 - Remove JWT token from storage (for JWT auth)
 - Redirect to login page
 
 **Current Implementation:**
+
 - ✅ Removes token from localStorage
 - ✅ Clears customer state
 - ✅ Resets PostHog identification

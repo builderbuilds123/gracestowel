@@ -39,34 +39,40 @@ Implement password reset flow for customers following Medusa v2 documentation. C
 ## Acceptance Criteria
 
 ### AC1: Forgot Password Page
+
 **Given** a customer on the login page
 **When** they click "Forgot Password"
 **Then** they see a form to enter their email address
 
 ### AC2: Password Reset Request
+
 **Given** a customer enters their email on the forgot password page
 **When** they submit the form
 **Then** Medusa sends a reset token to that email
 **And** the customer sees a success message
 
 ### AC3: Reset Email Sent
+
 **Given** a valid password reset request
 **When** the `auth.password_reset` event fires
 **Then** an email with reset link is sent via Resend
 **And** the link includes the reset token
 
 ### AC4: Reset Password Page
+
 **Given** a customer clicks the reset link in their email
 **When** the page loads
 **Then** they see a form to enter a new password
 
 ### AC5: Password Update
+
 **Given** a customer enters a new password on the reset page
 **When** they submit the form
 **Then** their password is updated in Medusa
 **And** they are redirected to login with a success message
 
 ### AC6: Invalid/Expired Token
+
 **Given** a customer uses an expired or invalid reset token
 **When** they try to reset their password
 **Then** they see an error message

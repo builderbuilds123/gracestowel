@@ -59,12 +59,57 @@ vi.mock('../context/LocaleContext', () => ({
     }),
 }));
 
+// Mock the useCheckout hook
+const mockSelectShippingOption = vi.fn();
+const mockCheckoutState = {
+    shippingOptions: [
+        { id: 'standard', displayName: 'Standard', amount: 5, deliveryEstimate: '3-5 days' },
+        { id: 'express', displayName: 'Express', amount: 15, deliveryEstimate: '1-2 days' }
+    ],
+    selectedShippingOption: { id: 'standard', displayName: 'Standard', amount: 5 },
+    email: 'test@example.com',
+    status: 'ready',
+    address: null,
+    billingAddress: null,
+    error: null,
+};
+
+vi.mock('./checkout/CheckoutProvider', () => ({
+    useCheckout: () => ({
+        items: [{ 
+            id: 'item_1', 
+            image: 'thumb.jpg', 
+            title: 'Test Towel', 
+            quantity: 1, 
+            price: '$20.00',
+            variantId: 'var_1',
+            color: 'Blue'
+        }],
+        displayCartTotal: '$20.00',
+        displayDiscountTotal: null,
+        state: mockCheckoutState,
+        actions: {
+            selectShippingOption: mockSelectShippingOption,
+            setEmail: vi.fn(),
+            setAddress: vi.fn(),
+            setBillingAddress: vi.fn(),
+            setStatus: vi.fn(),
+            setError: vi.fn(),
+        },
+        cartId: 'cart_123',
+        paymentCollectionId: 'pay_col_123',
+        isCalculatingShipping: false,
+        isShippingPersisted: true,
+        persistShippingOption: vi.fn().mockResolvedValue(undefined),
+        appliedPromoCodes: [],
+    }),
+}));
+
 // 2. ONLY THEN import React and components
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { CheckoutForm } from './CheckoutForm';
 import type { CheckoutFormProps } from './CheckoutForm';
-import { loadStripe } from '@stripe/stripe-js';
 
 
 describe('CheckoutForm', () => {
@@ -92,26 +137,8 @@ describe('CheckoutForm', () => {
     };
 
     const defaultProps: CheckoutFormProps = {
-        items: [{ 
-            id: 'item_1', 
-            image: 'thumb.jpg', 
-            title: 'Test Towel', 
-            quantity: 1, 
-            price: '$20.00',
-            variantId: 'var_1',
-            color: 'Blue'
-        }],
-        cartTotal: 2000,
-        shippingOptions: [
-            { id: 'standard', displayName: 'Standard', amount: 5, deliveryEstimate: '3-5 days' },
-            { id: 'express', displayName: 'Express', amount: 15, deliveryEstimate: '1-2 days' }
-        ],
-        selectedShipping: { id: 'standard', displayName: 'Standard', amount: 5 },
-        setSelectedShipping: vi.fn(),
         onAddressChange: vi.fn(),
-        persistShippingOption: vi.fn().mockResolvedValue(undefined),
-        cartId: 'cart_123',
-        paymentCollectionId: 'pay_col_123',
+        onEmailChange: vi.fn(),
         customerData: {
             email: 'test@example.com',
             firstName: 'John',
@@ -187,7 +214,7 @@ describe('CheckoutForm', () => {
         const expressOption = screen.getByText('Express');
         fireEvent.click(expressOption);
 
-        expect(defaultProps.setSelectedShipping).toHaveBeenCalledWith(
+        expect(mockSelectShippingOption).toHaveBeenCalledWith(
             expect.objectContaining({ id: 'express' })
         );
     });
