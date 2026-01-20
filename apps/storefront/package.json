@@ -16,7 +16,7 @@
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
-    "test:server": "wrangler dev -c wrangler.jsonc --env ci --port 5173 --ip 0.0.0.0 --inspector-port 0"
+    "test:server": "wrangler dev -c dist/server/wrangler.json --port 5173 --ip 0.0.0.0 --inspector-port 0"
   },
   "dependencies": {
     "@medusajs/js-sdk": "^2.12.5",
