@@ -104,7 +104,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   }
 
   // Generate CSRF Token
-  const { token: csrfToken, headers: csrfHeaders } = await createCSRFToken(request, jwtSecret);
+  const { token: csrfToken, headers: csrfHeaders } = await createCSRFToken(request, jwtSecret, env);
 
   // Initialize client server-side to verify config and connection
   try {

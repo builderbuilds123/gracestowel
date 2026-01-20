@@ -1,0 +1,555 @@
+Validate	Set up job	﻿2026-01-20T05:25:04.6440411Z Current runner version: '2.331.0'
+Validate	Set up job	2026-01-20T05:25:04.6465143Z ##[group]Runner Image Provisioner
+Validate	Set up job	2026-01-20T05:25:04.6466291Z Hosted Compute Agent
+Validate	Set up job	2026-01-20T05:25:04.6467087Z Version: 20251211.462
+Validate	Set up job	2026-01-20T05:25:04.6468225Z Commit: 6cbad8c2bb55d58165063d031ccabf57e2d2db61
+Validate	Set up job	2026-01-20T05:25:04.6469258Z Build Date: 2025-12-11T16:28:49Z
+Validate	Set up job	2026-01-20T05:25:04.6470184Z Worker ID: {483185e4-1886-436d-a969-da2df646a2e7}
+Validate	Set up job	2026-01-20T05:25:04.6471142Z ##[endgroup]
+Validate	Set up job	2026-01-20T05:25:04.6471971Z ##[group]Operating System
+Validate	Set up job	2026-01-20T05:25:04.6472742Z Ubuntu
+Validate	Set up job	2026-01-20T05:25:04.6473479Z 24.04.3
+Validate	Set up job	2026-01-20T05:25:04.6474035Z LTS
+Validate	Set up job	2026-01-20T05:25:04.6474484Z ##[endgroup]
+Validate	Set up job	2026-01-20T05:25:04.6474984Z ##[group]Runner Image
+Validate	Set up job	2026-01-20T05:25:04.6475591Z Image: ubuntu-24.04
+Validate	Set up job	2026-01-20T05:25:04.6476354Z Version: 20260111.209.1
+Validate	Set up job	2026-01-20T05:25:04.6477931Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260111.209/images/ubuntu/Ubuntu2404-Readme.md
+Validate	Set up job	2026-01-20T05:25:04.6480106Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260111.209
+Validate	Set up job	2026-01-20T05:25:04.6481324Z ##[endgroup]
+Validate	Set up job	2026-01-20T05:25:04.6483076Z ##[group]GITHUB_TOKEN Permissions
+Validate	Set up job	2026-01-20T05:25:04.6485397Z Contents: read
+Validate	Set up job	2026-01-20T05:25:04.6486279Z Metadata: read
+Validate	Set up job	2026-01-20T05:25:04.6487027Z ##[endgroup]
+Validate	Set up job	2026-01-20T05:25:04.6489623Z Secret source: Actions
+Validate	Set up job	2026-01-20T05:25:04.6490706Z Prepare workflow directory
+Validate	Set up job	2026-01-20T05:25:04.6934964Z Prepare all required actions
+Validate	Set up job	2026-01-20T05:25:04.6977425Z Getting action download info
+Validate	Set up job	2026-01-20T05:25:05.2709866Z Download action repository 'actions/checkout@v6' (SHA:8e8c483db84b4bee98b60c0593521ed34d9990e8)
+Validate	Set up job	2026-01-20T05:25:05.3636913Z Download action repository 'gitleaks/gitleaks-action@v2' (SHA:ff98106e4c7b2bc287b24eaf42907196329070c7)
+Validate	Set up job	2026-01-20T05:25:05.8828556Z Download action repository 'aquasecurity/trivy-action@0.33.1' (SHA:b6643a29fecd7f34b3597bc6acb0a98b03d33ff8)
+Validate	Set up job	2026-01-20T05:25:06.4441522Z Download action repository 'pnpm/action-setup@v4' (SHA:41ff72655975bd51cab0327fa583b6e92b6d3061)
+Validate	Set up job	2026-01-20T05:25:06.9931192Z Download action repository 'actions/setup-node@v6' (SHA:6044e13b5dc448c55e2357c09f80417699197238)
+Validate	Set up job	2026-01-20T05:25:07.5778466Z Download action repository 'actions/cache@v5' (SHA:8b402f58fbc84540c8b491a91e594a4576fec3d7)
+Validate	Set up job	2026-01-20T05:25:08.2935540Z Getting action download info
+Validate	Set up job	2026-01-20T05:25:08.4869822Z Download action repository 'aquasecurity/setup-trivy@e6c2c5e321ed9123bda567646e2f96565e34abe1' (SHA:e6c2c5e321ed9123bda567646e2f96565e34abe1)
+Validate	Set up job	2026-01-20T05:25:08.8701644Z Download action repository 'actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809' (SHA:0400d5f644dc74513175e3cd8d07132dd4860809)
+Validate	Set up job	2026-01-20T05:25:09.0380094Z Getting action download info
+Validate	Set up job	2026-01-20T05:25:09.2637590Z Download action repository 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' (SHA:08c6903cd8c0fde910a37f88322edcfb5dd907a8)
+Validate	Set up job	2026-01-20T05:25:09.3850364Z Complete job name: Validate
+Validate	Checkout	﻿2026-01-20T05:25:09.4541110Z ##[group]Run actions/checkout@v6
+Validate	Checkout	2026-01-20T05:25:09.4541707Z with:
+Validate	Checkout	2026-01-20T05:25:09.4541890Z   fetch-depth: 0
+Validate	Checkout	2026-01-20T05:25:09.4542116Z   repository: builderbuilds123/gracestowel
+Validate	Checkout	2026-01-20T05:25:09.4542505Z   token: ***
+Validate	Checkout	2026-01-20T05:25:09.4542691Z   ssh-strict: true
+Validate	Checkout	2026-01-20T05:25:09.4542887Z   ssh-user: git
+Validate	Checkout	2026-01-20T05:25:09.4543076Z   persist-credentials: true
+Validate	Checkout	2026-01-20T05:25:09.4543293Z   clean: true
+Validate	Checkout	2026-01-20T05:25:09.4543477Z   sparse-checkout-cone-mode: true
+Validate	Checkout	2026-01-20T05:25:09.4543716Z   fetch-tags: false
+Validate	Checkout	2026-01-20T05:25:09.4543903Z   show-progress: true
+Validate	Checkout	2026-01-20T05:25:09.4544091Z   lfs: false
+Validate	Checkout	2026-01-20T05:25:09.4544249Z   submodules: false
+Validate	Checkout	2026-01-20T05:25:09.4544437Z   set-safe-directory: true
+Validate	Checkout	2026-01-20T05:25:09.4544817Z env:
+Validate	Checkout	2026-01-20T05:25:09.4544982Z   NODE_VERSION: 24
+Validate	Checkout	2026-01-20T05:25:09.4545165Z ##[endgroup]
+Validate	Checkout	2026-01-20T05:25:09.5532163Z Syncing repository: builderbuilds123/gracestowel
+Validate	Checkout	2026-01-20T05:25:09.5533484Z ##[group]Getting Git version info
+Validate	Checkout	2026-01-20T05:25:09.5533965Z Working directory is '/home/runner/work/gracestowel/gracestowel'
+Validate	Checkout	2026-01-20T05:25:09.5534817Z [command]/usr/bin/git version
+Validate	Checkout	2026-01-20T05:25:09.5600428Z git version 2.52.0
+Validate	Checkout	2026-01-20T05:25:09.5620878Z ##[endgroup]
+Validate	Checkout	2026-01-20T05:25:09.5634875Z Temporarily overriding HOME='/home/runner/work/_temp/2331c7bd-d4c2-46a1-8a01-187d98f8ead4' before making global git config changes
+Validate	Checkout	2026-01-20T05:25:09.5635968Z Adding repository directory to the temporary git global config as a safe directory
+Validate	Checkout	2026-01-20T05:25:09.5641099Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/gracestowel/gracestowel
+Validate	Checkout	2026-01-20T05:25:09.5679327Z Deleting the contents of '/home/runner/work/gracestowel/gracestowel'
+Validate	Checkout	2026-01-20T05:25:09.5682400Z ##[group]Initializing the repository
+Validate	Checkout	2026-01-20T05:25:09.5687018Z [command]/usr/bin/git init /home/runner/work/gracestowel/gracestowel
+Validate	Checkout	2026-01-20T05:25:09.5791266Z hint: Using 'master' as the name for the initial branch. This default branch name
+Validate	Checkout	2026-01-20T05:25:09.5792360Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+Validate	Checkout	2026-01-20T05:25:09.5793354Z hint: to use in all of your new repositories, which will suppress this warning,
+Validate	Checkout	2026-01-20T05:25:09.5794090Z hint: call:
+Validate	Checkout	2026-01-20T05:25:09.5794428Z hint:
+Validate	Checkout	2026-01-20T05:25:09.5794872Z hint: 	git config --global init.defaultBranch <name>
+Validate	Checkout	2026-01-20T05:25:09.5795446Z hint:
+Validate	Checkout	2026-01-20T05:25:09.5795981Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+Validate	Checkout	2026-01-20T05:25:09.5796971Z hint: 'development'. The just-created branch can be renamed via this command:
+Validate	Checkout	2026-01-20T05:25:09.5797706Z hint:
+Validate	Checkout	2026-01-20T05:25:09.5798240Z hint: 	git branch -m <name>
+Validate	Checkout	2026-01-20T05:25:09.5798666Z hint:
+Validate	Checkout	2026-01-20T05:25:09.5799509Z hint: Disable this message with "git config set advice.defaultBranchName false"
+Validate	Checkout	2026-01-20T05:25:09.5800319Z Initialized empty Git repository in /home/runner/work/gracestowel/gracestowel/.git/
+Validate	Checkout	2026-01-20T05:25:09.5808021Z [command]/usr/bin/git remote add origin https://github.com/builderbuilds123/gracestowel
+Validate	Checkout	2026-01-20T05:25:09.5842497Z ##[endgroup]
+Validate	Checkout	2026-01-20T05:25:09.5843101Z ##[group]Disabling automatic garbage collection
+Validate	Checkout	2026-01-20T05:25:09.5846326Z [command]/usr/bin/git config --local gc.auto 0
+Validate	Checkout	2026-01-20T05:25:09.5873610Z ##[endgroup]
+Validate	Checkout	2026-01-20T05:25:09.5874168Z ##[group]Setting up auth
+Validate	Checkout	2026-01-20T05:25:09.5875093Z Removing SSH command configuration
+Validate	Checkout	2026-01-20T05:25:09.5881385Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+Validate	Checkout	2026-01-20T05:25:09.5912370Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+Validate	Checkout	2026-01-20T05:25:09.6271477Z Removing HTTP extra header
+Validate	Checkout	2026-01-20T05:25:09.6276170Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+Validate	Checkout	2026-01-20T05:25:09.6306516Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+Validate	Checkout	2026-01-20T05:25:09.6523760Z Removing includeIf entries pointing to credentials config files
+Validate	Checkout	2026-01-20T05:25:09.6529463Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+Validate	Checkout	2026-01-20T05:25:09.6559472Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+Validate	Checkout	2026-01-20T05:25:09.6784407Z [command]/usr/bin/git config --file /home/runner/work/_temp/git-credentials-5efb47fd-06f1-45bd-9f2a-492bfc250693.config http.https://github.com/.extraheader AUTHORIZATION: basic ***
+Validate	Checkout	2026-01-20T05:25:09.6820012Z [command]/usr/bin/git config --local includeIf.gitdir:/home/runner/work/gracestowel/gracestowel/.git.path /home/runner/work/_temp/git-credentials-5efb47fd-06f1-45bd-9f2a-492bfc250693.config
+Validate	Checkout	2026-01-20T05:25:09.6849217Z [command]/usr/bin/git config --local includeIf.gitdir:/home/runner/work/gracestowel/gracestowel/.git/worktrees/*.path /home/runner/work/_temp/git-credentials-5efb47fd-06f1-45bd-9f2a-492bfc250693.config
+Validate	Checkout	2026-01-20T05:25:09.6879452Z [command]/usr/bin/git config --local includeIf.gitdir:/github/workspace/.git.path /github/runner_temp/git-credentials-5efb47fd-06f1-45bd-9f2a-492bfc250693.config
+Validate	Checkout	2026-01-20T05:25:09.6909334Z [command]/usr/bin/git config --local includeIf.gitdir:/github/workspace/.git/worktrees/*.path /github/runner_temp/git-credentials-5efb47fd-06f1-45bd-9f2a-492bfc250693.config
+Validate	Checkout	2026-01-20T05:25:09.6934831Z ##[endgroup]
+Validate	Checkout	2026-01-20T05:25:09.6935441Z ##[group]Fetching the repository
+Validate	Checkout	2026-01-20T05:25:09.6944921Z [command]/usr/bin/git -c protocol.version=2 fetch --prune --no-recurse-submodules origin +refs/heads/*:refs/remotes/origin/* +refs/tags/*:refs/tags/* +18983a6e74c8c34435b6d10baf8df44302633f1a:refs/remotes/pull/165/merge
+Validate	Checkout	2026-01-20T05:25:20.2164493Z From https://github.com/builderbuilds123/gracestowel
+Validate	Checkout	2026-01-20T05:25:20.2166308Z  * [new branch]          add-claude-github-actions-1765910266241  -> origin/add-claude-github-actions-1765910266241
+Validate	Checkout	2026-01-20T05:25:20.2170036Z  * [new branch]          add-claude-github-actions-1765910454594  -> origin/add-claude-github-actions-1765910454594
+Validate	Checkout	2026-01-20T05:25:20.2171428Z  * [new branch]          copilot/fix-pr-122-cicd-errors           -> origin/copilot/fix-pr-122-cicd-errors
+Validate	Checkout	2026-01-20T05:25:20.2172464Z  * [new branch]          copilot/sub-pr-113                       -> origin/copilot/sub-pr-113
+Validate	Checkout	2026-01-20T05:25:20.2173398Z  * [new branch]          copilot/sub-pr-39                        -> origin/copilot/sub-pr-39
+Validate	Checkout	2026-01-20T05:25:20.2174396Z  * [new branch]          dependabot/npm_and_yarn/production-dependencies-304587e85b -> origin/dependabot/npm_and_yarn/production-dependencies-304587e85b
+Validate	Checkout	2026-01-20T05:25:20.2175442Z  * [new branch]          dependabot/npm_and_yarn/production-dependencies-7a69cc2a01 -> origin/dependabot/npm_and_yarn/production-dependencies-7a69cc2a01
+Validate	Checkout	2026-01-20T05:25:20.2177143Z  * [new branch]          feat/claude-code-review-integration      -> origin/feat/claude-code-review-integration
+Validate	Checkout	2026-01-20T05:25:20.2178283Z  * [new branch]          feat/cluster-b-rel01-idempotency-fix     -> origin/feat/cluster-b-rel01-idempotency-fix
+Validate	Checkout	2026-01-20T05:25:20.2179092Z  * [new branch]          feat/fix-ORD-03-address-update-token     -> origin/feat/fix-ORD-03-address-update-token
+Validate	Checkout	2026-01-20T05:25:20.2179740Z  * [new branch]          feat/inv-02-backorder-logic              -> origin/feat/inv-02-backorder-logic
+Validate	Checkout	2026-01-20T05:25:20.2180357Z  * [new branch]          feat/local-admin-notifications           -> origin/feat/local-admin-notifications
+Validate	Checkout	2026-01-20T05:25:20.2181042Z  * [new branch]          feat/story-1-1-validate-backend-webhooks -> origin/feat/story-1-1-validate-backend-webhooks
+Validate	Checkout	2026-01-20T05:25:20.2181747Z  * [new branch]          feature/3.1-storefront-timer-edit-ui     -> origin/feature/3.1-storefront-timer-edit-ui
+Validate	Checkout	2026-01-20T05:25:20.2182562Z  * [new branch]          feature/e2e-testing-overhaul-17987784683457407418 -> origin/feature/e2e-testing-overhaul-17987784683457407418
+Validate	Checkout	2026-01-20T05:25:20.2183666Z  * [new branch]          feature/email-masking-utility-14062625233638908527 -> origin/feature/email-masking-utility-14062625233638908527
+Validate	Checkout	2026-01-20T05:25:20.2184451Z  * [new branch]          feature/recover-deleted-docs-1765830164  -> origin/feature/recover-deleted-docs-1765830164
+Validate	Checkout	2026-01-20T05:25:20.2185121Z  * [new branch]          fix/CHK-02-B-C-completion-flow           -> origin/fix/CHK-02-B-C-completion-flow
+Validate	Checkout	2026-01-20T05:25:20.2185719Z  * [new branch]          fix/TAX-01-end-to-end-tax                -> origin/fix/TAX-01-end-to-end-tax
+Validate	Checkout	2026-01-20T05:25:20.2186276Z  * [new branch]          fix/checkout-flow-debug                  -> origin/fix/checkout-flow-debug
+Validate	Checkout	2026-01-20T05:25:20.2186917Z  * [new branch]          fix/ci-triage-pr-unknown-20251213-1200   -> origin/fix/ci-triage-pr-unknown-20251213-1200
+Validate	Checkout	2026-01-20T05:25:20.2187577Z  * [new branch]          fix/inv-01-code-review-fixes             -> origin/fix/inv-01-code-review-fixes
+Validate	Checkout	2026-01-20T05:25:20.2188271Z  * [new branch]          gemini-docs-update                       -> origin/gemini-docs-update
+Validate	Checkout	2026-01-20T05:25:20.2189030Z  * [new branch]          jules-payment-debug-2848310365392919707  -> origin/jules-payment-debug-2848310365392919707
+Validate	Checkout	2026-01-20T05:25:20.2189735Z  * [new branch]          jules/e2e-rewrite-v1-5315801385276186531 -> origin/jules/e2e-rewrite-v1-5315801385276186531
+Validate	Checkout	2026-01-20T05:25:20.2190277Z  * [new branch]          main                                     -> origin/main
+Validate	Checkout	2026-01-20T05:25:20.2190671Z  * [new branch]          pr-55                                    -> origin/pr-55
+Validate	Checkout	2026-01-20T05:25:20.2191071Z  * [new branch]          staging                                  -> origin/staging
+Validate	Checkout	2026-01-20T05:25:20.2191713Z  * [new branch]          story/4-5-health-check-monitoring        -> origin/story/4-5-health-check-monitoring
+Validate	Checkout	2026-01-20T05:25:20.2193581Z  * [new branch]          temp-push-branch                         -> origin/temp-push-branch
+Validate	Checkout	2026-01-20T05:25:20.2194104Z  * [new branch]          xenodochial-chaum                        -> origin/xenodochial-chaum
+Validate	Checkout	2026-01-20T05:25:20.2194673Z  * [new ref]             18983a6e74c8c34435b6d10baf8df44302633f1a -> pull/165/merge
+Validate	Checkout	2026-01-20T05:25:20.2279090Z ##[endgroup]
+Validate	Checkout	2026-01-20T05:25:20.2279728Z ##[group]Determining the checkout info
+Validate	Checkout	2026-01-20T05:25:20.2280744Z ##[endgroup]
+Validate	Checkout	2026-01-20T05:25:20.2286398Z [command]/usr/bin/git sparse-checkout disable
+Validate	Checkout	2026-01-20T05:25:20.2333058Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+Validate	Checkout	2026-01-20T05:25:20.2360578Z ##[group]Checking out the ref
+Validate	Checkout	2026-01-20T05:25:20.2366002Z [command]/usr/bin/git checkout --progress --force refs/remotes/pull/165/merge
+Validate	Checkout	2026-01-20T05:25:20.5579692Z Note: switching to 'refs/remotes/pull/165/merge'.
+Validate	Checkout	2026-01-20T05:25:20.5580664Z 
+Validate	Checkout	2026-01-20T05:25:20.5581435Z You are in 'detached HEAD' state. You can look around, make experimental
+Validate	Checkout	2026-01-20T05:25:20.5582291Z changes and commit them, and you can discard any commits you make in this
+Validate	Checkout	2026-01-20T05:25:20.5583135Z state without impacting any branches by switching back to a branch.
+Validate	Checkout	2026-01-20T05:25:20.5583631Z 
+Validate	Checkout	2026-01-20T05:25:20.5583945Z If you want to create a new branch to retain commits you create, you may
+Validate	Checkout	2026-01-20T05:25:20.5584688Z do so (now or later) by using -c with the switch command. Example:
+Validate	Checkout	2026-01-20T05:25:20.5585122Z 
+Validate	Checkout	2026-01-20T05:25:20.5585285Z   git switch -c <new-branch-name>
+Validate	Checkout	2026-01-20T05:25:20.5585586Z 
+Validate	Checkout	2026-01-20T05:25:20.5585736Z Or undo this operation with:
+Validate	Checkout	2026-01-20T05:25:20.5586004Z 
+Validate	Checkout	2026-01-20T05:25:20.5586133Z   git switch -
+Validate	Checkout	2026-01-20T05:25:20.5586319Z 
+Validate	Checkout	2026-01-20T05:25:20.5586671Z Turn off this advice by setting config variable advice.detachedHead to false
+Validate	Checkout	2026-01-20T05:25:20.5587194Z 
+Validate	Checkout	2026-01-20T05:25:20.5587826Z HEAD is now at 18983a6e7 Merge dbf18c38b138c61df13357987d461daa991de7c5 into cf6d0f890bf2ecaeb6d68cb7cf6ed0467c423ed8
+Validate	Checkout	2026-01-20T05:25:20.5617328Z ##[endgroup]
+Validate	Checkout	2026-01-20T05:25:20.5664846Z [command]/usr/bin/git log -1 --format=%H
+Validate	Checkout	2026-01-20T05:25:20.5697109Z 18983a6e74c8c34435b6d10baf8df44302633f1a
+Validate	Lockfile drift guard	﻿2026-01-20T05:25:20.5884791Z ##[group]Run set -euo pipefail
+Validate	Lockfile drift guard	2026-01-20T05:25:20.5885135Z [36;1mset -euo pipefail[0m
+Validate	Lockfile drift guard	2026-01-20T05:25:20.5885686Z [36;1mforbidden=$(git ls-files | grep -E '(^|.*/)(package-lock\.json|yarn\.lock|npm-shrinkwrap\.json)$|(^.+/pnpm-lock\.yaml$)' || true)[0m
+Validate	Lockfile drift guard	2026-01-20T05:25:20.5886358Z [36;1mforbidden=$(echo "$forbidden" | grep -v '^pnpm-lock\.yaml$' || true)[0m
+Validate	Lockfile drift guard	2026-01-20T05:25:20.5886729Z [36;1mif [ -n "$forbidden" ]; then[0m
+Validate	Lockfile drift guard	2026-01-20T05:25:20.5887028Z [36;1m  echo "Forbidden lockfiles found in repo:" >&2[0m
+Validate	Lockfile drift guard	2026-01-20T05:25:20.5887327Z [36;1m  echo "$forbidden" >&2[0m
+Validate	Lockfile drift guard	2026-01-20T05:25:20.5887538Z [36;1m  exit 1[0m
+Validate	Lockfile drift guard	2026-01-20T05:25:20.5887709Z [36;1mfi[0m
+Validate	Lockfile drift guard	2026-01-20T05:25:20.5921850Z shell: /usr/bin/bash -e {0}
+Validate	Lockfile drift guard	2026-01-20T05:25:20.5922103Z env:
+Validate	Lockfile drift guard	2026-01-20T05:25:20.5922274Z   NODE_VERSION: 24
+Validate	Lockfile drift guard	2026-01-20T05:25:20.5922456Z ##[endgroup]
+Validate	Secrets Scanning (Gitleaks)	﻿2026-01-20T05:25:20.6096750Z ##[group]Run gitleaks/gitleaks-action@v2
+Validate	Secrets Scanning (Gitleaks)	2026-01-20T05:25:20.6097042Z env:
+Validate	Secrets Scanning (Gitleaks)	2026-01-20T05:25:20.6097393Z   NODE_VERSION: 24
+Validate	Secrets Scanning (Gitleaks)	2026-01-20T05:25:20.6097804Z   GITHUB_TOKEN: ***
+Validate	Secrets Scanning (Gitleaks)	2026-01-20T05:25:20.6098007Z ##[endgroup]
+Validate	Secrets Scanning (Gitleaks)	2026-01-20T05:25:21.0863259Z [builderbuilds123] is an individual user. No license key is required.
+Validate	Secrets Scanning (Gitleaks)	2026-01-20T05:25:21.0864275Z gitleaks version: 8.24.3
+Validate	Secrets Scanning (Gitleaks)	2026-01-20T05:25:21.0867559Z Version to install: 8.24.3 (target directory: /tmp/gitleaks-8.24.3)
+Validate	Secrets Scanning (Gitleaks)	2026-01-20T05:25:21.3374293Z Cache hit for: gitleaks-cache-8.24.3-linux-x64
+Validate	Secrets Scanning (Gitleaks)	2026-01-20T05:25:22.5816020Z Received 5717453 of 5717453 (100.0%), 5.8 MBs/sec
+Validate	Secrets Scanning (Gitleaks)	2026-01-20T05:25:22.5818875Z Cache Size: ~5 MB (5717453 B)
+Validate	Secrets Scanning (Gitleaks)	2026-01-20T05:25:22.5846922Z [command]/usr/bin/tar -xf /home/runner/work/_temp/3b7ada5c-7852-4c95-8262-f3de185f12e8/cache.tzst -P -C /home/runner/work/gracestowel/gracestowel --use-compress-program unzstd
+Validate	Secrets Scanning (Gitleaks)	2026-01-20T05:25:22.6181704Z Cache restored successfully
+Validate	Secrets Scanning (Gitleaks)	2026-01-20T05:25:22.6196645Z Gitleaks restored from cache
+Validate	Secrets Scanning (Gitleaks)	2026-01-20T05:25:22.6199805Z event type: pull_request
+Validate	Secrets Scanning (Gitleaks)	2026-01-20T05:25:22.9683743Z gitleaks cmd: gitleaks detect --redact -v --exit-code=2 --report-format=sarif --report-path=results.sarif --log-level=debug --log-opts=--no-merges --first-parent 7fc722fb56ec21c1ec5b2564711fe9645bec59ee^..0ab663998982d66dd49a7dd2a7522822ba07b4d5
+Validate	Secrets Scanning (Gitleaks)	2026-01-20T05:25:22.9699250Z [command]/tmp/gitleaks-8.24.3/gitleaks detect --redact -v --exit-code=2 --report-format=sarif --report-path=results.sarif --log-level=debug --log-opts=--no-merges --first-parent 7fc722fb56ec21c1ec5b2564711fe9645bec59ee^..0ab663998982d66dd49a7dd2a7522822ba07b4d5
+Validate	Secrets Scanning (Gitleaks)	2026-01-20T05:25:23.2336665Z 
+Validate	Secrets Scanning (Gitleaks)	2026-01-20T05:25:23.2337361Z     ○
+Validate	Secrets Scanning (Gitleaks)	2026-01-20T05:25:23.2338425Z     │╲
+Validate	Secrets Scanning (Gitleaks)	2026-01-20T05:25:23.2338797Z     │ ○
+Validate	Secrets Scanning (Gitleaks)	2026-01-20T05:25:23.2339271Z     ○ ░
+Validate	Secrets Scanning (Gitleaks)	2026-01-20T05:25:23.2339563Z     ░    gitleaks
+Validate	Secrets Scanning (Gitleaks)	2026-01-20T05:25:23.2339771Z 
+Validate	Secrets Scanning (Gitleaks)	2026-01-20T05:25:23.2340217Z [90m5:25AM[0m DBG using github.com/wasilibs/go-re2 regex engine
+Validate	Secrets Scanning (Gitleaks)	2026-01-20T05:25:23.2341318Z [90m5:25AM[0m DBG no gitleaks config found in path .gitleaks.toml, using default gitleaks config
+Validate	Secrets Scanning (Gitleaks)	2026-01-20T05:25:23.3698775Z [90m5:25AM[0m DBG found .gitleaksignore file: .gitleaksignore
+Validate	Secrets Scanning (Gitleaks)	2026-01-20T05:25:23.3699673Z [90m5:25AM[0m DBG found .gitleaksignore file: .gitleaksignore
+Validate	Secrets Scanning (Gitleaks)	2026-01-20T05:25:23.3728362Z [90m5:25AM[0m DBG executing: /usr/bin/git -C . log -p -U0 --no-merges --first-parent 7fc722fb56ec21c1ec5b2564711fe9645bec59ee^..0ab663998982d66dd49a7dd2a7522822ba07b4d5
+Validate	Secrets Scanning (Gitleaks)	2026-01-20T05:25:23.3753582Z [90m5:25AM[0m DBG SCM platform parsed from host [36mhost=[0mgithub.com [36mplatform=[0mgithub
+Validate	Secrets Scanning (Gitleaks)	2026-01-20T05:25:23.4436627Z [90m5:25AM[0m DBG skipping finding: fingerprint [36mfinding=[0mREDACTED [36mfingerprint=[0m825e1af4f56d225c128146ab6955bd422bba0ee8:apps/storefront/app/lib/env.server.test.ts:generic-api-key:7
+Validate	Secrets Scanning (Gitleaks)	2026-01-20T05:25:23.4439550Z [90m5:25AM[0m DBG skipping finding: fingerprint [36mfinding=[0mREDACTED [36mfingerprint=[0m825e1af4f56d225c128146ab6955bd422bba0ee8:apps/storefront/app/lib/env.server.test.ts:generic-api-key:8
+Validate	Secrets Scanning (Gitleaks)	2026-01-20T05:25:23.4442038Z [90m5:25AM[0m DBG skipping finding: fingerprint [36mfinding=[0mREDACTED [36mfingerprint=[0m825e1af4f56d225c128146ab6955bd422bba0ee8:apps/storefront/app/lib/env.server.test.ts:generic-api-key:9
+Validate	Secrets Scanning (Gitleaks)	2026-01-20T05:25:23.4443555Z [90m5:25AM[0m DBG skipping finding: fingerprint [36mfinding=[0mREDACTED [36mfingerprint=[0m825e1af4f56d225c128146ab6955bd422bba0ee8:apps/storefront/app/lib/env.server.test.ts:generic-api-key:22
+Validate	Secrets Scanning (Gitleaks)	2026-01-20T05:25:23.4444451Z [90m5:25AM[0m [32mINF[0m [1m28 commits scanned.[0m
+Validate	Secrets Scanning (Gitleaks)	2026-01-20T05:25:23.4444988Z [90m5:25AM[0m DBG Note: this number might be smaller than expected due to commits with no additions
+Validate	Secrets Scanning (Gitleaks)	2026-01-20T05:25:23.4445569Z [90m5:25AM[0m [32mINF[0m [1mscanned ~242393 bytes (242.39 KB) in 210ms[0m
+Validate	Secrets Scanning (Gitleaks)	2026-01-20T05:25:23.4445985Z [90m5:25AM[0m [32mINF[0m [1mno leaks found[0m
+Validate	Secrets Scanning (Gitleaks)	2026-01-20T05:25:23.4472766Z Artifact name is valid!
+Validate	Secrets Scanning (Gitleaks)	2026-01-20T05:25:23.4474626Z Root directory input is valid!
+Validate	Secrets Scanning (Gitleaks)	2026-01-20T05:25:23.6900801Z Beginning upload of artifact content to blob storage
+Validate	Secrets Scanning (Gitleaks)	2026-01-20T05:25:23.9772984Z Uploaded bytes 6776
+Validate	Secrets Scanning (Gitleaks)	2026-01-20T05:25:24.0519412Z Finished uploading artifact content to blob storage!
+Validate	Secrets Scanning (Gitleaks)	2026-01-20T05:25:24.0522647Z SHA256 digest of uploaded artifact zip is 2cca857286a16f4a5fd9dbd32337c25796569e0808b75334a71d5ea3a1d7050e
+Validate	Secrets Scanning (Gitleaks)	2026-01-20T05:25:24.0524686Z Finalizing artifact upload
+Validate	Secrets Scanning (Gitleaks)	2026-01-20T05:25:24.3637006Z Artifact gitleaks-results.sarif.zip successfully finalized. Artifact ID 5185059170
+Validate	Secrets Scanning (Gitleaks)	2026-01-20T05:25:24.3652792Z ✅ No leaks detected
+Validate	Dependency & Config Scanning (Trivy)	﻿2026-01-20T05:25:24.3924207Z ##[group]Run aquasecurity/trivy-action@0.33.1
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:24.3924521Z with:
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:24.3924701Z   scan-type: fs
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:24.3924912Z   scanners: vuln,secret,misconfig
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:24.3925165Z   ignore-unfixed: true
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:24.3925378Z   format: table
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:24.3925564Z   exit-code: 1
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:24.3925757Z   severity: CRITICAL,HIGH
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:24.3925976Z   scan-ref: .
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:24.3926156Z   vuln-type: os,library
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:24.3926469Z   cache-dir: /home/runner/work/gracestowel/gracestowel/.cache/trivy
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:24.3926849Z   list-all-pkgs: false
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:24.3927066Z   version: v0.65.0
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:24.3927254Z   cache: true
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:24.3927441Z   skip-setup-trivy: false
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:24.3927830Z   token-setup-trivy: ***
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:24.3928219Z env:
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:24.3928397Z   NODE_VERSION: 24
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:24.3928593Z ##[endgroup]
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:24.4068601Z ##[group]Run aquasecurity/setup-trivy@e6c2c5e321ed9123bda567646e2f96565e34abe1
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:24.4069307Z with:
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:24.4069543Z   version: v0.65.0
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:24.4069867Z   cache: true
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:24.4070286Z   token: ***
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:24.4070612Z   path: $HOME/.local/bin
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:24.4071002Z   github-server-url: https://github.com
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:24.4071363Z env:
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:24.4071614Z   NODE_VERSION: 24
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:24.4071933Z ##[endgroup]
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:24.4096865Z ##[group]Run echo "dir=$HOME/.local/bin/trivy-bin" >> $GITHUB_OUTPUT
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:24.4097326Z [36;1mecho "dir=$HOME/.local/bin/trivy-bin" >> $GITHUB_OUTPUT[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:24.4131775Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:24.4132122Z env:
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:24.4132299Z   NODE_VERSION: 24
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:24.4132498Z ##[endgroup]
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:24.4256401Z ##[group]Run actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:24.4256737Z with:
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:24.4256936Z   path: /home/runner/.local/bin/trivy-bin
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:24.4257229Z   key: trivy-binary-v0.65.0-Linux-X64
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:24.4257499Z   enableCrossOsArchive: false
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:24.4257740Z   fail-on-cache-miss: false
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:24.4257967Z   lookup-only: false
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:24.4258406Z   save-always: false
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:24.4258596Z env:
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:24.4258765Z   NODE_VERSION: 24
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:24.4258952Z ##[endgroup]
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:24.7993359Z Cache hit for: trivy-binary-v0.65.0-Linux-X64
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:26.0986518Z Received 4194304 of 42124381 (10.0%), 4.0 MBs/sec
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:26.5480296Z Received 42124381 of 42124381 (100.0%), 27.7 MBs/sec
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:26.5481255Z Cache Size: ~40 MB (42124381 B)
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:26.5511962Z [command]/usr/bin/tar -xf /home/runner/work/_temp/5c1b118b-ab03-403c-9948-5e37bc7b23e5/cache.tzst -P -C /home/runner/work/gracestowel/gracestowel --use-compress-program unzstd
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:26.7908619Z Cache restored successfully
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:26.8067427Z Cache restored from key: trivy-binary-v0.65.0-Linux-X64
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:26.8184125Z ##[group]Run echo /home/runner/.local/bin/trivy-bin >> $GITHUB_PATH
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:26.8184594Z [36;1mecho /home/runner/.local/bin/trivy-bin >> $GITHUB_PATH[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:26.8217044Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:26.8217393Z env:
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:26.8217574Z   NODE_VERSION: 24
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:26.8217779Z ##[endgroup]
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:26.8320444Z ##[group]Run echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:26.8321041Z [36;1mecho "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:26.8349641Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:26.8349988Z env:
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:26.8350166Z   NODE_VERSION: 24
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:26.8350367Z ##[endgroup]
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:26.8453234Z ##[group]Run actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:26.8453576Z with:
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:26.8453841Z   path: /home/runner/work/gracestowel/gracestowel/.cache/trivy
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:26.8454382Z   key: cache-trivy-2026-01-20
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:26.8454633Z   restore-keys: cache-trivy-
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:26.8454880Z   enableCrossOsArchive: false
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:26.8455115Z   fail-on-cache-miss: false
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:26.8455346Z   lookup-only: false
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:26.8455550Z   save-always: false
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:26.8455740Z env:
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:26.8455914Z   NODE_VERSION: 24
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:26.8456111Z ##[endgroup]
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:27.2529961Z Cache hit for: cache-trivy-2026-01-20
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:28.5366000Z Received 4194304 of 58130979 (7.2%), 4.0 MBs/sec
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:29.0445805Z Received 58130979 of 58130979 (100.0%), 36.8 MBs/sec
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:29.0446881Z Cache Size: ~55 MB (58130979 B)
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:29.0477912Z [command]/usr/bin/tar -xf /home/runner/work/_temp/1b6cef59-ca8b-496a-9802-822ce6ac875b/cache.tzst -P -C /home/runner/work/gracestowel/gracestowel --use-compress-program unzstd
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.0621024Z Cache restored successfully
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.0814801Z Cache restored from key: cache-trivy-2026-01-20
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.0920143Z ##[group]Run echo "$GITHUB_ACTION_PATH" >> $GITHUB_PATH
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.0920559Z [36;1mecho "$GITHUB_ACTION_PATH" >> $GITHUB_PATH[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.0952225Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.0952595Z env:
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.0952794Z   NODE_VERSION: 24
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.0953170Z   GITHUB_ACTION_PATH: /home/runner/work/_actions/aquasecurity/trivy-action/0.33.1
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.0953617Z ##[endgroup]
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1025661Z ##[group]Run rm -f trivy_envs.txt
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1025984Z [36;1mrm -f trivy_envs.txt[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1026238Z [36;1mtouch trivy_envs.txt[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1054469Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1054820Z env:
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1055008Z   NODE_VERSION: 24
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1055217Z ##[endgroup]
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1147334Z ##[group]Run # Note: There is currently no way to distinguish between undefined variables and empty strings in GitHub Actions.
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1148524Z [36;1m# Note: There is currently no way to distinguish between undefined variables and empty strings in GitHub Actions.[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1149189Z [36;1m# This limitation affects how we handle default values and empty inputs.[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1149753Z [36;1m# For more information, see: https://github.com/actions/runner/issues/924[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1150153Z [36;1m[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1150530Z [36;1m# The following logic implements the configuration priority described in the README:[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1150960Z [36;1m#[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1151156Z [36;1m# Inputs[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1151369Z [36;1m# Environment Variables[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1151624Z [36;1m# Config File[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1151846Z [36;1m# Defaults[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1152047Z [36;1m#[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1152462Z [36;1m# As noted above defaults are awkward to handle as GitHub Actions will inject those values as the input[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1153165Z [36;1m# if the caller doesn't provide them, thus if the input matches the default we don't set it as we[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1153858Z [36;1m# can't tell the difference.  Plus if we did set it when it was the default value then it could potentially [0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1154642Z [36;1m# override an external environment variable, or something in the callers configuration file, which then wouldn't [0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1155449Z [36;1m# match the configuration priority that is documented.[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1155798Z [36;1mset_env_var_if_provided() {[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1156070Z [36;1m  local var_name="$1"[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1156321Z [36;1m  local input_value="$2"[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1156612Z [36;1m  local default_value="$3"[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1156860Z [36;1m[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1157177Z [36;1m  if [ ! -z "$input_value" ] && [ "$input_value" != "$default_value" ]; then[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1157822Z [36;1m    # If action was provided with explicit input by the caller set that[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1158486Z [36;1m    echo "export $var_name=$input_value" >> trivy_envs.txt[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1158820Z [36;1m  fi[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1159007Z [36;1m}[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1159186Z [36;1m[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1159479Z [36;1m# Set environment variables, handling those with default values[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1160066Z [36;1m# cf. https://aquasecurity.github.io/trivy/latest/docs/configuration/#environment-variables[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1160609Z [36;1mset_env_var_if_provided "TRIVY_INPUT" "" ""[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1160966Z [36;1mset_env_var_if_provided "TRIVY_EXIT_CODE" "1" ""[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1161370Z [36;1mset_env_var_if_provided "TRIVY_IGNORE_UNFIXED" "true" "false"[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1161836Z [36;1mset_env_var_if_provided "TRIVY_PKG_TYPES" "os,library" "os,library"[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1162403Z [36;1mset_env_var_if_provided "TRIVY_SEVERITY" "CRITICAL,HIGH" "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1162947Z [36;1mset_env_var_if_provided "TRIVY_FORMAT" "table" "table"[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1163333Z [36;1mset_env_var_if_provided "TRIVY_TEMPLATE" "" ""[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1163691Z [36;1mset_env_var_if_provided "TRIVY_OUTPUT" "" ""[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1164042Z [36;1mset_env_var_if_provided "TRIVY_SKIP_DIRS" "" ""[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1164403Z [36;1mset_env_var_if_provided "TRIVY_SKIP_FILES" "" ""[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1164776Z [36;1mset_env_var_if_provided "TRIVY_TIMEOUT" "" ""[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1165139Z [36;1mset_env_var_if_provided "TRIVY_IGNORE_POLICY" "" ""[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1165498Z [36;1mset_env_var_if_provided "TRIVY_QUIET" "" ""[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1165888Z [36;1mset_env_var_if_provided "TRIVY_LIST_ALL_PKGS" "false" "false"[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1166343Z [36;1mset_env_var_if_provided "TRIVY_SCANNERS" "vuln,secret,misconfig" ""[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1166761Z [36;1mset_env_var_if_provided "TRIVY_CONFIG" "" ""[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1167097Z [36;1mset_env_var_if_provided "TRIVY_TF_VARS" "" ""[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1167452Z [36;1mset_env_var_if_provided "TRIVY_DOCKER_HOST" "" ""[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1195441Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1195850Z env:
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1196057Z   NODE_VERSION: 24
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1196269Z ##[endgroup]
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1271070Z ##[group]Run entrypoint.sh
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1271337Z [36;1mentrypoint.sh[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1299618Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1299990Z env:
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1300176Z   NODE_VERSION: 24
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1300387Z   INPUT_SCAN_TYPE: fs
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1300598Z   INPUT_IMAGE_REF: 
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1300797Z   INPUT_SCAN_REF: .
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1300999Z   INPUT_TRIVYIGNORES: 
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1301220Z   INPUT_GITHUB_PAT: 
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1301449Z   INPUT_LIMIT_SEVERITIES_FOR_SARIF: 
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1301825Z   TRIVY_CACHE_DIR: /home/runner/work/gracestowel/gracestowel/.cache/trivy
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1302211Z ##[endgroup]
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1363195Z Running Trivy with options: trivy fs .
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1955206Z 2026-01-20T05:25:30Z	INFO	[vuln] Vulnerability scanning is enabled
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:30.1957532Z 2026-01-20T05:25:30Z	INFO	[misconfig] Misconfiguration scanning is enabled
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:32.3059827Z 2026-01-20T05:25:32Z	INFO	[secret] Secret scanning is enabled
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:32.3061113Z 2026-01-20T05:25:32Z	INFO	[secret] If your scanning is slow, please try '--scanners vuln' to disable secret scanning
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:32.3062274Z 2026-01-20T05:25:32Z	INFO	[secret] Please see also https://trivy.dev/v0.65/docs/scanner/secret#recommendation for faster secret detection
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:33.4231687Z 2026-01-20T05:25:33Z	WARN	[secret] The size of the scanned file is too large. It is recommended to use `--skip-files` for this file to avoid high memory consumption.	file_path="postman/collections/admin-api.postman_collection.json" size (MB)=28
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:40.6934188Z 2026-01-20T05:25:40Z	INFO	[pnpm] To collect the license information of packages, "pnpm install" needs to be performed beforehand	dir="node_modules"
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:43.0822714Z 2026-01-20T05:25:43Z	INFO	Suppressing dependencies for development and testing. To display them, try the '--include-dev-deps' flag.
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:43.0825294Z 2026-01-20T05:25:43Z	INFO	Number of language-specific files	num=1
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:43.0826099Z 2026-01-20T05:25:43Z	INFO	[pnpm] Detecting vulnerabilities...
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:43.1065290Z 2026-01-20T05:25:43Z	INFO	Detected config files	num=2
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:43.1073487Z 
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:43.1073712Z Report Summary
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:43.1073957Z 
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:43.1074848Z ┌─────────────────────────────────────────────────────────────┬────────────┬─────────────────┬─────────┬───────────────────┐
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:43.1076050Z │                           Target                            │    Type    │ Vulnerabilities │ Secrets │ Misconfigurations │
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:43.1077278Z ├─────────────────────────────────────────────────────────────┼────────────┼─────────────────┼─────────┼───────────────────┤
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:43.1078851Z │ pnpm-lock.yaml                                              │    pnpm    │        0        │    -    │         -         │
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:43.1080098Z ├─────────────────────────────────────────────────────────────┼────────────┼─────────────────┼─────────┼───────────────────┤
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:43.1081391Z │ apps/backend/Dockerfile                                     │ dockerfile │        -        │    -    │         0         │
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:43.1082696Z ├─────────────────────────────────────────────────────────────┼────────────┼─────────────────┼─────────┼───────────────────┤
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:43.1083902Z │ apps/storefront/Dockerfile                                  │ dockerfile │        -        │    -    │         0         │
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:43.1085256Z ├─────────────────────────────────────────────────────────────┼────────────┼─────────────────┼─────────┼───────────────────┤
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:43.1086591Z │ apps/backend/src/scripts/order-flow.postman_collection.json │    text    │        -        │    0    │         -         │
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:43.1088018Z ├─────────────────────────────────────────────────────────────┼────────────┼─────────────────┼─────────┼───────────────────┤
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:43.1089425Z │ apps/storefront/wrangler.jsonc                              │    text    │        -        │    0    │         -         │
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:43.1091071Z └─────────────────────────────────────────────────────────────┴────────────┴─────────────────┴─────────┴───────────────────┘
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:43.1091789Z Legend:
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:43.1092090Z - '-': Not scanned
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:43.1092477Z - '0': Clean (no security findings detected)
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:43.1092820Z 
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:43.1092839Z 
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:43.1093231Z 📣 [34mNotices:[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:43.1093746Z   - Version 0.68.2 of Trivy is now available, current version is 0.65.0
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:43.1094220Z 
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:43.1094591Z To suppress version checks, run Trivy scans with the --skip-version-check flag
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:43.1095127Z 
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:43.1272631Z ##[group]Run rm -f trivy_envs.txt
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:43.1273101Z [36;1mrm -f trivy_envs.txt[0m
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:43.1313789Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:43.1314349Z env:
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:43.1314670Z   NODE_VERSION: 24
+Validate	Dependency & Config Scanning (Trivy)	2026-01-20T05:25:43.1315002Z ##[endgroup]
+Validate	Setup pnpm	﻿2026-01-20T05:25:43.1477791Z ##[group]Run pnpm/action-setup@v4
+Validate	Setup pnpm	2026-01-20T05:25:43.1478238Z with:
+Validate	Setup pnpm	2026-01-20T05:25:43.1478438Z   dest: ~/setup-pnpm
+Validate	Setup pnpm	2026-01-20T05:25:43.1478654Z   run_install: null
+Validate	Setup pnpm	2026-01-20T05:25:43.1478882Z   package_json_file: package.json
+Validate	Setup pnpm	2026-01-20T05:25:43.1479149Z   standalone: false
+Validate	Setup pnpm	2026-01-20T05:25:43.1479353Z env:
+Validate	Setup pnpm	2026-01-20T05:25:43.1479530Z   NODE_VERSION: 24
+Validate	Setup pnpm	2026-01-20T05:25:43.1479730Z ##[endgroup]
+Validate	Setup pnpm	2026-01-20T05:25:43.2022888Z ##[group]Running self-installer...
+Validate	Setup pnpm	2026-01-20T05:25:43.7591109Z Progress: resolved 1, reused 0, downloaded 0, added 0
+Validate	Setup pnpm	2026-01-20T05:25:43.7713150Z Packages: +1
+Validate	Setup pnpm	2026-01-20T05:25:43.7714579Z +
+Validate	Setup pnpm	2026-01-20T05:25:44.1706780Z Progress: resolved 1, reused 0, downloaded 1, added 1, done
+Validate	Setup pnpm	2026-01-20T05:25:44.1981024Z 
+Validate	Setup pnpm	2026-01-20T05:25:44.1981422Z dependencies:
+Validate	Setup pnpm	2026-01-20T05:25:44.1981930Z + pnpm 9.15.2 (10.28.1 is available)
+Validate	Setup pnpm	2026-01-20T05:25:44.1983956Z 
+Validate	Setup pnpm	2026-01-20T05:25:44.2023109Z Done in 806ms
+Validate	Setup pnpm	2026-01-20T05:25:44.2223757Z ##[endgroup]
+Validate	Setup pnpm	2026-01-20T05:25:44.2227702Z Installation Completed!
+Validate	Setup Node.js	﻿2026-01-20T05:25:44.2364220Z ##[group]Run actions/setup-node@v6
+Validate	Setup Node.js	2026-01-20T05:25:44.2364687Z with:
+Validate	Setup Node.js	2026-01-20T05:25:44.2364996Z   node-version: 24
+Validate	Setup Node.js	2026-01-20T05:25:44.2365337Z   cache: pnpm
+Validate	Setup Node.js	2026-01-20T05:25:44.2365662Z   check-latest: false
+Validate	Setup Node.js	2026-01-20T05:25:44.2366206Z   token: ***
+Validate	Setup Node.js	2026-01-20T05:25:44.2366556Z   package-manager-cache: true
+Validate	Setup Node.js	2026-01-20T05:25:44.2366957Z env:
+Validate	Setup Node.js	2026-01-20T05:25:44.2367250Z   NODE_VERSION: 24
+Validate	Setup Node.js	2026-01-20T05:25:44.2367692Z   PNPM_HOME: /home/runner/setup-pnpm/node_modules/.bin
+Validate	Setup Node.js	2026-01-20T05:25:44.2368424Z ##[endgroup]
+Validate	Setup Node.js	2026-01-20T05:25:44.3692278Z Found in cache @ /opt/hostedtoolcache/node/24.12.0/x64
+Validate	Setup Node.js	2026-01-20T05:25:44.3696658Z ##[group]Environment details
+Validate	Setup Node.js	2026-01-20T05:25:44.7541339Z node: v24.12.0
+Validate	Setup Node.js	2026-01-20T05:25:44.7541720Z npm: 11.6.2
+Validate	Setup Node.js	2026-01-20T05:25:44.7542029Z yarn: 1.22.22
+Validate	Setup Node.js	2026-01-20T05:25:44.7542625Z ##[endgroup]
+Validate	Setup Node.js	2026-01-20T05:25:44.7564918Z [command]/home/runner/setup-pnpm/node_modules/.bin/pnpm store path --silent
+Validate	Setup Node.js	2026-01-20T05:25:45.1571680Z /home/runner/setup-pnpm/node_modules/.bin/store/v3
+Validate	Setup Node.js	2026-01-20T05:25:45.4346833Z Cache hit for: node-cache-Linux-x64-pnpm-10211a8c6ef731105ea53c04159239443735931f1d473a7d93ffeecbdccb557c
+Validate	Setup Node.js	2026-01-20T05:25:46.7416637Z Received 0 of 297961141 (0.0%), 0.0 MBs/sec
+Validate	Setup Node.js	2026-01-20T05:25:47.7414456Z Received 113246208 of 297961141 (38.0%), 54.0 MBs/sec
+Validate	Setup Node.js	2026-01-20T05:25:48.7459320Z Received 243269632 of 297961141 (81.6%), 77.3 MBs/sec
+Validate	Setup Node.js	2026-01-20T05:25:49.4894348Z Received 297961141 of 297961141 (100.0%), 75.8 MBs/sec
+Validate	Setup Node.js	2026-01-20T05:25:49.4895697Z Cache Size: ~284 MB (297961141 B)
+Validate	Setup Node.js	2026-01-20T05:25:49.4964482Z [command]/usr/bin/tar -xf /home/runner/work/_temp/0e3e2777-3f60-4a63-9bfc-0cd4872a4d3e/cache.tzst -P -C /home/runner/work/gracestowel/gracestowel --use-compress-program unzstd
+Validate	Setup Node.js	2026-01-20T05:25:54.6960922Z Cache restored successfully
+Validate	Setup Node.js	2026-01-20T05:25:54.7483899Z Cache restored from key: node-cache-Linux-x64-pnpm-10211a8c6ef731105ea53c04159239443735931f1d473a7d93ffeecbdccb557c
+Validate	Cache turbo	﻿2026-01-20T05:25:54.7664662Z ##[group]Run actions/cache@v5
+Validate	Cache turbo	2026-01-20T05:25:54.7664946Z with:
+Validate	Cache turbo	2026-01-20T05:25:54.7665149Z   path: .turbo
+Validate	Cache turbo	2026-01-20T05:25:54.7665435Z   key: Linux-turbo-18983a6e74c8c34435b6d10baf8df44302633f1a
+Validate	Cache turbo	2026-01-20T05:25:54.7665791Z   restore-keys: Linux-turbo-
+Validate	Cache turbo	
+Validate	Cache turbo	2026-01-20T05:25:54.7666059Z   enableCrossOsArchive: false
+Validate	Cache turbo	2026-01-20T05:25:54.7666326Z   fail-on-cache-miss: false
+Validate	Cache turbo	2026-01-20T05:25:54.7666563Z   lookup-only: false
+Validate	Cache turbo	2026-01-20T05:25:54.7666781Z   save-always: false
+Validate	Cache turbo	2026-01-20T05:25:54.7666983Z env:
+Validate	Cache turbo	2026-01-20T05:25:54.7667172Z   NODE_VERSION: 24
+Validate	Cache turbo	2026-01-20T05:25:54.7667442Z   PNPM_HOME: /home/runner/setup-pnpm/node_modules/.bin
+Validate	Cache turbo	2026-01-20T05:25:54.7667757Z ##[endgroup]
+Validate	Cache turbo	2026-01-20T05:25:55.1305115Z Cache hit for restore-key: Linux-turbo-1dc010b57fb929863ff263d80b23804c2cb4898c
+Validate	Cache turbo	2026-01-20T05:25:55.7556694Z Received 25257 of 25257 (100.0%), 0.1 MBs/sec
+Validate	Cache turbo	2026-01-20T05:25:55.7557797Z Cache Size: ~0 MB (25257 B)
+Validate	Cache turbo	2026-01-20T05:25:55.7591789Z [command]/usr/bin/tar -xf /home/runner/work/_temp/2edd91c7-2671-4ac8-a9fc-599e88565a20/cache.tzst -P -C /home/runner/work/gracestowel/gracestowel --use-compress-program unzstd
+Validate	Cache turbo	2026-01-20T05:25:55.7771273Z Cache restored successfully
+Validate	Cache turbo	2026-01-20T05:25:55.7848529Z Cache restored from key: Linux-turbo-1dc010b57fb929863ff263d80b23804c2cb4898c
+Validate	Install dependencies	﻿2026-01-20T05:25:55.7943890Z ##[group]Run pnpm install --frozen-lockfile
+Validate	Install dependencies	2026-01-20T05:25:55.7944291Z [36;1mpnpm install --frozen-lockfile[0m
+Validate	Install dependencies	2026-01-20T05:25:55.7996722Z shell: /usr/bin/bash -e {0}
+Validate	Install dependencies	2026-01-20T05:25:55.7997048Z env:
+Validate	Install dependencies	2026-01-20T05:25:55.7997286Z   NODE_VERSION: 24
+Validate	Install dependencies	2026-01-20T05:25:55.7997632Z   PNPM_HOME: /home/runner/setup-pnpm/node_modules/.bin
+Validate	Install dependencies	2026-01-20T05:25:55.7998232Z ##[endgroup]
+Validate	Install dependencies	2026-01-20T05:25:56.2129415Z Scope: all 4 workspace projects
+Validate	Install dependencies	2026-01-20T05:25:56.2858983Z  ERR_PNPM_OUTDATED_LOCKFILE  Cannot install with "frozen-lockfile" because pnpm-lock.yaml is not up to date with <ROOT>/apps/backend/package.json
+Validate	Install dependencies	2026-01-20T05:25:56.2860008Z 
+Validate	Install dependencies	2026-01-20T05:25:56.2861071Z Note that in CI environments this setting is true by default. If you still need to run install in such cases, use "pnpm install --no-frozen-lockfile"
+Validate	Install dependencies	2026-01-20T05:25:56.2862141Z 
+Validate	Install dependencies	2026-01-20T05:25:56.2862356Z     Failure reason:
+Validate	Install dependencies	2026-01-20T05:25:56.2879195Z     specifiers in the lockfile ({"@medusajs/admin-sdk":"2.12.5","@medusajs/admin-shared":"2.12.5","@medusajs/auth-emailpass":"2.12.5","@medusajs/cli":"2.12.5","@medusajs/core-flows":"2.12.5","@medusajs/dashboard":"2.12.5","@medusajs/draft-order":"2.12.5","@medusajs/event-bus-redis":"2.12.5","@medusajs/file":"2.12.5","@medusajs/file-local":"2.12.5","@medusajs/file-s3":"2.12.5","@medusajs/framework":"2.12.5","@medusajs/medusa":"2.12.5","@medusajs/notification":"2.12.5","@medusajs/payment-stripe":"^2.12.5","@medusajs/translation":"^2.12.5","@medusajs/types":"2.12.5","@react-email/components":"^1.0.5","bullmq":"^5.66.5","fetch-event-stream":"^0.1.6","happy-dom":"20.3.3","ioredis":"^5.9.1","jsonwebtoken":"^9.0.3","posthog-node":"^5.22.0","qs":"^6.14.1","react":"19.2.0","react-dom":"19.2.0","resend":"^6.8.0","sanitize-html":"^2.17.0","stripe":"^20.1.2","zod":"^4.3.5","@medusajs/test-utils":"2.12.5","@react-email/render":"^2.0.2","@swc/core":"1.15.10","@swc/jest":"^0.2.39","@types/jest":"^29.5.14","@types/jsonwebtoken":"^9.0.10","@types/node":"^25.0.8","@types/react":"^19.1.15","@types/react-dom":"^19.1.9","@types/sanitize-html":"^2.16.0","@vitest/coverage-v8":"^4.0.17","dotenv":"^17.2.3","jest":"^30.0.0","pg":"^8.16.3","prettier":"^3.7.4","prop-types":"^15.8.1","ts-node":"^10.9.2","typescript":"^5.6.2","vite":"^7.3.1","vitest":"^4.0.17"}) don't match specs in package.json ({"@medusajs/test-utils":"2.12.5","@react-email/render":"^2.0.2","@swc/core":"1.15.10","@swc/jest":"^0.2.39","@types/jest":"^29.5.14","@types/jsonwebtoken":"^9.0.10","@types/node":"^25.0.8","@types/react":"^19.1.15","@types/react-dom":"^19.1.9","@types/sanitize-html":"^2.16.0","@vitest/coverage-v8":"^4.0.17","dotenv":"^17.2.3","jest":"^30.0.0","pg":"^8.16.3","prettier":"^3.7.4","prop-types":"^15.8.1","ts-node":"^10.9.2","typescript":"^5.6.2","vite":"^7.3.1","vitest":"^4.0.17","@medusajs/admin-sdk":"2.12.5","@medusajs/admin-shared":"2.12.5","@medusajs/analytics-local":"2.12.5","@medusajs/analytics-posthog":"2.12.5","@medusajs/auth-emailpass":"2.12.5","@medusajs/cli":"2.12.5","@medusajs/core-flows":"2.12.5","@medusajs/dashboard":"2.12.5","@medusajs/draft-order":"2.12.5","@medusajs/event-bus-redis":"2.12.5","@medusajs/file":"2.12.5","@medusajs/file-local":"2.12.5","@medusajs/file-s3":"2.12.5","@medusajs/framework":"2.12.5","@medusajs/medusa":"2.12.5","@medusajs/notification":"2.12.5","@medusajs/payment-stripe":"^2.12.5","@medusajs/translation":"^2.12.5","@medusajs/types":"2.12.5","@react-email/components":"^1.0.5","bullmq":"^5.66.5","fetch-event-stream":"^0.1.6","happy-dom":"20.3.3","ioredis":"^5.9.1","jsonwebtoken":"^9.0.3","posthog-node":"^5.22.0","qs":"^6.14.1","react":"19.2.0","react-dom":"19.2.0","resend":"^6.8.0","sanitize-html":"^2.17.0","stripe":"^20.1.2","zod":"^4.3.5"})
+Validate	Install dependencies	2026-01-20T05:25:56.3133657Z ##[error]Process completed with exit code 1.
+Validate	Post Setup pnpm	﻿2026-01-20T05:25:56.3218305Z Post job cleanup.
+Validate	Post Setup pnpm	2026-01-20T05:25:56.3750499Z Pruning is unnecessary.
+Validate	Post Dependency & Config Scanning (Trivy)	﻿2026-01-20T05:25:56.3927874Z Post job cleanup.
+Validate	Post Dependency & Config Scanning (Trivy)	2026-01-20T05:25:56.4000019Z Post job cleanup.
+Validate	Post Checkout	﻿2026-01-20T05:25:56.4060513Z Post job cleanup.
+Validate	Post Checkout	2026-01-20T05:25:56.4832655Z [command]/usr/bin/git version
+Validate	Post Checkout	2026-01-20T05:25:56.4868013Z git version 2.52.0
+Validate	Post Checkout	2026-01-20T05:25:56.4905824Z Temporarily overriding HOME='/home/runner/work/_temp/bef8e4dc-08e1-44eb-9443-6a4de0cbd42c' before making global git config changes
+Validate	Post Checkout	2026-01-20T05:25:56.4907489Z Adding repository directory to the temporary git global config as a safe directory
+Validate	Post Checkout	2026-01-20T05:25:56.4912142Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/gracestowel/gracestowel
+Validate	Post Checkout	2026-01-20T05:25:56.4941365Z Removing SSH command configuration
+Validate	Post Checkout	2026-01-20T05:25:56.4947967Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+Validate	Post Checkout	2026-01-20T05:25:56.4981580Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+Validate	Post Checkout	2026-01-20T05:25:56.5217708Z Removing HTTP extra header
+Validate	Post Checkout	2026-01-20T05:25:56.5222954Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+Validate	Post Checkout	2026-01-20T05:25:56.5255678Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+Validate	Post Checkout	2026-01-20T05:25:56.5497691Z Removing includeIf entries pointing to credentials config files
+Validate	Post Checkout	2026-01-20T05:25:56.5504012Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+Validate	Post Checkout	2026-01-20T05:25:56.5526764Z includeif.gitdir:/home/runner/work/gracestowel/gracestowel/.git.path
+Validate	Post Checkout	2026-01-20T05:25:56.5528627Z includeif.gitdir:/home/runner/work/gracestowel/gracestowel/.git/worktrees/*.path
+Validate	Post Checkout	2026-01-20T05:25:56.5529699Z includeif.gitdir:/github/workspace/.git.path
+Validate	Post Checkout	2026-01-20T05:25:56.5531961Z includeif.gitdir:/github/workspace/.git/worktrees/*.path
+Validate	Post Checkout	2026-01-20T05:25:56.5536831Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/gracestowel/gracestowel/.git.path
+Validate	Post Checkout	2026-01-20T05:25:56.5558856Z /home/runner/work/_temp/git-credentials-5efb47fd-06f1-45bd-9f2a-492bfc250693.config
+Validate	Post Checkout	2026-01-20T05:25:56.5570342Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/gracestowel/gracestowel/.git.path /home/runner/work/_temp/git-credentials-5efb47fd-06f1-45bd-9f2a-492bfc250693.config
+Validate	Post Checkout	2026-01-20T05:25:56.5603414Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/gracestowel/gracestowel/.git/worktrees/*.path
+Validate	Post Checkout	2026-01-20T05:25:56.5625682Z /home/runner/work/_temp/git-credentials-5efb47fd-06f1-45bd-9f2a-492bfc250693.config
+Validate	Post Checkout	2026-01-20T05:25:56.5634324Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/gracestowel/gracestowel/.git/worktrees/*.path /home/runner/work/_temp/git-credentials-5efb47fd-06f1-45bd-9f2a-492bfc250693.config
+Validate	Post Checkout	2026-01-20T05:25:56.5664469Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git.path
+Validate	Post Checkout	2026-01-20T05:25:56.5684639Z /github/runner_temp/git-credentials-5efb47fd-06f1-45bd-9f2a-492bfc250693.config
+Validate	Post Checkout	2026-01-20T05:25:56.5692484Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git.path /github/runner_temp/git-credentials-5efb47fd-06f1-45bd-9f2a-492bfc250693.config
+Validate	Post Checkout	2026-01-20T05:25:56.5721143Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git/worktrees/*.path
+Validate	Post Checkout	2026-01-20T05:25:56.5740381Z /github/runner_temp/git-credentials-5efb47fd-06f1-45bd-9f2a-492bfc250693.config
+Validate	Post Checkout	2026-01-20T05:25:56.5750686Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git/worktrees/*.path /github/runner_temp/git-credentials-5efb47fd-06f1-45bd-9f2a-492bfc250693.config
+Validate	Post Checkout	2026-01-20T05:25:56.5781781Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+Validate	Post Checkout	2026-01-20T05:25:56.5999341Z Removing credentials config '/home/runner/work/_temp/git-credentials-5efb47fd-06f1-45bd-9f2a-492bfc250693.config'
+Validate	Complete job	﻿2026-01-20T05:25:56.6114055Z Cleaning up orphan processes

@@ -16,21 +16,24 @@ export function resolveCSRFSecret(secret?: string): string | null {
   return secret;
 }
 
-export const getCSRFCookie = (secret: string) => createCookie("csrf_token", {
+export const getCSRFCookie = (secret: string, isProd: boolean, isCI: boolean) => createCookie("csrf_token", {
   path: "/",
   httpOnly: true,
-  secure: (process.env.NODE_ENV === "production" || import.meta.env.PROD) && !process.env.CI,
+  secure: isProd && !isCI,
   sameSite: "lax",
   secrets: [secret],
   maxAge: 60 * 60 * 24, // 1 day
 });
 
-export async function createCSRFToken(request: Request, secret?: string) {
-    const resolvedSecret = resolveCSRFSecret(secret);
+export async function createCSRFToken(request: Request, secret?: string, env?: any) {
+    const isProd = (env?.ENVIRONMENT === 'production') || (typeof process !== 'undefined' && process.env.NODE_ENV === 'production') || import.meta.env.PROD;
+    const isCI = (String(env?.CI) === 'true') || (typeof process !== 'undefined' && String(process.env.CI) === 'true');
+    
+    const resolvedSecret = resolveCSRFSecret(secret || env?.JWT_SECRET);
     if (!resolvedSecret) {
         throw new Error("JWT_SECRET not configured for CSRF");
     }
-    const cookie = getCSRFCookie(resolvedSecret);
+    const cookie = getCSRFCookie(resolvedSecret, isProd, isCI);
     const cookieHeader = request.headers.get("Cookie");
     const session = (await cookie.parse(cookieHeader)) || {};
     
@@ -45,18 +48,27 @@ export async function createCSRFToken(request: Request, secret?: string) {
     return { token, headers };
 }
 
-export async function validateCSRFToken(request: Request, secret?: string) {
-    const resolvedSecret = resolveCSRFSecret(secret);
+export async function validateCSRFToken(request: Request, secret?: string, env?: any) {
+    const isProd = (env?.ENVIRONMENT === 'production') || (typeof process !== 'undefined' && process.env.NODE_ENV === 'production') || import.meta.env.PROD;
+    const isCI = (String(env?.CI) === 'true') || (typeof process !== 'undefined' && String(process.env.CI) === 'true');
+
+    const resolvedSecret = resolveCSRFSecret(secret || env?.JWT_SECRET);
     if (!resolvedSecret) {
         throw new Error("JWT_SECRET not configured for CSRF");
     }
-    const cookie = getCSRFCookie(resolvedSecret);
+    const cookie = getCSRFCookie(resolvedSecret, isProd, isCI);
     const cookieHeader = request.headers.get("Cookie");
     const session = (await cookie.parse(cookieHeader)) || {};
     const storedToken = session.token;
-    
     const headerToken = request.headers.get("X-CSRF-Token");
     
+    if (!isProd || isCI) {
+        console.log(`[CSRF Debug] Stored: ${storedToken?.substring(0, 8)}..., Header: ${headerToken?.substring(0, 8)}..., Match: ${storedToken === headerToken}`);
+        if (!storedToken) {
+            console.log(`[CSRF Debug] Cookie Header: ${request.headers.get("Cookie")}`);
+        }
+    }
+
     if (!storedToken || !headerToken) return false;
 
     return storedToken === headerToken;

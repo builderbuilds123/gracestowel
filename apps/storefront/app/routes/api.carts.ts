@@ -28,7 +28,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
   if (!jwtSecret) {
     return data({ error: "Server configuration error" }, { status: 500 });
   }
-  const isValidCSRF = await validateCSRFToken(request, jwtSecret);
+  const isValidCSRF = await validateCSRFToken(request, jwtSecret, env);
   if (!isValidCSRF) {
     return data({ error: "Invalid CSRF token" }, { status: 403 });
   }

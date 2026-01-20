@@ -1,0 +1,500 @@
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5700420Z     ────────────────────────────────────────────────────────────────────────────────────────────────
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5700667Z 
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5701025Z     attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5701696Z     test-results/storefront-storefront-cata-22b51-4-and-offline-UX-gracefully-chromium-retry1/trace.zip
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5702181Z     Usage:
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5702276Z 
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5702882Z         pnpm exec playwright show-trace test-results/storefront-storefront-cata-22b51-4-and-offline-UX-gracefully-chromium-retry1/trace.zip
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5703409Z 
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5703718Z     ────────────────────────────────────────────────────────────────────────────────────────────────
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5703963Z 
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5704281Z     Retry #2 ───────────────────────────────────────────────────────────────────────────────────────
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5704547Z 
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5704830Z     Error: page.goto: net::ERR_NAME_NOT_RESOLVED at http://storefront:5173/non-existent-route
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5705222Z     Call log:
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5705674Z     [2m  - navigating to "http://storefront:5173/non-existent-route", waiting until "load"[22m
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5705988Z 
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5705995Z 
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5706077Z       94 |
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5706370Z       95 |   test("handles 404 and offline UX gracefully", async ({ page }) => {
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5706846Z     > 96 |     await page.goto("/non-existent-route");
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5707114Z          |                ^
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5707438Z       97 |     await expect(page.getByText(/not found|404/i)).toBeVisible();
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5707750Z       98 |
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5707975Z       99 |     await page.context().setOffline(true);
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5708339Z         at /app/tests/storefront/storefront-catalog.spec.ts:96:16
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5708641Z 
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5708989Z     attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5709700Z     test-results/storefront-storefront-cata-22b51-4-and-offline-UX-gracefully-chromium-retry2/test-failed-1.png
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5710452Z     ────────────────────────────────────────────────────────────────────────────────────────────────
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5710699Z 
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5711043Z     attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5711715Z     test-results/storefront-storefront-cata-22b51-4-and-offline-UX-gracefully-chromium-retry2/video.webm
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5712495Z     ────────────────────────────────────────────────────────────────────────────────────────────────
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5712744Z 
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5713100Z     attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5713782Z     test-results/storefront-storefront-cata-22b51-4-and-offline-UX-gracefully-chromium-retry2/trace.zip
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5714263Z     Usage:
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5714358Z 
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5714845Z         pnpm exec playwright show-trace test-results/storefront-storefront-cata-22b51-4-and-offline-UX-gracefully-chromium-retry2/trace.zip
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5715362Z 
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5715671Z     ────────────────────────────────────────────────────────────────────────────────────────────────
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5715913Z 
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5716003Z   7 failed
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5716662Z     [chromium] › tests/full-checkout.happy.spec.ts:11:7 › Full Checkout Flow (Happy Path) › should complete a guest checkout with successful payment 
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5717758Z     [chromium] › tests/storefront/multi-region.spec.ts:131:9 › Multi-Region Flow › Cart Creation with Region › should create cart with region_id from localStorage 
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5718851Z     [chromium] › tests/storefront/multi-region.spec.ts:232:9 › Multi-Region Flow › Checkout Currency Display › should show currency selector in header 
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5719887Z     [chromium] › tests/storefront/multi-region.spec.ts:243:9 › Multi-Region Flow › Region Error Handling › should handle region mismatch gracefully 
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5721037Z     [chromium] › tests/storefront/storefront-catalog.spec.ts:15:7 › Storefront navigation, discovery, and PDP coverage › loads homepage navigation, categories, and product cards 
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5722325Z     [chromium] › tests/storefront/storefront-catalog.spec.ts:65:7 › Storefront navigation, discovery, and PDP coverage › renders PDP variants, pricing, stock, images, and related content 
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5723698Z     [chromium] › tests/storefront/storefront-catalog.spec.ts:95:7 › Storefront navigation, discovery, and PDP coverage › handles 404 and offline UX gracefully 
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5724296Z   27 skipped
+E2E Tests	Run E2E tests	2026-01-20T05:21:23.5724489Z   45 passed (1.6m)
+E2E Tests	Run E2E tests	2026-01-20T05:21:29.1802744Z ##[error]  1) [chromium] › tests/full-checkout.happy.spec.ts:11:7 › Full Checkout Flow (Happy Path) › should complete a guest checkout with successful payment 
+E2E Tests	Run E2E tests	    Error: expect(locator).toBeVisible() failed
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	    Locator: locator('iframe[title*="Secure email input"], iframe[title*="email"]').first()
+E2E Tests	Run E2E tests	    Expected: visible
+E2E Tests	Run E2E tests	    Timeout: 30000ms
+E2E Tests	Run E2E tests	    Error: element(s) not found
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	    Call log:
+E2E Tests	Run E2E tests	      - Expect "toBeVisible" with timeout 30000ms
+E2E Tests	Run E2E tests	      - waiting for locator('iframe[title*="Secure email input"], iframe[title*="email"]').first()
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	      36 |     // Stripe elements render in iframes. We need to find the right iframe.
+E2E Tests	Run E2E tests	      37 |     const emailFrameSelector = 'iframe[title*="Secure email input"], iframe[title*="email"]';
+E2E Tests	Run E2E tests	    > 38 |     await expect(page.locator(emailFrameSelector).first()).toBeVisible({ timeout: 30000 });
+E2E Tests	Run E2E tests	         |                                                            ^
+E2E Tests	Run E2E tests	      39 |     const emailIframe = page.frameLocator(emailFrameSelector).first();
+E2E Tests	Run E2E tests	      40 |     const emailInput = emailIframe.locator('input[name="email"]');
+E2E Tests	Run E2E tests	      41 |     await emailInput.fill(`tester-${Date.now()}@example.com`);
+E2E Tests	Run E2E tests	        at /app/tests/full-checkout.happy.spec.ts:38:60
+E2E Tests	Run E2E tests	2026-01-20T05:21:29.1823346Z ##[error]  1) [chromium] › tests/full-checkout.happy.spec.ts:11:7 › Full Checkout Flow (Happy Path) › should complete a guest checkout with successful payment 
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+E2E Tests	Run E2E tests	    Error: expect(locator).toBeVisible() failed
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	    Locator: locator('iframe[title*="Secure email input"], iframe[title*="email"]').first()
+E2E Tests	Run E2E tests	    Expected: visible
+E2E Tests	Run E2E tests	    Timeout: 30000ms
+E2E Tests	Run E2E tests	    Error: element(s) not found
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	    Call log:
+E2E Tests	Run E2E tests	      - Expect "toBeVisible" with timeout 30000ms
+E2E Tests	Run E2E tests	      - waiting for locator('iframe[title*="Secure email input"], iframe[title*="email"]').first()
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	      36 |     // Stripe elements render in iframes. We need to find the right iframe.
+E2E Tests	Run E2E tests	      37 |     const emailFrameSelector = 'iframe[title*="Secure email input"], iframe[title*="email"]';
+E2E Tests	Run E2E tests	    > 38 |     await expect(page.locator(emailFrameSelector).first()).toBeVisible({ timeout: 30000 });
+E2E Tests	Run E2E tests	         |                                                            ^
+E2E Tests	Run E2E tests	      39 |     const emailIframe = page.frameLocator(emailFrameSelector).first();
+E2E Tests	Run E2E tests	      40 |     const emailInput = emailIframe.locator('input[name="email"]');
+E2E Tests	Run E2E tests	      41 |     await emailInput.fill(`tester-${Date.now()}@example.com`);
+E2E Tests	Run E2E tests	        at /app/tests/full-checkout.happy.spec.ts:38:60
+E2E Tests	Run E2E tests	2026-01-20T05:21:29.1832174Z ##[error]  1) [chromium] › tests/full-checkout.happy.spec.ts:11:7 › Full Checkout Flow (Happy Path) › should complete a guest checkout with successful payment 
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	    Retry #2 ───────────────────────────────────────────────────────────────────────────────────────
+E2E Tests	Run E2E tests	    Error: page.goto: net::ERR_NAME_NOT_RESOLVED at http://storefront:5173/products/the-nuzzle
+E2E Tests	Run E2E tests	    Call log:
+E2E Tests	Run E2E tests	      - navigating to "http://storefront:5173/products/the-nuzzle", waiting until "load"
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	      16 |     const product = await productFactory.createProduct();
+E2E Tests	Run E2E tests	      17 |     
+E2E Tests	Run E2E tests	    > 18 |     await page.goto(`/products/${product.handle}`);
+E2E Tests	Run E2E tests	         |                ^
+E2E Tests	Run E2E tests	      19 |     await page.waitForLoadState("networkidle");
+E2E Tests	Run E2E tests	      20 |     
+E2E Tests	Run E2E tests	      21 |     // 2. Add to cart
+E2E Tests	Run E2E tests	        at /app/tests/full-checkout.happy.spec.ts:18:16
+E2E Tests	Run E2E tests	2026-01-20T05:21:29.1839450Z ##[error]  2) [chromium] › tests/storefront/multi-region.spec.ts:131:9 › Multi-Region Flow › Cart Creation with Region › should create cart with region_id from localStorage 
+E2E Tests	Run E2E tests	    Error: page.goto: net::ERR_NAME_NOT_RESOLVED at http://storefront:5173/
+E2E Tests	Run E2E tests	    Call log:
+E2E Tests	Run E2E tests	      - navigating to "http://storefront:5173/", waiting until "load"
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	      40 |   test.beforeEach(async ({ page }) => {
+E2E Tests	Run E2E tests	      41 |     // Clear localStorage and sessionStorage to start fresh
+E2E Tests	Run E2E tests	    > 42 |     await page.goto("/");
+E2E Tests	Run E2E tests	         |                ^
+E2E Tests	Run E2E tests	      43 |     await page.evaluate(() => {
+E2E Tests	Run E2E tests	      44 |       localStorage.removeItem("medusa_region_id");
+E2E Tests	Run E2E tests	      45 |       localStorage.removeItem("locale_language");
+E2E Tests	Run E2E tests	        at /app/tests/storefront/multi-region.spec.ts:42:16
+E2E Tests	Run E2E tests	2026-01-20T05:21:29.1846820Z ##[error]  2) [chromium] › tests/storefront/multi-region.spec.ts:131:9 › Multi-Region Flow › Cart Creation with Region › should create cart with region_id from localStorage 
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+E2E Tests	Run E2E tests	    Error: page.goto: net::ERR_NAME_NOT_RESOLVED at http://storefront:5173/
+E2E Tests	Run E2E tests	    Call log:
+E2E Tests	Run E2E tests	      - navigating to "http://storefront:5173/", waiting until "load"
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	      40 |   test.beforeEach(async ({ page }) => {
+E2E Tests	Run E2E tests	      41 |     // Clear localStorage and sessionStorage to start fresh
+E2E Tests	Run E2E tests	    > 42 |     await page.goto("/");
+E2E Tests	Run E2E tests	         |                ^
+E2E Tests	Run E2E tests	      43 |     await page.evaluate(() => {
+E2E Tests	Run E2E tests	      44 |       localStorage.removeItem("medusa_region_id");
+E2E Tests	Run E2E tests	      45 |       localStorage.removeItem("locale_language");
+E2E Tests	Run E2E tests	        at /app/tests/storefront/multi-region.spec.ts:42:16
+E2E Tests	Run E2E tests	2026-01-20T05:21:29.1854202Z ##[error]  2) [chromium] › tests/storefront/multi-region.spec.ts:131:9 › Multi-Region Flow › Cart Creation with Region › should create cart with region_id from localStorage 
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	    Retry #2 ───────────────────────────────────────────────────────────────────────────────────────
+E2E Tests	Run E2E tests	    Error: page.goto: net::ERR_NAME_NOT_RESOLVED at http://storefront:5173/
+E2E Tests	Run E2E tests	    Call log:
+E2E Tests	Run E2E tests	      - navigating to "http://storefront:5173/", waiting until "load"
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	      40 |   test.beforeEach(async ({ page }) => {
+E2E Tests	Run E2E tests	      41 |     // Clear localStorage and sessionStorage to start fresh
+E2E Tests	Run E2E tests	    > 42 |     await page.goto("/");
+E2E Tests	Run E2E tests	         |                ^
+E2E Tests	Run E2E tests	      43 |     await page.evaluate(() => {
+E2E Tests	Run E2E tests	      44 |       localStorage.removeItem("medusa_region_id");
+E2E Tests	Run E2E tests	      45 |       localStorage.removeItem("locale_language");
+E2E Tests	Run E2E tests	        at /app/tests/storefront/multi-region.spec.ts:42:16
+E2E Tests	Run E2E tests	2026-01-20T05:21:29.1861008Z ##[error]  3) [chromium] › tests/storefront/multi-region.spec.ts:232:9 › Multi-Region Flow › Checkout Currency Display › should show currency selector in header 
+E2E Tests	Run E2E tests	    Error: page.goto: net::ERR_NAME_NOT_RESOLVED at http://storefront:5173/
+E2E Tests	Run E2E tests	    Call log:
+E2E Tests	Run E2E tests	      - navigating to "http://storefront:5173/", waiting until "load"
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	      40 |   test.beforeEach(async ({ page }) => {
+E2E Tests	Run E2E tests	      41 |     // Clear localStorage and sessionStorage to start fresh
+E2E Tests	Run E2E tests	    > 42 |     await page.goto("/");
+E2E Tests	Run E2E tests	         |                ^
+E2E Tests	Run E2E tests	      43 |     await page.evaluate(() => {
+E2E Tests	Run E2E tests	      44 |       localStorage.removeItem("medusa_region_id");
+E2E Tests	Run E2E tests	      45 |       localStorage.removeItem("locale_language");
+E2E Tests	Run E2E tests	        at /app/tests/storefront/multi-region.spec.ts:42:16
+E2E Tests	Run E2E tests	2026-01-20T05:21:29.1868176Z ##[error]  3) [chromium] › tests/storefront/multi-region.spec.ts:232:9 › Multi-Region Flow › Checkout Currency Display › should show currency selector in header 
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+E2E Tests	Run E2E tests	    Error: page.goto: net::ERR_NAME_NOT_RESOLVED at http://storefront:5173/
+E2E Tests	Run E2E tests	    Call log:
+E2E Tests	Run E2E tests	      - navigating to "http://storefront:5173/", waiting until "load"
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	      40 |   test.beforeEach(async ({ page }) => {
+E2E Tests	Run E2E tests	      41 |     // Clear localStorage and sessionStorage to start fresh
+E2E Tests	Run E2E tests	    > 42 |     await page.goto("/");
+E2E Tests	Run E2E tests	         |                ^
+E2E Tests	Run E2E tests	      43 |     await page.evaluate(() => {
+E2E Tests	Run E2E tests	      44 |       localStorage.removeItem("medusa_region_id");
+E2E Tests	Run E2E tests	      45 |       localStorage.removeItem("locale_language");
+E2E Tests	Run E2E tests	        at /app/tests/storefront/multi-region.spec.ts:42:16
+E2E Tests	Run E2E tests	2026-01-20T05:21:29.1875624Z ##[error]  3) [chromium] › tests/storefront/multi-region.spec.ts:232:9 › Multi-Region Flow › Checkout Currency Display › should show currency selector in header 
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	    Retry #2 ───────────────────────────────────────────────────────────────────────────────────────
+E2E Tests	Run E2E tests	    Error: page.goto: net::ERR_NAME_NOT_RESOLVED at http://storefront:5173/
+E2E Tests	Run E2E tests	    Call log:
+E2E Tests	Run E2E tests	      - navigating to "http://storefront:5173/", waiting until "load"
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	      40 |   test.beforeEach(async ({ page }) => {
+E2E Tests	Run E2E tests	      41 |     // Clear localStorage and sessionStorage to start fresh
+E2E Tests	Run E2E tests	    > 42 |     await page.goto("/");
+E2E Tests	Run E2E tests	         |                ^
+E2E Tests	Run E2E tests	      43 |     await page.evaluate(() => {
+E2E Tests	Run E2E tests	      44 |       localStorage.removeItem("medusa_region_id");
+E2E Tests	Run E2E tests	      45 |       localStorage.removeItem("locale_language");
+E2E Tests	Run E2E tests	        at /app/tests/storefront/multi-region.spec.ts:42:16
+E2E Tests	Run E2E tests	2026-01-20T05:21:29.1882475Z ##[error]  4) [chromium] › tests/storefront/multi-region.spec.ts:243:9 › Multi-Region Flow › Region Error Handling › should handle region mismatch gracefully 
+E2E Tests	Run E2E tests	    Error: page.goto: net::ERR_NAME_NOT_RESOLVED at http://storefront:5173/
+E2E Tests	Run E2E tests	    Call log:
+E2E Tests	Run E2E tests	      - navigating to "http://storefront:5173/", waiting until "load"
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	      40 |   test.beforeEach(async ({ page }) => {
+E2E Tests	Run E2E tests	      41 |     // Clear localStorage and sessionStorage to start fresh
+E2E Tests	Run E2E tests	    > 42 |     await page.goto("/");
+E2E Tests	Run E2E tests	         |                ^
+E2E Tests	Run E2E tests	      43 |     await page.evaluate(() => {
+E2E Tests	Run E2E tests	      44 |       localStorage.removeItem("medusa_region_id");
+E2E Tests	Run E2E tests	      45 |       localStorage.removeItem("locale_language");
+E2E Tests	Run E2E tests	        at /app/tests/storefront/multi-region.spec.ts:42:16
+E2E Tests	Run E2E tests	2026-01-20T05:21:29.1889553Z ##[error]  4) [chromium] › tests/storefront/multi-region.spec.ts:243:9 › Multi-Region Flow › Region Error Handling › should handle region mismatch gracefully 
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+E2E Tests	Run E2E tests	    Error: page.goto: net::ERR_NAME_NOT_RESOLVED at http://storefront:5173/
+E2E Tests	Run E2E tests	    Call log:
+E2E Tests	Run E2E tests	      - navigating to "http://storefront:5173/", waiting until "load"
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	      40 |   test.beforeEach(async ({ page }) => {
+E2E Tests	Run E2E tests	      41 |     // Clear localStorage and sessionStorage to start fresh
+E2E Tests	Run E2E tests	    > 42 |     await page.goto("/");
+E2E Tests	Run E2E tests	         |                ^
+E2E Tests	Run E2E tests	      43 |     await page.evaluate(() => {
+E2E Tests	Run E2E tests	      44 |       localStorage.removeItem("medusa_region_id");
+E2E Tests	Run E2E tests	      45 |       localStorage.removeItem("locale_language");
+E2E Tests	Run E2E tests	        at /app/tests/storefront/multi-region.spec.ts:42:16
+E2E Tests	Run E2E tests	2026-01-20T05:21:29.1896913Z ##[error]  4) [chromium] › tests/storefront/multi-region.spec.ts:243:9 › Multi-Region Flow › Region Error Handling › should handle region mismatch gracefully 
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	    Retry #2 ───────────────────────────────────────────────────────────────────────────────────────
+E2E Tests	Run E2E tests	    Error: page.goto: net::ERR_NAME_NOT_RESOLVED at http://storefront:5173/
+E2E Tests	Run E2E tests	    Call log:
+E2E Tests	Run E2E tests	      - navigating to "http://storefront:5173/", waiting until "load"
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	      40 |   test.beforeEach(async ({ page }) => {
+E2E Tests	Run E2E tests	      41 |     // Clear localStorage and sessionStorage to start fresh
+E2E Tests	Run E2E tests	    > 42 |     await page.goto("/");
+E2E Tests	Run E2E tests	         |                ^
+E2E Tests	Run E2E tests	      43 |     await page.evaluate(() => {
+E2E Tests	Run E2E tests	      44 |       localStorage.removeItem("medusa_region_id");
+E2E Tests	Run E2E tests	      45 |       localStorage.removeItem("locale_language");
+E2E Tests	Run E2E tests	        at /app/tests/storefront/multi-region.spec.ts:42:16
+E2E Tests	Run E2E tests	2026-01-20T05:21:29.1903961Z ##[error]  5) [chromium] › tests/storefront/storefront-catalog.spec.ts:15:7 › Storefront navigation, discovery, and PDP coverage › loads homepage navigation, categories, and product cards 
+E2E Tests	Run E2E tests	    Error: page.goto: net::ERR_NAME_NOT_RESOLVED at http://storefront:5173/
+E2E Tests	Run E2E tests	    Call log:
+E2E Tests	Run E2E tests	      - navigating to "http://storefront:5173/", waiting until "load"
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	      17 |   }) => {
+E2E Tests	Run E2E tests	      18 |     // Homepage uses static hardcoded products, no API calls needed
+E2E Tests	Run E2E tests	    > 19 |     await page.goto("/");
+E2E Tests	Run E2E tests	         |                ^
+E2E Tests	Run E2E tests	      20 |     await page.waitForLoadState("domcontentloaded");
+E2E Tests	Run E2E tests	      21 |
+E2E Tests	Run E2E tests	      22 |     await expect(page).toHaveTitle(/Grace/i);
+E2E Tests	Run E2E tests	        at /app/tests/storefront/storefront-catalog.spec.ts:19:16
+E2E Tests	Run E2E tests	2026-01-20T05:21:29.1910916Z ##[error]  5) [chromium] › tests/storefront/storefront-catalog.spec.ts:15:7 › Storefront navigation, discovery, and PDP coverage › loads homepage navigation, categories, and product cards 
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+E2E Tests	Run E2E tests	    Error: page.goto: net::ERR_NAME_NOT_RESOLVED at http://storefront:5173/
+E2E Tests	Run E2E tests	    Call log:
+E2E Tests	Run E2E tests	      - navigating to "http://storefront:5173/", waiting until "load"
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	      17 |   }) => {
+E2E Tests	Run E2E tests	      18 |     // Homepage uses static hardcoded products, no API calls needed
+E2E Tests	Run E2E tests	    > 19 |     await page.goto("/");
+E2E Tests	Run E2E tests	         |                ^
+E2E Tests	Run E2E tests	      20 |     await page.waitForLoadState("domcontentloaded");
+E2E Tests	Run E2E tests	      21 |
+E2E Tests	Run E2E tests	      22 |     await expect(page).toHaveTitle(/Grace/i);
+E2E Tests	Run E2E tests	        at /app/tests/storefront/storefront-catalog.spec.ts:19:16
+E2E Tests	Run E2E tests	2026-01-20T05:21:29.1918161Z ##[error]  5) [chromium] › tests/storefront/storefront-catalog.spec.ts:15:7 › Storefront navigation, discovery, and PDP coverage › loads homepage navigation, categories, and product cards 
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	    Retry #2 ───────────────────────────────────────────────────────────────────────────────────────
+E2E Tests	Run E2E tests	    Error: page.goto: net::ERR_NAME_NOT_RESOLVED at http://storefront:5173/
+E2E Tests	Run E2E tests	    Call log:
+E2E Tests	Run E2E tests	      - navigating to "http://storefront:5173/", waiting until "load"
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	      17 |   }) => {
+E2E Tests	Run E2E tests	      18 |     // Homepage uses static hardcoded products, no API calls needed
+E2E Tests	Run E2E tests	    > 19 |     await page.goto("/");
+E2E Tests	Run E2E tests	         |                ^
+E2E Tests	Run E2E tests	      20 |     await page.waitForLoadState("domcontentloaded");
+E2E Tests	Run E2E tests	      21 |
+E2E Tests	Run E2E tests	      22 |     await expect(page).toHaveTitle(/Grace/i);
+E2E Tests	Run E2E tests	        at /app/tests/storefront/storefront-catalog.spec.ts:19:16
+E2E Tests	Run E2E tests	2026-01-20T05:21:29.1925933Z ##[error]  6) [chromium] › tests/storefront/storefront-catalog.spec.ts:65:7 › Storefront navigation, discovery, and PDP coverage › renders PDP variants, pricing, stock, images, and related content 
+E2E Tests	Run E2E tests	    Error: page.goto: net::ERR_NAME_NOT_RESOLVED at http://storefront:5173/products/the-nuzzle
+E2E Tests	Run E2E tests	    Call log:
+E2E Tests	Run E2E tests	      - navigating to "http://storefront:5173/products/the-nuzzle", waiting until "load"
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	      69 |     const product = await productFactory.createProduct();
+E2E Tests	Run E2E tests	      70 |     // Navigate to product detail page
+E2E Tests	Run E2E tests	    > 71 |     await page.goto(`/products/${product.handle}`);
+E2E Tests	Run E2E tests	         |                ^
+E2E Tests	Run E2E tests	      72 |     await page.waitForLoadState("domcontentloaded");
+E2E Tests	Run E2E tests	      73 |
+E2E Tests	Run E2E tests	      74 |     // Verify product content renders (use .first() as PDP may have title in sticky bar too)
+E2E Tests	Run E2E tests	        at /app/tests/storefront/storefront-catalog.spec.ts:71:16
+E2E Tests	Run E2E tests	2026-01-20T05:21:29.1934528Z ##[error]  6) [chromium] › tests/storefront/storefront-catalog.spec.ts:65:7 › Storefront navigation, discovery, and PDP coverage › renders PDP variants, pricing, stock, images, and related content 
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+E2E Tests	Run E2E tests	    Error: page.goto: net::ERR_NAME_NOT_RESOLVED at http://storefront:5173/products/the-nuzzle
+E2E Tests	Run E2E tests	    Call log:
+E2E Tests	Run E2E tests	      - navigating to "http://storefront:5173/products/the-nuzzle", waiting until "load"
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	      69 |     const product = await productFactory.createProduct();
+E2E Tests	Run E2E tests	      70 |     // Navigate to product detail page
+E2E Tests	Run E2E tests	    > 71 |     await page.goto(`/products/${product.handle}`);
+E2E Tests	Run E2E tests	         |                ^
+E2E Tests	Run E2E tests	      72 |     await page.waitForLoadState("domcontentloaded");
+E2E Tests	Run E2E tests	      73 |
+E2E Tests	Run E2E tests	      74 |     // Verify product content renders (use .first() as PDP may have title in sticky bar too)
+E2E Tests	Run E2E tests	        at /app/tests/storefront/storefront-catalog.spec.ts:71:16
+E2E Tests	Run E2E tests	2026-01-20T05:21:29.1943265Z ##[error]  6) [chromium] › tests/storefront/storefront-catalog.spec.ts:65:7 › Storefront navigation, discovery, and PDP coverage › renders PDP variants, pricing, stock, images, and related content 
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	    Retry #2 ───────────────────────────────────────────────────────────────────────────────────────
+E2E Tests	Run E2E tests	    Error: page.goto: net::ERR_NAME_NOT_RESOLVED at http://storefront:5173/products/the-nuzzle
+E2E Tests	Run E2E tests	    Call log:
+E2E Tests	Run E2E tests	      - navigating to "http://storefront:5173/products/the-nuzzle", waiting until "load"
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	      69 |     const product = await productFactory.createProduct();
+E2E Tests	Run E2E tests	      70 |     // Navigate to product detail page
+E2E Tests	Run E2E tests	    > 71 |     await page.goto(`/products/${product.handle}`);
+E2E Tests	Run E2E tests	         |                ^
+E2E Tests	Run E2E tests	      72 |     await page.waitForLoadState("domcontentloaded");
+E2E Tests	Run E2E tests	      73 |
+E2E Tests	Run E2E tests	      74 |     // Verify product content renders (use .first() as PDP may have title in sticky bar too)
+E2E Tests	Run E2E tests	        at /app/tests/storefront/storefront-catalog.spec.ts:71:16
+E2E Tests	Run E2E tests	2026-01-20T05:21:29.1950707Z ##[error]  7) [chromium] › tests/storefront/storefront-catalog.spec.ts:95:7 › Storefront navigation, discovery, and PDP coverage › handles 404 and offline UX gracefully 
+E2E Tests	Run E2E tests	    Error: page.goto: net::ERR_NAME_NOT_RESOLVED at http://storefront:5173/non-existent-route
+E2E Tests	Run E2E tests	    Call log:
+E2E Tests	Run E2E tests	      - navigating to "http://storefront:5173/non-existent-route", waiting until "load"
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	      94 |
+E2E Tests	Run E2E tests	      95 |   test("handles 404 and offline UX gracefully", async ({ page }) => {
+E2E Tests	Run E2E tests	    > 96 |     await page.goto("/non-existent-route");
+E2E Tests	Run E2E tests	         |                ^
+E2E Tests	Run E2E tests	      97 |     await expect(page.getByText(/not found|404/i)).toBeVisible();
+E2E Tests	Run E2E tests	      98 |
+E2E Tests	Run E2E tests	      99 |     await page.context().setOffline(true);
+E2E Tests	Run E2E tests	        at /app/tests/storefront/storefront-catalog.spec.ts:96:16
+E2E Tests	Run E2E tests	2026-01-20T05:21:29.1958125Z ##[error]  7) [chromium] › tests/storefront/storefront-catalog.spec.ts:95:7 › Storefront navigation, discovery, and PDP coverage › handles 404 and offline UX gracefully 
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+E2E Tests	Run E2E tests	    Error: page.goto: net::ERR_NAME_NOT_RESOLVED at http://storefront:5173/non-existent-route
+E2E Tests	Run E2E tests	    Call log:
+E2E Tests	Run E2E tests	      - navigating to "http://storefront:5173/non-existent-route", waiting until "load"
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	      94 |
+E2E Tests	Run E2E tests	      95 |   test("handles 404 and offline UX gracefully", async ({ page }) => {
+E2E Tests	Run E2E tests	    > 96 |     await page.goto("/non-existent-route");
+E2E Tests	Run E2E tests	         |                ^
+E2E Tests	Run E2E tests	      97 |     await expect(page.getByText(/not found|404/i)).toBeVisible();
+E2E Tests	Run E2E tests	      98 |
+E2E Tests	Run E2E tests	      99 |     await page.context().setOffline(true);
+E2E Tests	Run E2E tests	        at /app/tests/storefront/storefront-catalog.spec.ts:96:16
+E2E Tests	Run E2E tests	2026-01-20T05:21:29.1966133Z ##[error]  7) [chromium] › tests/storefront/storefront-catalog.spec.ts:95:7 › Storefront navigation, discovery, and PDP coverage › handles 404 and offline UX gracefully 
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	    Retry #2 ───────────────────────────────────────────────────────────────────────────────────────
+E2E Tests	Run E2E tests	    Error: page.goto: net::ERR_NAME_NOT_RESOLVED at http://storefront:5173/non-existent-route
+E2E Tests	Run E2E tests	    Call log:
+E2E Tests	Run E2E tests	      - navigating to "http://storefront:5173/non-existent-route", waiting until "load"
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	
+E2E Tests	Run E2E tests	      94 |
+E2E Tests	Run E2E tests	      95 |   test("handles 404 and offline UX gracefully", async ({ page }) => {
+E2E Tests	Run E2E tests	    > 96 |     await page.goto("/non-existent-route");
+E2E Tests	Run E2E tests	         |                ^
+E2E Tests	Run E2E tests	      97 |     await expect(page.getByText(/not found|404/i)).toBeVisible();
+E2E Tests	Run E2E tests	      98 |
+E2E Tests	Run E2E tests	      99 |     await page.context().setOffline(true);
+E2E Tests	Run E2E tests	        at /app/tests/storefront/storefront-catalog.spec.ts:96:16
+E2E Tests	Run E2E tests	2026-01-20T05:21:29.1978690Z ##[notice]  7 failed
+E2E Tests	Run E2E tests	    [chromium] › tests/full-checkout.happy.spec.ts:11:7 › Full Checkout Flow (Happy Path) › should complete a guest checkout with successful payment 
+E2E Tests	Run E2E tests	    [chromium] › tests/storefront/multi-region.spec.ts:131:9 › Multi-Region Flow › Cart Creation with Region › should create cart with region_id from localStorage 
+E2E Tests	Run E2E tests	    [chromium] › tests/storefront/multi-region.spec.ts:232:9 › Multi-Region Flow › Checkout Currency Display › should show currency selector in header 
+E2E Tests	Run E2E tests	    [chromium] › tests/storefront/multi-region.spec.ts:243:9 › Multi-Region Flow › Region Error Handling › should handle region mismatch gracefully 
+E2E Tests	Run E2E tests	    [chromium] › tests/storefront/storefront-catalog.spec.ts:15:7 › Storefront navigation, discovery, and PDP coverage › loads homepage navigation, categories, and product cards 
+E2E Tests	Run E2E tests	    [chromium] › tests/storefront/storefront-catalog.spec.ts:65:7 › Storefront navigation, discovery, and PDP coverage › renders PDP variants, pricing, stock, images, and related content 
+E2E Tests	Run E2E tests	    [chromium] › tests/storefront/storefront-catalog.spec.ts:95:7 › Storefront navigation, discovery, and PDP coverage › handles 404 and offline UX gracefully 
+E2E Tests	Run E2E tests	  27 skipped
+E2E Tests	Run E2E tests	  45 passed (1.6m)
+E2E Tests	Run E2E tests	2026-01-20T05:21:29.3223136Z 
+E2E Tests	Run E2E tests	2026-01-20T05:21:29.3254439Z ##[error]Process completed with exit code 1.
+E2E Tests	Upload Playwright report	﻿2026-01-20T05:21:29.3321513Z ##[group]Run actions/upload-artifact@v6
+E2E Tests	Upload Playwright report	2026-01-20T05:21:29.3321777Z with:
+E2E Tests	Upload Playwright report	2026-01-20T05:21:29.3321961Z   name: playwright-report
+E2E Tests	Upload Playwright report	2026-01-20T05:21:29.3322202Z   path: apps/e2e/playwright-report/
+E2E Tests	Upload Playwright report	2026-01-20T05:21:29.3322585Z   retention-days: 7
+E2E Tests	Upload Playwright report	2026-01-20T05:21:29.3322786Z   if-no-files-found: warn
+E2E Tests	Upload Playwright report	2026-01-20T05:21:29.3322990Z   compression-level: 6
+E2E Tests	Upload Playwright report	2026-01-20T05:21:29.3323189Z   overwrite: false
+E2E Tests	Upload Playwright report	2026-01-20T05:21:29.3323414Z   include-hidden-files: false
+E2E Tests	Upload Playwright report	2026-01-20T05:21:29.3323635Z env:
+E2E Tests	Upload Playwright report	2026-01-20T05:21:29.3323800Z   NODE_VERSION: 24
+E2E Tests	Upload Playwright report	2026-01-20T05:21:29.3324036Z   PNPM_HOME: /home/runner/setup-pnpm/node_modules/.bin
+E2E Tests	Upload Playwright report	2026-01-20T05:21:29.3325675Z   ADMIN_TOKEN: ***
+E2E Tests	Upload Playwright report	2026-01-20T05:21:29.3325853Z ##[endgroup]
+E2E Tests	Upload Playwright report	2026-01-20T05:21:29.6185690Z With the provided path, there will be 64 files uploaded
+E2E Tests	Upload Playwright report	2026-01-20T05:21:29.6189985Z Artifact name is valid!
+E2E Tests	Upload Playwright report	2026-01-20T05:21:29.6190575Z Root directory input is valid!
+E2E Tests	Upload Playwright report	2026-01-20T05:21:29.8665528Z Beginning upload of artifact content to blob storage
+E2E Tests	Upload Playwright report	2026-01-20T05:21:31.1129046Z Uploaded bytes 8388608
+E2E Tests	Upload Playwright report	2026-01-20T05:21:31.3748709Z Uploaded bytes 16777216
+E2E Tests	Upload Playwright report	2026-01-20T05:21:31.5614716Z Uploaded bytes 19123830
+E2E Tests	Upload Playwright report	2026-01-20T05:21:31.6340712Z Finished uploading artifact content to blob storage!
+E2E Tests	Upload Playwright report	2026-01-20T05:21:31.6342667Z SHA256 digest of uploaded artifact zip is 2fa27244e99b4d09416b5bde415bcc156a807d320beda4422662add9746f986a
+E2E Tests	Upload Playwright report	2026-01-20T05:21:31.6344806Z Finalizing artifact upload
+E2E Tests	Upload Playwright report	2026-01-20T05:21:31.8753792Z Artifact playwright-report.zip successfully finalized. Artifact ID 5185032992
+E2E Tests	Upload Playwright report	2026-01-20T05:21:31.8754725Z Artifact playwright-report has been successfully uploaded! Final size is 19123830 bytes. Artifact ID is 5185032992
+E2E Tests	Upload Playwright report	2026-01-20T05:21:31.8759716Z Artifact download URL: https://github.com/builderbuilds123/gracestowel/actions/runs/21160283838/artifacts/5185032992
+E2E Tests	Stop test environment	﻿2026-01-20T05:21:31.8900594Z ##[group]Run docker compose -f docker-compose.test.yml down -v
+E2E Tests	Stop test environment	2026-01-20T05:21:31.8901047Z [36;1mdocker compose -f docker-compose.test.yml down -v[0m
+E2E Tests	Stop test environment	2026-01-20T05:21:31.8922719Z shell: /usr/bin/bash -e {0}
+E2E Tests	Stop test environment	2026-01-20T05:21:31.8923115Z env:
+E2E Tests	Stop test environment	2026-01-20T05:21:31.8923401Z   NODE_VERSION: 24
+E2E Tests	Stop test environment	2026-01-20T05:21:31.8923825Z   PNPM_HOME: /home/runner/setup-pnpm/node_modules/.bin
+E2E Tests	Stop test environment	2026-01-20T05:21:31.8926524Z   ADMIN_TOKEN: ***
+E2E Tests	Stop test environment	2026-01-20T05:21:31.8926868Z ##[endgroup]
+E2E Tests	Stop test environment	2026-01-20T05:21:31.9518221Z time="2026-01-20T05:21:31Z" level=warning msg="The \"MEDUSA_PUBLISHABLE_KEY\" variable is not set. Defaulting to a blank string."
+E2E Tests	Stop test environment	2026-01-20T05:21:31.9519551Z time="2026-01-20T05:21:31Z" level=warning msg="The \"MEDUSA_PUBLISHABLE_KEY\" variable is not set. Defaulting to a blank string."
+E2E Tests	Stop test environment	2026-01-20T05:21:31.9646514Z  Container gracestowel-storefront-test  Stopping
+E2E Tests	Stop test environment	2026-01-20T05:21:31.9649074Z  Container gracestowel-storefront-test  Stopped
+E2E Tests	Stop test environment	2026-01-20T05:21:31.9649780Z  Container gracestowel-storefront-test  Removing
+E2E Tests	Stop test environment	2026-01-20T05:21:31.9699606Z  Container gracestowel-storefront-test  Removed
+E2E Tests	Stop test environment	2026-01-20T05:21:31.9700164Z  Container gracestowel-backend-test  Stopping
+E2E Tests	Stop test environment	2026-01-20T05:21:32.1284704Z  Container gracestowel-backend-test  Stopped
+E2E Tests	Stop test environment	2026-01-20T05:21:32.1313852Z  Container gracestowel-backend-test  Removing
+E2E Tests	Stop test environment	2026-01-20T05:21:32.1387993Z  Container gracestowel-backend-test  Removed
+E2E Tests	Stop test environment	2026-01-20T05:21:32.1390016Z  Container gracestowel-postgres-test  Stopping
+E2E Tests	Stop test environment	2026-01-20T05:21:32.1390579Z  Container gracestowel-redis-test  Stopping
+E2E Tests	Stop test environment	2026-01-20T05:21:32.2635784Z  Container gracestowel-postgres-test  Stopped
+E2E Tests	Stop test environment	2026-01-20T05:21:32.2636522Z  Container gracestowel-postgres-test  Removing
+E2E Tests	Stop test environment	2026-01-20T05:21:32.2678073Z  Container gracestowel-postgres-test  Removed
+E2E Tests	Stop test environment	2026-01-20T05:21:32.2986045Z  Container gracestowel-redis-test  Stopped
+E2E Tests	Stop test environment	2026-01-20T05:21:32.2986626Z  Container gracestowel-redis-test  Removing
+E2E Tests	Stop test environment	2026-01-20T05:21:32.3029622Z  Container gracestowel-redis-test  Removed
+E2E Tests	Stop test environment	2026-01-20T05:21:32.3035915Z  Network gracestowel-test-network  Removing
+E2E Tests	Stop test environment	2026-01-20T05:21:32.4330688Z  Network gracestowel-test-network  Removed
+E2E Tests	Post Set up Docker Buildx	﻿2026-01-20T05:21:32.4431352Z Post job cleanup.
+E2E Tests	Post Set up Docker Buildx	2026-01-20T05:21:32.6850593Z ##[group]Removing builder
+E2E Tests	Post Set up Docker Buildx	2026-01-20T05:21:32.7896218Z [command]/usr/bin/docker buildx rm builder-6d6b8a0f-d1f9-4a83-918f-7aab8c964087
+E2E Tests	Post Set up Docker Buildx	2026-01-20T05:21:52.6260092Z builder-6d6b8a0f-d1f9-4a83-918f-7aab8c964087 removed
+E2E Tests	Post Set up Docker Buildx	2026-01-20T05:21:52.6293025Z ##[endgroup]
+E2E Tests	Post Set up Docker Buildx	2026-01-20T05:21:52.6294238Z ##[group]Cleaning up certificates
+E2E Tests	Post Set up Docker Buildx	2026-01-20T05:21:52.6301001Z ##[endgroup]
+E2E Tests	Post Set up Docker Buildx	2026-01-20T05:21:52.6301482Z ##[group]Post cache
+E2E Tests	Post Set up Docker Buildx	2026-01-20T05:21:52.6302923Z State not set
+E2E Tests	Post Set up Docker Buildx	2026-01-20T05:21:52.6303799Z ##[endgroup]
+E2E Tests	Post Setup pnpm	﻿2026-01-20T05:21:52.6396342Z Post job cleanup.
+E2E Tests	Post Setup pnpm	2026-01-20T05:21:52.6947530Z Pruning is unnecessary.
+E2E Tests	Post Checkout	﻿2026-01-20T05:21:52.7076459Z Post job cleanup.
+E2E Tests	Post Checkout	2026-01-20T05:21:52.7928686Z [command]/usr/bin/git version
+E2E Tests	Post Checkout	2026-01-20T05:21:52.7970419Z git version 2.52.0
+E2E Tests	Post Checkout	2026-01-20T05:21:52.8011720Z Temporarily overriding HOME='/home/runner/work/_temp/6358febb-6323-430b-9200-59fb7e70048d' before making global git config changes
+E2E Tests	Post Checkout	2026-01-20T05:21:52.8013991Z Adding repository directory to the temporary git global config as a safe directory
+E2E Tests	Post Checkout	2026-01-20T05:21:52.8018492Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/gracestowel/gracestowel
+E2E Tests	Post Checkout	2026-01-20T05:21:52.8050992Z Removing SSH command configuration
+E2E Tests	Post Checkout	2026-01-20T05:21:52.8061443Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+E2E Tests	Post Checkout	2026-01-20T05:21:52.8100126Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+E2E Tests	Post Checkout	2026-01-20T05:21:52.8357181Z Removing HTTP extra header
+E2E Tests	Post Checkout	2026-01-20T05:21:52.8365687Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+E2E Tests	Post Checkout	2026-01-20T05:21:52.8404647Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+E2E Tests	Post Checkout	2026-01-20T05:21:52.8603905Z Removing includeIf entries pointing to credentials config files
+E2E Tests	Post Checkout	2026-01-20T05:21:52.8610477Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+E2E Tests	Post Checkout	2026-01-20T05:21:52.8632136Z includeif.gitdir:/home/runner/work/gracestowel/gracestowel/.git.path
+E2E Tests	Post Checkout	2026-01-20T05:21:52.8633403Z includeif.gitdir:/home/runner/work/gracestowel/gracestowel/.git/worktrees/*.path
+E2E Tests	Post Checkout	2026-01-20T05:21:52.8634177Z includeif.gitdir:/github/workspace/.git.path
+E2E Tests	Post Checkout	2026-01-20T05:21:52.8634825Z includeif.gitdir:/github/workspace/.git/worktrees/*.path
+E2E Tests	Post Checkout	2026-01-20T05:21:52.8643280Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/gracestowel/gracestowel/.git.path
+E2E Tests	Post Checkout	2026-01-20T05:21:52.8663768Z /home/runner/work/_temp/git-credentials-42feaa2e-9814-4c94-b83e-1bc8a3e8f443.config
+E2E Tests	Post Checkout	2026-01-20T05:21:52.8675584Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/gracestowel/gracestowel/.git.path /home/runner/work/_temp/git-credentials-42feaa2e-9814-4c94-b83e-1bc8a3e8f443.config
+E2E Tests	Post Checkout	2026-01-20T05:21:52.8708520Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/gracestowel/gracestowel/.git/worktrees/*.path
+E2E Tests	Post Checkout	2026-01-20T05:21:52.8729384Z /home/runner/work/_temp/git-credentials-42feaa2e-9814-4c94-b83e-1bc8a3e8f443.config
+E2E Tests	Post Checkout	2026-01-20T05:21:52.8738389Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/gracestowel/gracestowel/.git/worktrees/*.path /home/runner/work/_temp/git-credentials-42feaa2e-9814-4c94-b83e-1bc8a3e8f443.config
+E2E Tests	Post Checkout	2026-01-20T05:21:52.8765324Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git.path
+E2E Tests	Post Checkout	2026-01-20T05:21:52.8783608Z /github/runner_temp/git-credentials-42feaa2e-9814-4c94-b83e-1bc8a3e8f443.config
+E2E Tests	Post Checkout	2026-01-20T05:21:52.8791084Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git.path /github/runner_temp/git-credentials-42feaa2e-9814-4c94-b83e-1bc8a3e8f443.config
+E2E Tests	Post Checkout	2026-01-20T05:21:52.8818871Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git/worktrees/*.path
+E2E Tests	Post Checkout	2026-01-20T05:21:52.8837558Z /github/runner_temp/git-credentials-42feaa2e-9814-4c94-b83e-1bc8a3e8f443.config
+E2E Tests	Post Checkout	2026-01-20T05:21:52.8846904Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git/worktrees/*.path /github/runner_temp/git-credentials-42feaa2e-9814-4c94-b83e-1bc8a3e8f443.config
+E2E Tests	Post Checkout	2026-01-20T05:21:52.8877110Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+E2E Tests	Post Checkout	2026-01-20T05:21:52.9069859Z Removing credentials config '/home/runner/work/_temp/git-credentials-42feaa2e-9814-4c94-b83e-1bc8a3e8f443.config'
+E2E Tests	Complete job	﻿2026-01-20T05:21:52.9205695Z Cleaning up orphan processes
