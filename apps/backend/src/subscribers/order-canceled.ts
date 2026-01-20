@@ -7,6 +7,7 @@ import { Templates } from "../modules/resend/service"
 import { startEmailWorker } from "../workers/email-worker"
 import { cancelPaymentCaptureJob } from "../lib/payment-capture-queue"
 import { sendAdminNotification, AdminNotificationType } from "../lib/admin-notifications"
+import { trackEvent } from "../utils/analytics"
 
 interface OrderCanceledEventData {
   id: string;
@@ -24,6 +25,12 @@ export default async function orderCanceledHandler({
 
   const logger = container.resolve("logger")
   logger.info(`[ORDER_CANCELED] Order canceled event received: ${data.id}`)
+  await trackEvent(container, "order.canceled", {
+    properties: {
+      order_id: data.id,
+      reason: data.reason,
+    },
+  })
 
   // Cancel any scheduled payment capture job
   try {
@@ -102,4 +109,3 @@ export default async function orderCanceledHandler({
 export const config: SubscriberConfig = {
   event: "order.canceled",
 }
-

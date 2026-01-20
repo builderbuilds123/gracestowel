@@ -6,6 +6,7 @@ import { enqueueEmail } from "../lib/email-queue"
 import { Templates } from "../modules/resend/service"
 import { startEmailWorker } from "../workers/email-worker"
 import { sendAdminNotification, AdminNotificationType } from "../lib/admin-notifications"
+import { trackEvent } from "../utils/analytics"
 
 export default async function fulfillmentCreatedHandler({
   event: { data },
@@ -18,6 +19,11 @@ export default async function fulfillmentCreatedHandler({
 
   const logger = container.resolve("logger")
   logger.info(`[FULFILLMENT_CREATED] Fulfillment created event received: ${data.id}`)
+  await trackEvent(container, "fulfillment.created", {
+    properties: {
+      fulfillment_id: data.id,
+    },
+  })
   
   try {
     const query = container.resolve("query")
@@ -76,4 +82,3 @@ export default async function fulfillmentCreatedHandler({
 export const config: SubscriberConfig = {
   event: "fulfillment.created",
 }
-

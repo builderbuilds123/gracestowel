@@ -6,6 +6,7 @@ import { enqueueEmail } from "../lib/email-queue"
 import { Templates } from "../modules/resend/service"
 import { startEmailWorker } from "../workers/email-worker"
 import { sendAdminNotification, AdminNotificationType } from "../lib/admin-notifications"
+import { trackEvent } from "../utils/analytics"
 
 export default async function customerCreatedHandler({
   event: { data },
@@ -18,6 +19,12 @@ export default async function customerCreatedHandler({
 
   const logger = container.resolve("logger")
   logger.info(`[CUSTOMER_CREATED] Customer created event received: ${data.id}`)
+  await trackEvent(container, "customer.created", {
+    actorId: data.id,
+    properties: {
+      customer_id: data.id,
+    },
+  })
   
   try {
     const query = container.resolve("query")
@@ -66,4 +73,3 @@ export default async function customerCreatedHandler({
 export const config: SubscriberConfig = {
   event: "customer.created",
 }
-

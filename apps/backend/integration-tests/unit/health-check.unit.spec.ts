@@ -22,8 +22,8 @@ vi.mock('ioredis', () => ({
 }));
 
 // Mock dependencies before imports
-vi.mock('../../src/utils/posthog', () => ({
-  getPostHog: vi.fn(),
+vi.mock('../../src/utils/analytics', () => ({
+  trackEvent: vi.fn(),
 }));
 
 vi.mock('../../src/utils/logger', () => ({
@@ -34,11 +34,9 @@ vi.mock('../../src/utils/logger', () => ({
   },
 }));
 
-import { getPostHog } from '../../src/utils/posthog';
 import { logger } from '../../src/utils/logger';
 
 describe('Health Check Endpoint (Story 4.5)', () => {
-  let mockCapture: vi.Mock;
   let mockQuery: vi.Mock;
   let mockReq: any;
   let mockRes: any;
@@ -64,8 +62,8 @@ describe('Health Check Endpoint (Story 4.5)', () => {
     }));
     
     // Re-mock dependencies with doMock to use local variables
-    vi.doMock('../../src/utils/posthog', () => ({
-      getPostHog: vi.fn(() => ({ capture: mockCapture })),
+    vi.doMock('../../src/utils/analytics', () => ({
+      trackEvent: vi.fn(),
     }));
     vi.doMock('../../src/utils/logger', () => ({
       logger: { 
@@ -76,14 +74,13 @@ describe('Health Check Endpoint (Story 4.5)', () => {
     }));
 
     const { GET } = await import('../../src/api/health/route');
-    return GET;
+    const analytics = await import('../../src/utils/analytics');
+    return { GET, trackEvent: analytics.trackEvent as vi.Mock };
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
     
-    mockCapture = vi.fn();
-    (getPostHog as any).mockReturnValue({ capture: mockCapture });
     
     mockQuery = vi.fn().mockResolvedValue({ data: [{ id: 'region_1' }] });
     
@@ -151,7 +148,7 @@ describe('Health Check Endpoint (Story 4.5)', () => {
     it('should report unhealthy status when database fails (AC3)', async () => {
       mockQuery.mockRejectedValueOnce(new Error('Connection refused'));
       
-      const GET = await loadGetHandler();
+      const { GET } = await loadGetHandler();
       await GET(mockReq, mockRes);
 
       expect(mockRes.status).toHaveBeenCalledWith(503);
@@ -163,43 +160,49 @@ describe('Health Check Endpoint (Story 4.5)', () => {
       }));
     });
 
-    it('should send health_check event to PostHog (AC2)', async () => {
-      const { GET } = await import('../../src/api/health/route');
+    it('should send health_check event to analytics (AC2)', async () => {
+      const { GET, trackEvent } = await loadGetHandler();
       
       await GET(mockReq, mockRes);
 
-      expect(mockCapture).toHaveBeenCalledWith(expect.objectContaining({
-        distinctId: 'system_health_check',
-        event: 'health_check',
-        properties: expect.objectContaining({
-          status: 'healthy',
-          response_time_ms: expect.any(Number),
-          database_status: 'ok',
-        }),
-      }));
+      expect(trackEvent).toHaveBeenCalledWith(
+        mockReq.scope,
+        "system.health_check",
+        expect.objectContaining({
+          properties: expect.objectContaining({
+            status: 'healthy',
+            response_time_ms: expect.any(Number),
+            database_status: 'ok',
+          }),
+        })
+      );
     });
 
-    it('should include error details in PostHog event when unhealthy (AC3)', async () => {
+    it('should include error details in analytics event when unhealthy (AC3)', async () => {
       mockQuery.mockRejectedValueOnce(new Error('DB Error'));
       
-      const GET = await loadGetHandler();
+      const { GET, trackEvent } = await loadGetHandler();
       await GET(mockReq, mockRes);
 
-      expect(mockCapture).toHaveBeenCalledWith(expect.objectContaining({
-        properties: expect.objectContaining({
-          status: 'unhealthy',
-          error_count: expect.any(Number),
-          errors: expect.arrayContaining([
-            expect.stringContaining('Database'),
-          ]),
-        }),
-      }));
+      expect(trackEvent).toHaveBeenCalledWith(
+        mockReq.scope,
+        "system.health_check",
+        expect.objectContaining({
+          properties: expect.objectContaining({
+            status: 'unhealthy',
+            error_count: expect.any(Number),
+            errors: expect.arrayContaining([
+              expect.stringContaining('Database'),
+            ]),
+          }),
+        })
+      );
     });
 
     it('should handle Redis not configured gracefully', async () => {
       delete process.env.REDIS_URL;
       
-      const GET = await loadGetHandler();
+      const { GET } = await loadGetHandler();
       await GET(mockReq, mockRes);
 
       expect(mockRes.json).toHaveBeenCalledWith(expect.objectContaining({
@@ -215,7 +218,7 @@ describe('Health Check Endpoint (Story 4.5)', () => {
 
     it('should log health check results', async () => {
       const mockLoggerInfo = vi.fn();
-      const GET = await loadGetHandler({ loggerInfo: mockLoggerInfo });
+      const { GET } = await loadGetHandler({ loggerInfo: mockLoggerInfo });
       
       await GET(mockReq, mockRes);
 
