@@ -34,12 +34,16 @@ test.describe("Full Checkout Flow (Happy Path)", () => {
 
     // 4. Fill guest email (Stripe LinkAuthenticationElement)
     // Stripe elements render in iframes. We need to find the right iframe.
-    const emailIframe = page.frameLocator('iframe[title*="Secure email input"]').first();
+    const emailFrameSelector = 'iframe[title*="Secure email input"], iframe[title*="email"]';
+    await expect(page.locator(emailFrameSelector).first()).toBeVisible({ timeout: 30000 });
+    const emailIframe = page.frameLocator(emailFrameSelector).first();
     const emailInput = emailIframe.locator('input[name="email"]');
     await emailInput.fill(`tester-${Date.now()}@example.com`);
     
     // 5. Fill shipping address (Stripe AddressElement)
-    const addressIframe = page.frameLocator('iframe[title*="Secure shipping address input"]').first();
+    const addressFrameSelector = 'iframe[title*="Secure shipping address input"], iframe[title*="shipping address"], iframe[title*="address"]';
+    await expect(page.locator(addressFrameSelector).first()).toBeVisible({ timeout: 30000 });
+    const addressIframe = page.frameLocator(addressFrameSelector).first();
     
     // Fill Name
     await addressIframe.locator('input[name="name"]').fill("Testy McTester");
@@ -79,7 +83,9 @@ test.describe("Full Checkout Flow (Happy Path)", () => {
 
     // 8. Payment (Stripe PaymentElement)
     // Payment element is also an iframe.
-    const paymentIframe = page.frameLocator('iframe[title*="Secure payment input"]').first();
+    const paymentFrameSelector = 'iframe[title*="Secure payment input"], iframe[title*="payment"]';
+    await expect(page.locator(paymentFrameSelector).first()).toBeVisible({ timeout: 30000 });
+    const paymentIframe = page.frameLocator(paymentFrameSelector).first();
     
     // Stripe test cards are often automatically handled if configured, 
     // but usually we need to enter them if it's the standard PaymentElement.

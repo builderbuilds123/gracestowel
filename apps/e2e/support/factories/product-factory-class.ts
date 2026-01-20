@@ -98,16 +98,40 @@ export class ProductFactory {
           console.log(`Product ${product.handle} is linked to sales channel: ${scId}`);
         }
 
-        return {
-          id: product.id,
-          title: product.title,
-          description: product.description,
-          handle: product.handle,
-          status: 'published',
-          variants: product.variants,
-          variant_id: variant?.id,
-          sales_channel_id: scId,
-        };
+        let adminProductAvailableInStore = true;
+        if (pk && product.handle) {
+          try {
+            const storeCheck = await apiRequest<{ products: any[] }>({
+              request: this.request,
+              method: 'GET',
+              url: `/store/products?handle=${product.handle}&limit=1`,
+              headers: {
+                'x-publishable-api-key': pk,
+              },
+            });
+
+            if (!storeCheck.products?.length) {
+              console.warn(`[ProductFactory] Admin product ${product.handle} not available in store API. Falling back to store products.`);
+              adminProductAvailableInStore = false;
+            }
+          } catch (error) {
+            console.warn('[ProductFactory] Store availability check failed, falling back to store API list:', error);
+            adminProductAvailableInStore = false;
+          }
+        }
+
+        if (adminProductAvailableInStore) {
+          return {
+            id: product.id,
+            title: product.title,
+            description: product.description,
+            handle: product.handle,
+            status: 'published',
+            variants: product.variants,
+            variant_id: variant?.id,
+            sales_channel_id: scId,
+          };
+        }
       }
     } catch (error) {
       console.warn('Could not fetch from admin API:', error);
