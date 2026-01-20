@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 
 dotenv.config({ path: path.resolve(__dirname, ".env") });
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
+dotenv.config({ path: path.resolve(__dirname, "../backend/.env") }); // Load backend env to get Stripe Secret Key
 import { defineConfig, devices } from "@playwright/test";
 
 if (
