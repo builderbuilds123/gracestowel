@@ -3,17 +3,17 @@ import { test, expect } from "../support/fixtures";
 /**
  * Full Checkout Flow E2E Test
  * covers the complete happy path from product selection to payment and success.
+ * 
+ * Note: This test uses existing seeded products (like "The Nuzzle") 
+ * since creating new products requires admin workflow.
  */
 test.describe("Full Checkout Flow (Happy Path)", () => {
   test("should complete a guest checkout with successful payment", async ({ 
     page, 
     productFactory 
   }) => {
-    // 1. Setup: Create a product and navigate to its page
-    const product = await productFactory.createProduct({
-        title: "E2E Test Towel",
-        handle: "e2e-test-towel-" + Date.now(),
-    });
+    // 1. Setup: Get an existing seeded product
+    const product = await productFactory.createProduct();
     
     await page.goto(`/products/${product.handle}`);
     await page.waitForLoadState("networkidle");
