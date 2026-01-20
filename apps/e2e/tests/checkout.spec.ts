@@ -8,8 +8,6 @@ import { test, expect } from "../support/fixtures";
  * The storefront has product cards with hover overlays that can block clicks.
  */
 test.describe("Guest Checkout Flow", () => {
-  const escapeRegExp = (value: string) =>
-    value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
   test("should display homepage with products", async ({ page }) => {
     // Navigate to homepage
@@ -44,8 +42,7 @@ test.describe("Guest Checkout Flow", () => {
     // Verify product page loads with details - increase timeout for slow CI
     await page.waitForLoadState("networkidle");
     // Verify product page loads using main heading (h1) to avoid sticky bar conflict
-    const titleRegex = new RegExp(escapeRegExp(product.title).split("").join("\\s*"), "i");
-    await expect(page.getByRole("heading", { name: titleRegex, level: 1 })).toBeVisible({ timeout: 30000 });
+    await expect(page.locator("h1")).toContainText(product.title, { ignoreCase: true, timeout: 30000 });
 
     // Look for add to cart button (uses "Hang it Up" text in this storefront)
     await expect(
@@ -61,8 +58,7 @@ test.describe("Guest Checkout Flow", () => {
 
     // Wait for product page to load
     // Wait for product page to load
-    const titleRegex = new RegExp(escapeRegExp(product.title).split("").join("\\s*"), "i");
-    await expect(page.getByRole("heading", { name: titleRegex, level: 1 })).toBeVisible({ timeout: 30000 });
+    await expect(page.locator("h1")).toContainText(product.title, { ignoreCase: true, timeout: 30000 });
 
     // Add to cart (button says "Hang it Up" in this storefront)
     const addToCartButton = page.getByRole("button", { name: /hang it up|add to cart/i }).first();
@@ -83,8 +79,7 @@ test.describe("Guest Checkout Flow", () => {
     // Add product to cart first
     await page.goto(`/products/${product.handle}`);
     await page.waitForLoadState("domcontentloaded");
-    const titleRegex = new RegExp(escapeRegExp(product.title).split("").join("\\s*"), "i");
-    await expect(page.getByRole("heading", { name: titleRegex, level: 1 })).toBeVisible({ timeout: 30000 });
+    await expect(page.locator("h1")).toContainText(product.title, { ignoreCase: true, timeout: 30000 });
     const addToCartButton = page.getByRole("button", { name: /hang it up|add to cart/i }).first();
     await addToCartButton.scrollIntoViewIfNeeded();
     await page.waitForTimeout(1000); // Wait for hydration
@@ -120,8 +115,7 @@ test.describe("Guest Checkout Flow", () => {
     await page.goto(`/products/${product.handle}`);
     await page.waitForLoadState("domcontentloaded");
     await page.waitForLoadState("domcontentloaded");
-    const titleRegex = new RegExp(escapeRegExp(product.title).split("").join("\\s*"), "i");
-    await expect(page.getByRole("heading", { name: titleRegex, level: 1 })).toBeVisible({ timeout: 30000 });
+    await expect(page.locator("h1")).toContainText(product.title, { ignoreCase: true, timeout: 30000 });
     const addToCartButton = page.getByRole("button", { name: /hang it up|add to cart/i }).first();
     await addToCartButton.scrollIntoViewIfNeeded();
     await page.waitForTimeout(1000); // Wait for hydration
@@ -153,8 +147,7 @@ test.describe("Guest Checkout Flow", () => {
     await page.goto(`/products/${product.handle}`);
     await page.waitForLoadState("domcontentloaded");
     await page.waitForLoadState("domcontentloaded");
-    const titleRegex = new RegExp(escapeRegExp(product.title).split("").join("\\s*"), "i");
-    await expect(page.getByRole("heading", { name: titleRegex, level: 1 })).toBeVisible({ timeout: 30000 });
+    await expect(page.locator("h1")).toContainText(product.title, { ignoreCase: true, timeout: 30000 });
     const addToCartButton = page.getByRole("button", { name: /hang it up|add to cart/i }).first();
     await addToCartButton.scrollIntoViewIfNeeded();
     await page.waitForTimeout(1000); // Wait for hydration
@@ -181,8 +174,7 @@ test.describe("Guest Checkout Flow", () => {
     await page.goto(`/products/${product.handle}`);
     await page.waitForLoadState("domcontentloaded");
     await page.waitForLoadState("domcontentloaded");
-    const titleRegex = new RegExp(escapeRegExp(product.title).split("").join("\\s*"), "i");
-    await expect(page.getByRole("heading", { name: titleRegex, level: 1 })).toBeVisible({ timeout: 30000 });
+    await expect(page.locator("h1")).toContainText(product.title, { ignoreCase: true, timeout: 30000 });
     
     const addToCartButton = page.getByRole("button", { name: /hang it up|add to cart/i }).first();
     await addToCartButton.scrollIntoViewIfNeeded();
@@ -221,7 +213,7 @@ test.describe("Guest Checkout Flow", () => {
     await page.goto(`/products/${product.handle}`);
     await page.waitForLoadState("domcontentloaded");
     await page.waitForLoadState("domcontentloaded");
-    await expect(page.getByRole("heading", { name: new RegExp(product.title.split("").join("\\s*"), "i"), level: 1 })).toBeVisible({ timeout: 30000 });
+    await expect(page.locator("h1")).toContainText(product.title, { ignoreCase: true, timeout: 30000 });
     const addToCartButton = page.getByRole("button", { name: /hang it up|add to cart/i }).first();
     await addToCartButton.scrollIntoViewIfNeeded();
     await page.waitForTimeout(1000); // Wait for hydration
@@ -247,7 +239,7 @@ test.describe("Cart Persistence", () => {
     // Navigate to product page
     await page.goto(`/products/${product.handle}`);
     await page.waitForLoadState("domcontentloaded");
-      await expect(page.getByRole("heading", { name: new RegExp(product.title.split("").join("\\s*"), "i"), level: 1 })).toBeVisible();
+      await expect(page.locator("h1")).toContainText(product.title, { ignoreCase: true, timeout: 30000 });
       
       const addToCart = page.getByRole("button", { name: /add to cart/i }).first();
     await addToCart.scrollIntoViewIfNeeded();
