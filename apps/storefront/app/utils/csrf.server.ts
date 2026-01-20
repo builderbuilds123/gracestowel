@@ -59,11 +59,13 @@ export async function validateCSRFToken(request: Request, secret?: string, env?:
     const cookie = getCSRFCookie(resolvedSecret, isProd, isCI);
     const cookieHeader = request.headers.get("Cookie");
     const session = (await cookie.parse(cookieHeader)) || {};
-    const storedToken = session.token;
+    const storedToken = typeof session.token === 'string' ? session.token : undefined;
     const headerToken = request.headers.get("X-CSRF-Token");
     
     if (!isProd || isCI) {
-        console.log(`[CSRF Debug] Stored: ${storedToken?.substring(0, 8)}..., Header: ${headerToken?.substring(0, 8)}..., Match: ${storedToken === headerToken}`);
+        const storedDisplay = typeof storedToken === 'string' ? `${storedToken.substring(0, 8)}...` : 'undefined';
+        const headerDisplay = typeof headerToken === 'string' ? `${headerToken.substring(0, 8)}...` : 'undefined';
+        console.log(`[CSRF Debug] Stored: ${storedDisplay}, Header: ${headerDisplay}, Match: ${storedToken === headerToken}`);
         if (!storedToken) {
             console.log(`[CSRF Debug] Cookie Header: ${request.headers.get("Cookie")}`);
         }

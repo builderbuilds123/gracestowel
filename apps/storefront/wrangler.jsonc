@@ -66,8 +66,10 @@
     // CI/Local testing environment
     "ci": {
       "name": "gracestowelstorefront-ci",
+      "hyperdrive": [], // Disable hyperdrive in CI to avoid proxy crashes
       "vars": {
         "ENVIRONMENT": "development",
+        "CI": "true",
         "MEDUSA_BACKEND_URL": "http://backend:8080",
         "MEDUSA_PUBLISHABLE_KEY": "pk_test_placeholder_for_ci",
         "JWT_SECRET": "test-secret-must-be-at-least-32-characters-long-for-security",
