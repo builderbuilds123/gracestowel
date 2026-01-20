@@ -112,3 +112,45 @@ When reviewing PRs, verify:
 - Offer code examples when helpful
 - Distinguish between required changes and suggestions
 - Acknowledge good practices when you see them
+
+## Commit Rules
+
+**IMPORTANT:** Before completing any task, you MUST run `/commit-smart` to commit your changes.
+
+- Only commit files YOU modified in this session — never commit unrelated changes
+- Use atomic commits with descriptive messages following conventional commits format:
+  - `feat:` for new features
+  - `fix:` for bug fixes
+  - `refactor:` for code refactoring
+  - `test:` for adding tests
+  - `docs:` for documentation changes
+  - `chore:` for maintenance tasks
+- If there are no changes to commit, skip this step
+- Do not push unless explicitly asked
+- Always include Co-Authored-By trailer: `Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>`
+
+## Commands
+
+Common development commands for this monorepo:
+
+**Development:**
+- `pnpm dev:storefront` - Run storefront dev server
+- `pnpm dev:api` - Run API backend
+- `pnpm dev:background` - Run background worker
+
+**Testing:**
+- `pnpm test` - Run all tests
+- `pnpm test:storefront` - Run storefront tests
+- `pnpm test:backend` - Run backend integration tests
+- `pnpm test:e2e` - Run E2E tests
+- `pnpm test:e2e:ui` - Run E2E tests with UI
+
+**Building:**
+- `pnpm build` - Build all apps
+- `pnpm lint` - Lint all code
+- `pnpm typecheck` - Type check all code
+
+**Deployment:**
+- `pnpm deploy:storefront` - Deploy storefront
+- `pnpm deploy:api` - Deploy API backend
+- `pnpm deploy:background` - Deploy background worker
