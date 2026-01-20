@@ -60,7 +60,7 @@ jobs:
           format: "table"
           exit-code: "1"
           severity: "CRITICAL,HIGH"
-          trivy-config-file: ".trivyignore"
+          trivy-config: "trivy.yaml"
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -239,7 +239,7 @@ jobs:
 
       - name: Start backend and database
         env:
-          STRIPE_SECRET_KEY: sk_test_placeholder_for_ci_testing
+          STRIPE_SECRET_KEY: sk_test_placeholder_for_ci_testing # Pattern: sk_test_placeholder_for_ci_testing
           STRIPE_WEBHOOK_SECRET: whsec_test_placeholder_for_ci
         run: docker compose -f docker-compose.test.yml up -d postgres redis backend
 
