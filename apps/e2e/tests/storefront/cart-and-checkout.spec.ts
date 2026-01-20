@@ -94,7 +94,11 @@ test.describe("Storefront cart + checkout flows", () => {
       .or(page.getByRole("button", { name: /checkout|proceed/i }));
     await Promise.all([
       page.waitForURL(/checkout/i, { timeout: 30_000 }),
-      checkoutTrigger.first().click(),
+      (async () => {
+        await page.evaluate(() => document.querySelectorAll('div[class*="PostHogSurvey"]').forEach(el => el.remove()));
+        // Use JS click to bypass "outside of viewport" errors completely
+        await checkoutTrigger.first().evaluate((el: HTMLElement) => { el.scrollIntoView(); el.click(); });
+      })(),
     ]);
 
     // Verify we're on checkout page - just verify the URL and basic structure

@@ -20,11 +20,12 @@ import {
     isTerminalStatus,
     type PaymentCollectionStatusType,
 } from "../types/payment-collection-status";
-import { 
+import {
     PAYMENT_CAPTURE_QUEUE,
     PAYMENT_CAPTURE_WORKER_CONCURRENCY,
     getRedisConnection,
 } from "../lib/payment-capture-queue";
+import { sendAdminNotification, AdminNotificationType } from "../lib/admin-notifications";
 
 // Avoid accumulating process signal listeners during Jest runs.
 const IS_JEST = process.env.JEST_WORKER_ID !== undefined;
@@ -877,10 +878,10 @@ export function startPaymentCaptureWorker(container?: MedusaContainer): Worker<P
         console.log(`[PaymentCapture] Job ${job.id} completed`);
     });
 
-    worker.on("failed", (job, err) => {
+    worker.on("failed", async (job, err) => {
         const attemptsMade = job?.attemptsMade || 0;
         const maxAttempts = job?.opts?.attempts || 3;
-        
+
         if (attemptsMade >= maxAttempts) {
             // CRITICAL: Job has exhausted all retries - revenue at risk
             console.error(
@@ -889,7 +890,25 @@ export function startPaymentCaptureWorker(container?: MedusaContainer): Worker<P
                 `Manual intervention required!`,
                 err
             );
-            // TODO: Integrate with alerting service (PagerDuty, Slack webhook, etc.)
+
+            // Send admin notification for payment capture failure
+            if (containerRef) {
+                try {
+                    await sendAdminNotification(containerRef, {
+                        type: AdminNotificationType.PAYMENT_FAILED,
+                        title: "Payment Capture Failed",
+                        description: `Payment capture failed for order ${job?.data?.orderId} after ${attemptsMade} attempts. Manual intervention required.`,
+                        metadata: {
+                            order_id: job?.data?.orderId,
+                            payment_intent_id: job?.data?.paymentIntentId,
+                            attempts: attemptsMade,
+                            error: err?.message,
+                        },
+                    });
+                } catch (notifError) {
+                    console.error("[PaymentCapture] Failed to send admin notification:", notifError);
+                }
+            }
         } else {
             console.error(
                 `[PaymentCapture] Job ${job?.id} failed (attempt ${attemptsMade}/${maxAttempts}):`,

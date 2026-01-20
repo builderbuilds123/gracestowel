@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 
 dotenv.config({ path: path.resolve(__dirname, ".env") });
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
+dotenv.config({ path: path.resolve(__dirname, "../backend/.env") }); // Load backend env to get Stripe Secret Key
 import { defineConfig, devices } from "@playwright/test";
 
 if (
@@ -16,8 +17,18 @@ if (
 
 const isMacArm = process.platform === "darwin" && process.arch === "arm64";
 const shouldUseHeadless = process.env.CI ? true : true; // Default to headless even on Mac ARM to avoid popups
-const chromiumLaunchArgs = isMacArm ? ["--no-crashpad", "--disable-crash-reporter"] : [];
-const chromiumChannel = isMacArm ? "chrome" : undefined;
+const chromiumLaunchArgs: string[] = [];
+
+if (process.env.CI) {
+  chromiumLaunchArgs.push("--no-sandbox", "--disable-dev-shm-usage");
+}
+
+if (isMacArm) {
+  chromiumLaunchArgs.push("--no-crashpad", "--disable-crash-reporter");
+}
+
+const chromiumChannel = process.env.E2E_USE_SYSTEM_CHROME === "true" ? "chrome" : undefined;
+const chromiumLaunchOptions = chromiumLaunchArgs.length > 0 ? { args: chromiumLaunchArgs } : undefined;
 
 /**
  * Playwright configuration for Grace Stowel E2E tests
@@ -36,7 +47,7 @@ export default defineConfig({
   /* Optimized workers: More workers locally for faster execution, more in CI */
   /* Use 50% of CPU cores locally (min 2, max 4), full capacity in CI */
   workers: process.env.CI 
-    ? 4 
+    ? 1 
     : Math.max(2, Math.min(4, Math.floor(require('os').cpus().length * 0.5))),
   /* Reporter to use */
   reporter: [
@@ -50,8 +61,6 @@ export default defineConfig({
     /* Base URL to use in actions like `await page.goto('/')` */
     baseURL: process.env.STOREFRONT_URL || "http://localhost:5173",
     headless: shouldUseHeadless,
-    channel: chromiumChannel,
-    launchOptions: chromiumLaunchArgs.length > 0 ? { args: chromiumLaunchArgs } : undefined,
     /* Collect trace when retrying the failed test */
     trace: "retain-on-failure",
     /* Capture screenshot on failure */
@@ -72,14 +81,22 @@ export default defineConfig({
         // Fast mode: Only Chromium for quick feedback
         {
           name: "chromium",
-          use: { ...devices["Desktop Chrome"] },
+          use: {
+            ...devices["Desktop Chrome"],
+            channel: chromiumChannel,
+            launchOptions: chromiumLaunchOptions,
+          },
         },
       ]
     : [
         // Full mode: All browsers (for CI and comprehensive testing)
         {
           name: "chromium",
-          use: { ...devices["Desktop Chrome"] },
+          use: {
+            ...devices["Desktop Chrome"],
+            channel: chromiumChannel,
+            launchOptions: chromiumLaunchOptions,
+          },
         },
         {
           name: "firefox",
@@ -92,7 +109,11 @@ export default defineConfig({
         /* Test against mobile viewports */
         {
           name: "Mobile Chrome",
-          use: { ...devices["Pixel 5"] },
+          use: {
+            ...devices["Pixel 5"],
+            channel: chromiumChannel,
+            launchOptions: chromiumLaunchOptions,
+          },
         },
         {
           name: "Mobile Safari",
@@ -102,7 +123,11 @@ export default defineConfig({
         {
           name: "resilience",
           testDir: "./resilience",
-          use: { ...devices["Desktop Chrome"] },
+          use: {
+            ...devices["Desktop Chrome"],
+            channel: chromiumChannel,
+            launchOptions: chromiumLaunchOptions,
+          },
         },
       ],
 

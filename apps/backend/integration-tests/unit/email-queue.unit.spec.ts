@@ -54,7 +54,7 @@ describe("Email Queue Service", () => {
 
   it("enqueueEmail() adds job with correct options", async () => {
     const payload = {
-      orderId: "ord_123",
+      entityId: "ord_123",
       template: "order-placed" as const,
       recipient: "test@example.com",
       data: {
@@ -72,10 +72,10 @@ describe("Email Queue Service", () => {
 
     const queue = getEmailQueue()
     expect(queue.add).toHaveBeenCalledWith(
-      "email-ord_123",
+      "email-order-placed", // Job name is now template-based
       payload,
       expect.objectContaining({
-        jobId: "email-ord_123",
+        jobId: expect.stringMatching(/^email-order-placed-ord_123-[a-f0-9-]+$/), // UUID-based jobId
         attempts: 3,
         backoff: {
           type: "exponential",
@@ -91,7 +91,7 @@ describe("Email Queue Service", () => {
     ;(queue.add as any).mockRejectedValueOnce(new Error("Redis offline"))
 
     const payload = {
-        orderId: "ord_fail",
+        entityId: "ord_fail",
         template: "order-placed" as const,
         recipient: "test@example.com",
         data: {

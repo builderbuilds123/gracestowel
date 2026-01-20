@@ -1,4 +1,5 @@
 import type { SubscriberConfig, SubscriberArgs } from "@medusajs/framework"
+import { sendAdminNotification, AdminNotificationType } from "../lib/admin-notifications"
 
 /**
  * Event payload for inventory.backordered events
@@ -63,15 +64,22 @@ export default async function inventoryBackorderedSubscriber({
                 `[Backorder] Item ${item.inventory_item_id} at location ${item.location_id} went negative: ` +
                 `new_stock=${item.new_stock}, delta=${item.delta}, previous=${item.previous_stocked_quantity}`
             )
-
-            // AI-NOTE: Future implementation - trigger replenishment or admin alert
-            // Example:
-            // await container.resolve("replenishmentService").trigger({
-            //     inventory_item_id: item.inventory_item_id,
-            //     location_id: item.location_id,
-            //     shortfall: Math.abs(item.new_stock),
-            // })
         }
+
+        // Send admin notification for inventory backorder alert
+        await sendAdminNotification(container, {
+            type: AdminNotificationType.INVENTORY_BACKORDER,
+            title: "Inventory Backorder Alert",
+            description: `${validItems.length} item(s) backordered for order ${data.order_id}`,
+            metadata: {
+                order_id: data.order_id,
+                item_count: validItems.length,
+                items: validItems.map(item => ({
+                    inventory_item_id: item.inventory_item_id,
+                    new_stock: item.new_stock,
+                })),
+            },
+        })
 
         logger.info(`[Subscriber] inventory.backordered processed successfully for order ${data.order_id}`)
     } catch (error) {

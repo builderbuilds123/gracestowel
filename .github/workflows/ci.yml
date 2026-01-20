@@ -60,6 +60,7 @@ jobs:
           format: "table"
           exit-code: "1"
           severity: "CRITICAL,HIGH"
+          trivyignores: ".trivyignore"
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -194,6 +195,12 @@ jobs:
     runs-on: ubuntu-latest
     needs: validate
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shardIndex: [1, 2, 3]
+        shardTotal: [3]
+    environment: staging # Required to access Stripe secrets
     permissions:
       contents: read
     steps:
@@ -237,7 +244,13 @@ jobs:
             --build-arg BUILDKIT_INLINE_CACHE=1
 
       - name: Start backend and database
-        run: docker compose -f docker-compose.test.yml up -d postgres redis backend
+        env:
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+        run: |
+          # Debug: verify secret is available (shows length, not value)
+          echo "STRIPE_SECRET_KEY length: ${#STRIPE_SECRET_KEY}"
+          echo "STRIPE_SECRET_KEY prefix: ${STRIPE_SECRET_KEY:0:7}..."
+          docker compose -f docker-compose.test.yml up -d postgres redis backend
 
       - name: Wait for backend to be ready
         run: |
@@ -248,6 +261,13 @@ jobs:
           echo "Waiting for backend health check..."
           timeout 180 bash -c 'until docker compose -f docker-compose.test.yml exec -T backend curl -sf http://localhost:8080/health; do sleep 5; done'
           echo "Backend health check passed"
+
+          # Debug: Check if backend container has STRIPE_SECRET_KEY
+          echo "Checking backend container STRIPE_SECRET_KEY..."
+          BACKEND_SK_LENGTH=$(docker compose -f docker-compose.test.yml exec -T backend sh -c 'echo ${#STRIPE_SECRET_KEY}')
+          BACKEND_SK_PREFIX=$(docker compose -f docker-compose.test.yml exec -T backend sh -c 'echo ${STRIPE_SECRET_KEY:0:7}')
+          echo "Backend STRIPE_SECRET_KEY length: $BACKEND_SK_LENGTH"
+          echo "Backend STRIPE_SECRET_KEY prefix: $BACKEND_SK_PREFIX..."
 
           echo "Waiting for seed to complete (checking for publishable API key)..."
           timeout 120 bash -c 'until docker compose -f docker-compose.test.yml exec -T postgres psql -U medusa_test -d medusa_test -t -c "SELECT token FROM api_key WHERE type = '\''publishable'\'' LIMIT 1;" | grep -q "[a-zA-Z0-9]"; do echo "API key not found yet, waiting..."; sleep 5; done'
@@ -270,6 +290,8 @@ jobs:
         env:
           MEDUSA_PUBLISHABLE_KEY: ${{ steps.get-api-key.outputs.MEDUSA_PUBLISHABLE_KEY }}
           JWT_SECRET: "test-secret-must-be-at-least-32-characters-long-for-security"
+          STRIPE_PUBLISHABLE_KEY: ${{ secrets.STRIPE_PUBLISHABLE_KEY }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
         run: docker compose -f docker-compose.test.yml up -d storefront
 
       - name: Wait for storefront to be ready
@@ -277,21 +299,7 @@ jobs:
           echo "Waiting for storefront..."
           timeout 120 bash -c 'until docker compose -f docker-compose.test.yml exec -T storefront curl -sf http://localhost:5173/ -o /dev/null; do sleep 5; done'
           echo "Storefront is ready"
-
-      - name: Debug - Check container status
-        if: always()
-        run: |
-          docker compose -f docker-compose.test.yml ps -a
-          echo "--- Testing storefront from inside container ---"
-          docker compose -f docker-compose.test.yml exec -T storefront curl -sf http://localhost:5173/ -o /dev/null && echo "Storefront responding" || echo "Storefront not responding"
-
-      - name: Show backend container logs
-        if: always()
-        run: docker compose -f docker-compose.test.yml logs backend
-
-      - name: Show storefront container logs
-        if: always()
-        run: docker compose -f docker-compose.test.yml logs storefront
+          sleep 10
 
       - name: Generate Admin Token
         id: generate-token
@@ -306,15 +314,30 @@ jobs:
           MEDUSA_PUBLISHABLE_KEY: ${{ steps.get-api-key.outputs.MEDUSA_PUBLISHABLE_KEY }}
           ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
           JWT_SECRET: "test-secret-must-be-at-least-32-characters-long-for-security"
-        run: docker compose -f docker-compose.test.yml run --rm -e MEDUSA_PUBLISHABLE_KEY -e ADMIN_TOKEN -e JWT_SECRET -e API_URL=http://backend:8080 playwright sh -c "corepack enable && corepack prepare pnpm@9.15.2 --activate && pnpm install && pnpm exec playwright test --project=chromium"
+        run: docker compose -f docker-compose.test.yml run --rm -e MEDUSA_PUBLISHABLE_KEY -e ADMIN_TOKEN -e JWT_SECRET -e API_URL=http://backend:8080 -e STOREFRONT_URL=http://storefront:5173 playwright sh -c "corepack enable && corepack prepare pnpm@9.15.2 --activate && pnpm install && pnpm exec playwright test --project=chromium --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}"
 
       - name: Upload Playwright report
         uses: actions/upload-artifact@v6
         if: always()
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.shardIndex }}
           path: apps/e2e/playwright-report/
           retention-days: 7
+
+      - name: Debug - Check container status (on failure)
+        if: failure()
+        run: |
+          docker compose -f docker-compose.test.yml ps -a
+          echo "--- Testing storefront from inside container ---"
+          docker compose -f docker-compose.test.yml exec -T storefront curl -sf http://localhost:5173/ -o /dev/null && echo "Storefront responding" || echo "Storefront not responding"
+
+      - name: Show backend container logs (on failure)
+        if: failure()
+        run: docker compose -f docker-compose.test.yml logs backend
+
+      - name: Show storefront container logs (on failure)
+        if: failure()
+        run: docker compose -f docker-compose.test.yml logs storefront
 
       - name: Stop test environment
         if: always()

@@ -1,6 +1,7 @@
 import { type ActionFunctionArgs, data } from "react-router";
 import { createLogger, getTraceIdFromRequest } from "../lib/logger";
 import { medusaFetch } from "../lib/medusa-fetch";
+import type { CloudflareEnv } from "../utils/monitored-fetch";
 
 // Helper types for Medusa responses
 type MedusaPaymentCollection = {
@@ -28,12 +29,29 @@ interface PaymentCollectionRequest {
   cartId: string;
 }
 
+import { resolveCSRFSecret, validateCSRFToken } from "../utils/csrf.server";
+
+// ...
+
 export async function action({ request, context }: ActionFunctionArgs) {
   const traceId = getTraceIdFromRequest(request);
   const logger = createLogger({ traceId });
 
   if (request.method !== "POST") {
     return data({ error: "Method not allowed" }, { status: 405 });
+  }
+
+  // CSRF Check
+  const env = context.cloudflare.env as unknown as CloudflareEnv;
+  const jwtSecret = resolveCSRFSecret(env.JWT_SECRET);
+  if (!jwtSecret) {
+    logger.error("JWT_SECRET not configured for CSRF validation");
+    return data({ error: "Configuration error", traceId }, { status: 500 });
+  }
+  const isValidCSRF = await validateCSRFToken(request, jwtSecret);
+  if (!isValidCSRF) {
+    logger.error("Invalid CSRF token for payment collection creation");
+    return data({ error: "Invalid CSRF token", traceId }, { status: 403 });
   }
 
   let body: PaymentCollectionRequest;
@@ -56,11 +74,6 @@ export async function action({ request, context }: ActionFunctionArgs) {
     return data({ error: "Invalid cart ID format", traceId }, { status: 400 });
   }
 
-  const env = context.cloudflare.env as {
-    MEDUSA_BACKEND_URL?: string;
-    MEDUSA_PUBLISHABLE_KEY?: string;
-    [key: string]: unknown;
-  };
 
   const medusaBackendUrl = env.MEDUSA_BACKEND_URL || "http://localhost:9000";
   const publishableKey = env.MEDUSA_PUBLISHABLE_KEY;

@@ -8,49 +8,33 @@ import type { ProductId } from '../types/product';
 import type { AppliedPromoCode } from '../types/promotion';
 import type { AutomaticPromotionInfo } from '../hooks/useAutomaticPromotions';
 
+import { useCheckout } from './checkout/CheckoutProvider';
+
 export interface OrderSummaryProps {
-    items: CartItem[];
-    cartTotal: number;
-    originalTotal: number;
-    selectedShipping: ShippingOption | null;
-    shippingCost: number;
-    finalTotal: number;
-    onUpdateQuantity: (id: ProductId, quantity: number, color?: string, variantId?: string) => void;
-    onRemoveFromCart: (id: ProductId, color?: string) => void;
-    // Promo code props (optional for backward compatibility)
-    cartId?: string;
-    appliedPromoCodes?: AppliedPromoCode[];
-    onApplyPromoCode?: (code: string) => Promise<boolean>;
-    onRemovePromoCode?: (code: string) => Promise<boolean>;
-    isPromoLoading?: boolean;
-    promoError?: string | null;
-    promoSuccessMessage?: string | null;
-    discountTotal?: number;
-    // Automatic promotions (Phase 2)
-    automaticPromotions?: AutomaticPromotionInfo[];
 }
 
-export function OrderSummary({
-    items,
-    cartTotal,
-    originalTotal,
-    selectedShipping,
-    shippingCost,
-    finalTotal,
-    onUpdateQuantity,
-    onRemoveFromCart,
-    // Promo code props
-    cartId,
-    appliedPromoCodes = [],
-    onApplyPromoCode,
-    onRemovePromoCode,
-    isPromoLoading = false,
-    promoError,
-    promoSuccessMessage,
-    discountTotal = 0,
-    // Automatic promotions (Phase 2)
-    automaticPromotions = [],
-}: OrderSummaryProps) {
+export function OrderSummary() {
+    const {
+        items,
+        displayCartTotal: cartTotal,
+        originalTotal,
+        state: checkoutState,
+        displayShippingCost: shippingCost,
+        displayFinalTotal: finalTotal,
+        updateQuantity: onUpdateQuantity,
+        removeFromCart: onRemoveFromCart,
+        cartId,
+        appliedPromoCodes,
+        applyPromoCode: onApplyPromoCode,
+        removePromoCode: onRemovePromoCode,
+        isPromoLoading,
+        promoError,
+        promoSuccessMessage,
+        displayDiscountTotal: discountTotal,
+        automaticPromotions,
+    } = useCheckout();
+
+    const { selectedShippingOption: selectedShipping } = checkoutState;
     const hasDiscount = originalTotal > cartTotal || discountTotal > 0;
 
     return (

@@ -67,24 +67,21 @@ describe("SEC-05: Checkout Success Storage Operations", () => {
   });
 
   describe("cleanup operations (pattern used in checkout.success)", () => {
-    it("should clean up all checkout data (lastOrder, orderId, medusa_cart_id)", () => {
+    it("should clean up checkout data (lastOrder, orderId)", () => {
       // Setup: add data to sessionStorage
       sessionStorage.setItem("lastOrder", JSON.stringify({ items: [] }));
       sessionStorage.setItem("orderId", "order_123");
-      sessionStorage.setItem("medusa_cart_id", "cart_456");
 
       // Test cleanup pattern (as done in setTimeout and unmount)
       try {
         sessionStorage.removeItem("lastOrder");
         sessionStorage.removeItem("orderId");
-        sessionStorage.removeItem("medusa_cart_id");
       } catch (error) {
         // Error handling (non-critical)
       }
 
       expect(sessionStorage.getItem("lastOrder")).toBeNull();
       expect(sessionStorage.getItem("orderId")).toBeNull();
-      expect(sessionStorage.getItem("medusa_cart_id")).toBeNull();
     });
 
     it("should handle cleanup errors gracefully", () => {
@@ -108,7 +105,6 @@ describe("SEC-05: Checkout Success Storage Operations", () => {
         try {
           sessionStorage.removeItem("lastOrder");
           sessionStorage.removeItem("orderId");
-          sessionStorage.removeItem("medusa_cart_id");
         } catch (error) {
           // Expected to catch and handle (non-critical)
         }
@@ -119,4 +115,3 @@ describe("SEC-05: Checkout Success Storage Operations", () => {
     });
   });
 });
-

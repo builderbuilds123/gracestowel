@@ -1,7 +1,11 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { calculateTotal } from '../lib/price';
+import { calculateTotal, fromCents } from '../lib/price';
 import type { ProductId, CartItem, EmbroideryData } from '../types/product';
 import { productIdsEqual } from '../types/product';
+import { monitoredFetch } from '../utils/monitored-fetch';
+import { useMedusaCart } from './MedusaCartContext';
+import { useLocale } from './LocaleContext';
+import type { CartWithPromotions } from '../types/promotion';
 
 // Re-export CartItem for backwards compatibility
 export type { CartItem, EmbroideryData } from '../types/product';
@@ -16,6 +20,8 @@ interface CartContextType {
     toggleCart: () => void;
     clearCart: () => void;
     cartTotal: number;
+    medusaCart?: CartWithPromotions | null;
+    isLoading: boolean;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -24,6 +30,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     const [items, setItems] = useState<CartItem[]>([]);
     const [isOpen, setIsOpen] = useState(false);
     const [isLoaded, setIsLoaded] = useState(false);
+    const cartCreateInFlight = React.useRef(false);
+    const { cartId, cart: medusaCart, setCartId, isLoading, refreshCart } = useMedusaCart();
+    const { regionId } = useLocale();
 
     // Validate cart item integrity
     const validateCartItem = (item: any): boolean => {
@@ -57,10 +66,32 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         setIsLoaded(true);
     }, []);
 
-    // Save cart to local storage whenever it changes
     useEffect(() => {
         localStorage.setItem('cart', JSON.stringify(items));
     }, [items]);
+
+    // Debounced sync with Medusa backend
+    useEffect(() => {
+        if (!cartId || !isLoaded) return;
+
+        const timeoutId = setTimeout(async () => {
+            try {
+                const response = await monitoredFetch(`/api/carts/${cartId}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ items }),
+                    label: 'sync-cart-items-debounced',
+                });
+                if (response.ok) {
+                    void refreshCart();
+                }
+            } catch (err) {
+                console.error('[CartContext] Failed to sync items with Medusa:', err);
+            }
+        }, 1000); // 1 second debounce
+
+        return () => clearTimeout(timeoutId);
+    }, [items, cartId, isLoaded, refreshCart]);
 
     const addToCart = (newItem: Omit<CartItem, 'quantity'> & { quantity?: number }) => {
         const quantityToAdd = newItem.quantity ?? 1;
@@ -94,6 +125,32 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
             return [...prevItems, itemToAdd];
         });
         setIsOpen(true);
+
+        // Fire-and-forget: ensure a Medusa cart exists on first cart interaction
+        if (typeof window !== 'undefined' && !cartId && !cartCreateInFlight.current) {
+            cartCreateInFlight.current = true;
+            void (async () => {
+                try {
+                    const response = await monitoredFetch('/api/carts', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ region_id: regionId }),
+                        label: 'create-cart-on-add',
+                    });
+                    if (!response.ok) {
+                        return;
+                    }
+                    const payload = await response.json() as { cart_id?: string };
+                    if (payload.cart_id) {
+                        setCartId(payload.cart_id);
+                    }
+                } catch {
+                    // Non-blocking: cart creation failure should not prevent local cart updates
+                } finally {
+                    cartCreateInFlight.current = false;
+                }
+            })();
+        }
     };
 
     const removeFromCart = (id: ProductId, color?: string, variantId?: string) => {
@@ -136,10 +193,26 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     };
 
     // Use the centralized price calculation utility
-    const cartTotal = calculateTotal(items);
+    // Prefer Medusa subtotal for the main cart total display if available
+    const displayCartTotal =
+        typeof medusaCart?.subtotal === 'number'
+            ? fromCents(medusaCart.subtotal)
+            : calculateTotal(items);
 
     return (
-        <CartContext.Provider value={{ items, isOpen, isLoaded, addToCart, removeFromCart, updateQuantity, toggleCart, clearCart, cartTotal }}>
+        <CartContext.Provider value={{ 
+            items, 
+            isOpen, 
+            isLoaded, 
+            addToCart, 
+            removeFromCart, 
+            updateQuantity, 
+            toggleCart, 
+            clearCart, 
+            cartTotal: displayCartTotal,
+            medusaCart,
+            isLoading
+        }}>
             {children}
         </CartContext.Provider>
     );

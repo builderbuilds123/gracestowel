@@ -6,6 +6,7 @@ module.exports = defineConfig({
   projectConfig: {
     databaseUrl: process.env.DATABASE_URL,
     redisUrl: process.env.REDIS_URL,
+    workerMode: (process.env.MEDUSA_WORKER_MODE as "shared" | "worker" | "server") || "shared",
     databaseDriverOptions: process.env.DATABASE_SSL !== "false" ? {
       connection: {
         ssl: {
@@ -28,10 +29,33 @@ module.exports = defineConfig({
     }
   },
   admin: {
-    disable: process.env.DISABLE_MEDUSA_ADMIN === "true",
+    // Disable admin for worker instances (saves ~100MB RAM)
+    disable: process.env.DISABLE_MEDUSA_ADMIN === "true" || process.env.MEDUSA_WORKER_MODE === "worker",
     backendUrl: process.env.RAILWAY_PUBLIC_DOMAIN || process.env.MEDUSA_BACKEND_URL || "/"
   },
   modules: [
+    {
+      resolve: "@medusajs/medusa/analytics",
+      options: {
+        providers: process.env.NODE_ENV === "production"
+          ? [
+              {
+                resolve: "@medusajs/analytics-posthog",
+                id: "posthog",
+                options: {
+                  posthogEventsKey: process.env.POSTHOG_EVENTS_API_KEY,
+                  posthogHost: process.env.POSTHOG_HOST,
+                },
+              },
+            ]
+          : [
+              {
+                resolve: "@medusajs/analytics-local",
+                id: "local",
+              },
+            ],
+      },
+    },
     {
       // Event bus backed by Redis for durable cross-instance delivery (useful in dev/staging/prod)
       key: "eventBusService",
@@ -86,6 +110,13 @@ module.exports = defineConfig({
               channels: ["email"],
               api_key: process.env.RESEND_API_KEY,
               from: process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev",
+            },
+          },
+          {
+            resolve: "@medusajs/medusa/notification-local",
+            id: "local",
+            options: {
+              channels: ["feed"],
             },
           },
         ],

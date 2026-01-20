@@ -1,4 +1,8 @@
 {
   "mcpServers": {
+    "medusa": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote@latest", "https://docs.medusajs.com/mcp"]
+    }
   }
 }

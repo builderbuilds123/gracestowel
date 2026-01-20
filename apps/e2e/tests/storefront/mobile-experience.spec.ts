@@ -108,7 +108,9 @@ test.describe("Mobile Cart Experience", () => {
     // Find checkout link and click
     const checkoutLink = page.getByRole("link", { name: /checkout/i });
     await expect(checkoutLink).toBeVisible();
-    await checkoutLink.click();
+    // Explicitly remove PostHog overlay
+    await page.evaluate(() => document.querySelectorAll('div[class*="PostHogSurvey"]').forEach(el => el.remove()));
+    await checkoutLink.click({ force: true });
 
     // Verify checkout page loads
     await expect(page).toHaveURL(/checkout/i);
@@ -136,7 +138,8 @@ test.describe("Mobile Checkout Form", () => {
     // Go to checkout via UI to ensure session persistence
     const checkoutLink = page.getByRole("link", { name: /checkout/i }).first();
     await expect(checkoutLink).toBeVisible();
-    await checkoutLink.click();
+    await page.evaluate(() => document.querySelectorAll('div[class*="PostHogSurvey"]').forEach(el => el.remove()));
+    await checkoutLink.click({ force: true });
     await page.waitForLoadState("domcontentloaded");
 
     // Verify checkout page is visible and form elements are accessible

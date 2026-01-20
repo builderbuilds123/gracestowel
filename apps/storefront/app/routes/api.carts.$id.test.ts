@@ -16,11 +16,23 @@ vi.mock("../services/medusa-cart", () => ({
   },
 }));
 
+// Mock validateCSRFToken
+const mockValidateCSRFToken = vi.fn();
+vi.mock("../utils/csrf.server", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../utils/csrf.server")>();
+  return {
+    ...actual,
+    validateCSRFToken: (...args: any[]) => mockValidateCSRFToken(...args),
+    resolveCSRFSecret: vi.fn(() => "test-secret"),
+  };
+});
+
 describe("API Carts - PATCH /api/carts/:id", () => {
   let context: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockValidateCSRFToken.mockResolvedValue(true);
     context = {
       cloudflare: {
         env: {
@@ -194,6 +206,12 @@ describe("API Carts - GET /api/carts/:id", () => {
     mockGetCart.mockResolvedValue({
       id: "cart_123",
       region_id: "reg_us",
+      currency_code: "usd",
+      subtotal: 100,
+      discount_total: 10,
+      shipping_total: 5,
+      tax_total: 8,
+      total: 103,
       items: [{ id: "item_1", title: "Towel", quantity: 1 }],
       shipping_address: { city: "NYC" },
     });
@@ -204,6 +222,11 @@ describe("API Carts - GET /api/carts/:id", () => {
     expect(data.id).toBe("cart_123");
     expect(data.region_id).toBe("reg_us");
     expect(data.items).toHaveLength(1);
+    expect(data.subtotal).toBe(100);
+    expect(data.discount_total).toBe(10);
+    expect(data.shipping_total).toBe(5);
+    expect(data.tax_total).toBe(8);
+    expect(data.total).toBe(103);
   });
 
   it("should return 404 when cart not found", async () => {

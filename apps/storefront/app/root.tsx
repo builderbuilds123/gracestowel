@@ -11,6 +11,7 @@ import type { Route } from "./+types/root";
 import { getMedusaClient } from "./lib/medusa";
 import { useLoaderData } from "react-router";
 import { CartProvider } from "./context/CartContext";
+import { MedusaCartProvider } from "./context/MedusaCartContext";
 import { LocaleProvider } from "./context/LocaleContext";
 import { CustomerProvider } from "./context/CustomerContext";
 import { WishlistProvider } from "./context/WishlistContext";
@@ -76,23 +77,36 @@ function AnalyticsTracking() {
   return null;
 }
 
-export async function loader({ context }: Route.LoaderArgs) {
+import { createCSRFToken, resolveCSRFSecret } from "./utils/csrf.server";
+import { data } from "react-router";
+import type { CloudflareEnv } from "./utils/monitored-fetch";
+
+// ... (existing imports)
+
+export async function loader({ request, context }: Route.LoaderArgs) {
   // Ensure we have access to Cloudflare env
-  const env = context.cloudflare?.env;
+  // Cast to CloudflareEnv which includes secrets not in wrangler.json (set via dashboard)
+  const env = context.cloudflare?.env as unknown as CloudflareEnv | undefined;
 
   if (!env) {
-    // In dev mode or non-CF env, this might happen if not properly mocked/proxied.
-    // Throwing an error makes the dependency explicit and prevents runtime errors.
     throw new Error("Cloudflare environment context is not available.");
   }
 
-  const { MEDUSA_BACKEND_URL, MEDUSA_PUBLISHABLE_KEY } = env;
+  const { MEDUSA_BACKEND_URL, MEDUSA_PUBLISHABLE_KEY, JWT_SECRET } = env;
+  const jwtSecret = resolveCSRFSecret(JWT_SECRET);
+
+  if (!jwtSecret) {
+    throw new Error("Missing JWT_SECRET environment variable");
+  }
 
   if (!MEDUSA_BACKEND_URL) {
     throw new Error("Missing MEDUSA_BACKEND_URL environment variable");
   }
 
-  // Initialize client server-side to verify config and connection (AC requirement)
+  // Generate CSRF Token
+  const { token: csrfToken, headers: csrfHeaders } = await createCSRFToken(request, jwtSecret, env);
+
+  // Initialize client server-side to verify config and connection
   try {
       const client = getMedusaClient({ cloudflare: { env } });
       await client.store.product.list({ limit: 1 });
@@ -101,23 +115,23 @@ export async function loader({ context }: Route.LoaderArgs) {
       console.error("❌ Failed to verify Medusa connection:", err);
   }
   
-  // Extract PostHog config from Cloudflare Workers env (runtime) or fallback to build-time
-  // Prioritize VITE_ prefixed vars as per policy
+  // Extract PostHog config
   const posthogApiKey = (env as any).VITE_POSTHOG_API_KEY || (env as any).POSTHOG_API_KEY || import.meta.env.VITE_POSTHOG_API_KEY;
   const posthogHost = (env as any).VITE_POSTHOG_HOST || (env as any).POSTHOG_HOST || import.meta.env.VITE_POSTHOG_HOST || 'https://us.i.posthog.com';
   
-  return { 
+  return data({ 
     env: { 
       MEDUSA_BACKEND_URL, 
       MEDUSA_PUBLISHABLE_KEY,
-      // Include PostHog config for client-side initialization
+      CSRF_TOKEN: csrfToken, // Expose CSRF token
       VITE_POSTHOG_API_KEY: posthogApiKey,
       VITE_POSTHOG_HOST: posthogHost,
-      // Keep legacy for compat if needed, but VITE_ is primary
       POSTHOG_API_KEY: posthogApiKey,
       POSTHOG_HOST: posthogHost,
     } 
-  };
+  }, {
+    headers: csrfHeaders // Set cookie header
+  });
 }
 
 export const links: Route.LinksFunction = () => [
@@ -137,30 +151,32 @@ export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <LocaleProvider>
       <CustomerProvider>
-        <CartProvider>
-          <WishlistProvider>
-            <html lang="en">
-              <head>
-                <meta charSet="utf-8" />
-                <meta name="viewport" content="width=device-width, initial-scale=1" />
-                <Meta />
-                <Links />
-              </head>
-              <body className="flex flex-col min-h-screen font-sans text-text-earthy bg-background-earthy antialiased selection:bg-accent-earthy/20">
-                <Header />
-                <main className="flex-grow">
-                  {children}
-                </main>
-                <Footer />
-                <CartDrawer />
-                <PostHogSurveyTrigger />
-                <ScrollRestoration />
-                <EnvScript />
-                <Scripts />
-              </body>
-            </html>
-          </WishlistProvider>
-        </CartProvider>
+        <MedusaCartProvider>
+          <CartProvider>
+            <WishlistProvider>
+              <html lang="en">
+                <head>
+                  <meta charSet="utf-8" />
+                  <meta name="viewport" content="width=device-width, initial-scale=1" />
+                  <Meta />
+                  <Links />
+                </head>
+                <body className="flex flex-col min-h-screen font-sans text-text-earthy bg-background-earthy antialiased selection:bg-accent-earthy/20">
+                  <Header />
+                  <main className="flex-grow">
+                    {children}
+                  </main>
+                  <Footer />
+                  <CartDrawer />
+                  <PostHogSurveyTrigger />
+                  <ScrollRestoration />
+                  <EnvScript />
+                  <Scripts />
+                </body>
+              </html>
+            </WishlistProvider>
+          </CartProvider>
+        </MedusaCartProvider>
       </CustomerProvider>
     </LocaleProvider>
   );

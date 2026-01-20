@@ -162,8 +162,11 @@ export function transformToDetail(
             id: v.id,
             title: v.title,
             sku: v.sku || undefined,
-            // AC4 (INV-02): Clamp negative inventory to 0 for storefront display
-            inventory_quantity: clampAvailability(v.inventory_quantity),
+            // AC4 (INV-02): Clamp negative inventory to 0, but preserve null/undefined
+            // (null/undefined means inventory is not managed = always in stock)
+            inventory_quantity: v.inventory_quantity != null 
+                ? clampAvailability(v.inventory_quantity) 
+                : undefined,
             options: v.options,
             prices: v.prices,
         })) || [],

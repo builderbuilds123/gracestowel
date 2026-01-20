@@ -7,6 +7,8 @@ import { render, type RenderOptions } from "@testing-library/react";
 import { WishlistProvider } from "../app/context/WishlistContext";
 import { CartProvider } from "../app/context/CartContext";
 import { LocaleProvider } from "../app/context/LocaleContext";
+import { MedusaCartProvider } from "../app/context/MedusaCartContext";
+import { CustomerProvider } from "../app/context/CustomerContext";
 
 /**
  * Custom wrapper that provides all necessary context providers
@@ -15,9 +17,13 @@ import { LocaleProvider } from "../app/context/LocaleContext";
 function AllProviders({ children }: { children: ReactNode }) {
   return (
     <LocaleProvider>
-      <CartProvider>
-        <WishlistProvider>{children}</WishlistProvider>
-      </CartProvider>
+      <CustomerProvider>
+        <MedusaCartProvider>
+          <CartProvider>
+            <WishlistProvider>{children}</WishlistProvider>
+          </CartProvider>
+        </MedusaCartProvider>
+      </CustomerProvider>
     </LocaleProvider>
   );
 }

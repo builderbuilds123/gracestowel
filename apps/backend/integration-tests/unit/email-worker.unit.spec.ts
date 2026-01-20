@@ -90,7 +90,7 @@ describe("Email Worker", () => {
 
       const mockJob = {
         data: {
-          orderId: "ord_123",
+          entityId: "ord_123",
           template: "order_confirmation",
           recipient: "test@example.com",
           data: { foo: "bar" }
@@ -116,7 +116,7 @@ describe("Email Worker", () => {
 
       const mockJob = {
         data: {
-          orderId: "ord_success",
+          entityId: "ord_success",
           template: "order_confirmation",
           recipient: "test@example.com",
           data: {}
@@ -128,7 +128,7 @@ describe("Email Worker", () => {
       await processor(mockJob);
 
       expect(mockLogger.info).toHaveBeenCalledWith(
-        expect.stringContaining("[EMAIL][SENT] Sent order_confirmation to m***@test.com for order ord_success. ID: sent_123")
+        expect.stringContaining("[EMAIL][SENT] Sent order_confirmation to m***@test.com for entity ord_success. ID: sent_123")
       );
     });
 
@@ -141,7 +141,7 @@ describe("Email Worker", () => {
 
       const mockJob = {
         data: {
-          orderId: "ord_fail",
+          entityId: "ord_fail",
           template: "order_confirmation",
           recipient: "test@example.com",
           data: {}
@@ -153,7 +153,7 @@ describe("Email Worker", () => {
       await expect(processor(mockJob)).rejects.toThrow("Resend Error");
 
       expect(mockLogger.error).toHaveBeenCalledWith(
-        expect.stringContaining("[EMAIL][FAILED] Failed order_confirmation for order ord_fail (attempt 1/3): Resend Error")
+        expect.stringContaining("[EMAIL][FAILED] Failed order_confirmation for entity ord_fail (attempt 1/3): Resend Error")
       );
     });
   });
@@ -166,7 +166,7 @@ describe("Email Worker", () => {
 
       const mockJob = {
         data: {
-          orderId: "ord_retry",
+          entityId: "ord_retry",
           template: "order_confirmation",
           recipient: "test@example.com",
           data: {}
@@ -178,7 +178,7 @@ describe("Email Worker", () => {
       await processor(mockJob);
 
       expect(mockLogger.info).toHaveBeenCalledWith(
-        expect.stringContaining("[EMAIL][RETRY] Attempt 2/3 for order ord_retry")
+        expect.stringContaining("[EMAIL][RETRY] Attempt 2/3 for entity ord_retry")
       );
     });
   });
@@ -195,7 +195,7 @@ describe("Email Worker", () => {
         const mockJob = {
           id: "job_failed_alert",
           data: {
-            orderId: "ord_alert_1",
+            entityId: "ord_alert_1",
             template: "order_confirmation",
             recipient: "test@example.com",
           },
@@ -207,7 +207,7 @@ describe("Email Worker", () => {
 
         // Verify alert log
         expect(mockLogger.error).toHaveBeenCalledWith(
-            expect.stringMatching(/\[EMAIL\]\[ALERT\].*order=ord_alert_1.*template=order_confirmation/)
+            expect.stringMatching(/\[EMAIL\]\[ALERT\].*entity=ord_alert_1.*template=order_confirmation/)
         );
 
         // Verify metric log
@@ -224,7 +224,7 @@ describe("Email Worker", () => {
         const mockJob = {
             id: "job_parse",
             data: {
-              orderId: "ord_parse_1",
+              entityId: "ord_parse_1",
               template: "order_confirmation",
               recipient: "test@example.com",
             },
@@ -240,7 +240,7 @@ describe("Email Worker", () => {
         expect(alertLog).toBeDefined();
 
         // Basic parsing check
-        expect(alertLog).toContain("order=ord_parse_1");
+        expect(alertLog).toContain("entity=ord_parse_1");
         expect(alertLog).toContain("template=order_confirmation");
         expect(alertLog).toContain("error=API_Error"); // Spaces replaced by underscore
         expect(alertLog).toContain("attempts=3");
@@ -256,7 +256,7 @@ describe("Email Worker", () => {
 
         const mockJob = {
           data: {
-            orderId: "order_invalid_alert",
+            entityId: "entity_invalid_alert",
             template: "order_confirmation",
             recipient: "invalid@test.com",
             data: {}
@@ -269,7 +269,7 @@ describe("Email Worker", () => {
 
         // Verify alert log
         expect(mockLogger.error).toHaveBeenCalledWith(
-            expect.stringMatching(/\[EMAIL\]\[ALERT\].*order=order_invalid_alert/)
+            expect.stringMatching(/\[EMAIL\]\[ALERT\].*entity=entity_invalid_alert/)
         );
         expect(mockLogger.error).toHaveBeenCalledWith(
             expect.stringContaining("error=Invalid_email")
@@ -286,7 +286,7 @@ describe("Email Worker", () => {
       const mockJob = {
         id: "job_dlq_test",
         data: {
-          orderId: "ord_dlq_1",
+          entityId: "ord_dlq_1",
           template: "order_confirmation",
           recipient: "unmasked@test.com",
         },
@@ -306,7 +306,7 @@ describe("Email Worker", () => {
 
       expect(dlqEntry).toMatchObject({
         jobId: "job_dlq_test",
-        orderId: "ord_dlq_1",
+        entityId: "ord_dlq_1",
         template: "order_confirmation",
         recipient: "m***@test.com", // Checked by mock implementation
         error: "Final Failure",
@@ -346,7 +346,7 @@ describe("Email Worker", () => {
 
       const mockJob = {
         data: {
-          orderId: "ord_inv_1",
+          entityId: "ord_inv_1",
           template: "order_confirmation",
           recipient: "invalid@test.com",
         },

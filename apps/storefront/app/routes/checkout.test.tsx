@@ -53,7 +53,7 @@ vi.mock('../context/CustomerContext', () => ({
 }));
 
 vi.mock('react-router', async () => {
-    const actual = await vi.importActual('react-router');
+    const actual = await vi.importActual<any>('react-router');
     return {
         ...actual,
         Link: ({ children }: any) => <a>{children}</a>,
@@ -61,7 +61,27 @@ vi.mock('react-router', async () => {
     };
 });
 
+// Mock MedusaCartContext
+const mockUseMedusaCart = vi.fn();
+vi.mock('../context/MedusaCartContext', () => ({
+  useMedusaCart: () => mockUseMedusaCart(),
+}));
+
+// Mock useCheckoutState
+const mockUseCheckoutState = vi.fn();
+vi.mock('../hooks/useCheckoutState', () => ({
+    useCheckoutState: () => mockUseCheckoutState(),
+}));
+
+
 // Mock hooks
+vi.mock('../hooks/useShippingRates', () => ({
+    useShippingRates: () => ({
+        fetchShippingRates: vi.fn(),
+        clearCache: vi.fn(),
+    }),
+}));
+
 const mockPersistShippingOption = vi.fn();
 vi.mock('../hooks/useShippingPersistence', () => ({
     useShippingPersistence: () => ({
@@ -83,6 +103,31 @@ describe('Checkout Route', () => {
             cartTotal: 0,
             updateQuantity: vi.fn(),
             removeFromCart: vi.fn(),
+            isLoaded: true,
+        });
+
+        mockUseMedusaCart.mockReturnValue({
+            cartId: 'cart_test_123',
+            cart: { id: 'cart_test_123', region_id: 'reg_us', total: 1000 },
+            setCart: vi.fn(),
+            setCartId: vi.fn(),
+        });
+
+        mockUseCheckoutState.mockReturnValue({
+            state: {
+                status: 'ready',
+                shippingOptions: [],
+                selectedShippingOption: null,
+                shippingAddress: null,
+                email: '',
+            },
+            actions: {
+                setStatus: vi.fn(),
+                setShippingOptions: vi.fn(),
+                selectShippingOption: vi.fn(),
+                setAddress: vi.fn(),
+                setEmail: vi.fn(),
+            }
         });
 
         // Mock fetch for payment-collections API (Medusa v2 payment flow)
@@ -98,6 +143,7 @@ describe('Checkout Route', () => {
             cartTotal: 0,
             updateQuantity: vi.fn(),
             removeFromCart: vi.fn(),
+            isLoaded: true,
         });
         
         const { rerender } = render(<Checkout />);
@@ -113,6 +159,7 @@ describe('Checkout Route', () => {
             cartTotal: 1000,
             updateQuantity: vi.fn(),
             removeFromCart: vi.fn(),
+            isLoaded: true,
         });
         
         rerender(<Checkout />);
@@ -132,6 +179,7 @@ describe('Checkout Route', () => {
             cartTotal: 1000,
             updateQuantity: vi.fn(),
             removeFromCart: vi.fn(),
+            isLoaded: true,
         });
 
         const { rerender } = render(<Checkout />);
@@ -146,6 +194,7 @@ describe('Checkout Route', () => {
             cartTotal: 2000,
             updateQuantity: vi.fn(),
             removeFromCart: vi.fn(),
+            isLoaded: true,
         });
 
         rerender(<Checkout />);
@@ -179,22 +228,14 @@ describe('Checkout Payment Collection Flow', () => {
             cartTotal: 1000,
             updateQuantity: vi.fn(),
             removeFromCart: vi.fn(),
+            isLoaded: true,
         });
 
         // Mock the payment collection flow responses
         // Mock cart sync API calls (Update, Options) followed by Payment Collection/Session
+        // Mock the payment collection flow responses
+        // Mock payment collection API calls (useShippingRates is mocked and skipped)
         mockFetch
-            .mockResolvedValueOnce({
-                ok: true,
-                json: () => Promise.resolve({ cart_id: 'cart_01HTEST123' }),
-            })
-            .mockResolvedValueOnce({
-                ok: true,
-                json: () => Promise.resolve({ 
-                    shipping_options: [],
-                    cart_id: 'cart_01HTEST123'
-                }),
-            })
             .mockResolvedValueOnce({
                 ok: true,
                 json: () => Promise.resolve({ payment_collection: { id: 'paycol_test123' } }),
@@ -231,6 +272,7 @@ describe('Checkout Payment Collection Flow', () => {
             cartTotal: 1000,
             updateQuantity: vi.fn(),
             removeFromCart: vi.fn(),
+            isLoaded: true,
         });
 
         // Mock failed payment collection creation
@@ -252,6 +294,7 @@ describe('Checkout Payment Collection Flow', () => {
             cartTotal: 1000,
             updateQuantity: vi.fn(),
             removeFromCart: vi.fn(),
+            isLoaded: true,
         });
 
         // Mock successful collection, failed session
@@ -295,22 +338,13 @@ describe('Express Checkout with Payment Collections', () => {
             cartTotal: 1000,
             updateQuantity: vi.fn(),
             removeFromCart: vi.fn(),
+            isLoaded: true,
         });
 
         // Mock cart sync API calls (happens first)
         // Mock cart sync API calls (Updated: Create Cart skipped due to session)
+        // Mock payment collection API calls
         mockFetch
-            .mockResolvedValueOnce({
-                ok: true,
-                json: () => Promise.resolve({ cart_id: 'cart_01HTEST123' }),
-            })
-            .mockResolvedValueOnce({
-                ok: true,
-                json: () => Promise.resolve({ 
-                    shipping_options: [],
-                    cart_id: 'cart_01HTEST123'
-                }),
-            })
             // Mock successful payment collection and session creation
             .mockResolvedValueOnce({
                 ok: true,
@@ -372,19 +406,8 @@ describe('Express Checkout with Payment Collections', () => {
 
         // Mock cart sync API calls
         // Mock cart sync API calls (Updated: Create Cart skipped due to session)
+        // Mock payment collection creation failure
         mockFetch
-            .mockResolvedValueOnce({
-                ok: true,
-                json: () => Promise.resolve({ cart_id: 'cart_01HTEST123' }),
-            })
-            .mockResolvedValueOnce({
-                ok: true,
-                json: () => Promise.resolve({ 
-                    shipping_options: [],
-                    cart_id: 'cart_01HTEST123'
-                }),
-            })
-            // Mock payment collection creation failure
             .mockResolvedValueOnce({
                 ok: false,
                 status: 500,

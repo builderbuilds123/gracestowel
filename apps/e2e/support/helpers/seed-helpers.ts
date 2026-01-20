@@ -74,12 +74,13 @@ export async function ensureTheNuzzleExists(request: APIRequestContext): Promise
       const currentPk = api_keys.find(k => k.token === pk);
       
       if (currentPk) {
-        // Fetch sales channels for this PK if not already present
-        const { sales_channels } = await apiRequest<{ sales_channels: any[] }>({
-          request, method: 'GET', url: `/admin/api-keys/${currentPk.id}/sales-channels`
+        // In Medusa V2, sales channels are typically expanded or listed via fields
+        const { api_key } = await apiRequest<{ api_key: any }>({
+          request, method: 'GET', url: `/admin/api-keys/${currentPk.id}?fields=+sales_channels`
         });
-        if (sales_channels.length > 0) {
-          salesChannelId = sales_channels[0].id;
+        
+        if (api_key && api_key.sales_channels && api_key.sales_channels.length > 0) {
+          salesChannelId = api_key.sales_channels[0].id;
           console.log(`[Self-Heal] Found Sales Channel ID for PK: ${salesChannelId}`);
         }
       }
@@ -126,16 +127,18 @@ export async function ensureTheNuzzleExists(request: APIRequestContext): Promise
       };
 
       if (salesChannelId) {
+        // Correct V2 payload structure: options is mandatory at top level, variants refer to option titles
         payload.sales_channels = [{ id: salesChannelId }];
       }
 
+      console.log('[Self-Heal] Creating product with payload:', JSON.stringify(payload, null, 2));
       const { product } = await apiRequest<{ product: any }>({
         request, method: 'POST', url: '/admin/products', data: payload
       });
       console.log(`[Self-Heal] Created "The Nuzzle" (${product.id})`);
       return product.id;
-    } catch (err) {
-      console.error('[Self-Heal] Failed to create "The Nuzzle":', err);
+    } catch (err: any) {
+      console.error('[Self-Heal] Failed to create "The Nuzzle":', err.responseBody || err.message);
       throw err;
     }
   } else {

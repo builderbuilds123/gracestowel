@@ -2,12 +2,15 @@ import { type ActionFunctionArgs, data } from "react-router";
 import { medusaFetch } from "../lib/medusa-fetch";
 import { MedusaCartService } from "../services/medusa-cart";
 import { createLogger, getTraceIdFromRequest } from "../lib/logger";
+import type { CloudflareEnv } from "../utils/monitored-fetch";
 
 interface CreateCartRequest {
   region_id?: string;
   currency?: string;
   country_code?: string;
 }
+
+import { resolveCSRFSecret, validateCSRFToken } from "../utils/csrf.server";
 
 /**
  * POST /api/carts
@@ -18,10 +21,17 @@ export async function action({ request, context }: ActionFunctionArgs) {
     return data({ error: "Method not allowed" }, { status: 405 });
   }
 
-  const env = context.cloudflare.env as {
-    MEDUSA_BACKEND_URL?: string;
-    MEDUSA_PUBLISHABLE_KEY?: string;
-  };
+  const env = context.cloudflare.env as unknown as CloudflareEnv;
+
+  // CSRF Check
+  const jwtSecret = resolveCSRFSecret(env.JWT_SECRET);
+  if (!jwtSecret) {
+    return data({ error: "Server configuration error" }, { status: 500 });
+  }
+  const isValidCSRF = await validateCSRFToken(request, jwtSecret, env);
+  if (!isValidCSRF) {
+    return data({ error: "Invalid CSRF token" }, { status: 403 });
+  }
 
   const medusaBackendUrl = env.MEDUSA_BACKEND_URL || "http://localhost:9000";
   const medusaPublishableKey = env.MEDUSA_PUBLISHABLE_KEY;

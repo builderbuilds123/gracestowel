@@ -5,6 +5,10 @@ import type { CartItem, ProductId } from "../types/product";
 import { isMedusaId } from "../types/product";
 import { createLogger, getTraceIdFromRequest } from "../lib/logger";
 
+// CSRF Check
+import { resolveCSRFSecret, validateCSRFToken } from "../utils/csrf.server"; 
+import type { CloudflareEnv } from "../utils/monitored-fetch";
+
 /**
  * @deprecated Use the new RESTful cart endpoints instead:
  * - POST /api/carts - Create cart
@@ -87,16 +91,23 @@ export async function action({ request, context }: ActionFunctionArgs) {
     return data({ message: "Method not allowed" }, { status: 405 });
   }
 
-  const env = context.cloudflare.env as {
-    MEDUSA_BACKEND_URL?: string;
-    MEDUSA_PUBLISHABLE_KEY?: string;
-  };
+  const env = context.cloudflare.env as unknown as CloudflareEnv;
 
   const medusaBackendUrl = env.MEDUSA_BACKEND_URL || "http://localhost:9000";
   const medusaPublishableKey = env.MEDUSA_PUBLISHABLE_KEY;
 
   if (!medusaPublishableKey) {
     throw new Error("Missing MEDUSA_PUBLISHABLE_KEY environment variable");
+  }
+
+  // CSRF Check
+  const jwtSecret = resolveCSRFSecret(env.JWT_SECRET);
+  if (!jwtSecret) {
+     return data({ message: "Configuration error" }, { status: 500 });
+  }
+  const isValidCSRF = await validateCSRFToken(request, jwtSecret);
+  if (!isValidCSRF) {
+     return data({ message: "Invalid CSRF token" }, { status: 403 });
   }
 
   // Parse request body

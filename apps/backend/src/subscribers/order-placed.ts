@@ -7,10 +7,12 @@ import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
 import { schedulePaymentCapture, formatModificationWindow } from "../lib/payment-capture-queue"
 import { getPostHog } from "../utils/posthog"
 import { enqueueEmail } from "../lib/email-queue"
+import { Templates } from "../modules/resend/service"
 import type { ModificationTokenService } from "../services/modification-token"
 import { ensureStripeWorkerStarted } from "../loaders/stripe-event-worker"
 import { startPaymentCaptureWorker } from "../workers/payment-capture-worker"
 import { startEmailWorker } from "../workers/email-worker"
+import { sendAdminNotification, AdminNotificationType } from "../lib/admin-notifications"
 
 interface OrderPlacedEventData {
   id: string;
@@ -230,8 +232,8 @@ export default async function orderPlacedHandler({
         // Template must be "order-placed" to match Templates.ORDER_PLACED enum
         // Note: Medusa v2 stores prices in MAJOR currency units (e.g., $34.00 not 3400 cents)
         const emailPayload = {
-            orderId: order.id,
-            template: "order-placed" as const,
+            entityId: order.id,
+            template: Templates.ORDER_PLACED,
             recipient: order.email || "",
             data: {
               order: {
@@ -284,6 +286,19 @@ export default async function orderPlacedHandler({
   } catch (error: any) {
     // Log but don't throw - email failure shouldn't block order
     logger.error(`[EMAIL][ERROR] Failed to queue confirmation for order ${data.id}: ${error.message}`)
+  }
+
+  // Send admin notification for new order
+  try {
+    await sendAdminNotification(container, {
+      type: AdminNotificationType.ORDER_PLACED,
+      title: "New Order Received",
+      description: `Order ${data.id} has been placed`,
+      metadata: { order_id: data.id },
+    })
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error)
+    logger.error(`[ADMIN_NOTIF][ERROR] Failed to send admin notification for order ${data.id}: ${message}`)
   }
 
   // Schedule payment capture after modification window

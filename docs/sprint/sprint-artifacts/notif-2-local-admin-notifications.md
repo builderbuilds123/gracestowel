@@ -2,7 +2,7 @@
 
 **Epic**: Notifications & Communications
 **Story ID**: NOTIF-2-LOCAL-ADMIN
-**Status**: Ready for Development
+**Status**: Done
 **Priority**: Medium
 **Estimated Effort**: 2-3 story points
 **Created**: 2026-01-19
@@ -205,11 +205,11 @@ Subscribe to `payment.capture_failed` event and send admin notification.
 
 ## Definition of Done
 
-- [ ] Local notification provider registered in medusa-config.ts
-- [ ] `sendAdminNotification()` helper function created
-- [ ] All 6 event types trigger admin notifications
-- [ ] `pnpm build` passes in apps/backend
-- [ ] `pnpm typecheck` passes
+- [x] Local notification provider registered in medusa-config.ts
+- [x] `sendAdminNotification()` helper function created
+- [x] All 6 event types trigger admin notifications
+- [x] `pnpm build` passes in apps/backend
+- [x] `pnpm typecheck` passes
 - [ ] Manual test: Place order -> see notification in admin
 
 ---

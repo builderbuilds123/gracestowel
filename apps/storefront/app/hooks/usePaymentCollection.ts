@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { monitoredFetch } from "../utils/monitored-fetch";
 import { createLogger } from "../lib/logger";
+import { CHECKOUT_CONSTANTS } from "../constants/checkout";
 
 // Check if in development mode
 const isDevelopment = import.meta.env.MODE === 'development';
@@ -173,8 +174,7 @@ export function usePaymentCollection(
     };
 
     // Debounce to batch rapid cart changes (e.g., quantity updates)
-    const DEBOUNCE_MS = 100;
-    const timer = setTimeout(createPaymentCollection, DEBOUNCE_MS);
+    const timer = setTimeout(createPaymentCollection, CHECKOUT_CONSTANTS.PAYMENT_COLLECTION_DEBOUNCE_MS);
 
     return () => {
       clearTimeout(timer);

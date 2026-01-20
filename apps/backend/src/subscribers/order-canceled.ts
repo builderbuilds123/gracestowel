@@ -4,6 +4,7 @@ import type {
 } from "@medusajs/framework"
 import { sendOrderCanceledWorkflow } from "../workflows/send-order-canceled"
 import { cancelPaymentCaptureJob } from "../lib/payment-capture-queue"
+import { sendAdminNotification, AdminNotificationType } from "../lib/admin-notifications"
 
 interface OrderCanceledEventData {
   id: string;
@@ -37,6 +38,18 @@ export default async function orderCanceledHandler({
     console.log("Order canceled email workflow completed for order:", data.id)
   } catch (error) {
     console.error("Failed to send order canceled email:", error)
+  }
+
+  // Send admin notification for canceled order
+  try {
+    await sendAdminNotification(container, {
+      type: AdminNotificationType.ORDER_CANCELED,
+      title: "Order Canceled",
+      description: `Order ${data.id} has been canceled${data.reason ? `: ${data.reason}` : ""}`,
+      metadata: { order_id: data.id, reason: data.reason },
+    })
+  } catch (error) {
+    console.error("Failed to send admin notification for order cancellation:", error)
   }
 }
 

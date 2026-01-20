@@ -58,8 +58,10 @@ services:
       DATABASE_SSL: "false"
       DISABLE_MEDUSA_ADMIN: "true"
       # Stripe test mode keys - use sk_test_ prefix for test environment
-      STRIPE_SECRET_KEY: sk_test_placeholder_for_ci_testing
-      STRIPE_WEBHOOK_SECRET: whsec_test_placeholder_for_ci
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
+      POSTHOG_EVENTS_API_KEY: test_posthog_key_no_prefix
+      POSTHOG_HOST: https://us.i.posthog.com
     ports:
       - "9001:8080"
     healthcheck:
@@ -86,6 +88,9 @@ services:
       NODE_ENV: development
       CI: "true"
       CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE: postgresql://medusa_test:medusa_test@postgres:5432/medusa_test
+      # Stripe keys - use real test keys from CI secrets for E2E tests
+      STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-pk_test_placeholder_for_ci_testing}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-sk_test_placeholder_for_ci_testing}
     ports:
       - "5174:5173"
     command: pnpm run test:server
@@ -94,8 +99,8 @@ services:
         ["CMD-SHELL", "curl -sf http://localhost:5173/ -o /dev/null || exit 1"]
       interval: 5s
       timeout: 10s
-      retries: 20
-      start_period: 30s
+      retries: 30
+      start_period: 60s
 
   # Playwright Test Runner
   playwright:
