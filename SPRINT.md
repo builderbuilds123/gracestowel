@@ -1,28 +1,52 @@
-# Sprint Backlog
+# Active Work Tracker
 
-## Current Sprint: Sprint 1 - Local Admin Notifications
-Started: 2026-01-19
-Goal: Implement admin UI notification system for local development environment
+> **Note**: This file tracks **active development tasks** for Claude Code sessions.
+> For comprehensive epic/story tracking, see [`docs/sprint/sprint-artifacts/sprint-status.yaml`](docs/sprint/sprint-artifacts/sprint-status.yaml)
 
-## In Progress
-- [ ] **[TASK-001]** Review and test local admin notifications feature
-  - Assignee: Claude
-  - Started: 2026-01-19
-  - Notes: Currently on branch `feat/local-admin-notifications`, need to verify implementation
+## Current Focus
+**Branch**: `feat/local-admin-notifications`
+**Story**: [NOTIF-2: Local Admin Notifications](docs/sprint/sprint-artifacts/notif-2-local-admin-notifications.md)
+**Started**: 2026-01-19
 
-## Backlog (Prioritized)
-<!-- Add upcoming tasks here, prioritized from top to bottom -->
+## Active Tasks
 
-## Completed This Sprint
-- [x] **[TASK-000]** Repository setup with SPRINT.md
+### In Progress
+- [ ] **[NOTIF-2-T1]** Review and test local admin notifications implementation
+  - Verify notification feed appears in admin UI
+  - Test event subscribers trigger correctly
+  - Validate notification priorities and formatting
+  - Story: `notif-2-local-admin-notifications` (status: review in sprint-status.yaml)
+
+## Up Next
+<!-- Pull from sprint-status.yaml backlog as needed -->
+- [ ] **[CUST-2]** Implement customer profile editing
+  - Story: `cust-2-edit-profile` (status: backlog)
+- [ ] **[CUST-3]** Add customer address management
+  - Story: `cust-3-address-management` (status: backlog)
+
+## Completed Today
+- [x] **[SETUP-1]** Repository setup with SPRINT.md and CLAUDE.md updates
   - Completed: 2026-01-19
-  - Commit: Repository setup
+  - Commit: bcc80e036
 
 ## Blocked
-<!-- Tasks waiting on external dependencies or decisions -->
+<!-- Tasks waiting on decisions or external dependencies -->
 
-## Sprint History
-### Sprint 1 - Starting 2026-01-19
-- Completed: 1 task (repository setup)
-- Carried over: 0 tasks
-- Notes: Initial sprint tracking setup for Grace's Towel monorepo
+---
+
+## Quick Reference
+
+**Check Story Status**:
+```bash
+grep "notif-2-local-admin-notifications" docs/sprint/sprint-artifacts/sprint-status.yaml
+```
+
+**View Story Details**:
+```bash
+cat docs/sprint/sprint-artifacts/notif-2-local-admin-notifications.md
+```
+
+**BMAD Commands**:
+- `/sprint-status` - View current sprint status from YAML
+- `/sprint-planning` - Generate sprint planning from epics
+- `/dev-story` - Work on a specific story from sprint-status.yaml

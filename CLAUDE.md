@@ -129,6 +129,29 @@ When reviewing PRs, verify:
 - Do not push unless explicitly asked
 - Always include Co-Authored-By trailer: `Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>`
 
+## Task Tracking
+
+This project uses a **dual tracking system**:
+
+### 1. Sprint Status (Strategic Planning)
+- **File**: `docs/sprint/sprint-artifacts/sprint-status.yaml`
+- **Purpose**: Comprehensive epic and story tracking across product lifecycle
+- **Commands**: `/sprint-status`, `/sprint-planning`, `/dev-story`
+- **Format**: YAML with dependencies, metadata, and retrospectives
+
+### 2. Active Work Tracker (Tactical Execution)
+- **File**: `SPRINT.md` (root level)
+- **Purpose**: Daily task tracking for current Claude Code session
+- **Usage**: Updated during active development work
+- **Format**: Markdown checklist with task IDs referencing stories
+
+**Workflow**:
+1. Check `sprint-status.yaml` for story status and dependencies
+2. Add active tasks to `SPRINT.md` referencing the story ID
+3. Update `SPRINT.md` as you complete tasks
+4. Commit with `/commit-smart` when task is done
+5. Update story status in `sprint-status.yaml` when story is complete
+
 ## Commands
 
 Common development commands for this monorepo:
