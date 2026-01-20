@@ -241,7 +241,11 @@ jobs:
       - name: Start backend and database
         env:
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
-        run: docker compose -f docker-compose.test.yml up -d postgres redis backend
+        run: |
+          # Debug: verify secret is available (shows length, not value)
+          echo "STRIPE_SECRET_KEY length: ${#STRIPE_SECRET_KEY}"
+          echo "STRIPE_SECRET_KEY prefix: ${STRIPE_SECRET_KEY:0:7}..."
+          docker compose -f docker-compose.test.yml up -d postgres redis backend
 
       - name: Wait for backend to be ready
         run: |
@@ -252,6 +256,13 @@ jobs:
           echo "Waiting for backend health check..."
           timeout 180 bash -c 'until docker compose -f docker-compose.test.yml exec -T backend curl -sf http://localhost:8080/health; do sleep 5; done'
           echo "Backend health check passed"
+
+          # Debug: Check if backend container has STRIPE_SECRET_KEY
+          echo "Checking backend container STRIPE_SECRET_KEY..."
+          BACKEND_SK_LENGTH=$(docker compose -f docker-compose.test.yml exec -T backend sh -c 'echo ${#STRIPE_SECRET_KEY}')
+          BACKEND_SK_PREFIX=$(docker compose -f docker-compose.test.yml exec -T backend sh -c 'echo ${STRIPE_SECRET_KEY:0:7}')
+          echo "Backend STRIPE_SECRET_KEY length: $BACKEND_SK_LENGTH"
+          echo "Backend STRIPE_SECRET_KEY prefix: $BACKEND_SK_PREFIX..."
 
           echo "Waiting for seed to complete (checking for publishable API key)..."
           timeout 120 bash -c 'until docker compose -f docker-compose.test.yml exec -T postgres psql -U medusa_test -d medusa_test -t -c "SELECT token FROM api_key WHERE type = '\''publishable'\'' LIMIT 1;" | grep -q "[a-zA-Z0-9]"; do echo "API key not found yet, waiting..."; sleep 5; done'
