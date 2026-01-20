@@ -20,9 +20,14 @@ vi.mock("../utils/monitored-fetch", () => ({
 
 // Mock validateCSRFToken
 const mockValidateCSRFToken = vi.fn();
-vi.mock("../utils/csrf.server", () => ({
-  validateCSRFToken: (...args: any[]) => mockValidateCSRFToken(...args),
-}));
+vi.mock("../utils/csrf.server", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../utils/csrf.server")>();
+  return {
+    ...actual,
+    validateCSRFToken: (...args: any[]) => mockValidateCSRFToken(...args),
+    resolveCSRFSecret: vi.fn(() => "test-secret"),
+  };
+});
 
 describe("API Carts - POST /api/carts", () => {
   let context: any;

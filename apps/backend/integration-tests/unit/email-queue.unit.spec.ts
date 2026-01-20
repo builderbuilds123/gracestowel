@@ -72,10 +72,10 @@ describe("Email Queue Service", () => {
 
     const queue = getEmailQueue()
     expect(queue.add).toHaveBeenCalledWith(
-      "email-ord_123",
+      "email-order-placed", // Job name is now template-based
       payload,
       expect.objectContaining({
-        jobId: "email-ord_123",
+        jobId: expect.stringMatching(/^email-order-placed-ord_123-[a-f0-9-]+$/), // UUID-based jobId
         attempts: 3,
         backoff: {
           type: "exponential",

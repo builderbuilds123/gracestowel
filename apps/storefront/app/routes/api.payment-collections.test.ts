@@ -19,9 +19,14 @@ vi.mock('../lib/logger', () => ({
 
 // Mock validateCSRFToken
 const mockValidateCSRFToken = vi.fn();
-vi.mock("../utils/csrf.server", () => ({
-    validateCSRFToken: (...args: any[]) => mockValidateCSRFToken(...args),
-}));
+vi.mock("../utils/csrf.server", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("../utils/csrf.server")>();
+    return {
+        ...actual,
+        validateCSRFToken: (...args: any[]) => mockValidateCSRFToken(...args),
+        resolveCSRFSecret: vi.fn(() => "test-secret"),
+    };
+});
 
 import { monitoredFetch } from '../utils/monitored-fetch';
 
