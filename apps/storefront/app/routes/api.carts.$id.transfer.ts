@@ -1,6 +1,7 @@
 import { type ActionFunctionArgs, data } from "react-router";
-import { MedusaCartService } from "../services/medusa-cart";
-import { validateCSRFToken } from "../utils/csrf.server";
+import { medusaFetch } from "../lib/medusa-fetch";
+import type { CloudflareEnv } from "../utils/monitored-fetch";
+import { resolveCSRFSecret, validateCSRFToken } from "../utils/csrf.server";
 
 /**
  * POST /api/carts/:id/transfer
@@ -12,8 +13,11 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
   }
 
   // CSRF Check
-  const env = context.cloudflare.env as any;
-  const jwtSecret = env.JWT_SECRET || "dev-secret-key";
+  const env = context.cloudflare.env as CloudflareEnv;
+  const jwtSecret = resolveCSRFSecret(env.JWT_SECRET);
+  if (!jwtSecret) {
+    return data({ error: "Server configuration error" }, { status: 500 });
+  }
   const isValidCSRF = await validateCSRFToken(request, jwtSecret);
   if (!isValidCSRF) {
     return data({ error: "Invalid CSRF token" }, { status: 403 });
@@ -24,11 +28,29 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
     return data({ error: "Cart ID is required" }, { status: 400 });
   }
 
-  const service = new MedusaCartService(context);
-  
   try {
-    const cart = await service.transferCart(cartId);
-    return data({ success: true, cart }, { status: 200 });
+    const authHeader = request.headers.get("Authorization");
+    if (!authHeader) {
+      return data({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const response = await medusaFetch(`/store/carts/${cartId}/transfer`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: authHeader,
+      },
+      context,
+      label: "cart-transfer",
+    });
+
+    if (!response.ok) {
+      const errorData = (await response.json().catch(() => ({}))) as { message?: string };
+      return data({ error: errorData.message || "Failed to transfer cart" }, { status: response.status });
+    }
+
+    const payload = (await response.json()) as { cart?: unknown };
+    return data({ success: true, cart: payload.cart }, { status: 200 });
   } catch (error: any) {
     console.error(`Error transferring cart ${cartId}:`, error);
     

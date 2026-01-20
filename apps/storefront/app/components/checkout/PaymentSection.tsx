@@ -12,7 +12,7 @@ export function PaymentSection({ error, forwardedRef }: PaymentSectionProps) {
       className={`p-4 rounded-lg transition-all ${error ? 'border-2 border-red-500 bg-red-50' : 'border border-transparent'}`}
     >
       <h2 className="text-lg font-medium mb-4">Payment</h2>
-      <PaymentElement id="payment-element" options={{ layout: 'tabs' }} />
+      <PaymentElement id="payment-element" options={{ layout: { type: 'tabs' } }} />
       {error && (
         <p className="text-red-600 text-sm mt-2">{error}</p>
       )}

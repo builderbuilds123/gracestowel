@@ -1,12 +1,14 @@
 import { Queue, Job } from "bullmq";
+import { randomUUID } from "crypto";
 import { getRedisConnection } from "./redis";
-import { MedusaContainer } from "@medusajs/framework/types";
+import type { MedusaContainer, Logger } from "@medusajs/framework/types";
 import { maskEmail } from "../utils/email-masking";
 
 const QUEUE_NAME = "email-queue";
 
 let emailQueue: Queue | null = null;
-let logger: any = console; // Default to console, replaced by initEmailQueue
+type MinimalLogger = Pick<Logger, "info" | "error">;
+let logger: MinimalLogger = console; // Default to console, replaced by initEmailQueue
 
 import { Templates } from "../modules/resend/service";
 
@@ -52,9 +54,10 @@ export function getEmailQueue(): Queue {
 export async function enqueueEmail(payload: EmailJobPayload): Promise<Job | null> {
   try {
     const queue = getEmailQueue();
-    const jobId = `email-${payload.entityId}`;
+    const jobName = `email-${payload.template}`;
+    const jobId = `${jobName}-${payload.entityId}-${randomUUID()}`;
 
-    const job = await queue.add(jobId, payload, {
+    const job = await queue.add(jobName, payload, {
       jobId, // idempotency key
       attempts: 3,
       backoff: {
@@ -63,11 +66,12 @@ export async function enqueueEmail(payload: EmailJobPayload): Promise<Job | null
       },
     });
 
-    logger.info(`[EMAIL][QUEUE] Enqueued ${payload.template} for entity ${payload.entityId} to ${maskEmail(payload.recipient)}`);
+    logger.info(`[EMAIL][QUEUE] Enqueued ${payload.template} for entity ${payload.entityId}`);
     return job;
-  } catch (error: any) {
+  } catch (error: unknown) {
     // CRITICAL: Catch all errors - never throw from email queue
-    logger.error(`[EMAIL][ERROR] Failed to queue email for entity ${payload.entityId}: ${error.message}`);
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error(`[EMAIL][ERROR] Failed to queue email for entity ${payload.entityId}: ${message}`);
     return null;
   }
 }

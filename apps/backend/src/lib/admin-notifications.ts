@@ -1,5 +1,5 @@
 import { Modules } from "@medusajs/framework/utils"
-import type { MedusaContainer } from "@medusajs/framework/types"
+import type { MedusaContainer, Logger } from "@medusajs/framework/types"
 import type { INotificationModuleService } from "@medusajs/framework/types"
 
 export enum AdminNotificationType {
@@ -18,7 +18,8 @@ export interface AdminNotificationData {
   metadata?: Record<string, unknown>
 }
 
-let logger: any = console
+type MinimalLogger = Pick<Logger, "info" | "error">
+let logger: MinimalLogger = console
 
 /**
  * Initializes the admin notifications module with access to the logger.
@@ -62,9 +63,10 @@ export async function sendAdminNotification(
     logger.info(
       `[ADMIN_NOTIF][SENT] type=${data.type} title="${data.title}"`
     )
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error)
     logger.error(
-      `[ADMIN_NOTIF][ERROR] Failed to send notification type=${data.type}: ${error.message}`
+      `[ADMIN_NOTIF][ERROR] Failed to send notification type=${data.type}: ${message}`
     )
   }
 }

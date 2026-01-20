@@ -1,10 +1,11 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { calculateTotal } from '../lib/price';
+import { calculateTotal, fromCents } from '../lib/price';
 import type { ProductId, CartItem, EmbroideryData } from '../types/product';
 import { productIdsEqual } from '../types/product';
 import { monitoredFetch } from '../utils/monitored-fetch';
 import { useMedusaCart } from './MedusaCartContext';
 import { useLocale } from './LocaleContext';
+import type { CartWithPromotions } from '../types/promotion';
 
 // Re-export CartItem for backwards compatibility
 export type { CartItem, EmbroideryData } from '../types/product';
@@ -19,7 +20,7 @@ interface CartContextType {
     toggleCart: () => void;
     clearCart: () => void;
     cartTotal: number;
-    medusaCart?: any | null;
+    medusaCart?: CartWithPromotions | null;
     isLoading: boolean;
 }
 
@@ -196,7 +197,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
     // Use the centralized price calculation utility
     // Prefer Medusa subtotal for the main cart total display if available
-    const displayCartTotal = medusaCart?.subtotal ?? calculateTotal(items);
+    const displayCartTotal =
+        typeof medusaCart?.subtotal === 'number'
+            ? fromCents(medusaCart.subtotal)
+            : calculateTotal(items);
 
     return (
         <CartContext.Provider value={{ 

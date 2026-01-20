@@ -5,7 +5,7 @@ import { monitoredFetch, type CloudflareEnv } from "../utils/monitored-fetch";
  * POST /api/carts/:id/complete
  * Completes a Medusa cart.
  */
-import { validateCSRFToken } from "../utils/csrf.server";
+import { resolveCSRFSecret, validateCSRFToken } from "../utils/csrf.server";
 
 // ...
 
@@ -15,8 +15,11 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
     }
 
     // CSRF Check
-    const env = context.cloudflare.env as any;
-    const jwtSecret = env.JWT_SECRET || "dev-secret-key";
+    const env = context.cloudflare.env as CloudflareEnv;
+    const jwtSecret = resolveCSRFSecret(env.JWT_SECRET);
+    if (!jwtSecret) {
+        return data({ error: "Server configuration error" }, { status: 500 });
+    }
     const isValidCSRF = await validateCSRFToken(request, jwtSecret);
     if (!isValidCSRF) {
        return data({ error: "Invalid CSRF token" }, { status: 403 });
@@ -87,4 +90,3 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
         }, { status: 500 });
     }
 }
-

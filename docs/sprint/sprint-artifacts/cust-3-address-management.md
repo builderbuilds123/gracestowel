@@ -249,6 +249,7 @@ function AddressesTab() {
 ## UI Design
 
 ### Addresses Tab
+
 ```
 ┌─────────────────────────────────────────────┐
 │ Saved Addresses              [+ Add Address]│

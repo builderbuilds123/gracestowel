@@ -2,6 +2,7 @@ import { type ActionFunctionArgs, data } from "react-router";
 import { medusaFetch } from "../lib/medusa-fetch";
 import { MedusaCartService } from "../services/medusa-cart";
 import { createLogger, getTraceIdFromRequest } from "../lib/logger";
+import type { CloudflareEnv } from "../utils/monitored-fetch";
 
 interface CreateCartRequest {
   region_id?: string;
@@ -9,7 +10,7 @@ interface CreateCartRequest {
   country_code?: string;
 }
 
-import { validateCSRFToken } from "../utils/csrf.server";
+import { resolveCSRFSecret, validateCSRFToken } from "../utils/csrf.server";
 
 /**
  * POST /api/carts
@@ -20,14 +21,13 @@ export async function action({ request, context }: ActionFunctionArgs) {
     return data({ error: "Method not allowed" }, { status: 405 });
   }
 
-  const env = context.cloudflare.env as {
-    MEDUSA_BACKEND_URL?: string;
-    MEDUSA_PUBLISHABLE_KEY?: string;
-    JWT_SECRET?: string;
-  };
+  const env = context.cloudflare.env as CloudflareEnv;
 
   // CSRF Check
-  const jwtSecret = env.JWT_SECRET || "dev-secret-key";
+  const jwtSecret = resolveCSRFSecret(env.JWT_SECRET);
+  if (!jwtSecret) {
+    return data({ error: "Server configuration error" }, { status: 500 });
+  }
   const isValidCSRF = await validateCSRFToken(request, jwtSecret);
   if (!isValidCSRF) {
     return data({ error: "Invalid CSRF token" }, { status: 403 });

@@ -27,6 +27,7 @@ export function MedusaCartProvider({ children }: { children: React.ReactNode }) 
   const [cart, setCart] = useState<CartWithPromotions | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const regionSyncInFlight = React.useRef<string | null>(null);
   const { regionId } = useLocale();
 
   const persistCartId = useCallback((nextId?: string) => {
@@ -90,23 +91,27 @@ export function MedusaCartProvider({ children }: { children: React.ReactNode }) 
 
   // Sync region if it changes and cart exists
   useEffect(() => {
-    if (cart && cartId && regionId && cart.region_id !== regionId) {
-      void (async () => {
-        try {
-          const response = await monitoredFetch(`/api/carts/${cartId}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ region_id: regionId }),
-            label: "medusa-cart-sync-region",
-          });
-          if (response.ok) {
-            void refreshCart();
-          }
-        } catch (err) {
-          console.error("Failed to sync cart region:", err);
+    if (!cart || !cartId || !regionId || cart.region_id === regionId) return;
+    if (regionSyncInFlight.current === regionId) return;
+
+    void (async () => {
+      try {
+        regionSyncInFlight.current = regionId;
+        const response = await monitoredFetch(`/api/carts/${cartId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ region_id: regionId }),
+          label: "medusa-cart-sync-region",
+        });
+        if (response.ok) {
+          void refreshCart();
         }
-      })();
-    }
+      } catch (err) {
+        console.error("Failed to sync cart region:", err);
+      } finally {
+        regionSyncInFlight.current = null;
+      }
+    })();
   }, [cart, cartId, regionId, refreshCart]);
 
   const value = useMemo(

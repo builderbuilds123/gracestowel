@@ -1,5 +1,6 @@
 import { type ActionFunctionArgs, data } from "react-router";
-import { validateCSRFToken } from "../utils/csrf.server";
+import type { CloudflareEnv } from "../utils/monitored-fetch";
+import { resolveCSRFSecret, validateCSRFToken } from "../utils/csrf.server";
 
 export async function action({ request, context }: ActionFunctionArgs) {
     if (request.method !== "POST") {
@@ -7,8 +8,11 @@ export async function action({ request, context }: ActionFunctionArgs) {
     }
 
     // CSRF Check
-    const env = context.cloudflare.env as any;
-    const jwtSecret = env.JWT_SECRET || "dev-secret-key";
+    const env = context.cloudflare.env as CloudflareEnv;
+    const jwtSecret = resolveCSRFSecret(env.JWT_SECRET);
+    if (!jwtSecret) {
+        return data({ error: "Server configuration error" }, { status: 500 });
+    }
     const isValidCSRF = await validateCSRFToken(request, jwtSecret);
     if (!isValidCSRF) {
         return data({ error: "Invalid CSRF token" }, { status: 403 });

@@ -1,6 +1,6 @@
 import { type LoaderFunctionArgs, type ActionFunctionArgs, data } from "react-router";
-import { monitoredFetch } from "../../utils/monitored-fetch";
-import { validateCSRFToken } from "../../utils/csrf.server";
+import { monitoredFetch, type CloudflareEnv } from "../../utils/monitored-fetch";
+import { resolveCSRFSecret, validateCSRFToken } from "../../utils/csrf.server";
 
 export async function loader({ request, context }: LoaderFunctionArgs) {
     return handleProxy(request, context);
@@ -8,8 +8,13 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
 
 export async function action({ request, params, context }: ActionFunctionArgs) {
     // CSRF Check
-    const env = context.cloudflare?.env || (context as any).env || {};
-    const jwtSecret = (env as any).JWT_SECRET || "dev-secret-key";
+    const env =
+        (context.cloudflare?.env as CloudflareEnv | undefined) ||
+        ((context as { env?: CloudflareEnv }).env ?? {});
+    const jwtSecret = resolveCSRFSecret(env.JWT_SECRET);
+    if (!jwtSecret) {
+        return data({ error: "Configuration error" }, { status: 500 });
+    }
     const isValidCSRF = await validateCSRFToken(request, jwtSecret);
     if (!isValidCSRF) {
         return data({ error: "Invalid CSRF token" }, { status: 403 });

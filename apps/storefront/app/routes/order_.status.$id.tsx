@@ -1,5 +1,6 @@
 import { data } from "react-router";
-import { validateCSRFToken } from "../utils/csrf.server";
+import { resolveCSRFSecret, validateCSRFToken } from "../utils/csrf.server";
+import type { CloudflareEnv } from "../utils/monitored-fetch";
 import { useLoaderData, useRevalidator, useNavigate, useActionData, useSubmit } from "react-router";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { useState, useCallback, useEffect } from "react";
@@ -30,7 +31,7 @@ interface ErrorData {
 
 export async function loader({ params, request, context }: LoaderFunctionArgs) {
     const { id } = params;
-    const env = context.cloudflare.env as any;
+    const env = context.cloudflare.env as CloudflareEnv;
     const medusaBackendUrl = env.MEDUSA_BACKEND_URL;
     const medusaPublishableKey = env.MEDUSA_PUBLISHABLE_KEY;
 
@@ -119,7 +120,10 @@ export async function action({ params, request, context }: ActionFunctionArgs) {
     const medusaPublishableKey = env.MEDUSA_PUBLISHABLE_KEY;
 
     // CSRF Check
-    const jwtSecret = env.JWT_SECRET || "dev-secret-key";
+    const jwtSecret = resolveCSRFSecret(env.JWT_SECRET);
+    if (!jwtSecret) {
+        return data({ error: "Server configuration error" }, { status: 500 });
+    }
     const isValidCSRF = await validateCSRFToken(request, jwtSecret);
     if (!isValidCSRF) {
         return data({ error: "Invalid CSRF token" }, { status: 403 });

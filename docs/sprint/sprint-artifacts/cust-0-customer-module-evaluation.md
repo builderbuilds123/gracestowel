@@ -100,12 +100,14 @@ Comprehensive evaluation of the Grace's Towel customers module implementation ag
 ### 4. Password Reset ❌ (0/10)
 
 **Documentation Requirements:**
+
 - Request reset page (email input)
 - Reset password page (new password input)
 - Token passed via Authorization header (v2.6+)
 - Email notification subscriber
 
 **Current Implementation:**
+
 - ❌ No forgot password page
 - ❌ No reset password page
 - ❌ No email subscriber for reset tokens
@@ -121,11 +123,13 @@ Comprehensive evaluation of the Grace's Towel customers module implementation ag
 ### 5. Retrieve Customer ✅ (10/10)
 
 **Documentation Requirements:**
+
 - Fetch via `GET /store/customers/me`
 - Include bearer token in header
 - Handle unauthenticated state
 
 **Current Implementation:**
+
 - ✅ Fetches via `medusaFetch('/store/customers/me')`
 - ✅ Includes bearer token in Authorization header
 - ✅ Handles invalid token by clearing state
@@ -138,11 +142,13 @@ Comprehensive evaluation of the Grace's Towel customers module implementation ag
 ### 6. Customer React Context ✅ (9/10)
 
 **Documentation Requirements:**
+
 - CustomerProvider wrapping app
 - useCustomer hook for child components
 - State: customer data + setCustomer
 
 **Current Implementation:**
+
 - ✅ `CustomerProvider` component
 - ✅ `useCustomer()` hook
 - ✅ State includes: customer, isAuthenticated, isLoading
@@ -170,11 +176,13 @@ interface CustomerContextType {
 ### 7. Edit Customer Profile ❌ (0/10)
 
 **Documentation Requirements:**
+
 - Update form for first_name, last_name, phone, company_name
 - Call `POST /store/customers/me` with updated data
 - Update context state with response
 
 **Current Implementation:**
+
 - ❌ Profile tab is READ-ONLY
 - ❌ No edit button or form
 - ❌ No `updateProfile` method in CustomerContext
@@ -187,12 +195,14 @@ interface CustomerContextType {
 ### 8. Manage Customer Addresses ⚠️ (3/10)
 
 **Documentation Requirements:**
+
 - **List:** `GET /store/customers/me/addresses` with pagination
 - **Create:** `POST /store/customers/me/addresses`
 - **Update:** `POST /store/customers/me/addresses/{id}`
 - **Delete:** `DELETE /store/customers/me/addresses/{id}`
 
 **Current Implementation:**
+
 - ✅ **List:** Addresses displayed in account page
 - ❌ **Create:** No "Add Address" button in account
 - ❌ **Update:** No edit functionality in account

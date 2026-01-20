@@ -20,14 +20,14 @@ test.describe("Full Checkout Flow (Happy Path)", () => {
     
     // 2. Add to cart
     const addToCartButton = page.getByRole("button", { name: /hang it up|add to cart/i }).first();
-    await addToCartButton.evaluate((el: any) => el.click());
+    await addToCartButton.click();
     
     // Verify item in cart
     await expect(page.getByText(product.title).first()).toBeVisible({ timeout: 15000 });
     
     // 3. Proceed to checkout
     const checkoutLink = page.getByRole("link", { name: /checkout/i });
-    await checkoutLink.evaluate((el: any) => el.click());
+    await checkoutLink.click();
     
     await expect(page).toHaveURL(/\/checkout/);
     await page.waitForLoadState("networkidle");

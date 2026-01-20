@@ -1,6 +1,8 @@
 import type { SubscriberConfig, SubscriberArgs } from "@medusajs/framework"
 import { enqueueEmail } from "../lib/email-queue"
 import { Templates } from "../modules/resend/service"
+import { getEnv } from "../lib/env"
+import { maskEmail } from "../utils/email-masking"
 
 interface PasswordResetEventData {
   entity_id: string  // customer_id
@@ -38,8 +40,8 @@ export default async function customerPasswordResetHandler({
     return
   }
 
-  const storefrontUrl = process.env.STOREFRONT_URL || "http://localhost:3000"
-  const resetUrl = `${storefrontUrl}/account/reset-password?token=${data.token}`
+  const { STOREFRONT_URL } = getEnv()
+  const resetUrl = `${STOREFRONT_URL}/account/reset-password?token=${encodeURIComponent(data.token)}`
 
   await enqueueEmail({
     entityId: customer.id,
@@ -52,7 +54,7 @@ export default async function customerPasswordResetHandler({
     },
   })
 
-  logger.info(`[PASSWORD_RESET] Reset email queued for ${customer.email}`)
+  logger.info(`[PASSWORD_RESET] Reset email queued for ${maskEmail(customer.email)}`)
 }
 
 export const config: SubscriberConfig = {

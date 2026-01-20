@@ -1,6 +1,7 @@
 import { type ActionFunctionArgs, data } from "react-router";
 import { createLogger, getTraceIdFromRequest } from "../lib/logger";
 import { medusaFetch } from "../lib/medusa-fetch";
+import type { CloudflareEnv } from "../utils/monitored-fetch";
 
 // Helper types for Medusa responses
 type MedusaPaymentCollection = {
@@ -28,7 +29,7 @@ interface PaymentCollectionRequest {
   cartId: string;
 }
 
-import { validateCSRFToken } from "../utils/csrf.server";
+import { resolveCSRFSecret, validateCSRFToken } from "../utils/csrf.server";
 
 // ...
 
@@ -41,8 +42,12 @@ export async function action({ request, context }: ActionFunctionArgs) {
   }
 
   // CSRF Check
-  const env = context.cloudflare.env as any;
-  const jwtSecret = env.JWT_SECRET || "dev-secret-key";
+  const env = context.cloudflare.env as CloudflareEnv;
+  const jwtSecret = resolveCSRFSecret(env.JWT_SECRET);
+  if (!jwtSecret) {
+    logger.error("JWT_SECRET not configured for CSRF validation");
+    return data({ error: "Configuration error", traceId }, { status: 500 });
+  }
   const isValidCSRF = await validateCSRFToken(request, jwtSecret);
   if (!isValidCSRF) {
     logger.error("Invalid CSRF token for payment collection creation");

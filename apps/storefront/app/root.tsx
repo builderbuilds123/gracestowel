@@ -77,7 +77,7 @@ function AnalyticsTracking() {
   return null;
 }
 
-import { createCSRFToken } from "./utils/csrf.server";
+import { createCSRFToken, resolveCSRFSecret } from "./utils/csrf.server";
 import { data } from "react-router";
 
 // ... (existing imports)
@@ -90,8 +90,12 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     throw new Error("Cloudflare environment context is not available.");
   }
 
-  const { MEDUSA_BACKEND_URL, MEDUSA_PUBLISHABLE_KEY } = env;
-  const jwtSecret = (env as any).JWT_SECRET || "dev-secret-key";
+  const { MEDUSA_BACKEND_URL, MEDUSA_PUBLISHABLE_KEY, JWT_SECRET } = env;
+  const jwtSecret = resolveCSRFSecret(JWT_SECRET);
+
+  if (!jwtSecret) {
+    throw new Error("Missing JWT_SECRET environment variable");
+  }
 
   if (!MEDUSA_BACKEND_URL) {
     throw new Error("Missing MEDUSA_BACKEND_URL environment variable");
