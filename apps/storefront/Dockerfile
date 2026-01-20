@@ -59,6 +59,8 @@ COPY --from=builder /repo/apps/storefront/node_modules ./node_modules
 COPY --from=builder /repo/apps/storefront/dist ./dist
 COPY --from=builder /repo/apps/storefront/package.json ./package.json
 COPY --from=builder /repo/apps/storefront/public ./public
+COPY --from=builder /repo/apps/storefront/wrangler.jsonc ./wrangler.jsonc
+COPY --from=builder /repo/apps/storefront/workers ./workers
 
 # Install wrangler in node_modules so pnpm script can find it
 RUN pnpm add wrangler@4

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { useCustomer } from '../context/CustomerContext';
+import { useMedusaCart } from '../context/MedusaCartContext';
 import { Eye, EyeOff, Mail, Lock } from 'lucide-react';
 
 export function meta() {
@@ -13,6 +14,7 @@ export function meta() {
 export default function LoginPage() {
     const navigate = useNavigate();
     const { login, isLoading: authLoading } = useCustomer();
+    const { cartId } = useMedusaCart();
     
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -25,7 +27,7 @@ export default function LoginPage() {
         setError(null);
         setIsSubmitting(true);
 
-        const result = await login(email, password);
+        const result = await login(email, password, cartId);
         
         if (result.success) {
             navigate('/account');
@@ -74,9 +76,14 @@ export default function LoginPage() {
 
                     {/* Password Field */}
                     <div>
-                        <label htmlFor="password" className="block text-sm font-medium text-text-earthy mb-2">
-                            Password
-                        </label>
+                        <div className="flex justify-between items-center mb-2">
+                            <label htmlFor="password" className="block text-sm font-medium text-text-earthy">
+                                Password
+                            </label>
+                            <Link to="/account/forgot-password" className="text-sm text-accent-earthy hover:underline">
+                                Forgot password?
+                            </Link>
+                        </div>
                         <div className="relative">
                             <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-earthy/40" />
                             <input

@@ -85,6 +85,11 @@ development_status:
   backend-analytics-migration-2026-01-19:
     path: docs/sprint/sprint-artifacts/story-2026-01-19-backend-analytics-migration.md
     status: drafted
+  cart-migration-medusa-docs-2026-01-19:
+    path: docs/sprint/sprint-artifacts/story-2026-01-19-cart-migration-medusa-docs.md
+    status: done
+    meta: "Aligned storefront with Medusa cart docs. Implemented debounced server-side sync, guest-to-customer transfer, and exposed Medusa totals in UI. All 375 tests passing."
+    completed: "2026-01-19"
   5-2-comprehensive-frontend-tracking:
     path: docs/sprint/sprint-artifacts/5-2-comprehensive-frontend-tracking.md
     status: done
@@ -244,7 +249,9 @@ development_status:
   7-1-secure-token-generation: backlog
   7-2-rate-limiting: backlog
   7-3-audit-logging: backlog
-  7-4-csrf-protection: backlog
+  7-4-csrf-protection:
+    status: done
+    meta: "Implemented across all API routes via double-submit cookie pattern. Integrated with root.tsx and monitored-fetch.ts."
   pi-epic-7-retrospective: optional
 
   pi-epic-8: in-progress
@@ -496,9 +503,10 @@ development_status:
     blocks: ["RET-02"]
   checkout-remediation-2026-01-19:
     path: docs/sprint/sprint-artifacts/story-2026-01-19-checkout-remediation.md
-    status: ready-for-dev
-    meta: "Checkout implementation remediation from Medusa documentation evaluation. Debug code removal, retry mechanism, constants extraction, rate limiting. Logging audit deferred to separate story."
+    status: done
+    meta: "COMPLETED: Full checkout remediation: Route refactored to <100 lines, context-based orchestration, useReducer for all hooks, input sanitization, CSRF protection, and full E2E test coverage."
     created: "2026-01-19"
+    completed: "2026-01-19"
     depends_on: ["CHK-02-A", "CHK-02-B", "CHK-02-C", "SHP-01"]
   audit-epic-1-retrospective: optional
 
@@ -516,7 +524,7 @@ development_status:
   notif-1-notification-module-enhancement:
     path: docs/sprint/sprint-artifacts/notif-1-notification-module-enhancement.md
     status: in-progress
-    meta: "Enhance existing Resend notification provider. New templates (order-modified, refund, password-reset), optional SMS via Twilio, admin alerts. 5-8 points estimated."
+    meta: "Enhance existing Resend notification provider. Added password-reset template and general email queue refactoring. Next: order-modified, refund."
     created: "2026-01-13"
   notif-2-local-admin-notifications:
     path: docs/sprint/sprint-artifacts/notif-2-local-admin-notifications.md
@@ -524,3 +532,31 @@ development_status:
     meta: "Local notification module for admin feed. 2-3 points. Code complete, pending manual test."
     created: "2026-01-19"
   notif-epic-1-retrospective: optional
+
+  # --- Customer Experience (from evaluation 2026-01-19) ---
+  # Evaluation: docs/sprint/sprint-artifacts/cust-0-customer-module-evaluation.md
+  # Overall Score: 5.5/10 - Missing password reset, edit profile, address management
+  # Reference: https://docs.medusajs.com/resources/storefront-development/customers/
+  cust-epic-1: backlog
+  cust-0-customer-module-evaluation:
+    path: docs/sprint/sprint-artifacts/cust-0-customer-module-evaluation.md
+    status: done
+    meta: "Evaluation of customers module vs Medusa v2 docs. Score: 5.5/10. Missing: password reset, edit profile, address CRUD."
+    created: "2026-01-19"
+  cust-1-password-reset:
+    path: docs/sprint/sprint-artifacts/cust-1-password-reset.md
+    status: done
+    meta: "Password reset flow implemented: forgot-password, reset-password, and backend subscriber. Integrated with Resend service."
+    completed: "2026-01-19"
+    created: "2026-01-19"
+  cust-2-edit-profile:
+    path: docs/sprint/sprint-artifacts/cust-2-edit-profile.md
+    status: backlog
+    meta: "Edit customer profile: updateProfile context method, edit form in account page. 2-3 points. HIGH PRIORITY."
+    created: "2026-01-19"
+  cust-3-address-management:
+    path: docs/sprint/sprint-artifacts/cust-3-address-management.md
+    status: backlog
+    meta: "Customer address CRUD: reuse EditAddressDialog, add/edit/delete in account. 3-5 points. HIGH PRIORITY."
+    created: "2026-01-19"
+  cust-epic-1-retrospective: optional

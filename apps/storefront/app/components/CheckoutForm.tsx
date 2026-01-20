@@ -1,6 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
 import {
-    PaymentElement,
     useStripe,
     useElements,
     LinkAuthenticationElement,
@@ -14,9 +13,12 @@ import type {
     StripeAddressElementChangeEvent,
     StripeLinkAuthenticationElementChangeEvent,
 } from '@stripe/stripe-js';
+import { useCheckout } from './checkout/CheckoutProvider';
 import type { CartItem } from '../context/CartContext';
 import { createLogger } from '../lib/logger';
 import { monitoredFetch } from '../utils/monitored-fetch';
+import { ShippingSection } from './checkout/ShippingSection';
+import { PaymentSection } from './checkout/PaymentSection';
 
 export interface ShippingOption {
     id: string;
@@ -43,43 +45,35 @@ export interface CustomerData {
 }
 
 export interface CheckoutFormProps {
-    items: CartItem[];
-    cartTotal: number;
     onAddressChange?: (event: StripeAddressElementChangeEvent) => void;
     onEmailChange?: (email: string) => void;
-    shippingOptions: ShippingOption[];
-    selectedShipping: ShippingOption | null;
-    setSelectedShipping: (option: ShippingOption) => void;
     customerData?: CustomerData;
-    isCalculatingShipping?: boolean;
-    isShippingPersisted?: boolean; 
-    persistShippingOption: (option: ShippingOption) => Promise<void>;
-    paymentCollectionId: string | null;
-    guestEmail?: string;
-    cartId: string;
-    // Discount props for success page
-    discountTotal?: number;
-    appliedPromoCodes?: Array<{ code: string; discount: number; isAutomatic?: boolean }>;
 }
 
 export function CheckoutForm({
-    items,
-    cartTotal,
     onAddressChange,
     onEmailChange,
-    shippingOptions,
-    selectedShipping,
-    setSelectedShipping,
     customerData,
-    isCalculatingShipping = false,
-    isShippingPersisted = true,
-    persistShippingOption,
-    paymentCollectionId,
-    guestEmail,
-    cartId,
-    discountTotal = 0,
-    appliedPromoCodes = [],
 }: CheckoutFormProps) {
+    const {
+        items,
+        displayCartTotal: cartTotal,
+        displayDiscountTotal: discountTotal,
+        state: checkoutState,
+        actions: checkoutActions,
+        cartId,
+        paymentCollectionId,
+        isCalculatingShipping,
+        isShippingPersisted,
+        persistShippingOption,
+        appliedPromoCodes
+    } = useCheckout();
+
+    const { 
+        shippingOptions, 
+        selectedShippingOption: selectedShipping, 
+        email: guestEmail 
+    } = checkoutState;
     const stripe = useStripe();
     const elements = useElements();
     const [message, setMessage] = useState<string | null>(null);
@@ -375,11 +369,11 @@ export function CheckoutForm({
                 (opt) => opt.id === event.shippingRate.id
             );
             if (selectedRate) {
-                setSelectedShipping(selectedRate);
+                checkoutActions.selectShippingOption(selectedRate);
             }
             event.resolve();
         },
-        [shippingOptions, setSelectedShipping]
+        [shippingOptions, checkoutActions]
     );
 
     const handleExpressConfirm = async (event: StripeExpressCheckoutElementConfirmEvent) => {
@@ -501,47 +495,23 @@ export function CheckoutForm({
             </div>
 
             {/* Shipping Method Section */}
-            <div 
-                ref={shippingRef}
-                className={`p-4 rounded-lg transition-all ${validationErrors.shipping ? 'border-2 border-red-500 bg-red-50' : 'border border-transparent'}`}
-            >
-                {isCalculatingShipping ? (
-                    <div className="mt-6 text-sm text-gray-500">
-                        Calculating shipping rates...
-                    </div>
-                ) : shippingOptions.length > 0 ? (
-                    <>
-                        <ShippingMethodSelector
-                            options={shippingOptions}
-                            selected={selectedShipping}
-                            onSelect={(option) => {
-                                setSelectedShipping(option);
-                                setValidationErrors(prev => ({ ...prev, shipping: '' }));
-                            }}
-                        />
-                        <div className="text-xs text-gray-300 mt-2 font-mono">
-                            Debug: Cart Total used for Shipping: ${(cartTotal).toFixed(2)}
-                        </div>
-                    </>
-                ) : (
-                    <p className="text-gray-500 text-sm italic">Please enter your address to see shipping options.</p>
-                )}
-                {validationErrors.shipping && (
-                    <p className="text-red-600 text-sm mt-2">{validationErrors.shipping}</p>
-                )}
-            </div>
+            <ShippingSection
+                shippingOptions={shippingOptions}
+                selectedShipping={selectedShipping}
+                onSelectShipping={(option) => {
+                    checkoutActions.selectShippingOption(option);
+                    setValidationErrors(prev => ({ ...prev, shipping: '' }));
+                }}
+                isCalculating={isCalculatingShipping}
+                error={validationErrors.shipping}
+                forwardedRef={shippingRef}
+            />
 
             {/* Payment Section */}
-            <div 
-                ref={paymentRef}
-                className={`p-4 rounded-lg transition-all ${validationErrors.payment ? 'border-2 border-red-500 bg-red-50' : 'border border-transparent'}`}
-            >
-                <h2 className="text-lg font-medium mb-4">Payment</h2>
-                <PaymentElement id="payment-element" options={{ layout: 'tabs' }} />
-                {validationErrors.payment && (
-                    <p className="text-red-600 text-sm mt-2">{validationErrors.payment}</p>
-                )}
-            </div>
+            <PaymentSection
+                error={validationErrors.payment}
+                forwardedRef={paymentRef}
+            />
 
             {/* Submit Button */}
             <button
@@ -567,60 +537,7 @@ export function CheckoutForm({
     );
 }
 
-interface ShippingMethodSelectorProps {
-    options: ShippingOption[];
-    selected: ShippingOption | null;
-    onSelect: (option: ShippingOption) => void;
-}
 
-function ShippingMethodSelector({ options, selected, onSelect }: ShippingMethodSelectorProps) {
-    return (
-        <div className="mt-6">
-            <h3 className="text-base font-medium mb-4 text-text-earthy">Shipping method</h3>
-            <div className="space-y-3">
-                {options.map((option) => (
-                    <label
-                        key={option.id}
-                        className={`flex items-center justify-between p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                            selected?.id === option.id
-                                ? 'border-accent-earthy bg-accent-earthy/5'
-                                : 'border-gray-200 hover:border-accent-earthy/50'
-                        }`}
-                    >
-                        <div className="flex items-center gap-3 flex-1">
-                            <input
-                                type="radio"
-                                name="shipping"
-                                checked={selected?.id === option.id}
-                                onChange={() => onSelect(option)}
-                                className="w-5 h-5 text-accent-earthy"
-                            />
-                            <div className="flex-1">
-                                <div className="font-medium text-text-earthy">
-                                    {option.displayName}
-                                </div>
-                                {option.deliveryEstimate && (
-                                    <div className="text-sm text-gray-500 mt-0.5">
-                                        {option.deliveryEstimate}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                        <div className="text-right">
-                            {option.isFree ? (
-                                <span className="font-bold text-text-earthy">FREE</span>
-                            ) : (
-                                <span className="font-semibold text-text-earthy">
-                                    ${option.amount.toFixed(2)}
-                                </span>
-                            )}
-                        </div>
-                    </label>
-                ))}
-            </div>
-        </div>
-    );
-}
 
 function StripeBadge() {
     return (

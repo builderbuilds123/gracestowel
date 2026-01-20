@@ -29,11 +29,23 @@ vi.mock("../utils/monitored-fetch", () => ({
   monitoredFetch: (...args: any[]) => mockMonitoredFetchFn(...args),
 }));
 
+// Mock validateCSRFToken
+const mockValidateCSRFToken = vi.fn();
+vi.mock("../utils/csrf.server", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../utils/csrf.server")>();
+  return {
+    ...actual,
+    validateCSRFToken: (...args: any[]) => mockValidateCSRFToken(...args),
+    resolveCSRFSecret: vi.fn(() => "test-secret"),
+  };
+});
+
 describe("API Shipping Rates", () => {
   let context: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockValidateCSRFToken.mockResolvedValue(true);
     context = {
       cloudflare: {
         env: {

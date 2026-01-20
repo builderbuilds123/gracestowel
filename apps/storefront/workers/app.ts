@@ -16,8 +16,29 @@ const requestHandler = createRequestHandler(
 
 export default {
   async fetch(request, env, ctx) {
-    return requestHandler(request, {
-      cloudflare: { env, ctx },
-    });
+    try {
+      return await requestHandler(request, {
+        cloudflare: { env, ctx },
+      });
+    } catch (error: any) {
+      console.error("🔥 Worker Fatal Error:", error);
+      
+      // Return a clean error response instead of letting the isolate crash
+      const errorDetail = {
+        error: "Internal Worker Error",
+        message: error.message || "Unknown error",
+        stack: error.stack,
+        url: request.url,
+        method: request.method
+      };
+
+      return new Response(JSON.stringify(errorDetail), {
+        status: 500,
+        headers: {
+          "Content-Type": "application/json",
+          "X-Worker-Error": "true"
+        }
+      });
+    }
   },
 } satisfies ExportedHandler<Env>;

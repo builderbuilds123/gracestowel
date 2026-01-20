@@ -12,11 +12,13 @@ Replace direct PostHog calls and inconsistent logging with a unified Medusa Anal
 - Frontend PostHog migration is explicitly out of scope
 
 ## Requirements
-- Dev: Analytics Local provider with LOG_LEVEL=debug
+- Medusa Analytics Module available (v2.8.3+)
+- Dev: Analytics Local provider with LOG_LEVEL=debug (system env, not .env)
 - Prod: Analytics PostHog provider with POSTHOG_EVENTS_API_KEY and POSTHOG_HOST
 - Medusa-style event naming (domain.action)
 - PII masked in all analytics properties
 - Log policy: case-by-case review, then log all info logs
+- Only one Analytics provider configured per environment (Local in dev, PostHog in prod)
 
 ---
 
@@ -39,12 +41,14 @@ Deliverable: approved tracking matrix and log policy
 
 ### Phase 1 — Analytics Module Configuration
 1) Update apps/backend/medusa-config.ts
-   - Dev: @medusajs/analytics-local
-   - Prod: @medusajs/analytics-posthog
+   - Module: @medusajs/medusa/analytics
+   - Dev provider: @medusajs/analytics-local
+   - Prod provider: @medusajs/analytics-posthog
+   - Ensure only one provider active per environment
 2) Add env vars:
    - POSTHOG_EVENTS_API_KEY
    - POSTHOG_HOST
-   - LOG_LEVEL=debug in dev
+   - LOG_LEVEL=debug in dev (system env, not .env)
 
 ---
 

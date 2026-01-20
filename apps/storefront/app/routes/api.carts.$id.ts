@@ -3,6 +3,7 @@ import { MedusaCartService, type Cart } from "../services/medusa-cart";
 import type { CartItem } from "../types/product";
 import { isMedusaId } from "../types/product";
 import { createLogger, getTraceIdFromRequest } from "../lib/logger";
+import type { CloudflareEnv } from "../utils/monitored-fetch";
 
 interface UpdateCartRequest {
   items?: CartItem[];
@@ -35,6 +36,10 @@ interface UpdateCartRequest {
   metadata?: Record<string, any>;
 }
 
+import { resolveCSRFSecret, validateCSRFToken } from "../utils/csrf.server";
+
+// ...
+
 /**
  * PATCH /api/carts/:id
  * Update cart items and/or shipping address
@@ -42,6 +47,17 @@ interface UpdateCartRequest {
 export async function action({ request, params, context }: ActionFunctionArgs) {
   if (request.method !== "PATCH") {
     return data({ error: "Method not allowed" }, { status: 405 });
+  }
+
+  // CSRF Check
+  const env = context.cloudflare.env as unknown as CloudflareEnv;
+  const jwtSecret = resolveCSRFSecret(env.JWT_SECRET);
+  if (!jwtSecret) {
+    return data({ error: "Server configuration error" }, { status: 500 });
+  }
+  const isValidCSRF = await validateCSRFToken(request, jwtSecret);
+  if (!isValidCSRF) {
+     return data({ error: "Invalid CSRF token" }, { status: 403 });
   }
 
   const cartId = params.id;

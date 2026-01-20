@@ -1,5 +1,6 @@
 import { type LoaderFunctionArgs, data } from "react-router";
 import { MedusaCartService } from "../services/medusa-cart";
+import { CHECKOUT_CONSTANTS } from "../constants/checkout";
 
 /**
  * GET /api/carts/:id/shipping-options
@@ -42,8 +43,8 @@ export async function loader({ params, context }: LoaderFunctionArgs) {
       cart_id: cartId,
     }, {
       headers: {
-        // Cache for 60 seconds - shipping options rarely change
-        "Cache-Control": "private, max-age=60",
+        // Cache for a short period - shipping options rarely change
+        "Cache-Control": `private, max-age=${CHECKOUT_CONSTANTS.SHIPPING_OPTIONS_CACHE_SECONDS}`,
       },
     });
 

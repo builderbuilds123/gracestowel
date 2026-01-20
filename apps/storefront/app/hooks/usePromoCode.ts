@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useRef, useCallback, useReducer } from "react";
 import { getMedusaClient } from "../lib/medusa";
 import { createLogger } from "../lib/logger";
 import type { AppliedPromoCode, CartWithPromotions, LineItemAdjustment, ShippingMethodAdjustment } from "../types/promotion";
@@ -21,6 +21,51 @@ interface UsePromoCodeReturn {
   refreshDiscount: (requestId?: number) => Promise<void>;
   syncFromCart: (cart: CartWithPromotions) => void;
   clearMessages: () => void;
+}
+
+interface PromoCodeState {
+  appliedCodes: AppliedPromoCode[];
+  totalDiscount: number;
+  isLoading: boolean;
+  error: string | null;
+  successMessage: string | null;
+}
+
+type PromoCodeAction =
+  | { type: 'SET_LOADING'; payload: boolean }
+  | { type: 'SET_DISCOUNT_STATE'; payload: { codes: AppliedPromoCode[]; total: number } }
+  | { type: 'SET_ERROR'; payload: string | null }
+  | { type: 'SET_SUCCESS'; payload: string | null }
+  | { type: 'CLEAR_MESSAGES' };
+
+const initialPromoState: PromoCodeState = {
+  appliedCodes: [],
+  totalDiscount: 0,
+  isLoading: false,
+  error: null,
+  successMessage: null,
+};
+
+function promoCodeReducer(state: PromoCodeState, action: PromoCodeAction): PromoCodeState {
+  switch (action.type) {
+    case 'SET_LOADING':
+      return { ...state, isLoading: action.payload };
+    case 'SET_DISCOUNT_STATE':
+      return { 
+        ...state, 
+        appliedCodes: action.payload.codes, 
+        totalDiscount: action.payload.total,
+        isLoading: false 
+      };
+    case 'SET_ERROR':
+      return { ...state, error: action.payload, isLoading: false, successMessage: null };
+    case 'SET_SUCCESS':
+      return { ...state, successMessage: action.payload, isLoading: false, error: null };
+    case 'CLEAR_MESSAGES':
+      return { ...state, error: null, successMessage: null };
+    default:
+      return state;
+  }
 }
 
 /**
@@ -136,54 +181,40 @@ function extractAppliedCodesFromCart(
   return finalCodes;
 }
 
-function applyCartDiscountState(
+function getDiscountState(
   cart: CartWithPromotions,
-  setTotalDiscount: (value: number) => void,
-  setAppliedCodes: (codes: AppliedPromoCode[]) => void,
   debugLogger?: { info: (msg: string, data?: Record<string, unknown>) => void }
-) {
-  // Medusa is returning discount_total in major units (dollars)
+): { codes: AppliedPromoCode[]; total: number } {
   const discountTotal = cart.discount_total || 0;
-  setTotalDiscount(discountTotal);
-
   const rebuiltCodes = extractAppliedCodesFromCart(cart, debugLogger);
   
-  debugLogger?.info('[PromoCode] Applied discount state', {
+  debugLogger?.info('[PromoCode] Discount state calculation', {
     discountTotal,
     codesCount: rebuiltCodes.length,
     codes: rebuiltCodes.map(c => ({ code: c.code, discount: c.discount, isAutomatic: c.isAutomatic })),
   });
   
-  setAppliedCodes(rebuiltCodes);
+  return { codes: rebuiltCodes, total: discountTotal };
 }
 
 /**
  * Hook for managing promo codes on a Medusa cart
- * Handles multiple codes and stacking rules enforcement
- * @see https://docs.medusajs.com/resources/storefront-development/cart/manage-promotions
  */
 export function usePromoCode({
   cartId,
   onCartUpdate,
 }: UsePromoCodeOptions): UsePromoCodeReturn {
-  const [appliedCodes, setAppliedCodes] = useState<AppliedPromoCode[]>([]);
-  const [totalDiscount, setTotalDiscount] = useState<number>(0);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [state, dispatch] = useReducer(promoCodeReducer, initialPromoState);
 
   const refreshRequestIdRef = useRef(0);
-  
   const logger = useRef(createLogger({ context: 'usePromoCode' })).current;
 
   const clearMessages = useCallback(() => {
-    setError(null);
-    setSuccessMessage(null);
+    dispatch({ type: 'CLEAR_MESSAGES' });
   }, []);
 
   /**
    * Refresh discount total from cart without applying/removing codes
-   * Used when cart items are updated (quantity changes) to recalculate percentage discounts
    */
   const refreshDiscount = useCallback(async (requestId?: number) => {
     if (!cartId) return;
@@ -193,7 +224,7 @@ export function usePromoCode({
       refreshRequestIdRef.current = requestId;
     }
 
-    setIsLoading(true);
+    dispatch({ type: 'SET_LOADING', payload: true });
     try {
       const client = getMedusaClient();
       logger.info('[PromoCode] Refreshing discount from cart', { cartId });
@@ -202,39 +233,22 @@ export function usePromoCode({
         fields: '+promotions,+promotions.application_method,+items.adjustments,+shipping_methods.adjustments',
       });
 
-      // DEEP DEBUG: Log full cart structure for promo investigation
-      logger.info('[PromoCode] RAW Cart Data Received', {
-        cartId: cart.id,
-        discountTotal: cart.discount_total,
-        promotions: (cart as any).promotions,
-        itemsCount: cart.items?.length,
-        hasAdjustments: cart.items?.some(i => i.adjustments && i.adjustments.length > 0)
-      });
-      
-      if (isDevelopment) {
-        // Use structured logger for the full cart object in development
-        logger.info('[PromoCode] Full Cart Object', { cart });
-      }
-
-      logger.info('[PromoCode] Cart retrieved for discount refresh', {
-        cartId,
-        discountTotal: cart.discount_total,
-        hasPromotions: !!(cart as any).promotions,
-        promotionsCount: (cart as any).promotions?.length || 0,
-        itemsCount: cart.items?.length || 0,
-      });
-
       if (currentRequestId !== refreshRequestIdRef.current) {
         logger.info('[PromoCode] Stale request, skipping', { currentRequestId, latestRequestId: refreshRequestIdRef.current });
+        dispatch({ type: 'SET_LOADING', payload: false });
         return;
       }
 
-      applyCartDiscountState(cart as any, setTotalDiscount, setAppliedCodes, logger);
+      dispatch({ 
+        type: 'SET_DISCOUNT_STATE', 
+        payload: getDiscountState(cart as unknown as CartWithPromotions, logger) 
+      });
     } catch (err) {
       logger.warn('Failed to refresh discount', { error: err });
-      setError("Failed to refresh discounts. Please try again.");
-    } finally {
-      setIsLoading(false);
+      dispatch({ 
+        type: 'SET_ERROR', 
+        payload: "Failed to refresh discounts. Please try again." 
+      });
     }
   }, [cartId, logger]);
 
@@ -244,38 +258,39 @@ export function usePromoCode({
       discountTotal: cart.discount_total,
       promotionsCount: cart.promotions?.length || 0
     });
-    applyCartDiscountState(cart, setTotalDiscount, setAppliedCodes, logger);
+    dispatch({ 
+      type: 'SET_DISCOUNT_STATE', 
+      payload: getDiscountState(cart, logger) 
+    });
   }, [logger]);
 
   const applyPromoCode = useCallback(
     async (code: string): Promise<boolean> => {
       if (!cartId) {
-        setError("Cart not available");
+        dispatch({ type: 'SET_ERROR', payload: "Cart not available" });
         return false;
       }
 
       const normalizedCode = code.trim().toUpperCase();
       if (!normalizedCode) {
-        setError("Please enter a promo code");
+        dispatch({ type: 'SET_ERROR', payload: "Please enter a promo code" });
         return false;
       }
 
       // Check if already applied
-      if (appliedCodes.some((c) => c.code === normalizedCode)) {
-        setError("This promo code is already applied");
+      if (state.appliedCodes.some((c) => c.code === normalizedCode)) {
+        dispatch({ type: 'SET_ERROR', payload: "This promo code is already applied" });
         return false;
       }
 
-      setIsLoading(true);
-      setError(null);
-      setSuccessMessage(null);
+      dispatch({ type: 'CLEAR_MESSAGES' });
+      dispatch({ type: 'SET_LOADING', payload: true });
 
       try {
         const client = getMedusaClient();
         logger.info('[PromoCode] Applying promo code', { code: normalizedCode });
         
-        // Manual codes must be sent in the promo_codes array to Medusa update
-        const manualCodes = appliedCodes
+        const manualCodes = state.appliedCodes
           .filter(c => !c.isAutomatic)
           .map(c => c.code);
         
@@ -285,58 +300,52 @@ export function usePromoCode({
           promo_codes: allManualCodes,
         });
 
-        logger.info('[PromoCode] Promo code application response received', { 
-            cartId: cart.id,
-            discountTotal: cart.discount_total 
-        });
-
-        // Verify if it was actually applied
-        const rebuiltCodes = extractAppliedCodesFromCart(cart as any, logger);
+        const rebuiltCodes = extractAppliedCodesFromCart(cart as unknown as CartWithPromotions, logger);
         const wasApplied = rebuiltCodes.some(c => c.code.toUpperCase() === normalizedCode);
         
         if (!wasApplied) {
-          logger.warn('[PromoCode] Code accepted by API but not found in adjustments - possibly requirements not met', {
+          logger.warn('[PromoCode] Code accepted by API but not found in adjustments', {
             code: normalizedCode,
             availableCodes: rebuiltCodes.map(c => c.code)
           });
-          setError(`Promo code "${normalizedCode}" could not be applied. Check requirements (e.g. minimum spend).`);
+          dispatch({ 
+            type: 'SET_ERROR', 
+            payload: `Promo code "${normalizedCode}" could not be applied. Check requirements.` 
+          });
           return false;
         }
 
-        applyCartDiscountState(cart as any, setTotalDiscount, setAppliedCodes, logger);
-        setSuccessMessage(`Promo code "${normalizedCode}" applied!`);
+        dispatch({ 
+          type: 'SET_DISCOUNT_STATE', 
+          payload: getDiscountState(cart as unknown as CartWithPromotions, logger) 
+        });
+        dispatch({ type: 'SET_SUCCESS', payload: `Promo code "${normalizedCode}" applied!` });
         onCartUpdate?.();
         return true;
       } catch (err: unknown) {
         logger.error("Failed to apply promo code", err as Error);
-        const errorMessage = extractErrorMessage(err);
-        setError(errorMessage);
+        dispatch({ type: 'SET_ERROR', payload: extractErrorMessage(err) });
         return false;
-      } finally {
-        setIsLoading(false);
       }
     },
-    [cartId, appliedCodes, onCartUpdate, logger]
+    [cartId, state.appliedCodes, onCartUpdate, logger]
   );
 
   const removePromoCode = useCallback(
     async (code: string): Promise<boolean> => {
       if (!cartId) {
-        setError("Cart not available");
+        dispatch({ type: 'SET_ERROR', payload: "Cart not available" });
         return false;
       }
 
-      setIsLoading(true);
-      setError(null);
-      setSuccessMessage(null);
+      dispatch({ type: 'CLEAR_MESSAGES' });
+      dispatch({ type: 'SET_LOADING', payload: true });
 
       try {
         const client = getMedusaClient();
         logger.info('[PromoCode] Removing promo code', { code });
         
-        // Filter out the code being removed and any automatic codes 
-        // (automatic codes shouldn't be in the manual promo_codes array)
-        const remainingManualCodes = appliedCodes
+        const remainingManualCodes = state.appliedCodes
           .filter(c => c.code !== code && !c.isAutomatic)
           .map(c => c.code);
         
@@ -344,33 +353,28 @@ export function usePromoCode({
           promo_codes: remainingManualCodes,
         });
 
-        logger.info('[PromoCode] Promo code removal response received', { 
-            cartId: cart.id,
-            discountTotal: cart.discount_total 
+        dispatch({ 
+          type: 'SET_DISCOUNT_STATE', 
+          payload: getDiscountState(cart as unknown as CartWithPromotions, logger) 
         });
-
-        applyCartDiscountState(cart as any, setTotalDiscount, setAppliedCodes, logger);
-        setSuccessMessage("Promo code removed");
+        dispatch({ type: 'SET_SUCCESS', payload: "Promo code removed" });
         onCartUpdate?.();
         return true;
       } catch (err: unknown) {
         logger.error("Failed to remove promo code", err as Error);
-        const errorMessage = extractErrorMessage(err);
-        setError(errorMessage);
+        dispatch({ type: 'SET_ERROR', payload: extractErrorMessage(err) });
         return false;
-      } finally {
-        setIsLoading(false);
       }
     },
-    [cartId, appliedCodes, onCartUpdate, logger]
+    [cartId, state.appliedCodes, onCartUpdate, logger]
   );
 
   return {
-    appliedCodes,
-    totalDiscount,
-    isLoading,
-    error,
-    successMessage,
+    appliedCodes: state.appliedCodes,
+    totalDiscount: state.totalDiscount,
+    isLoading: state.isLoading,
+    error: state.error,
+    successMessage: state.successMessage,
     applyPromoCode,
     removePromoCode,
     refreshDiscount,

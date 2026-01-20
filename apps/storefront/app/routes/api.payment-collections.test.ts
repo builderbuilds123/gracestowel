@@ -17,6 +17,17 @@ vi.mock('../lib/logger', () => ({
     getTraceIdFromRequest: () => 'test-trace-id',
 }));
 
+// Mock validateCSRFToken
+const mockValidateCSRFToken = vi.fn();
+vi.mock("../utils/csrf.server", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("../utils/csrf.server")>();
+    return {
+        ...actual,
+        validateCSRFToken: (...args: any[]) => mockValidateCSRFToken(...args),
+        resolveCSRFSecret: vi.fn(() => "test-secret"),
+    };
+});
+
 import { monitoredFetch } from '../utils/monitored-fetch';
 
 describe('Payment Collections API', () => {
@@ -45,8 +56,12 @@ describe('Payment Collections API', () => {
         };
     };
 
+    // Removed duplicate mock
+
+
     beforeEach(() => {
         vi.clearAllMocks();
+        mockValidateCSRFToken.mockResolvedValue(true);
     });
 
     it('should create payment collection for valid cartId', async () => {

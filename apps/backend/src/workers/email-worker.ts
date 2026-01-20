@@ -48,12 +48,12 @@ async function moveToDLQDirectly(
   redis: Redis,
   logger: any
 ) {
-  const { orderId, template, recipient } = job.data;
+  const { entityId, template, recipient } = job.data;
 
   const errorMessage = error.message || "unknown_error";
   const dlqEntry = {
     jobId: job.id,
-    orderId,
+    entityId,
     template,
     recipient: maskEmail(recipient),
     error: `Invalid email address: ${maskEmail(recipient)} - ${errorMessage}`,
@@ -64,13 +64,13 @@ async function moveToDLQDirectly(
 
   try {
     await redis.lpush(DLQ_KEY, JSON.stringify(dlqEntry));
-    logger.warn(`[EMAIL][INVALID] Invalid email address for order ${orderId}, moved to DLQ`);
+    logger.warn(`[EMAIL][INVALID] Invalid email address for entity ${entityId}, moved to DLQ`);
 
     const timestamp = new Date().toISOString();
     const sanitizedError = errorMessage.replace(/\|/g, "-").replace(/\s/g, "_");
     logger.error(
         `[EMAIL][ALERT] Email delivery failed | ` +
-        `order=${orderId} ` +
+        `entity=${entityId} ` +
         `template=${template} ` +
         `error=Invalid_email_${sanitizedError} ` +
         `attempts=${job.attemptsMade + 1} ` +
@@ -78,8 +78,8 @@ async function moveToDLQDirectly(
     );
 
     logger.error(`[EMAIL][DLQ] Job ${job.id} moved to DLQ after ${job.attemptsMade + 1} attempts`);
-    logger.info(`[METRIC] email_dlq template=${template} order=${orderId} reason=invalid_email`);
-    logger.info(`[METRIC] email_alert order=${orderId} template=${template}`);
+    logger.info(`[METRIC] email_dlq template=${template} entity=${entityId} reason=invalid_email`);
+    logger.info(`[METRIC] email_alert entity=${entityId} template=${template}`);
   } catch (dlqError: any) {
     logger.error(`[EMAIL][DLQ_ERROR] Failed to store job ${job.id} in DLQ: ${dlqError.message}`);
     // Re-throw to prevent silent data loss - BullMQ will retry the job
@@ -128,14 +128,14 @@ export function startEmailWorker(container: MedusaContainer): Worker {
     QUEUE_NAME,
     async (job: Job<EmailJobPayload>) => {
       // ... existing processor logic ...
-      const { orderId, template, recipient, data } = job.data;
+      const { entityId, template, recipient, data } = job.data;
       const maskedRecipient = maskEmail(recipient);
       const attemptNum = job.attemptsMade + 1;
 
       if (job.attemptsMade > 0) {
-        logger.info(`[EMAIL][RETRY] Attempt ${attemptNum}/3 for order ${orderId}`);
+        logger.info(`[EMAIL][RETRY] Attempt ${attemptNum}/3 for entity ${entityId}`);
       } else {
-        logger.info(`[EMAIL][PROCESS] Processing ${template} for order ${orderId}, attempt ${attemptNum}/3`);
+        logger.info(`[EMAIL][PROCESS] Processing ${template} for entity ${entityId}, attempt ${attemptNum}/3`);
       }
 
       try {
@@ -148,8 +148,8 @@ export function startEmailWorker(container: MedusaContainer): Worker {
         
         const notificationId = notification?.id || "sent";
 
-        logger.info(`[EMAIL][SENT] Sent ${template} to ${maskedRecipient} for order ${orderId}. ID: ${notificationId}`);
-        logger.info(`[METRIC] email_sent template=${template} order=${orderId}`);
+        logger.info(`[EMAIL][SENT] Sent ${template} to ${maskedRecipient} for entity ${entityId}. ID: ${notificationId}`);
+        logger.info(`[METRIC] email_sent template=${template} entity=${entityId}`);
       } catch (error: any) {
         // Check if error is retryable
         if (!isRetryableError(error)) {
@@ -162,8 +162,8 @@ export function startEmailWorker(container: MedusaContainer): Worker {
           return; // Don't throw - job completes (but email not sent)
         }
 
-        logger.error(`[EMAIL][FAILED] Failed ${template} for order ${orderId} (attempt ${attemptNum}/3): ${error.message}`);
-        logger.info(`[METRIC] email_failed template=${template} order=${orderId} error=${error.code || "unknown"}`);
+        logger.error(`[EMAIL][FAILED] Failed ${template} for entity ${entityId} (attempt ${attemptNum}/3): ${error.message}`);
+        logger.info(`[METRIC] email_failed template=${template} entity=${entityId} error=${error.code || "unknown"}`);
         throw error; // Re-throw to trigger BullMQ retry
       }
     },
@@ -181,12 +181,12 @@ export function startEmailWorker(container: MedusaContainer): Worker {
     logger.error(`[EMAIL][JOB_FAILED] Job ${job?.id} failed: ${error.message}`);
 
     if (job) {
-        const { orderId, template, recipient } = job.data;
+        const { entityId, template, recipient } = job.data;
         const timestamp = new Date().toISOString();
 
         const dlqEntry = {
             jobId: job.id,
-            orderId,
+            entityId,
             template,
             recipient: maskEmail(recipient),
             error: error.message,
@@ -206,15 +206,15 @@ export function startEmailWorker(container: MedusaContainer): Worker {
             // ALERT log (parseable format)
             logger.error(
                 `[EMAIL][ALERT] Email delivery failed | ` +
-                `order=${orderId} ` +
+                `entity=${entityId} ` +
                 `template=${template} ` +
                 `error=${error.message.replace(/\|/g, "-").replace(/\s/g, "_")} ` +
                 `attempts=${job.attemptsMade} ` +
                 `timestamp=${timestamp}`
             );
 
-            logger.info(`[METRIC] email_dlq template=${template} order=${orderId}`);
-            logger.info(`[METRIC] email_alert order=${orderId} template=${template}`);
+            logger.info(`[METRIC] email_dlq template=${template} entity=${entityId}`);
+            logger.info(`[METRIC] email_alert entity=${entityId} template=${template}`);
         } catch (dlqError: any) {
             logger.error(`[EMAIL][DLQ_ERROR] Failed to store job ${job.id} in DLQ: ${dlqError.message}`);
         }

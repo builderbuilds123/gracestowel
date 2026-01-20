@@ -1,8 +1,21 @@
 import { type ActionFunctionArgs, data } from "react-router";
+import type { CloudflareEnv } from "../utils/monitored-fetch";
+import { resolveCSRFSecret, validateCSRFToken } from "../utils/csrf.server";
 
 export async function action({ request, context }: ActionFunctionArgs) {
     if (request.method !== "POST") {
         return data({ message: "Method not allowed" }, { status: 405 });
+    }
+
+    // CSRF Check
+    const env = context.cloudflare.env as unknown as CloudflareEnv;
+    const jwtSecret = resolveCSRFSecret(env.JWT_SECRET);
+    if (!jwtSecret) {
+        return data({ error: "Server configuration error" }, { status: 500 });
+    }
+    const isValidCSRF = await validateCSRFToken(request, jwtSecret);
+    if (!isValidCSRF) {
+        return data({ error: "Invalid CSRF token" }, { status: 403 });
     }
 
     const { amount, currency, items } = await request.json() as {
@@ -11,11 +24,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
         items: Array<{ title: string; price: string; quantity: number; image: string }>;
     };
 
-    const env = context.cloudflare.env as {
-      STRIPE_SECRET_KEY: string;
-      [key: string]: unknown;
-    };
-    const STRIPE_SECRET_KEY = env.STRIPE_SECRET_KEY;
+    const STRIPE_SECRET_KEY = env.STRIPE_SECRET_KEY as string;
 
     try {
         // Construct form-urlencoded body for Stripe API

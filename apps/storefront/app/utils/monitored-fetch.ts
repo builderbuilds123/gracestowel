@@ -18,10 +18,19 @@ type ServerPostHogConfig = {
  * In Workers, env vars are accessed via context.cloudflare.env, not process.env
  */
 export type CloudflareEnv = {
+  ENVIRONMENT?: string;
+  DATABASE_URL?: string;
+  MEDUSA_BACKEND_URL?: string;
+  MEDUSA_PUBLISHABLE_KEY?: string;
+  STRIPE_SECRET_KEY?: string;
+  STRIPE_PUBLISHABLE_KEY?: string;
   VITE_POSTHOG_API_KEY?: string;
   VITE_POSTHOG_HOST?: string;
   POSTHOG_API_KEY?: string;
   POSTHOG_HOST?: string;
+  JWT_SECRET?: string;
+  JWE_SECRET?: string;
+  NODE_ENV?: string;
   POSTHOG_SERVER_CAPTURE_ENABLED?: string | boolean;
   [key: string]: unknown;
 };
@@ -265,6 +274,24 @@ export async function monitoredFetch(
   const startTime = nowMs();
   const { host, path } = parseUrl(url);
   const sanitizedUrl = getSanitizedPath(url);
+
+  // CSRF Protection (Story 4.2)
+  if (typeof window !== 'undefined' && (window as any).ENV?.CSRF_TOKEN) {
+    try {
+      const targetUrl = new URL(url, window.location.origin);
+      const isSameOrigin = targetUrl.origin === window.location.origin;
+      const isHttp = targetUrl.protocol === 'http:' || targetUrl.protocol === 'https:';
+      if (isSameOrigin && isHttp) {
+        const headers = new Headers(fetchOptions.headers || {});
+        if (!headers.has('X-CSRF-Token')) {
+          headers.set('X-CSRF-Token', (window as any).ENV.CSRF_TOKEN);
+        }
+        fetchOptions.headers = headers;
+      }
+    } catch {
+      // Ignore invalid URLs
+    }
+  }
 
   const shouldCapture = async () => {
     if (skipTracking) return false;

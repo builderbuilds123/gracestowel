@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { medusaFetch } from '../lib/medusa-fetch';
+import { monitoredFetch } from '../utils/monitored-fetch';
 
 export interface CustomerAddress {
     id: string;
@@ -30,10 +31,12 @@ interface CustomerContextType {
     customer: Customer | null;
     isAuthenticated: boolean;
     isLoading: boolean;
-    login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
-    register: (email: string, password: string, firstName?: string, lastName?: string) => Promise<{ success: boolean; error?: string }>;
+    login: (email: string, password: string, cartId?: string) => Promise<{ success: boolean; error?: string }>;
+    register: (email: string, password: string, firstName?: string, lastName?: string, cartId?: string) => Promise<{ success: boolean; error?: string }>;
     logout: () => Promise<void>;
     refreshCustomer: () => Promise<void>;
+    requestPasswordReset: (email: string) => Promise<{ success: boolean; error?: string }>;
+    updatePassword: (password: string, token: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 const CustomerContext = createContext<CustomerContextType | undefined>(undefined);
@@ -108,7 +111,7 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
-    const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+    const login = async (email: string, password: string, cartId?: string): Promise<{ success: boolean; error?: string }> => {
         try {
             // Step 1: Authenticate with email/password
             const authResponse = await medusaFetch(`/auth/customer/emailpass`, {
@@ -129,6 +132,24 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
             localStorage.setItem(TOKEN_KEY, newToken);
             setToken(newToken);
 
+            // Step 2: Transfer cart if guest cart exists
+            if (cartId) {
+                try {
+                    await monitoredFetch(`/api/carts/${cartId}/transfer`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${newToken}`,
+                        },
+                        label: 'cart-transfer-on-login',
+                    });
+                    console.log('[CustomerContext] Cart transferred successfully:', cartId);
+                } catch (err) {
+                    console.error('[CustomerContext] Failed to transfer cart during login:', err);
+                    // Continue anyway, as login was successful
+                }
+            }
+
             return { success: true };
         } catch (error) {
             console.error('Login error:', error);
@@ -140,7 +161,8 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
         email: string, 
         password: string, 
         firstName?: string, 
-        lastName?: string
+        lastName?: string,
+        cartId?: string
     ): Promise<{ success: boolean; error?: string }> => {
         try {
             // Step 1: Register auth identity
@@ -182,6 +204,23 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
             localStorage.setItem(TOKEN_KEY, regToken);
             setToken(regToken);
 
+            // Step 3: Transfer cart if guest cart exists
+            if (cartId) {
+                try {
+                    await monitoredFetch(`/api/carts/${cartId}/transfer`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${regToken}`,
+                        },
+                        label: 'cart-transfer-on-register',
+                    });
+                    console.log('[CustomerContext] Cart transferred successfully:', cartId);
+                } catch (err) {
+                    console.error('[CustomerContext] Failed to transfer cart during registration:', err);
+                }
+            }
+
             return { success: true };
         } catch (error) {
             console.error('Registration error:', error);
@@ -203,6 +242,51 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
+    const requestPasswordReset = async (email: string): Promise<{ success: boolean; error?: string }> => {
+        try {
+            const response = await medusaFetch(`/auth/customer/emailpass/reset-password`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ identifier: email }),
+                label: 'customer-reset-password-request',
+            });
+
+            if (!response.ok) {
+                const error = (await response.json()) as { message?: string };
+                return { success: false, error: error.message || 'Failed to request password reset' };
+            }
+
+            return { success: true };
+        } catch (error) {
+            console.error('Password reset request error:', error);
+            return { success: false, error: 'An error occurred while requesting password reset' };
+        }
+    };
+
+    const updatePassword = async (password: string, token: string): Promise<{ success: boolean; error?: string }> => {
+        try {
+            const response = await medusaFetch(`/auth/customer/emailpass/update-provider`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                },
+                body: JSON.stringify({ password }),
+                label: 'customer-update-password',
+            });
+
+            if (!response.ok) {
+                const error = (await response.json()) as { message?: string };
+                return { success: false, error: error.message || 'Failed to update password' };
+            }
+
+            return { success: true };
+        } catch (error) {
+            console.error('Password update error:', error);
+            return { success: false, error: 'An error occurred while updating password' };
+        }
+    };
+
     const refreshCustomer = useCallback(async () => {
         await fetchCustomer();
     }, [token]);
@@ -217,6 +301,8 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
                 register,
                 logout,
                 refreshCustomer,
+                requestPasswordReset,
+                updatePassword,
             }}
         >
             {children}
