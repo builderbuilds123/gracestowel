@@ -330,7 +330,10 @@ export function useShippingRates({
     onCartCreated,
     onCartSynced,
     onCartSyncError,
-    logger
+    logger,
+    regionId,
+    setCartId,
+    onCartUpdated
   ]);
 
   const clearCache = useCallback(() => {

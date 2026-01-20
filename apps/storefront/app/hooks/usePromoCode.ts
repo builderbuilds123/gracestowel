@@ -235,6 +235,7 @@ export function usePromoCode({
 
       if (currentRequestId !== refreshRequestIdRef.current) {
         logger.info('[PromoCode] Stale request, skipping', { currentRequestId, latestRequestId: refreshRequestIdRef.current });
+        dispatch({ type: 'SET_LOADING', payload: false });
         return;
       }
 
@@ -282,6 +283,7 @@ export function usePromoCode({
         return false;
       }
 
+      dispatch({ type: 'CLEAR_MESSAGES' });
       dispatch({ type: 'SET_LOADING', payload: true });
 
       try {
@@ -336,6 +338,7 @@ export function usePromoCode({
         return false;
       }
 
+      dispatch({ type: 'CLEAR_MESSAGES' });
       dispatch({ type: 'SET_LOADING', payload: true });
 
       try {

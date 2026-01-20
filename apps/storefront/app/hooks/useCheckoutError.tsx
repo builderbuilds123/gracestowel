@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, useReducer } from "react";
+import DOMPurify from "dompurify";
 
 /**
  * Error types for checkout flow.
@@ -279,7 +280,7 @@ export function CheckoutErrorBanner({ error }: { error: CheckoutError }) {
       <div className="flex items-start gap-2">
         <span>{icon}</span>
         <div className="flex-1">
-          <p className="font-medium">{error.message}</p>
+          <p className="font-medium" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(error.message) }} />
           {error.action && (
             <button
               onClick={error.action.handler}

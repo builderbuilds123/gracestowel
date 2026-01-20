@@ -46,7 +46,7 @@ test.describe("Guest Checkout Flow", () => {
 
     // Look for add to cart button (uses "Hang it Up" text in this storefront)
     await expect(
-      page.getByRole("button", { name: /hang it up|add to cart|out of stock/i }).first(),
+      page.getByRole("button", { name: /hang it up|add to cart/i }).first(),
     ).toBeVisible({ timeout: 30000 });
   });
 
@@ -239,9 +239,9 @@ test.describe("Cart Persistence", () => {
     // Navigate to product page
     await page.goto(`/products/${product.handle}`);
     await page.waitForLoadState("domcontentloaded");
-      await expect(page.locator("h1").filter({ hasText: product.title })).toBeVisible({ timeout: 30000 });
-      
-      const addToCart = page.getByRole("button", { name: /add to cart|out of stock/i }).first();
+    await expect(page.locator("h1").filter({ hasText: product.title })).toBeVisible({ timeout: 30000 });
+    
+    const addToCart = page.getByRole("button", { name: /hang it up|add to cart/i }).first();
     await addToCart.scrollIntoViewIfNeeded();
     await page.waitForTimeout(500);
     await addToCart.evaluate((el: any) => el.click());

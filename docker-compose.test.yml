@@ -86,6 +86,9 @@ services:
       NODE_ENV: development
       CI: "true"
       CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE: postgresql://medusa_test:medusa_test@postgres:5432/medusa_test
+      # Stripe keys (required by env.server.ts validation)
+      STRIPE_PUBLISHABLE_KEY: pk_test_placeholder_for_ci_testing
+      STRIPE_SECRET_KEY: sk_test_placeholder_for_ci_testing
     ports:
       - "5174:5173"
     command: pnpm run test:server

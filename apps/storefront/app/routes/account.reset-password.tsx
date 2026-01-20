@@ -30,6 +30,16 @@ export default function ResetPasswordPage() {
         }
     }, [token]);
 
+    useEffect(() => {
+        if (isSuccess) {
+            const timer = setTimeout(() => {
+                navigate('/account/login');
+            }, 3000);
+
+            return () => clearTimeout(timer);
+        }
+    }, [isSuccess, navigate]);
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError(null);
@@ -55,10 +65,7 @@ export default function ResetPasswordPage() {
         
         if (result.success) {
             setIsSuccess(true);
-            // Auto redirect after 3 seconds
-            setTimeout(() => {
-                navigate('/account/login');
-            }, 3000);
+
         } else {
             setError(result.error || 'Failed to reset password. The link may have expired.');
         }

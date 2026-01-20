@@ -91,7 +91,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         }, 1000); // 1 second debounce
 
         return () => clearTimeout(timeoutId);
-    }, [items, cartId, isLoaded]);
+    }, [items, cartId, isLoaded, refreshCart]);
 
     const addToCart = (newItem: Omit<CartItem, 'quantity'> & { quantity?: number }) => {
         const quantityToAdd = newItem.quantity ?? 1;
@@ -127,13 +127,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         setIsOpen(true);
 
         // Fire-and-forget: ensure a Medusa cart exists on first cart interaction
-        if (typeof window !== 'undefined' && !cartCreateInFlight.current) {
+        if (typeof window !== 'undefined' && !cartId && !cartCreateInFlight.current) {
+            cartCreateInFlight.current = true;
             void (async () => {
                 try {
-                    if (cartId) {
-                        return;
-                    }
-                    cartCreateInFlight.current = true;
                     const response = await monitoredFetch('/api/carts', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },

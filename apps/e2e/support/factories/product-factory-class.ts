@@ -15,6 +15,14 @@ export class ProductFactory {
    * Get an existing seeded product for testing.
    */
   async createProduct(overrides: Partial<Product> = {}): Promise<Product> {
+    const isPurchasableVariant = (variant: any) => {
+      if (!variant) return false;
+      if (variant.allow_backorder) return true;
+      if (variant.manage_inventory === false) return true;
+      if (variant.inventory_quantity === null || variant.inventory_quantity === undefined) return true;
+      return Number(variant.inventory_quantity) > 0;
+    };
+
     // 1. Identify which sales channels are linked to our current publishable key
     let linkedSalesChannelIds: string[] = [];
     const pk = process.env.MEDUSA_PUBLISHABLE_KEY;
@@ -59,6 +67,7 @@ export class ProductFactory {
         let validProducts = adminProducts.products.filter(p => 
           (p.variants?.length > 0) && (p.sales_channels?.length > 0)
         );
+        const purchasableProducts = validProducts.filter(p => p.variants?.some(isPurchasableVariant));
 
         // EXTRA CREDIT: Filter products that are linked to one of OUR publishable key's sales channels
         let compatibleProducts = [];
@@ -78,14 +87,17 @@ export class ProductFactory {
           }
         }
 
-        const nuzzle = validProducts.find(p => 
+        const nuzzle = purchasableProducts.find(p => 
           p.handle === 'the-nuzzle' || p.title?.includes('Nuzzle')
         );
-        const product = nuzzle || validProducts[0] || adminProducts.products[0];
+        const fallbackNuzzle = validProducts.find(p => 
+          p.handle === 'the-nuzzle' || p.title?.includes('Nuzzle')
+        );
+        const product = nuzzle || purchasableProducts[0] || fallbackNuzzle || validProducts[0] || adminProducts.products[0];
         
         console.log(`Using admin product: ${product.title} (${product.id})`);
         
-        const variant = product.variants?.find((v: any) => v.inventory_quantity !== 0) || product.variants?.[0];
+        const variant = product.variants?.find(isPurchasableVariant) || product.variants?.[0];
         
         // Pick a sales channel that is both on the product AND linked to the PK
         let scId = product.sales_channels?.[0]?.id;
@@ -153,14 +165,18 @@ export class ProductFactory {
         console.log(`Available store products handles: ${storeProducts.products.map(p => p.handle).join(', ')}`);
 
         // Prefer "The Nuzzle" product
-        const nuzzle = storeProducts.products.find(p => 
+        const storePurchasable = storeProducts.products.filter(p => p.variants?.some(isPurchasableVariant));
+        const nuzzle = storePurchasable.find(p => 
           p.handle === 'the-nuzzle' || p.title?.includes('Nuzzle')
         );
-        const product = nuzzle || storeProducts.products[0];
+        const fallbackNuzzle = storeProducts.products.find(p => 
+          p.handle === 'the-nuzzle' || p.title?.includes('Nuzzle')
+        );
+        const product = nuzzle || storePurchasable[0] || fallbackNuzzle || storeProducts.products[0];
         
         console.log(`Using store product: ${product.title} (${product.id}, handle: ${product.handle})`);
         
-        const variant = product.variants?.find((v: any) => v.inventory_quantity !== 0) || product.variants?.[0];
+        const variant = product.variants?.find(isPurchasableVariant) || product.variants?.[0];
         
         return {
           id: product.id,

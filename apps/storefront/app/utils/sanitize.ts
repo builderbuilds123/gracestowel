@@ -32,6 +32,9 @@ export function sanitizeAddress<T extends Record<string, unknown>>(address: T): 
   const sanitized: Record<string, unknown> = {};
   
   for (const [key, value] of Object.entries(address)) {
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+      continue;
+    }
     if (typeof value === 'string') {
       sanitized[key] = sanitize(value);
     } else if (value !== null && typeof value === 'object') {

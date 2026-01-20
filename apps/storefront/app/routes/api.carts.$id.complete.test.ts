@@ -57,6 +57,7 @@ describe("API POST /api/carts/:id/complete", () => {
     });
 
     const response = await action({ request, params: { id: "cart_123" }, context } as any);
+    // data() returns DataWithResponseInit when called directly, not a Response object
     const data = (response as any).data;
     expect(data.error).toBe("Method not allowed");
   });
