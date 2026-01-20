@@ -1,4 +1,7 @@
 import { z } from 'zod';
+import { createLogger } from './logger';
+
+const logger = createLogger({ context: 'env-validation' });
 
 /**
  * Zod schema for Cloudflare Workers environment variables.
@@ -6,24 +9,16 @@ import { z } from 'zod';
  */
 export const storefrontEnvSchema = z.object({
   // === Required: Core Medusa Configuration ===
-  MEDUSA_BACKEND_URL: z
-    .string({ required_error: 'MEDUSA_BACKEND_URL is required' })
-    .url('MEDUSA_BACKEND_URL must be a valid URL'),
-  MEDUSA_PUBLISHABLE_KEY: z
-    .string({ required_error: 'MEDUSA_PUBLISHABLE_KEY is required' })
-    .min(1, 'MEDUSA_PUBLISHABLE_KEY cannot be empty'),
+  MEDUSA_BACKEND_URL: z.string().url('MEDUSA_BACKEND_URL must be a valid URL'),
+  MEDUSA_PUBLISHABLE_KEY: z.string().min(1, 'MEDUSA_PUBLISHABLE_KEY cannot be empty'),
 
   // === Required: Stripe Configuration ===
-  STRIPE_SECRET_KEY: z
-    .string({ required_error: 'STRIPE_SECRET_KEY is required' })
-    .refine((val) => val.startsWith('sk_'), {
-      message: 'STRIPE_SECRET_KEY must start with "sk_"',
-    }),
-  STRIPE_PUBLISHABLE_KEY: z
-    .string({ required_error: 'STRIPE_PUBLISHABLE_KEY is required' })
-    .refine((val) => val.startsWith('pk_'), {
-      message: 'STRIPE_PUBLISHABLE_KEY must start with "pk_"',
-    }),
+  STRIPE_SECRET_KEY: z.string().refine((val) => val.startsWith('sk_'), {
+    message: 'STRIPE_SECRET_KEY must start with "sk_"',
+  }),
+  STRIPE_PUBLISHABLE_KEY: z.string().refine((val) => val.startsWith('pk_'), {
+    message: 'STRIPE_PUBLISHABLE_KEY must start with "pk_"',
+  }),
 
   // === Optional: Database (Hyperdrive) ===
   DATABASE_URL: z.string().optional(),
@@ -52,7 +47,7 @@ export function validateStorefrontEnv(env: Record<string, unknown>): StorefrontE
 
   if (!result.success) {
     const formatted = result.error.format();
-    console.error('[ENV] Storefront environment validation failed:', JSON.stringify(formatted, null, 2));
+    logger.error('[ENV] Storefront environment validation failed', undefined, { errors: formatted });
 
     // Extract the first error message for a cleaner throw
     const firstIssue = result.error.issues[0];
@@ -75,11 +70,11 @@ export function validateStorefrontEnvWithWarnings(env: Record<string, unknown>):
 
   // Warn about missing optional but recommended variables
   if (!validated.DATABASE_URL) {
-    console.warn('[ENV] Warning: DATABASE_URL not set. Direct database reads will not work.');
+    logger.warn('[ENV] DATABASE_URL not set. Direct database reads will not work.');
   }
 
   if (!validated.VITE_POSTHOG_API_KEY) {
-    console.warn('[ENV] Warning: VITE_POSTHOG_API_KEY not set. Analytics will be disabled.');
+    logger.warn('[ENV] VITE_POSTHOG_API_KEY not set. Analytics will be disabled.');
   }
 
   return validated;

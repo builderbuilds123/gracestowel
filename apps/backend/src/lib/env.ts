@@ -6,55 +6,35 @@ import { z } from 'zod';
  */
 export const backendEnvSchema = z.object({
   // === Required: Core Infrastructure ===
-  DATABASE_URL: z
-    .string({ required_error: 'DATABASE_URL is required' })
-    .min(1, 'DATABASE_URL cannot be empty'),
-  REDIS_URL: z
-    .string({ required_error: 'REDIS_URL is required' })
-    .min(1, 'REDIS_URL cannot be empty'),
+  DATABASE_URL: z.string().min(1, 'DATABASE_URL cannot be empty'),
+  REDIS_URL: z.string().min(1, 'REDIS_URL cannot be empty'),
 
   // === Required: Authentication Secrets ===
-  JWT_SECRET: z
-    .string({ required_error: 'JWT_SECRET is required' })
-    .min(32, 'JWT_SECRET must be at least 32 characters for security'),
-  COOKIE_SECRET: z
-    .string({ required_error: 'COOKIE_SECRET is required' })
-    .min(1, 'COOKIE_SECRET cannot be empty'),
+  JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters for security'),
+  COOKIE_SECRET: z.string().min(1, 'COOKIE_SECRET cannot be empty'),
 
   // === Required: Stripe Configuration ===
-  STRIPE_SECRET_KEY: z
-    .string({ required_error: 'STRIPE_SECRET_KEY is required' })
-    .refine((val) => val.startsWith('sk_'), {
-      message: 'STRIPE_SECRET_KEY must start with "sk_"',
-    }),
-  STRIPE_PUBLISHABLE_KEY: z
-    .string({ required_error: 'STRIPE_PUBLISHABLE_KEY is required' })
-    .refine((val) => val.startsWith('pk_'), {
-      message: 'STRIPE_PUBLISHABLE_KEY must start with "pk_"',
-    }),
-  STRIPE_WEBHOOK_SECRET: z
-    .string({ required_error: 'STRIPE_WEBHOOK_SECRET is required' })
-    .refine((val) => val.startsWith('whsec_'), {
-      message: 'STRIPE_WEBHOOK_SECRET must start with "whsec_"',
-    }),
+  STRIPE_SECRET_KEY: z.string().refine((val) => val.startsWith('sk_'), {
+    message: 'STRIPE_SECRET_KEY must start with "sk_"',
+  }),
+  STRIPE_PUBLISHABLE_KEY: z.string().refine((val) => val.startsWith('pk_'), {
+    message: 'STRIPE_PUBLISHABLE_KEY must start with "pk_"',
+  }),
+  STRIPE_WEBHOOK_SECRET: z.string().refine((val) => val.startsWith('whsec_'), {
+    message: 'STRIPE_WEBHOOK_SECRET must start with "whsec_"',
+  }),
 
   // === Required: CORS Configuration ===
-  STORE_CORS: z
-    .string({ required_error: 'STORE_CORS is required' })
-    .min(1, 'STORE_CORS cannot be empty'),
-  ADMIN_CORS: z
-    .string({ required_error: 'ADMIN_CORS is required' })
-    .min(1, 'ADMIN_CORS cannot be empty'),
-  AUTH_CORS: z
-    .string({ required_error: 'AUTH_CORS is required' })
-    .min(1, 'AUTH_CORS cannot be empty'),
+  STORE_CORS: z.string().min(1, 'STORE_CORS cannot be empty'),
+  ADMIN_CORS: z.string().min(1, 'ADMIN_CORS cannot be empty'),
+  AUTH_CORS: z.string().min(1, 'AUTH_CORS cannot be empty'),
 
-  // === Optional: Storefront URL ===
-  STOREFRONT_URL: z.string().url().optional(),
+  // === Required: Storefront URL ===
+  STOREFRONT_URL: z.string().url('STOREFRONT_URL must be a valid URL'),
 
-  // === Optional: Email (Resend) ===
-  RESEND_API_KEY: z.string().optional(),
-  RESEND_FROM_EMAIL: z.string().email().optional(),
+  // === Required: Email (Resend) ===
+  RESEND_API_KEY: z.string().min(1, 'RESEND_API_KEY cannot be empty'),
+  RESEND_FROM_EMAIL: z.string().email('RESEND_FROM_EMAIL must be a valid email'),
 
   // === Optional: S3/R2 Storage ===
   S3_ENDPOINT: z.string().url().optional(),
@@ -90,6 +70,8 @@ let cachedEnv: BackendEnv | null = null;
 
 /**
  * Validates the backend environment.
+ * Note: Uses console for early-stage logging before Medusa container is available.
+ * The loader uses the proper Medusa logger.
  * @returns Validated and typed environment object
  * @throws Error if required variables are missing or invalid
  */
@@ -97,10 +79,6 @@ export function validateBackendEnv(): BackendEnv {
   const result = backendEnvSchema.safeParse(process.env);
 
   if (!result.success) {
-    const formatted = result.error.format();
-    console.error('[ENV] Backend environment validation failed:');
-    console.error(JSON.stringify(formatted, null, 2));
-
     // Extract the first error message for a cleaner throw
     const firstIssue = result.error.issues[0];
     const errorMessage = firstIssue
@@ -125,24 +103,21 @@ export function getEnv(): BackendEnv {
 }
 
 /**
- * Validates environment with warnings for optional but recommended vars.
- * Use this at startup to catch missing optional configs.
+ * Validates environment and returns issues for logging.
+ * Use this with the Medusa logger in loaders.
  */
-export function validateBackendEnvWithWarnings(): BackendEnv {
-  const validated = validateBackendEnv();
+export function validateBackendEnvWithIssues(): { env: BackendEnv | null; issues: z.ZodIssue[]; warnings: string[] } {
+  const result = backendEnvSchema.safeParse(process.env);
+  const warnings: string[] = [];
 
-  // Warn about missing optional but recommended variables
-  if (!validated.STOREFRONT_URL) {
-    console.warn('[ENV] Warning: STOREFRONT_URL not set. Email links may not work correctly.');
+  if (!result.success) {
+    return { env: null, issues: result.error.issues, warnings };
   }
 
-  if (!validated.RESEND_API_KEY) {
-    console.warn('[ENV] Warning: RESEND_API_KEY not set. Email notifications will be disabled.');
+  // Collect warnings for optional but recommended variables
+  if (!result.data.S3_ENDPOINT) {
+    warnings.push('S3_ENDPOINT not set. File uploads will not work.');
   }
 
-  if (!validated.S3_ENDPOINT) {
-    console.warn('[ENV] Warning: S3_ENDPOINT not set. File uploads will not work.');
-  }
-
-  return validated;
+  return { env: result.data, issues: [], warnings };
 }
