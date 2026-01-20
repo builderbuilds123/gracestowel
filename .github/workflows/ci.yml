@@ -281,21 +281,7 @@ jobs:
           echo "Waiting for storefront..."
           timeout 120 bash -c 'until docker compose -f docker-compose.test.yml exec -T storefront curl -sf http://localhost:5173/ -o /dev/null; do sleep 5; done'
           echo "Storefront is ready"
-
-      - name: Debug - Check container status
-        if: always()
-        run: |
-          docker compose -f docker-compose.test.yml ps -a
-          echo "--- Testing storefront from inside container ---"
-          docker compose -f docker-compose.test.yml exec -T storefront curl -sf http://localhost:5173/ -o /dev/null && echo "Storefront responding" || echo "Storefront not responding"
-
-      - name: Show backend container logs
-        if: always()
-        run: docker compose -f docker-compose.test.yml logs backend
-
-      - name: Show storefront container logs
-        if: always()
-        run: docker compose -f docker-compose.test.yml logs storefront
+          sleep 10
 
       - name: Generate Admin Token
         id: generate-token
@@ -310,7 +296,7 @@ jobs:
           MEDUSA_PUBLISHABLE_KEY: ${{ steps.get-api-key.outputs.MEDUSA_PUBLISHABLE_KEY }}
           ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
           JWT_SECRET: "test-secret-must-be-at-least-32-characters-long-for-security"
-        run: docker compose -f docker-compose.test.yml run --rm -e MEDUSA_PUBLISHABLE_KEY -e ADMIN_TOKEN -e JWT_SECRET -e API_URL=http://backend:8080 playwright sh -c "corepack enable && corepack prepare pnpm@9.15.2 --activate && pnpm install && pnpm exec playwright test --project=chromium"
+        run: docker compose -f docker-compose.test.yml run --rm -e MEDUSA_PUBLISHABLE_KEY -e ADMIN_TOKEN -e JWT_SECRET -e API_URL=http://backend:8080 -e STOREFRONT_URL=http://storefront:5173 playwright sh -c "corepack enable && corepack prepare pnpm@9.15.2 --activate && pnpm install && pnpm exec playwright test --project=chromium"
 
       - name: Upload Playwright report
         uses: actions/upload-artifact@v6
@@ -319,6 +305,21 @@ jobs:
           name: playwright-report
           path: apps/e2e/playwright-report/
           retention-days: 7
+
+      - name: Debug - Check container status (on failure)
+        if: failure()
+        run: |
+          docker compose -f docker-compose.test.yml ps -a
+          echo "--- Testing storefront from inside container ---"
+          docker compose -f docker-compose.test.yml exec -T storefront curl -sf http://localhost:5173/ -o /dev/null && echo "Storefront responding" || echo "Storefront not responding"
+
+      - name: Show backend container logs (on failure)
+        if: failure()
+        run: docker compose -f docker-compose.test.yml logs backend
+
+      - name: Show storefront container logs (on failure)
+        if: failure()
+        run: docker compose -f docker-compose.test.yml logs storefront
 
       - name: Stop test environment
         if: always()

@@ -40,13 +40,13 @@ export class ProductFactory {
           linkedSalesChannelIds = currentPk.sales_channels.map((sc: any) => sc.id);
           console.log(`Current publishable key is linked to sales channels: ${linkedSalesChannelIds.join(', ')}`);
         } else if (currentPk) {
-          // In some V2 versions, we might need a separate call to /admin/api-keys/:id/sales-channels
-          const scLinks = await apiRequest<{ sales_channels: any[] }>({
+          // In Medusa V2, we expansion via fields to get sales channels for an API key
+          const { api_key } = await apiRequest<{ api_key: any }>({
             request: this.request,
             method: 'GET',
-            url: `/admin/api-keys/${currentPk.id}/sales-channels`,
+            url: `/admin/api-keys/${currentPk.id}?fields=+sales_channels`,
           });
-          linkedSalesChannelIds = scLinks.sales_channels.map((sc: any) => sc.id);
+          linkedSalesChannelIds = api_key.sales_channels?.map((sc: any) => sc.id) || [];
           console.log(`Fetched linked sales channels: ${linkedSalesChannelIds.join(', ')}`);
         }
       } catch (error) {

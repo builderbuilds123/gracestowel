@@ -46,7 +46,7 @@ export default defineConfig({
   /* Optimized workers: More workers locally for faster execution, more in CI */
   /* Use 50% of CPU cores locally (min 2, max 4), full capacity in CI */
   workers: process.env.CI 
-    ? 4 
+    ? 2 
     : Math.max(2, Math.min(4, Math.floor(require('os').cpus().length * 0.5))),
   /* Reporter to use */
   reporter: [
