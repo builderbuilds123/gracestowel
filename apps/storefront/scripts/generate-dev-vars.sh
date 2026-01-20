@@ -5,7 +5,8 @@
 mkdir -p /app/dist/server
 
 # Generate .dev.vars file with all required environment variables
-cat > .dev.vars << EOF
+# Wrangler looks for .dev.vars in the config file's directory (dist/server/)
+cat > /app/dist/server/.dev.vars << EOF
 ENVIRONMENT=${ENVIRONMENT:-development}
 CI=${CI:-true}
 MEDUSA_BACKEND_URL=${MEDUSA_BACKEND_URL:-http://backend:8080}
