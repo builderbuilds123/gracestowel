@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { renderHook, act } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { useShippingRates } from './useShippingRates';
 import { monitoredFetch } from '../utils/monitored-fetch';
+import type { CartItem } from '../types/product';
 
 // Mock monitoredFetch
 vi.mock('../utils/monitored-fetch', () => ({
@@ -49,7 +50,7 @@ describe('useShippingRates', () => {
     // Mock responses for monitoredFetch
     // 1. Update Cart (POST /api/carts/cart_123)
     // 2. Shipping Options (GET /api/carts/cart_123/shipping-options)
-    (monitoredFetch as any)
+    (monitoredFetch as unknown as Mock)
       .mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve({ cart: { id: 'cart_123' } })
@@ -63,7 +64,7 @@ describe('useShippingRates', () => {
 
     await act(async () => {
       await result.current.fetchShippingRates(
-        [{ id: 'item_1', price: 1000, quantity: 1 } as any],
+        [{ id: 'item_1', price: 1000, quantity: 1 } as unknown as CartItem],
         {
           firstName: 'John',
           lastName: 'Doe',

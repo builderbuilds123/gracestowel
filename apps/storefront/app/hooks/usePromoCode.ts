@@ -240,7 +240,7 @@ export function usePromoCode({
 
       dispatch({ 
         type: 'SET_DISCOUNT_STATE', 
-        payload: getDiscountState(cart as any, logger) 
+        payload: getDiscountState(cart as unknown as CartWithPromotions, logger) 
       });
     } catch (err) {
       logger.warn('Failed to refresh discount', { error: err });
@@ -298,7 +298,7 @@ export function usePromoCode({
           promo_codes: allManualCodes,
         });
 
-        const rebuiltCodes = extractAppliedCodesFromCart(cart as any, logger);
+        const rebuiltCodes = extractAppliedCodesFromCart(cart as unknown as CartWithPromotions, logger);
         const wasApplied = rebuiltCodes.some(c => c.code.toUpperCase() === normalizedCode);
         
         if (!wasApplied) {
@@ -315,7 +315,7 @@ export function usePromoCode({
 
         dispatch({ 
           type: 'SET_DISCOUNT_STATE', 
-          payload: getDiscountState(cart as any, logger) 
+          payload: getDiscountState(cart as unknown as CartWithPromotions, logger) 
         });
         dispatch({ type: 'SET_SUCCESS', payload: `Promo code "${normalizedCode}" applied!` });
         onCartUpdate?.();
@@ -352,7 +352,7 @@ export function usePromoCode({
 
         dispatch({ 
           type: 'SET_DISCOUNT_STATE', 
-          payload: getDiscountState(cart as any, logger) 
+          payload: getDiscountState(cart as unknown as CartWithPromotions, logger) 
         });
         dispatch({ type: 'SET_SUCCESS', payload: "Promo code removed" });
         onCartUpdate?.();

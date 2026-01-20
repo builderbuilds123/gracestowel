@@ -10,7 +10,7 @@ import { useShippingPersistence } from '../../hooks/useShippingPersistence';
 import { usePaymentCollection } from '../../hooks/usePaymentCollection';
 import { usePaymentSession } from '../../hooks/usePaymentSession';
 import { usePromoCode } from '../../hooks/usePromoCode';
-import { useAutomaticPromotions } from '../../hooks/useAutomaticPromotions';
+import { useAutomaticPromotions, type AutomaticPromotionInfo } from '../../hooks/useAutomaticPromotions';
 import { generateTraceId, createLogger } from '../../lib/logger';
 import { parsePrice } from '../../lib/price';
 import { CHECKOUT_CONSTANTS } from '../../constants/checkout';
@@ -53,15 +53,15 @@ interface CheckoutContextType {
   
   // Payment
   paymentCollectionId: string | null;
-  initialPaymentSession: any;
+  initialPaymentSession: Record<string, unknown> | null;
   clientSecret: string | null;
   
   // Promo
-  appliedPromoCodes: any[];
+  appliedPromoCodes: AppliedPromoCode[];
   isPromoLoading: boolean;
   promoError: string | null;
   promoSuccessMessage: string | null;
-  automaticPromotions: any[];
+  automaticPromotions: AutomaticPromotionInfo[];
   
   // Methods
   fetchShippingRates: ReturnType<typeof useShippingRates>['fetchShippingRates'];
@@ -76,7 +76,7 @@ interface CheckoutContextType {
   setError: (type: CheckoutErrorType, error: { message: string }) => void;
   
   // Refs/Logger
-  logger: any;
+  logger: ReturnType<typeof createLogger>;
   sessionTraceId: string;
 }
 

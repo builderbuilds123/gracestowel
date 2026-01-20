@@ -296,8 +296,9 @@ export default async function orderPlacedHandler({
       description: `Order ${data.id} has been placed`,
       metadata: { order_id: data.id },
     })
-  } catch (error: any) {
-    logger.error(`[ADMIN_NOTIF][ERROR] Failed to send admin notification for order ${data.id}: ${error.message}`)
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error)
+    logger.error(`[ADMIN_NOTIF][ERROR] Failed to send admin notification for order ${data.id}: ${message}`)
   }
 
   // Schedule payment capture after modification window

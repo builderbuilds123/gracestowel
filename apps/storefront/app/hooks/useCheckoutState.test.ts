@@ -2,6 +2,7 @@
 import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
 import { useCheckoutState } from './useCheckoutState';
+import type { ShippingOption } from '../components/CheckoutForm';
 
 describe('useCheckoutState', () => {
   it('should initialize with default state', () => {
@@ -62,9 +63,9 @@ describe('useCheckoutState', () => {
 
   it('should set and select shipping options', () => {
     const { result } = renderHook(() => useCheckoutState());
-    const options = [
-      { id: 'opt_1', name: 'Standard', amount: 1000 } as any,
-      { id: 'opt_2', name: 'Express', amount: 2000 } as any
+    const options: ShippingOption[] = [
+      { id: 'opt_1', displayName: 'Standard', amount: 1000 },
+      { id: 'opt_2', displayName: 'Express', amount: 2000 }
     ];
 
     act(() => {
