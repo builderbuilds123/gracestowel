@@ -17,7 +17,7 @@ import { MedusaContainer } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import { getPaymentCaptureQueue, getJobState } from "../lib/payment-capture-queue";
 import { getStripeClient } from "../utils/stripe";
-import { getPostHog } from "../utils/posthog";
+import { trackEvent } from "../utils/analytics";
 import { getPendingRecoveryOrders, PgConnection } from "../repositories/order-recovery";
 
 // 65 minutes = normal 60 min window + 5 min buffer
@@ -53,7 +53,6 @@ export default async function fallbackCaptureJob(container: MedusaContainer) {
     const pgConnection = container.resolve(ContainerRegistrationKeys.PG_CONNECTION) as unknown as PgConnection;
     const orderService = container.resolve("order");
     const stripe = getStripeClient();
-    const posthog = getPostHog();
     
     // Calculate threshold time (65 minutes ago)
     const thresholdTime = new Date(Date.now() - STALE_ORDER_THRESHOLD_MS);
@@ -172,19 +171,20 @@ export default async function fallbackCaptureJob(container: MedusaContainer) {
                     await clearRecoveryFlag(orderService, orderId, order.metadata);
                     recoveryCount++;
                     
-                    // Track PostHog event for recovery (Story 6.2 AC requirement)
-                    if (posthog) {
-                        posthog.capture({
-                            distinctId: `system`,
-                            event: "redis_recovery_triggered",
-                            properties: {
-                                order_id: orderId,
-                                recovery_reason: order.metadata?.recovery_reason || "unknown",
-                            },
-                        });
-                    }
+                    await trackEvent(container, "recovery.redis_triggered", {
+                        properties: {
+                            order_id: orderId,
+                            recovery_reason: order.metadata?.recovery_reason || "unknown",
+                        },
+                    });
                     logger.info(`[METRIC] redis_recovery_triggered order=${orderId}`);
                 } else {
+                    await trackEvent(container, "capture.fallback.triggered", {
+                        properties: {
+                            order_id: orderId,
+                            source: "fallback",
+                        },
+                    });
                     logger.info(`[METRIC] fallback_capture_triggered order=${orderId}`);
                 }
                 
@@ -223,4 +223,3 @@ export const config = {
     name: "fallback-capture",
     schedule: "0 * * * *", // Every hour at :00
 };
-

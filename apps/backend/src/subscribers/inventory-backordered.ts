@@ -1,5 +1,6 @@
 import type { SubscriberConfig, SubscriberArgs } from "@medusajs/framework"
 import { sendAdminNotification, AdminNotificationType } from "../lib/admin-notifications"
+import { trackEvent } from "../utils/analytics"
 
 /**
  * Event payload for inventory.backordered events
@@ -57,6 +58,18 @@ export default async function inventoryBackorderedSubscriber({
     }
 
     logger.info(`[Subscriber] Handling inventory.backordered for order ${data.order_id} (${data.items.length} items)`)
+    await trackEvent(container, "inventory.backordered", {
+        properties: {
+            order_id: data.order_id,
+            item_count: data.items.length,
+            items: validItems.map((item) => ({
+                inventory_item_id: item.inventory_item_id,
+                location_id: item.location_id,
+                new_stock: item.new_stock,
+                delta: item.delta,
+            })),
+        },
+    })
 
     try {
         for (const item of data.items) {

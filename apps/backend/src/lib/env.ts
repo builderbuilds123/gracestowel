@@ -32,9 +32,9 @@ export const backendEnvSchema = z.object({
   // === Required: Storefront URL ===
   STOREFRONT_URL: z.string().url('STOREFRONT_URL must be a valid URL'),
 
-  // === Required: Email (Resend) ===
-  RESEND_API_KEY: z.string().min(1, 'RESEND_API_KEY cannot be empty'),
-  RESEND_FROM_EMAIL: z.string().email('RESEND_FROM_EMAIL must be a valid email'),
+  // === Optional: Email (Resend) ===
+  RESEND_API_KEY: z.string().optional(),
+  RESEND_FROM_EMAIL: z.string().email('RESEND_FROM_EMAIL must be a valid email').optional(),
 
   // === Optional: S3/R2 Storage ===
   S3_ENDPOINT: z.string().url().optional(),
@@ -58,7 +58,6 @@ export const backendEnvSchema = z.object({
   // === Optional: Analytics ===
   POSTHOG_EVENTS_API_KEY: z.string().optional(),
   POSTHOG_HOST: z.string().optional(),
-  POSTHOG_LOG_INFO: z.string().optional(),
   LOG_LEVEL: z.string().optional(),
 
   // === Optional: Medusa Feature Flags ===

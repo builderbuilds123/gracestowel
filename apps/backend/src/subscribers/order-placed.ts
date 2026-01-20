@@ -5,7 +5,7 @@ import type {
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
 // import { sendOrderConfirmationWorkflow } from "../workflows/send-order-confirmation" // DEPRECATED - Replaced by BullMQ
 import { schedulePaymentCapture, formatModificationWindow } from "../lib/payment-capture-queue"
-import { getPostHog } from "../utils/posthog"
+import { trackEvent } from "../utils/analytics"
 import { enqueueEmail } from "../lib/email-queue"
 import { Templates } from "../modules/resend/service"
 import type { ModificationTokenService } from "../services/modification-token"
@@ -382,30 +382,25 @@ export default async function orderPlacedHandler({
         logger.error(`[CRITICAL] No payment intent ID found for order ${data.id} - Automatic capture will NOT happen.`)
       }
 
-      // Track order_placed event in PostHog
+      // Track order.placed event in analytics
       try {
-        const posthog = getPostHog()
-        if (posthog) {
-          posthog.capture({
-            distinctId: order.customer_id || `guest_${order.id}`,
-            event: 'order_placed',
-            properties: {
-              order_id: order.id,
-              total: order.total,
-              currency: order.currency_code,
-              item_count: order.items?.length || 0,
-              items: order.items?.map((item: any) => ({
-                product_id: item.product_id,
-                title: item.title,
-                quantity: item.quantity,
-                unit_price: item.unit_price,
-              })) || [],
-            },
-          })
-          logger.info(`[PostHog] order_placed event tracked for order ${data.id}`)
-        }
+        await trackEvent(container, "order.placed", {
+          actorId: order.customer_id || undefined,
+          properties: {
+            order_id: order.id,
+            total: order.total,
+            currency: order.currency_code,
+            item_count: order.items?.length || 0,
+            items: order.items?.map((item: any) => ({
+              product_id: item.product_id,
+              quantity: item.quantity,
+              unit_price: item.unit_price,
+            })) || [],
+          },
+        })
+        logger.info(`[Analytics] order.placed event tracked for order ${data.id}`)
       } catch (error) {
-        logger.error(`[PostHog] Failed to track order_placed event for order ${data.id}`, error)
+        logger.error(`[Analytics] Failed to track order.placed event for order ${data.id}`, error)
       }
     }
   } catch (error) {

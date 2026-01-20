@@ -51,10 +51,11 @@ class ResendNotificationProviderService extends AbstractNotificationProviderServ
       this.logger.info("Resend: Running in test mode (explicitly configured)")
       this.resend = null
       this.from = "test@example.com"
+    } else if (!options.api_key) {
+      this.logger.warn("Resend: No API key provided, provider will be disabled")
+      this.resend = null
+      this.from = options.from || "onboarding@resend.dev"
     } else {
-      if (!options.api_key) {
-        throw new Error("Resend API key is required in non-test mode") 
-      }
       this.resend = new Resend(options.api_key)
       this.from = options.from || "onboarding@resend.dev"
     }

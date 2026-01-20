@@ -74,7 +74,8 @@ Bring the backend email system into alignment with Medusa Resend integration gui
 ## Dev Agent Record
 
 ### Debug Log
-- 2026-01-20: Finalized remediation after adversarial review. 
+
+- 2026-01-20: Finalized remediation after adversarial review.
 - 2026-01-20: Refactored 3 subscribers to use direct queueing, removing workflow dependency.
 - 2026-01-20: Improved Resend error mapping to enable status-based retry short-circuiting.
 - 2026-01-20: Fixed logging across all email paths (worker + subscribers).
@@ -83,12 +84,14 @@ Bring the backend email system into alignment with Medusa Resend integration gui
 All issues identified in the adversarial review have been addressed. The backend email system now uses a unified, non-blocking path via BullMQ for all transactional templates. Error handling is robust, distinguishing between transient and permanent failures. PII is protected in logs, and Redis hygiene is maintained with job TTLs.
 
 ### Change Log
+
 - Modified `ResendNotificationProviderService` to propagate error status codes.
 - Refactored `customer-created.ts`, `fulfillment-created.ts`, `order-canceled.ts` to enqueue emails directly.
 - Cleaned up `email-worker.ts` and `email-queue.ts` (logging, job cleanup).
 - Deleted legacy workflows: `send-welcome-email`, `send-shipping-confirmation`, `send-order-canceled`.
 
 ## Acceptance Criteria
+
 - [x] No raw PII in logs.
 - [x] All email types are queued, retried, and routed to DLQ on repeated failure.
 - [x] Provider config matches Medusa Resend guide requirements.

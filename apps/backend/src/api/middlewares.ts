@@ -5,7 +5,7 @@ import {
     type MedusaResponse,
 } from "@medusajs/framework/http";
 import { MedusaError } from "@medusajs/framework/utils";
-import { captureBackendError } from "../utils/posthog";
+import { trackEvent } from "../utils/analytics";
 import { logger } from "../utils/logger";
 import { registerProjectSubscribers } from "../utils/register-subscribers";
 
@@ -43,10 +43,10 @@ function moveTokenToHeaderMiddleware(
 /**
  * Global Error Handler Middleware (Story 4.4)
  *
- * Captures unhandled errors to PostHog and logs them.
+ * Captures unhandled errors to analytics and logs them.
  * Delegates to Medusa's default error handling for response.
  */
-function errorHandlerMiddleware(
+export function errorHandlerMiddleware(
     error: MedusaError | Error,
     req: MedusaRequest,
     res: MedusaResponse,
@@ -64,8 +64,17 @@ function errorHandlerMiddleware(
     // Log the error
     logger.error('api', `Unhandled error: ${error.message}`, context, error as Error);
 
-    // Capture to PostHog (async, don't await)
-    captureBackendError(error as Error, context);
+    // Capture to analytics (async, don't await)
+    void trackEvent(req.scope, "backend.error", {
+        actorId: user?.id || customer?.id,
+        properties: {
+            component: context.component,
+            path: context.path,
+            method: context.method,
+            error_name: error.name,
+            error_message: error.message,
+        },
+    });
 
     // Return JSON error response for debugging
     const status = (error as any).status || (error as any).statusCode || 500;
@@ -127,4 +136,3 @@ export default defineMiddlewares({
     ],
     errorHandler: errorHandlerMiddleware,
 });
-
