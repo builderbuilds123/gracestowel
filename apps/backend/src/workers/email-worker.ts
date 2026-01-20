@@ -221,12 +221,12 @@ export function startEmailWorker(container: MedusaContainer): Worker {
     }
   });
 
-  console.log("[EMAIL] Email worker started");
+  logger.info("[EMAIL] Email worker started");
 
   // Graceful shutdown (register once)
   if (!shutdownHandler) {
       shutdownHandler = async () => {
-          console.log("[EMAIL] Shutting down email worker...");
+          logger.info("[EMAIL] Shutting down email worker...");
           await emailWorker?.close();
           if (dlqRedis) {
               await dlqRedis.quit();
