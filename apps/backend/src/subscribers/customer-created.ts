@@ -35,7 +35,12 @@ export default async function customerCreatedHandler({
     })
 
     const customer = customers[0]
-    if (customer?.email) {
+    if (!customer) {
+      logger.error(`[EMAIL][ERROR] Customer ${data.id} not found for welcome email`)
+      return
+    }
+
+    if (customer.email) {
       await enqueueEmail({
         entityId: customer.id,
         template: Templates.WELCOME,

@@ -70,10 +70,10 @@ type AnalyticsContainer = {
   };
 };
 
-type TrackEventOptions = {
+interface TrackEventOptions {
   actorId?: string;
   properties?: Record<string, unknown>;
-};
+}
 
 export const trackEvent = async (
   container: AnalyticsContainer,

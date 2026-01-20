@@ -61,7 +61,12 @@ export default async function orderCanceledHandler({
     })
 
     const order = orders[0]
-    if (order?.email) {
+    if (!order) {
+      logger.error(`[EMAIL][ERROR] Order ${data.id} not found for cancellation email`)
+      return
+    }
+
+    if (order.email) {
       await enqueueEmail({
         entityId: order.id,
         template: Templates.ORDER_CANCELED,

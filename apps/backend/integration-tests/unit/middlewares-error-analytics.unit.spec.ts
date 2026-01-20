@@ -9,6 +9,7 @@ import { errorHandlerMiddleware } from "../../src/api/middlewares";
 
 describe("errorHandlerMiddleware analytics", () => {
   it("tracks backend.error with request context", () => {
+    // We use 'as any' for mocks in unit tests to avoid complex interface implementation
     const req = {
       path: "/store/orders",
       method: "POST",

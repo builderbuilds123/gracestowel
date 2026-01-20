@@ -41,7 +41,12 @@ export default async function fulfillmentCreatedHandler({
     })
 
     const fulfillment = fulfillments[0]
-    if (fulfillment?.order?.email) {
+    if (!fulfillment) {
+      logger.error(`[EMAIL][ERROR] Fulfillment ${data.id} not found for shipping confirmation`)
+      return
+    }
+
+    if (fulfillment.order?.email) {
       await enqueueEmail({
         entityId: fulfillment.id,
         template: Templates.SHIPPING_CONFIRMATION,
