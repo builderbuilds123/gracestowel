@@ -1,5 +1,6 @@
 # Build artifacts
 apps/backend/.medusa/**
 
-
-
+# Ignore mock Stripe secret key in CI workflow
+# Pattern: sk_test_placeholder_for_ci_testing
+.github/workflows/ci.yml:secret:sk_test_placeholder_for_ci_testing
