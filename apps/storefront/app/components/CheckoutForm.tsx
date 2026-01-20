@@ -13,6 +13,7 @@ import type {
     StripeAddressElementChangeEvent,
     StripeLinkAuthenticationElementChangeEvent,
 } from '@stripe/stripe-js';
+import { useCheckout } from './checkout/CheckoutProvider';
 import type { CartItem } from '../context/CartContext';
 import { createLogger } from '../lib/logger';
 import { monitoredFetch } from '../utils/monitored-fetch';
@@ -44,43 +45,35 @@ export interface CustomerData {
 }
 
 export interface CheckoutFormProps {
-    items: CartItem[];
-    cartTotal: number;
     onAddressChange?: (event: StripeAddressElementChangeEvent) => void;
     onEmailChange?: (email: string) => void;
-    shippingOptions: ShippingOption[];
-    selectedShipping: ShippingOption | null;
-    setSelectedShipping: (option: ShippingOption) => void;
     customerData?: CustomerData;
-    isCalculatingShipping?: boolean;
-    isShippingPersisted?: boolean; 
-    persistShippingOption: (option: ShippingOption) => Promise<void>;
-    paymentCollectionId: string | null;
-    guestEmail?: string;
-    cartId: string;
-    // Discount props for success page
-    discountTotal?: number;
-    appliedPromoCodes?: Array<{ code: string; discount: number; isAutomatic?: boolean }>;
 }
 
 export function CheckoutForm({
-    items,
-    cartTotal,
     onAddressChange,
     onEmailChange,
-    shippingOptions,
-    selectedShipping,
-    setSelectedShipping,
     customerData,
-    isCalculatingShipping = false,
-    isShippingPersisted = true,
-    persistShippingOption,
-    paymentCollectionId,
-    guestEmail,
-    cartId,
-    discountTotal = 0,
-    appliedPromoCodes = [],
 }: CheckoutFormProps) {
+    const {
+        items,
+        displayCartTotal: cartTotal,
+        displayDiscountTotal: discountTotal,
+        state: checkoutState,
+        actions: checkoutActions,
+        cartId,
+        paymentCollectionId,
+        isCalculatingShipping,
+        isShippingPersisted,
+        persistShippingOption,
+        appliedPromoCodes
+    } = useCheckout();
+
+    const { 
+        shippingOptions, 
+        selectedShippingOption: selectedShipping, 
+        email: guestEmail 
+    } = checkoutState;
     const stripe = useStripe();
     const elements = useElements();
     const [message, setMessage] = useState<string | null>(null);
@@ -376,11 +369,11 @@ export function CheckoutForm({
                 (opt) => opt.id === event.shippingRate.id
             );
             if (selectedRate) {
-                setSelectedShipping(selectedRate);
+                checkoutActions.selectShippingOption(selectedRate);
             }
             event.resolve();
         },
-        [shippingOptions, setSelectedShipping]
+        [shippingOptions, checkoutActions]
     );
 
     const handleExpressConfirm = async (event: StripeExpressCheckoutElementConfirmEvent) => {
@@ -506,7 +499,7 @@ export function CheckoutForm({
                 shippingOptions={shippingOptions}
                 selectedShipping={selectedShipping}
                 onSelectShipping={(option) => {
-                    setSelectedShipping(option);
+                    checkoutActions.selectShippingOption(option);
                     setValidationErrors(prev => ({ ...prev, shipping: '' }));
                 }}
                 isCalculating={isCalculatingShipping}

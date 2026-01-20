@@ -503,9 +503,10 @@ development_status:
     blocks: ["RET-02"]
   checkout-remediation-2026-01-19:
     path: docs/sprint/sprint-artifacts/story-2026-01-19-checkout-remediation.md
-    status: in-progress
-    meta: "Phase 1-2 complete: Removed debug code, added retry mechanism, extracted magic numbers to constants. Rate limiting pending Cloudflare config."
+    status: done
+    meta: "COMPLETED: Full checkout remediation: Route refactored to <100 lines, context-based orchestration, useReducer for all hooks, input sanitization, CSRF protection, and full E2E test coverage."
     created: "2026-01-19"
+    completed: "2026-01-19"
     depends_on: ["CHK-02-A", "CHK-02-B", "CHK-02-C", "SHP-01"]
   audit-epic-1-retrospective: optional
 

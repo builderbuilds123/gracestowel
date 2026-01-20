@@ -787,11 +787,11 @@ export default function CheckoutSuccess() {
                             </div>
                             {shippingAddress ? (
                                 <div className="text-text-earthy/80">
-                                    <p className="font-medium text-text-earthy">{shippingAddress.name}</p>
-                                    <p>{shippingAddress.address?.line1}</p>
-                                    {shippingAddress.address?.line2 && <p>{shippingAddress.address?.line2}</p>}
-                                    <p>{shippingAddress.address?.city}, {shippingAddress.address?.state} {shippingAddress.address?.postal_code}</p>
-                                    <p>{shippingAddress.address?.country}</p>
+                                    <p className="font-medium text-text-earthy">{sanitize(shippingAddress.name)}</p>
+                                    <p>{sanitize(shippingAddress.address?.line1)}</p>
+                                    {shippingAddress.address?.line2 && <p>{sanitize(shippingAddress.address?.line2)}</p>}
+                                    <p>{sanitize(shippingAddress.address?.city)}, {sanitize(shippingAddress.address?.state)} {sanitize(shippingAddress.address?.postal_code)}</p>
+                                    <p>{sanitize(shippingAddress.address?.country)}</p>
                                 </div>
                             ) : (
                                 <p className="text-text-earthy/60 italic">Loading address details...</p>

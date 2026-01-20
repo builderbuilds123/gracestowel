@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useReducer } from "react";
 
 /**
  * Error types for checkout flow.
@@ -143,12 +143,37 @@ interface UseCheckoutErrorResult {
  * ))}
  * ```
  */
+type CheckoutErrorState = Map<CheckoutErrorType, CheckoutError>;
+
+type CheckoutErrorAction =
+  | { type: 'SET_ERROR'; payload: CheckoutError }
+  | { type: 'CLEAR_ERROR'; payload: CheckoutErrorType }
+  | { type: 'CLEAR_ALL_ERRORS' };
+
+function checkoutErrorReducer(state: CheckoutErrorState, action: CheckoutErrorAction): CheckoutErrorState {
+  const next = new Map(state);
+  switch (action.type) {
+    case 'SET_ERROR':
+      next.set(action.payload.type, action.payload);
+      return next;
+    case 'CLEAR_ERROR':
+      next.delete(action.payload);
+      return next;
+    case 'CLEAR_ALL_ERRORS':
+      return new Map();
+    default:
+      return state;
+  }
+}
+
+/**
+ * Hook to manage checkout errors in a unified way.
+ */
 export function useCheckoutError(): UseCheckoutErrorResult {
-  const [errors, setErrors] = useState<Map<CheckoutErrorType, CheckoutError>>(new Map());
+  const [errors, dispatch] = useReducer(checkoutErrorReducer, new Map());
 
   /**
    * Set an error for a specific type.
-   * Merges with default configuration for the error type.
    */
   const setError = useCallback((
     type: CheckoutErrorType, 
@@ -165,36 +190,28 @@ export function useCheckoutError(): UseCheckoutErrorResult {
       timestamp: Date.now(),
     };
 
-    setErrors(prev => {
-      const next = new Map(prev);
-      next.set(type, error);
-      return next;
-    });
+    dispatch({ type: 'SET_ERROR', payload: error });
   }, []);
 
   /**
    * Clear a specific error type.
    */
   const clearError = useCallback((type: CheckoutErrorType) => {
-    setErrors(prev => {
-      const next = new Map(prev);
-      next.delete(type);
-      return next;
-    });
+    dispatch({ type: 'CLEAR_ERROR', payload: type });
   }, []);
 
   /**
    * Clear all errors.
    */
   const clearAllErrors = useCallback(() => {
-    setErrors(new Map());
+    dispatch({ type: 'CLEAR_ALL_ERRORS' });
   }, []);
 
   /**
    * Check if any blocking (non-recoverable) errors exist.
    */
   const hasBlockingError = useMemo(() => 
-    Array.from(errors.values()).some(e => !e.recoverable && e.severity === 'error'),
+    (Array.from(errors.values()) as CheckoutError[]).some(e => !e.recoverable && e.severity === 'error'),
     [errors]
   );
 
@@ -207,7 +224,7 @@ export function useCheckoutError(): UseCheckoutErrorResult {
    * Get errors as sorted array (most recent first).
    */
   const errorList = useMemo(() => 
-    Array.from(errors.values()).sort((a, b) => b.timestamp - a.timestamp),
+    (Array.from(errors.values()) as CheckoutError[]).sort((a, b) => b.timestamp - a.timestamp),
     [errors]
   );
 
@@ -215,7 +232,7 @@ export function useCheckoutError(): UseCheckoutErrorResult {
    * Get the most recent error.
    */
   const latestError = useMemo(() => 
-    errorList.length > 0 ? errorList[0] : null,
+    errorList.length > 0 ? (errorList[0] as CheckoutError) : null,
     [errorList]
   );
 

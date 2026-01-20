@@ -1,14 +1,44 @@
-import { useState, useRef, useCallback } from "react";
+import { useRef, useCallback, useReducer } from "react";
 import { createLogger } from "../lib/logger";
 import { monitoredFetch } from "../utils/monitored-fetch";
 import type { ShippingOption } from "../components/CheckoutForm";
 
+interface ShippingPersistenceState {
+  error: string | null;
+  isPersisted: boolean;
+}
+
+type ShippingPersistenceAction =
+  | { type: 'START_PERSISTING' }
+  | { type: 'PERSIST_SUCCESS' }
+  | { type: 'PERSIST_FAILURE'; payload: string }
+  | { type: 'RESET_PERSISTENCE' };
+
+const initialPersistenceState: ShippingPersistenceState = {
+  error: null,
+  isPersisted: false,
+};
+
+function shippingPersistenceReducer(
+  state: ShippingPersistenceState, 
+  action: ShippingPersistenceAction
+): ShippingPersistenceState {
+  switch (action.type) {
+    case 'START_PERSISTING':
+      return { ...state, isPersisted: false, error: null };
+    case 'PERSIST_SUCCESS':
+      return { ...state, isPersisted: true, error: null };
+    case 'PERSIST_FAILURE':
+      return { ...state, isPersisted: false, error: action.payload };
+    case 'RESET_PERSISTENCE':
+      return { ...state, isPersisted: false, error: null };
+    default:
+      return state;
+  }
+}
+
 export function useShippingPersistence(cartId?: string, traceId?: string) {
-  // SHP-01: Shipping persistence error state
-  const [shippingPersistError, setShippingPersistError] = useState<string | null>(null);
-  
-  // SHP-01 Review Fix (Issue 3): Track if shipping is successfully persisted to block checkout
-  const [isShippingPersisted, setIsShippingPersisted] = useState(false);
+  const [state, dispatch] = useReducer(shippingPersistenceReducer, initialPersistenceState);
   
   // SHP-01 Review Fix (Issue 6): Use Set to track in-flight requests for better race condition handling
   const inFlightShippingRequests = useRef<Set<string>>(new Set());
@@ -18,18 +48,12 @@ export function useShippingPersistence(cartId?: string, traceId?: string) {
 
   /**
    * SHP-01: Persist shipping selection to Medusa cart
-   * 
-   * This wrapper calls the API to persist the shipping method to the cart
-   * so it's available when the order is created. Updates local state after success.
-   * 
-   * SHP-01 Review Fix (Issue 3): Blocks checkout until shipping is successfully persisted.
-   * SHP-01 Review Fix (Issue 6): Uses Set to track in-flight requests for better race condition handling.
    */
   const persistShippingOption = useCallback(async (option: ShippingOption) => {
     const logger = createLogger({ traceId });
     
     // SHP-01 Review Fix (Issue 3): Reset persistence status when selection changes
-    setIsShippingPersisted(false);
+    dispatch({ type: 'START_PERSISTING' });
 
     // Skip API call if no cartId yet
     if (!cartId) {
@@ -37,15 +61,14 @@ export function useShippingPersistence(cartId?: string, traceId?: string) {
       return;
     }
 
-    // SHP-01 Review Fix (Issue 6): Skip if already persisted successfully (prevent duplicates and race conditions)
+    // SHP-01 Review Fix (Issue 6): Skip if already persisted successfully
     if (lastPersistedShipping.current === option.id) {
       logger.info('[SHP-01] Option already persisted, skipping', { optionId: option.id });
-      setShippingPersistError(null);
-      setIsShippingPersisted(true);
+      dispatch({ type: 'PERSIST_SUCCESS' });
       return;
     }
 
-    // SHP-01 Review Fix (Issue 6): Skip if we're already persisting this option (prevent duplicate calls)
+    // SHP-01 Review Fix (Issue 6): Skip if we're already persisting this option
     if (inFlightShippingRequests.current.has(option.id)) {
       logger.info('[SHP-01] Request already in flight, skipping', { optionId: option.id });
       return;
@@ -77,29 +100,15 @@ export function useShippingPersistence(cartId?: string, traceId?: string) {
         });
 
         // SHP-01 Review Fix: Handle expired cart specially
-        if (error.code === 'CART_EXPIRED') {
-          setShippingPersistError(
-            'Your cart has expired. Please refresh the page to continue.'
-          );
-          // Caller (checkout.tsx) needs to handle cartId invalidation if needed, 
-          // or we can expose a way to signal this. 
-          // For now, we just set the error message.
-        } else {
-          // SHP-01 Review Fix (Issue 3): Set error state - this will block checkout
-          setShippingPersistError(
-            'Shipping selection failed to save. Please try again or refresh the page.'
-          );
-        }
-        // SHP-01 Review Fix (Issue 3): Ensure checkout is blocked on failure
-        setIsShippingPersisted(false);
+        const errorMsg = error.code === 'CART_EXPIRED'
+          ? 'Your cart has expired. Please refresh the page to continue.'
+          : 'Shipping selection failed to save. Please try again or refresh the page.';
+        
+        dispatch({ type: 'PERSIST_FAILURE', payload: errorMsg });
       } else {
-        // Clear error on success
-        setShippingPersistError(null);
-
-        // SHP-01 Review Fix: Track successful persistence
+        // Clear error on success and track successful persistence
         lastPersistedShipping.current = option.id;
-        // SHP-01 Review Fix (Issue 3): Mark as persisted to allow checkout
-        setIsShippingPersisted(true);
+        dispatch({ type: 'PERSIST_SUCCESS' });
 
         logger.info('[SHP-01] Shipping method persisted to cart successfully', { 
           optionId: option.id,
@@ -112,11 +121,10 @@ export function useShippingPersistence(cartId?: string, traceId?: string) {
         optionId: option.id 
       });
 
-      // SHP-01 Review Fix (Issue 3): Set error state - this will block checkout
-      setShippingPersistError(
-        'Network error saving shipping selection. Please try again.'
-      );
-      setIsShippingPersisted(false);
+      dispatch({ 
+        type: 'PERSIST_FAILURE', 
+        payload: 'Network error saving shipping selection. Please try again.' 
+      });
     } finally {
       // SHP-01 Review Fix (Issue 6): Remove from in-flight set
       inFlightShippingRequests.current.delete(option.id);
@@ -124,11 +132,12 @@ export function useShippingPersistence(cartId?: string, traceId?: string) {
   }, [cartId, traceId]);
 
   return {
-    isShippingPersisted,
-    setIsShippingPersisted,
-    shippingPersistError,
-    // We expose setShippingPersistError in case parent needs to clear it
-    setShippingPersistError, 
+    isShippingPersisted: state.isPersisted,
+    setIsShippingPersisted: (isPersisted: boolean) => 
+      dispatch({ type: isPersisted ? 'PERSIST_SUCCESS' : 'RESET_PERSISTENCE' }),
+    shippingPersistError: state.error,
+    setShippingPersistError: (error: string | null) => 
+      dispatch(error ? { type: 'PERSIST_FAILURE', payload: error } : { type: 'RESET_PERSISTENCE' }), 
     persistShippingOption
   };
 }
