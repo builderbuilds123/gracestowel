@@ -10,7 +10,7 @@ type TrackWorkflowEventInput = {
 
 export const trackWorkflowEventStep = createStep(
   "track-workflow-event",
-  async (input: TrackWorkflowEventInput, { container }) => {
+  async (input: TrackWorkflowEventInput, { container }): Promise<StepResponse<void, { failureEvent?: string; actorId?: string; properties?: Record<string, unknown> }>> => {
     await trackEvent(container, input.event, {
       actorId: input.actorId,
       properties: input.properties,
