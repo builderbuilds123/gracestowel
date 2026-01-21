@@ -14,6 +14,23 @@ import { renderWithProviders } from "../../tests/test-utils";
 // Mock props for testing
 import { createMockProduct } from "../../tests/factories/product";
 
+// Mock useRegions to avoid network calls
+vi.mock('../hooks/useRegions', () => ({
+  useRegions: () => ({
+    regions: [{
+      id: "reg_test",
+      name: "Test Region",
+      currency_code: "usd",
+      countries: [{ iso_2: "us", name: "United States" }]
+    }],
+    isLoading: false,
+    error: null,
+    getRegionById: () => ({ id: "reg_test", currency_code: "usd" }),
+    getRegionByCurrency: () => ({ id: "reg_test", currency_code: "usd" }),
+    refreshRegions: vi.fn(),
+  })
+}));
+
 // Adapter to transform factory Medusa product to component props
 const factoryProduct = createMockProduct();
 const mockProduct = {

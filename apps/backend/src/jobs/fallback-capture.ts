@@ -91,7 +91,7 @@ export default async function fallbackCaptureJob(container: MedusaContainer) {
         const staleCount = ordersToProcess.filter(o => o.source === "stale" || o.source === "both").length;
         const recoveryOnlyCount = ordersToProcess.filter(o => o.source === "recovery").length;
 
-        console.log(`[FallbackCron] Found ${staleCount} stale orders, ${recoveryOnlyCount} recovery-only orders (${ordersToProcess.length} total to process)`);
+        logger.info(`[FallbackCron] Found ${staleCount} stale orders, ${recoveryOnlyCount} recovery-only orders (${ordersToProcess.length} total to process)`);
         
         let capturedCount = 0;
         let skippedCount = 0;

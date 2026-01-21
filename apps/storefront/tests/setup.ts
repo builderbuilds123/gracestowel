@@ -79,15 +79,17 @@ Object.defineProperty(window, "sessionStorage", {
   writable: true,
 });
 
-// Setup before each test (optional, but good for reset)
+// Setup before each test
 beforeEach(() => {
-   // Ensuring it's still there or resetting if needed can be done here, 
-   // but primarily we need it defined early.
+  // Common environment variables needed for hooks/util tests
+  process.env.MEDUSA_PUBLISHABLE_KEY = "pk_test_12345";
+  process.env.MEDUSA_BACKEND_URL = "http://localhost:9000";
 });
 
 // Reset after each test
 afterEach(() => {
   cleanup();
-  localStorageMock.clear();
-  sessionStorageMock.clear();
+  localStorage.clear();
+  sessionStorage.clear();
+  vi.clearAllMocks();
 });
