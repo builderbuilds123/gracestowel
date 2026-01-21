@@ -4,9 +4,7 @@ vi.mock("../../src/utils/analytics", () => ({
   trackEvent: vi.fn(),
 }));
 
-vi.mock("../../src/workflows/send-order-canceled", () => ({
-  sendOrderCanceledWorkflow: () => ({ run: vi.fn().mockResolvedValue(undefined) }),
-}));
+
 
 vi.mock("../../src/lib/payment-capture-queue", () => ({
   cancelPaymentCaptureJob: vi.fn().mockResolvedValue(true),
@@ -20,13 +18,7 @@ vi.mock("../../src/workers/email-worker", () => ({
   startEmailWorker: vi.fn(),
 }));
 
-vi.mock("../../src/workflows/send-welcome-email", () => ({
-  sendWelcomeEmailWorkflow: () => ({ run: vi.fn().mockResolvedValue(undefined) }),
-}));
 
-vi.mock("../../src/workflows/send-shipping-confirmation", () => ({
-  sendShippingConfirmationWorkflow: () => ({ run: vi.fn().mockResolvedValue(undefined) }),
-}));
 
 vi.mock("../../src/lib/admin-notifications", () => ({
   sendAdminNotification: vi.fn().mockResolvedValue(undefined),
