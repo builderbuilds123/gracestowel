@@ -7,7 +7,6 @@ import {
 import { MedusaError } from "@medusajs/framework/utils";
 import { trackEvent } from "../utils/analytics";
 import { logger } from "../utils/logger";
-import { registerProjectSubscribers } from "../utils/register-subscribers";
 
 function normalizeCartCountryCodesMiddleware(
     req: MedusaRequest,
@@ -86,27 +85,6 @@ export function errorHandlerMiddleware(
 }
 
 /**
- * Global Subscriber Registration Middleware
- *
- * Ensures project subscribers are registered on first API request
- * Medusa v2 doesn't auto-discover project-level subscribers, so we register manually
- */
-async function registerSubscribersMiddleware(
-    req: MedusaRequest,
-    res: MedusaResponse,
-    next: MedusaNextFunction
-) {
-    // Register subscribers using the request's container scope
-    // This ensures all scopes share the same event bus (via Redis)
-    try {
-        await registerProjectSubscribers(req.scope);
-    } catch (error) {
-        logger.error("middleware", "Failed to register subscribers", {}, error as Error);
-    }
-    next();
-}
-
-/**
  * Middleware configuration for custom API routes
  *
  * The Stripe webhook endpoint needs bodyParser disabled so we can
@@ -127,11 +105,6 @@ export default defineMiddlewares({
         {
             matcher: "/store/orders/:id*",
             middlewares: [moveTokenToHeaderMiddleware],
-        },
-        {
-            // Global middleware to register subscribers on first request
-            matcher: "*",
-            middlewares: [registerSubscribersMiddleware],
         },
     ],
     errorHandler: errorHandlerMiddleware,
