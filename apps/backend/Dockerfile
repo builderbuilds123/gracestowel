@@ -64,7 +64,7 @@ CMD ["sh", "-c", "set -e; echo 'Running database migrations...'; pnpm run migrat
 # Production image
 FROM base AS runner
 
-WORKDIR /app
+WORKDIR /medusa-backend
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
 
