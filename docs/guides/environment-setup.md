@@ -41,13 +41,7 @@ Modify your configuration to define `staging` and `production` environments. Thi
         "APP_ENV": "staging",
         "MEDUSA_BACKEND_URL": "https://gracestowel-backend-staging.up.railway.app"
       },
-      // Staging-specific Hyperdrive (if needed)
-      "hyperdrive": [
-        {
-          "binding": "HYPERDRIVE",
-          "id": "<STAGING_HYPERDRIVE_ID>"
-        }
-      ]
+      // No direct DB bindings; storefront uses Medusa API only
     },
 
     // ==========================================
@@ -65,13 +59,7 @@ Modify your configuration to define `staging` and `production` environments. Thi
         "APP_ENV": "production",
         "MEDUSA_BACKEND_URL": "https://gracestowel-backend.up.railway.app"
       },
-      // Production Hyperdrive
-      "hyperdrive": [
-        {
-          "binding": "HYPERDRIVE",
-          "id": "1dffb86ef8b64f5197bd875b8e1cc026"
-        }
-      ]
+      // No direct DB bindings; storefront uses Medusa API only
     }
   }
 }

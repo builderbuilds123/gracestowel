@@ -58,8 +58,8 @@
 | Inventory | Used | Reservations + location resolver (`createReservationsStep`, `InventoryLocationResolver`, `apps/backend/src/links/reservation-line-item.ts`) | Requires stock locations and inventory items seeded; scripts suggest manual checks (`apps/backend/src/scripts/check-locations.ts`). |
 | Order | Used | Custom order workflows + API routes (`apps/backend/src/workflows/*`, `apps/backend/src/api/store/orders/*`) | None found. |
 | Payment | Configured + Used | Stripe provider configured in `medusa-config.ts`; payment collection logic in workflows; storefront payment collection routes | Ensure `STRIPE_SECRET_KEY` and webhook configured; verify PaymentCollection creation succeeds in all flows. |
-| Pricing | Core + Used | Used via Store API; rules referenced in comments | **Risk:** Storefront uses Hyperdrive direct DB reads for products. This bypasses pricing rules/price selection unless explicitly recalculated. |
-| Product | Used | Storefront products via Hyperdrive + Medusa fallback (`apps/storefront/app/lib/products.server.ts`, `routes/towels.tsx`) | Ensure Hyperdrive queries stay in sync with Medusa schema evolutions. |
+| Pricing | Core + Used | Used via Store API; rules referenced in comments | None. |
+| Product | Used | Storefront products fetched via Medusa Store API | None. |
 | Promotion | Used | Cart fields include promotions; hooks `usePromoCode`, `useAutomaticPromotions` | Confirm promotion rules are configured in Medusa Admin. |
 | Region | Used | `getDefaultRegion`, `useRegions` | Ensure regions exist + correct currency (CAD/others). |
 | Sales Channel | Used | Order creation uses `sales_channel_id` from cart | Ensure at least one sales channel exists and is assigned to products. |
@@ -81,7 +81,7 @@
 | Analytics | Configured | PostHog in prod / local in dev (`medusa-config.ts`) | OK. |
 | File | Configured | S3/R2 + local fallback | OK. Verify `S3_*` envs for prod. |
 | Notification | Configured | Resend + local feed (`medusa-config.ts`) | OK. Ensure async send uses BullMQ (it does). |
-| Search | **Not configured** | N/A | Storefront uses Hyperdrive + Medusa fallback search (`routes/search.tsx`). No Medusa search provider in backend. |
+| Search | **Not configured** | N/A | Storefront uses Medusa Store API search. No Medusa search provider in backend. |
 | Cache | Not explicit | Redis used by event bus & queues | OK if relying on Redis only. |
 
 ---
@@ -198,7 +198,6 @@
 
 **Gaps / Risks:**
 - Storefront logs use `console.log`/`console.error` (violates structured logging rule). Examples: `CustomerContext.tsx`, `medusa.ts`, `medusa-cart.ts`.
-- Hyperdrive product reads bypass Medusa pricing rules and promotions unless explicitly recalculated. Products are fetched directly from DB in `apps/storefront/app/lib/products.server.ts` and routes like `search.tsx`.
 
 ---
 
@@ -228,7 +227,7 @@
 
 1) **Fulfillment provider not configured** → shipping options may be missing or incorrect.
 2) **Tax provider not configured** → tax calculation likely missing or incorrect.
-3) **Search provider not configured** → reliance on Hyperdrive DB queries instead of Medusa search.
+3) **Search provider not configured** → uses Medusa Store API search; no dedicated search provider.
 4) **Logging policy violations** in storefront and job code.
 5) **Data prerequisites** (regions, sales channels, stock locations, inventory items) must be seeded and verified for inventory/fulfillment correctness.
 
@@ -238,7 +237,7 @@
 
 1) Decide fulfillment provider (e.g., manual, Shippo, ShipStation) and add to `medusa-config.ts`.
 2) Configure tax provider (e.g., taxjar, custom) and verify tax region setup.
-3) Add Medusa search provider or document Hyperdrive-only strategy and limitations.
+3) Add Medusa search provider if you need advanced search capabilities.
 4) Replace `console.*` with structured logger utilities in storefront and backend job.
 5) Verify seed data for regions, sales channels, stock locations, inventory.
 

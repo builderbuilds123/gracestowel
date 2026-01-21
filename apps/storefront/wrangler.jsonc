@@ -15,14 +15,6 @@
   // Defining them here as empty strings overrides the dashboard secrets.
   // For type generation, see worker-configuration.d.ts
 
-  "hyperdrive": [
-    {
-      "binding": "HYPERDRIVE",
-      "id": "43cb3470f0b5446c881a7b30aa87eb3e",
-      "localConnectionString": "postgresql://postgres:password@localhost:5432/medusa-db",
-    },
-  ],
-
   // Observability configuration
   "observability": {
     "enabled": true,
@@ -49,7 +41,6 @@
       "vars": {
         "ENVIRONMENT": "staging",
       },
-      // Hyperdrive is injected by CI from HYPERDRIVE_ID secret
       // Secrets are set via: wrangler secret put <NAME> --env staging
     },
 
@@ -59,14 +50,12 @@
       "vars": {
         "ENVIRONMENT": "production",
       },
-      // Hyperdrive is injected by CI from HYPERDRIVE_ID secret
       // Secrets are set via: wrangler secret put <NAME> --env production
     },
 
     // CI/Local testing environment
     "ci": {
       "name": "gracestowelstorefront-ci",
-      "hyperdrive": [], // Disable hyperdrive in CI to avoid proxy crashes
       "vars": {
         "ENVIRONMENT": "development",
         "CI": "true",

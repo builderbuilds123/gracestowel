@@ -70,7 +70,6 @@
 - POST /api/checkout-session
 - POST /api/shipping-rates
 - GET /api/health
-- GET /api/test-hyperdrive
 - GET/POST /api/* (Catch-all)
 
 ### ⏳ Phase 5: Enhance Contract Test Quality
@@ -122,4 +121,3 @@
 - Schema validation patterns established
 - Error handling patterns established
 - Ready to scale to remaining endpoints
-

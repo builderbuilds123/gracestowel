@@ -46,7 +46,7 @@ Located in `apps/storefront/app/routes/api.*`:
 - Carts: api.carts.ts, api.carts.$id.ts, api.carts.$id.shipping-*.ts, api.carts.$id.complete.ts
 - Payment: api.payment-intent.ts, api.checkout-session.ts
 - Shipping: api.shipping-rates.ts
-- Infrastructure: api.health.ts, api.test-hyperdrive.ts
+- Infrastructure: api.health.ts
 
 ## Output
 
@@ -65,4 +65,3 @@ Create `docs/analysis/api-contract-test-audit.md` with:
 - [ ] Coverage matrix created
 - [ ] Audit report generated
 - [ ] TASK_COMPLETE
-

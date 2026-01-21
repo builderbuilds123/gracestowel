@@ -94,7 +94,6 @@ This audit analyzed all existing Postman collections and mapped them against act
 | `/api/checkout-session` | POST | ❌ None | ❌ Missing | **HIGH** |
 | `/api/shipping-rates` | POST | ❌ None | ❌ Missing | **HIGH** |
 | `/api/health` | GET | ❌ None | ❌ Missing | **MEDIUM** |
-| `/api/test-hyperdrive` | GET | ❌ None | ❌ Missing | **LOW** |
 | `/api/*` | GET/POST | ❌ None | ❌ Missing | **LOW** |
 
 ## Broken Tests Inventory
@@ -183,7 +182,6 @@ This audit analyzed all existing Postman collections and mapped them against act
 ### Low Priority (Nice to Have)
 
 1. **Debug Endpoints** - `/store/debug/stripe-flow`
-2. **Hyperdrive Test** - `/api/test-hyperdrive`
 3. **Catch-all Proxy** - `/api/*`
 4. **Failed Workers** - `/health/workers/failed`
 
@@ -303,4 +301,3 @@ if (!pm.globals.get("tv4")) {
 The current API contract test coverage is insufficient for production use. Critical endpoints, especially in the storefront, have zero coverage. The existing tests that do exist are generally well-structured but need enhancement with comprehensive schemas and error handling.
 
 **Recommended Action:** Prioritize storefront API contract tests and review endpoints as these are customer-facing and critical for business operations.
-

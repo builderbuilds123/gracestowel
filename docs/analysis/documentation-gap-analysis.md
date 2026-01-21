@@ -149,7 +149,6 @@ docs/
 | `api.carts.$id.complete.ts` | Cart completion | ❌ Not documented |
 | `api.carts.$id.shipping-methods.ts` | Shipping methods | ❌ Not documented |
 | `api.carts.$id.shipping-options.ts` | Shipping options | ❌ Not documented |
-| `api.test-hyperdrive.ts` | Test endpoint | ❌ Not documented |
 
 ### 5. Component Documentation Incomplete
 
