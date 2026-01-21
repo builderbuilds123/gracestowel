@@ -93,10 +93,17 @@ function sendToAnalytics(
       timestamp: new Date().toISOString(),
     });
 
-    analyticsService.track({
+    const result = analyticsService.track({
       event: `log.${level}`,
       properties,
     });
+
+    // Handle potential async rejection safely
+    if (result instanceof Promise) {
+      result.catch(() => {
+        // Silently fail - never break logging flow
+      });
+    }
   } catch (e) {
     // Silently fail - never break logging flow
   }
