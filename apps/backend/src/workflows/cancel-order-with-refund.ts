@@ -10,6 +10,7 @@ import type { MedusaContainer } from "@medusajs/types";
 import Stripe from "stripe";
 import { getStripeClient } from "../utils/stripe";
 import { cancelPaymentCaptureJob, schedulePaymentCapture, JobActiveError } from "../lib/payment-capture-queue";
+import { trackWorkflowEventStep } from "./steps/track-analytics-event";
 import {
     PaymentCollectionStatus,
     validatePaymentCollectionStatus,
@@ -523,6 +524,15 @@ const prepareReservationReleaseStep = createStep(
 export const cancelOrderWithRefundWorkflow = createWorkflow(
     "cancel-order-with-refund",
     (input: CancelOrderWithRefundInput) => {
+        trackWorkflowEventStep({
+            event: "order.cancel.started",
+            failureEvent: "order.cancel.failed",
+            properties: {
+                order_id: input.orderId,
+                payment_intent_id: input.paymentIntentId,
+            },
+        }).config({ name: "track-order-cancel-started" });
+
         // Step 1 (Story 3.5 AC3): Check fulfillment status first
         const fulfillmentInput = transform({ input }, (data) => {
             // Can't use logger in transform, it's pure logic
@@ -562,6 +572,14 @@ export const cancelOrderWithRefundWorkflow = createWorkflow(
         });
         cancelOrderWorkflow.runAsStep({ input: coreCancelInput });
 
+        trackWorkflowEventStep({
+            event: "order.cancel.succeeded",
+            properties: {
+                order_id: input.orderId,
+                payment_intent_id: input.paymentIntentId,
+            },
+        }).config({ name: "track-order-cancel-succeeded" });
+
         return new WorkflowResponse({
             success: true,
             orderId: input.orderId
@@ -570,4 +588,3 @@ export const cancelOrderWithRefundWorkflow = createWorkflow(
 );
 
 export default cancelOrderWithRefundWorkflow;
-

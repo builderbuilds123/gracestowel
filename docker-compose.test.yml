@@ -62,6 +62,8 @@ services:
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
       POSTHOG_EVENTS_API_KEY: test_posthog_key_no_prefix
       POSTHOG_HOST: https://us.i.posthog.com
+      RESEND_API_KEY: re_test_placeholder
+      RESEND_TEST_MODE: "true"
     ports:
       - "9001:8080"
     healthcheck:

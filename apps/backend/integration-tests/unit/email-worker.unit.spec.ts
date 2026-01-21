@@ -128,7 +128,8 @@ describe("Email Worker", () => {
       await processor(mockJob);
 
       expect(mockLogger.info).toHaveBeenCalledWith(
-        expect.stringContaining("[EMAIL][SENT] Sent order_confirmation to m***@test.com for entity ord_success. ID: sent_123")
+        "email",
+        expect.stringContaining("Sent order_confirmation to m***@test.com for entity ord_success. ID: sent_123")
       );
     });
 
@@ -153,7 +154,8 @@ describe("Email Worker", () => {
       await expect(processor(mockJob)).rejects.toThrow("Resend Error");
 
       expect(mockLogger.error).toHaveBeenCalledWith(
-        expect.stringContaining("[EMAIL][FAILED] Failed order_confirmation for entity ord_fail (attempt 1/3): Resend Error")
+        "email",
+        expect.stringContaining("Failed order_confirmation for entity ord_fail (attempt 1/3): Resend Error")
       );
     });
   });
@@ -178,7 +180,8 @@ describe("Email Worker", () => {
       await processor(mockJob);
 
       expect(mockLogger.info).toHaveBeenCalledWith(
-        expect.stringContaining("[EMAIL][RETRY] Attempt 2/3 for entity ord_retry")
+        "email",
+        expect.stringContaining("Attempt 2/3 for entity ord_retry")
       );
     });
   });
@@ -207,12 +210,14 @@ describe("Email Worker", () => {
 
         // Verify alert log
         expect(mockLogger.error).toHaveBeenCalledWith(
-            expect.stringMatching(/\[EMAIL\]\[ALERT\].*entity=ord_alert_1.*template=order_confirmation/)
+            "email",
+            expect.stringMatching(/Email delivery failed |.*entity=ord_alert_1.*template=order_confirmation/)
         );
 
         // Verify metric log
         expect(mockLogger.info).toHaveBeenCalledWith(
-            expect.stringContaining("[METRIC] email_alert")
+            "metric",
+            expect.stringContaining("email_alert")
         );
       });
 
@@ -234,8 +239,8 @@ describe("Email Worker", () => {
         await failedHandler(mockJob, new Error("API Error"));
 
         const alertLog = mockLogger.error.mock.calls.find(
-          (call: any) => call[0].includes("[EMAIL][ALERT]")
-        )[0];
+          (call: any) => call[1].includes("Email delivery failed")
+        )[1];
 
         expect(alertLog).toBeDefined();
 
@@ -269,9 +274,11 @@ describe("Email Worker", () => {
 
         // Verify alert log
         expect(mockLogger.error).toHaveBeenCalledWith(
-            expect.stringMatching(/\[EMAIL\]\[ALERT\].*entity=entity_invalid_alert/)
+            "email",
+            expect.stringMatching(/Email delivery failed |.*entity=entity_invalid_alert/)
         );
         expect(mockLogger.error).toHaveBeenCalledWith(
+            "email",
             expect.stringContaining("error=Invalid_email")
         );
       });

@@ -2,24 +2,77 @@ import type {
   SubscriberArgs,
   SubscriberConfig,
 } from "@medusajs/framework"
-import { sendShippingConfirmationWorkflow } from "../workflows/send-shipping-confirmation"
+import { enqueueEmail } from "../lib/email-queue"
+import { Templates } from "../modules/resend/service"
+import { startEmailWorker } from "../workers/email-worker"
 import { sendAdminNotification, AdminNotificationType } from "../lib/admin-notifications"
+import { trackEvent } from "../utils/analytics"
 
 export default async function fulfillmentCreatedHandler({
   event: { data },
   container,
 }: SubscriberArgs<{ id: string }>) {
-  console.log("Fulfillment created event received:", data.id)
+  // Ensure Email worker is running (lazy init)
+  if (process.env.REDIS_URL) {
+    startEmailWorker(container)
+  }
+
+  const logger = container.resolve("logger")
+  logger.info(`[FULFILLMENT_CREATED] Fulfillment created event received: ${data.id}`)
+  await trackEvent(container, "fulfillment.created", {
+    properties: {
+      fulfillment_id: data.id,
+    },
+  })
   
   try {
-    await sendShippingConfirmationWorkflow(container).run({
-      input: {
-        fulfillment_id: data.id,
-      },
+    const query = container.resolve("query")
+    const { data: fulfillments } = await query.graph({
+      entity: "fulfillment",
+      fields: [
+        "id",
+        "data",
+        "metadata",
+        "order.id",
+        "order.email",
+        "order.shipping_address.*",
+      ],
+      filters: { id: data.id },
     })
-    console.log("Shipping confirmation email workflow completed for fulfillment:", data.id)
-  } catch (error) {
-    console.error("Failed to send shipping confirmation email:", error)
+
+    const fulfillment = fulfillments[0]
+    if (!fulfillment) {
+      logger.error(`[EMAIL][ERROR] Fulfillment ${data.id} not found for shipping confirmation`)
+      return
+    }
+
+    if (fulfillment.order?.email) {
+      const result = await enqueueEmail({
+        entityId: fulfillment.id,
+        template: Templates.SHIPPING_CONFIRMATION,
+        recipient: fulfillment.order.email,
+        data: {
+          order: {
+            id: fulfillment.order.id,
+            email: fulfillment.order.email,
+            shipping_address: fulfillment.order.shipping_address,
+          },
+          fulfillment: {
+            id: fulfillment.id,
+            tracking_info: fulfillment.data || fulfillment.metadata,
+          },
+        },
+      })
+      if (result) {
+        logger.info(`[EMAIL][QUEUE] Shipping confirmation email queued for fulfillment ${data.id}`)
+      } else {
+        logger.warn(`[EMAIL][WARN] Failed to queue shipping confirmation for fulfillment ${data.id}`)
+      }
+    } else {
+      logger.warn(`[EMAIL][WARN] No email address for order linked to fulfillment ${data.id} - shipping confirmation skipped`)
+    }
+  } catch (error: any) {
+    logger.error(`[EMAIL][ERROR] Failed to queue shipping confirmation for fulfillment ${data.id}: ${error.message}`)
   }
 
   // Send admin notification for order shipped
@@ -30,12 +83,11 @@ export default async function fulfillmentCreatedHandler({
       description: `Fulfillment ${data.id} has been created`,
       metadata: { fulfillment_id: data.id },
     })
-  } catch (error) {
-    console.error("Failed to send admin notification for fulfillment:", error)
+  } catch (error: any) {
+    logger.error(`[ADMIN_NOTIF][ERROR] Failed to send admin notification for fulfillment ${data.id}: ${error.message}`)
   }
 }
 
 export const config: SubscriberConfig = {
   event: "fulfillment.created",
 }
-

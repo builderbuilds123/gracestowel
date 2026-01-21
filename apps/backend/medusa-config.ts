@@ -31,7 +31,10 @@ module.exports = defineConfig({
   admin: {
     // Disable admin for worker instances (saves ~100MB RAM)
     disable: process.env.DISABLE_MEDUSA_ADMIN === "true" || process.env.MEDUSA_WORKER_MODE === "worker",
-    backendUrl: process.env.RAILWAY_PUBLIC_DOMAIN || process.env.MEDUSA_BACKEND_URL || "/"
+    backendUrl: process.env.RAILWAY_PUBLIC_DOMAIN 
+      ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` 
+      : (process.env.MEDUSA_BACKEND_URL || "/"),
+    path: "/app"
   },
   modules: [
     {
@@ -105,11 +108,12 @@ module.exports = defineConfig({
         providers: [
           {
             resolve: "./src/modules/resend",
-            id: "resend",
+            id: "notification-resend",
             options: {
               channels: ["email"],
               api_key: process.env.RESEND_API_KEY,
               from: process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev",
+              test_mode: process.env.NODE_ENV === "test" || process.env.RESEND_TEST_MODE === "true",
             },
           },
           {

@@ -14,8 +14,8 @@ vi.mock("../../src/lib/payment-capture-queue", async (importOriginal) => {
   };
 });
 
-vi.mock("../../src/utils/posthog", () => ({
-  getPostHog: vi.fn().mockReturnValue(null),
+vi.mock("../../src/utils/analytics", () => ({
+  trackEvent: vi.fn().mockResolvedValue(undefined),
 }));
 
 describe("Order Placed Subscriber", () => {

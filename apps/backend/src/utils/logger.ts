@@ -5,7 +5,7 @@
  * - Searchable in Railway's log viewer
  * - Filterable by level, component, and custom fields
  * - Compatible with log aggregation tools (Datadog, Logtail, etc.)
- * - Automatically piped to PostHog for analysis (warn/error/critical levels)
+ * - Automatically piped to analytics for analysis
  * 
  * Usage:
  *   import { logger } from "../utils/logger";
@@ -13,7 +13,7 @@
  *   logger.error("worker", "Processing failed", { orderId: "order_123" }, error);
  */
 
-import { getPostHog } from "./posthog";
+import { maskProperties } from "./analytics";
 
 type LogLevel = "debug" | "info" | "warn" | "error";
 
@@ -25,16 +25,19 @@ interface LogEntry {
   [key: string]: unknown;
 }
 
-// Components that should always send logs to PostHog (even info level)
-const POSTHOG_TRACKED_COMPONENTS = [
-  "stripe-worker",
-  "webhook",
-  "payment-capture",
-  "email-queue",
-];
+type AnalyticsServiceLike = {
+  track: (data: {
+    event: string;
+    actor_id?: string;
+    properties?: Record<string, unknown>;
+  }) => Promise<void> | void;
+};
 
-// Whether to send info-level logs to PostHog (can be toggled via env)
-const POSTHOG_LOG_INFO = process.env.POSTHOG_LOG_INFO === "true";
+let analyticsService: AnalyticsServiceLike | null = null;
+
+export const setAnalyticsServiceForLogger = (service: AnalyticsServiceLike | null) => {
+  analyticsService = service;
+};
 
 function formatLog(
   level: LogLevel,
@@ -63,57 +66,46 @@ function formatLog(
 }
 
 /**
- * Send log entry to PostHog as an event
+ * Send log entry to analytics as an event
  * Only sends warn/error/critical by default, or info for tracked components
  */
-function sendToPostHog(
+function sendToAnalytics(
   level: LogLevel,
   component: string,
   message: string,
   data?: Record<string, unknown>,
   error?: Error
 ): void {
-  // Skip debug logs entirely
-  if (level === "debug") return;
-
-  // For info level, only send if explicitly enabled or component is tracked
-  if (level === "info" && !POSTHOG_LOG_INFO && !POSTHOG_TRACKED_COMPONENTS.includes(component)) {
-    return;
-  }
-
   try {
-    const posthog = getPostHog();
-    if (!posthog) return;
+    if (level === "debug") return;
+    if (!analyticsService) return;
 
-    // Determine distinct ID from data if available
-    const distinctId = (data?.userId as string) || 
-                       (data?.customerId as string) || 
-                       (data?.orderId ? `order_${data.orderId}` : null) ||
-                       (data?.paymentIntentId ? `pi_${data.paymentIntentId}` : null) ||
-                       "system";
-
-    posthog.capture({
-      distinctId,
-      event: `backend_log_${level}`,
-      properties: {
-        component,
-        message,
-        level,
-        ...data,
-        // Error details if present (no stack to avoid PII leakage)
-        ...(error && {
-          error_name: error.name,
-          error_message: error.message,
-          // Removed: error_stack - can contain PII and sensitive paths
-        }),
-        // Environment context
-        environment: process.env.NODE_ENV || "development",
-        timestamp: new Date().toISOString(),
-      },
+    const properties = maskProperties({
+      component,
+      message,
+      level,
+      ...(data || {}),
+      ...(error && {
+        error_name: error.name,
+        error_message: error.message,
+      }),
+      environment: process.env.NODE_ENV || "development",
+      timestamp: new Date().toISOString(),
     });
+
+    const result = analyticsService.track({
+      event: `log.${level}`,
+      properties,
+    });
+
+    // Handle potential async rejection safely
+    if (result instanceof Promise) {
+      result.catch(() => {
+        // Silently fail - never break logging flow
+      });
+    }
   } catch (e) {
-    // Silently fail - don't let PostHog issues break logging
-    console.error("[Logger] Failed to send to PostHog:", e);
+    // Silently fail - never break logging flow
   }
 }
 
@@ -122,25 +114,22 @@ export const logger = {
     if (process.env.LOG_LEVEL === "debug") {
       console.log(formatLog("debug", component, message, data));
     }
-    // Debug logs are never sent to PostHog
+    // Debug logs are never sent to analytics
   },
 
   info(component: string, message: string, data?: Record<string, unknown>): void {
     console.log(formatLog("info", component, message, data));
-    // Send to PostHog for tracked components (stripe-worker, webhook, etc.)
-    sendToPostHog("info", component, message, data);
+    sendToAnalytics("info", component, message, data);
   },
 
   warn(component: string, message: string, data?: Record<string, unknown>): void {
     console.warn(formatLog("warn", component, message, data));
-    // Always send warnings to PostHog
-    sendToPostHog("warn", component, message, data);
+    sendToAnalytics("warn", component, message, data);
   },
 
   error(component: string, message: string, data?: Record<string, unknown>, error?: Error): void {
     console.error(formatLog("error", component, message, data, error));
-    // Always send errors to PostHog
-    sendToPostHog("error", component, message, data, error);
+    sendToAnalytics("error", component, message, data, error);
   },
 
   /**
@@ -149,8 +138,7 @@ export const logger = {
    */
   critical(component: string, message: string, data?: Record<string, unknown>, error?: Error): void {
     console.error(formatLog("error", component, `[CRITICAL] ${message}`, data, error));
-    // Always send critical errors to PostHog with special event name
-    sendToPostHog("error", component, `[CRITICAL] ${message}`, { ...data, is_critical: true }, error);
+    sendToAnalytics("error", component, `[CRITICAL] ${message}`, { ...data, is_critical: true }, error);
   },
 };
 

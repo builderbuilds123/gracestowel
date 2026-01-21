@@ -30,30 +30,31 @@ const templates: { [key in Templates]?: (props: unknown) => React.ReactElement }
 interface ResendModuleOptions {
   api_key?: string
   from?: string
-}
-
-// Check if we're in test mode (no API key or test/placeholder key)
-const isTestMode = () => {
-  const apiKey = process.env.RESEND_API_KEY
-  if (!apiKey) return true
-  // Keys starting with re_test_ are Resend test keys, or ci_placeholder for CI
-  return apiKey.startsWith("re_test_") || apiKey.includes("placeholder")
+  test_mode?: boolean
+  html_templates?: Record<string, { subject?: string; content: string }>
 }
 
 class ResendNotificationProviderService extends AbstractNotificationProviderService {
-  static identifier = "resend"
+  static identifier = "notification-resend"
   private resend: Resend | null
   private from: string
   private testMode: boolean
+  private logger: any // simplistic logger type if not resolved from container
 
   constructor(container: Record<string, unknown>, options: ResendModuleOptions) {
     super()
-    this.testMode = isTestMode()
+    this.testMode = options.test_mode === true
+    // We can access logger from container if needed, usually container.logger
+    this.logger = container.logger || console
 
     if (this.testMode) {
-      console.log("Resend: Running in test mode (no API key provided)")
+      this.logger.info("Resend: Running in test mode (explicitly configured)")
       this.resend = null
       this.from = "test@example.com"
+    } else if (!options.api_key) {
+      this.logger.warn("Resend: No API key provided, provider will be disabled")
+      this.resend = null
+      this.from = options.from || "onboarding@resend.dev"
     } else {
       this.resend = new Resend(options.api_key)
       this.from = options.from || "onboarding@resend.dev"
@@ -61,9 +62,7 @@ class ResendNotificationProviderService extends AbstractNotificationProviderServ
   }
 
   static validateOptions(options: ResendModuleOptions) {
-    // Skip validation in test mode
-    if (isTestMode()) {
-      console.log("Resend: Skipping validation in test mode")
+    if (options.test_mode) {
       return
     }
 
@@ -75,17 +74,25 @@ class ResendNotificationProviderService extends AbstractNotificationProviderServ
     }
   }
 
+  private maskEmail(email: string): string {
+    const [local, domain] = email.split("@")
+    if (!local || !domain) return "unknown@***"
+    const visible = local.slice(0, 1)
+    return `${visible}***@***`
+  }
+
   async send(notification: ProviderSendNotificationDTO): Promise<ProviderSendNotificationResultsDTO> {
-    // In test mode, just log and return success
+    const maskedTo = this.maskEmail(notification.to)
+
     if (this.testMode || !this.resend) {
-      console.log(`Resend [TEST MODE]: Would send ${notification.template} email to ${notification.to}`)
+      this.logger.info(`Resend [TEST]: Would send ${notification.template} email to ${maskedTo}`)
       return { id: "test-mode-skipped" }
     }
 
     const template = templates[notification.template as Templates]
 
     if (!template) {
-      console.warn(`No template found for ${notification.template}, skipping email`)
+      this.logger.warn(`Resend: No template found for ${notification.template}, skipping email`)
       return { id: "skipped" }
     }
 
@@ -95,29 +102,35 @@ class ResendNotificationProviderService extends AbstractNotificationProviderServ
     try {
       const subject = this.getSubject(notification.template as Templates, notification.data || {})
 
-      console.log("--- [EMAIL DEBUG] START ---")
-      console.log(`Type: ${notification.template}`)
-      console.log(`To: ${notification.to}`)
-      console.log(`Subject: ${subject}`)
-      console.log(`Data: ${JSON.stringify(notification.data, null, 2)}`)
-      console.log("--- [EMAIL DEBUG] END ---")
+      // Safe logging
+      this.logger.info(`Resend: Sending ${notification.template} to ${maskedTo} [Subject: ${subject}]`)
+      // Do NOT log full data object
 
-      const { data, error } = await this.resend.emails.send({
+      const result = await this.resend.emails.send({
         from: this.from,
         to: notification.to,
         subject,
         html,
       })
 
-      if (error) {
-        console.error("Resend error:", error)
-        throw new Error(`Failed to send email: ${error.message}`)
+      if (result.error) {
+        const status = (result.error as any).status || (result.error as any).statusCode || 500
+        this.logger.error(`Resend error for ${notification.template} to ${maskedTo}: ${result.error.message} [Status: ${status}]`)
+        
+        // Wrap error to include status for BullMQ worker
+        const error: any = new Error(result.error.message)
+        error.statusCode = status
+        throw error
       }
 
-      console.log(`Email sent successfully: ${data?.id}`)
-      return { id: data?.id || "sent" }
-    } catch (error) {
-      console.error("Failed to send email:", error)
+      this.logger.info(`Resend: Email sent successfully. ID: ${result.data?.id}`)
+      return { id: result.data?.id || "sent" }
+    } catch (error: any) {
+      if (!error.statusCode) {
+        // Map common network/auth errors if possible
+        if (error.message?.includes("API key")) error.statusCode = 401
+      }
+      this.logger.error(`Resend: Failed to send email to ${maskedTo}: ${error.message}`)
       throw error
     }
   }

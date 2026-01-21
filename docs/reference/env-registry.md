@@ -25,7 +25,7 @@ This document tracks all environment variables across deployment environments.
 | `ADMIN_CORS` | Yes | Allowed admin origins | `http://localhost:7001` | `http://localhost:7002` | Staging admin URL | Production admin URL |
 | `AUTH_CORS` | Yes | Allowed auth origins | `http://localhost:5173` | `http://localhost:5174,https://localhost:5174` | Staging URLs | Production URLs |
 | `STRIPE_API_KEY` | Yes | Stripe secret key | Test key (`sk_test_...`) | Mock/skip | Test key | Live key (`sk_live_...`) |
-| `POSTHOG_API_KEY` | No | PostHog project key | Dev project | Skip | Staging project | Prod project |
+| `POSTHOG_EVENTS_API_KEY` | No | PostHog events API key (Medusa Analytics) | Dev project | Skip | Staging project | Prod project |
 | `POSTHOG_HOST` | No | PostHog host | `https://app.posthog.com` | Skip | `https://app.posthog.com` | `https://app.posthog.com` |
 | `RESEND_API_KEY` | No | Resend email API key | Test key | `re_test_ci_placeholder_key` | Test key | Live key |
 | `DATABASE_SSL` | No | Enable SSL for DB | `false` | `false` | `true` | `true` |

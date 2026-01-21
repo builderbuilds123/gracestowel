@@ -6,6 +6,7 @@ import {
 } from "@medusajs/framework/workflows-sdk"
 import { useRemoteQueryStep } from "@medusajs/core-flows"
 import { sendNotificationStep } from "./steps/send-notification"
+import { trackWorkflowEventStep } from "./steps/track-analytics-event"
 
 type SendOrderConfirmationInput = {
   id: string
@@ -15,6 +16,14 @@ type SendOrderConfirmationInput = {
 export const sendOrderConfirmationWorkflow = createWorkflow(
   "send-order-confirmation",
   (input: SendOrderConfirmationInput) => {
+    trackWorkflowEventStep({
+      event: "email.order_confirmation.started",
+      failureEvent: "email.order_confirmation.failed",
+      properties: {
+        order_id: input.id,
+      },
+    }).config({ name: "track-email-order-confirmation-started" })
+
     // Retrieve the order details using Remote Query
     const orders = useRemoteQueryStep({
       entry_point: "order",
@@ -59,7 +68,13 @@ export const sendOrderConfirmationWorkflow = createWorkflow(
       ]))
     })
 
+    trackWorkflowEventStep({
+      event: "email.order_confirmation.succeeded",
+      properties: {
+        order_id: input.id,
+      },
+    }).config({ name: "track-email-order-confirmation-succeeded" })
+
     return new WorkflowResponse({ success: true })
   }
 )
-

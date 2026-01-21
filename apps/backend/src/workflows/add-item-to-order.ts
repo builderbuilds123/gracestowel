@@ -14,6 +14,7 @@ import { updateInventoryLevelsStep, createReservationsStep } from "@medusajs/cor
 import type { UpdateInventoryLevelInput, InventoryTypes } from "@medusajs/types";
 import { logger } from "../utils/logger";
 import { formatModificationWindow } from "../lib/payment-capture-queue";
+import { trackWorkflowEventStep } from "./steps/track-analytics-event";
 
 // Type interface for inventory levels to improve type safety
 interface InventoryLevel {
@@ -1252,6 +1253,16 @@ const updateOrderValuesStep = createStep(
 export const addItemToOrderWorkflow = createWorkflow(
     "add-item-to-order",
     (input: AddItemToOrderInput) => {
+        trackWorkflowEventStep({
+            event: "order.edit.add_item.started",
+            failureEvent: "order.edit.add_item.failed",
+            properties: {
+                order_id: input.orderId,
+                variant_id: input.variantId,
+                quantity: input.quantity,
+            },
+        }).config({ name: "track-order-edit-add-item-started" });
+
         const validation = validatePreconditionsStep({
             orderId: input.orderId,
             modificationToken: input.modificationToken,
@@ -1394,6 +1405,15 @@ export const addItemToOrderWorkflow = createWorkflow(
                 };
             }
         );
+
+        trackWorkflowEventStep({
+            event: "order.edit.add_item.succeeded",
+            properties: {
+                order_id: input.orderId,
+                variant_id: input.variantId,
+                quantity: input.quantity,
+            },
+        }).config({ name: "track-order-edit-add-item-succeeded" });
 
         return new WorkflowResponse(result);
     }
