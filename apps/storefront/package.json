@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "react-router build",
-    "cf-typegen": "wrangler types",
+    "cf-typegen": "wrangler types && node patch-types.cjs",
     "deploy": "pnpm run build && wrangler deploy",
     "dev": "react-router dev",
     "postinstall": "node -e \"(process.env.CI || process.env.CF_PAGES === '1') ? null : require('child_process').execSync('pnpm run cf-typegen', {stdio: 'inherit'})\"",
