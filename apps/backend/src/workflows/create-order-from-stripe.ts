@@ -391,6 +391,51 @@ const linkPaymentCollectionStep = createStep(
 );
 
 /**
+ * Step to emit events to the event bus.
+ * This step is wrapped in a try-catch to ensure that event emission failures
+ * do not block the main workflow, allowing for graceful degradation.
+ */
+const emitEventStep = createStep(
+    "emit-event",
+    async (input: { eventName: string; data: any }, { container }) => {
+        const logger = container.resolve("logger");
+        let eventBusModuleService: any;
+        try {
+            // Try multiple resolution strategies for event bus (Medusa v2 compatibility)
+            try {
+                eventBusModuleService = container.resolve("eventBusModuleService") as any;
+            } catch {
+                try {
+                    eventBusModuleService = container.resolve("eventBus") as any;
+                } catch {
+                    // Try using Modules constant
+                    const { Modules } = await import("@medusajs/framework/utils");
+                    eventBusModuleService = container.resolve(Modules.EVENT_BUS) as any;
+                }
+            }
+        } catch (err) {
+            logger.warn(`[create-order-from-stripe] eventBus not configured, skipping emit. Event: ${input.eventName}, Error: ${err instanceof Error ? err.message : err}`);
+            return new StepResponse({ success: false, skipped: true });
+        }
+
+        try {
+            try {
+                await eventBusModuleService.emit({ name: input.eventName, data: input.data });
+            } catch (err) {
+                // Secondary check for Medusa specific overload
+                await eventBusModuleService.emit(input.eventName, input.data);
+            }
+            logger.info(`Event ${input.eventName} emitted successfully with data: ${JSON.stringify(input.data)}`);
+            return new StepResponse({ success: true });
+        } catch (err) {
+            // P1 FIX: Wrap in outer try-catch to ensure event bus failure doesn't block order creation
+            logger.error(`[create-order-from-stripe] CRITICAL: Failed to emit event ${input.eventName}. Error: ${err instanceof Error ? err.message : err}. Proceeding with order creation as best-effort.`);
+            return new StepResponse({ success: false, error: err instanceof Error ? err.message : String(err) });
+        }
+    }
+);
+
+/**
  * Step to resolve inventory locations for order items
  */
 const resolveInventoryLocationsStep = createStep(
