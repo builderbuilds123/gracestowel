@@ -1,5 +1,8 @@
 import Medusa from "@medusajs/js-sdk"
 import { clampAvailability } from "./inventory"
+import { createLogger } from "./logger"
+
+const logger = createLogger({ context: "medusa-lib" })
 
 export const createMedusaClient = (backendUrl: string, publishableKey: string) => {
   return new Medusa({
@@ -77,7 +80,7 @@ export function validateMedusaProduct(item: unknown): MedusaProduct | null {
     // Check for critical identifying fields
     const p = item as any;
     if (typeof p.id !== 'string' || typeof p.handle !== 'string') {
-        console.warn('Invalid product data: missing id or handle', p);
+        logger.warn('Invalid product data: missing id or handle', { item: p });
         return null;
     }
 
@@ -133,7 +136,7 @@ export async function getDefaultRegion(
         
         return null;
     } catch (error) {
-        console.error("Failed to fetch default region:", error);
+        logger.error("Failed to fetch default region:", error as Error);
         return null;
     }
 }
@@ -289,11 +292,15 @@ export function getMedusaClient(context?: { cloudflare?: { env?: { MEDUSA_BACKEN
 
     const backendUrl = getBackendUrl(context);
 
-    // Prioritize context key, then window.ENV
+    // Prioritize context key, then window.ENV, finally process.env (for tests)
     let publishableKey = context?.cloudflare?.env?.MEDUSA_PUBLISHABLE_KEY;
     
     if (!publishableKey && typeof window !== "undefined") {
         publishableKey = window.ENV?.MEDUSA_PUBLISHABLE_KEY;
+    }
+
+    if (!publishableKey && process.env.MEDUSA_PUBLISHABLE_KEY) {
+        publishableKey = process.env.MEDUSA_PUBLISHABLE_KEY;
     }
 
     if (!publishableKey) {
