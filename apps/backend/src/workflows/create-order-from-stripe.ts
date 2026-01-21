@@ -11,6 +11,7 @@ import {
     createReservationsStep, // Replaced updateInventoryLevelsStep
     acquireLockStep,
     releaseLockStep,
+    emitEventStep,
 } from "@medusajs/core-flows";
 import { Modules } from "@medusajs/framework/utils";
 import { modificationTokenService } from "../services/modification-token";
@@ -188,41 +189,6 @@ const prepareOrderDataStep = createStep(
     }
 );
 
-/**
- * Step to emit an event
- */
-const emitEventStep = createStep(
-    "emit-event",
-    async (input: { eventName: string; data: any }, { container }) => {
-        const logger = container.resolve("logger");
-        let eventBusModuleService: any;
-        try {
-            // Try multiple resolution strategies for event bus (Medusa v2 compatibility)
-            try {
-                eventBusModuleService = container.resolve("eventBusModuleService") as any;
-            } catch {
-                try {
-                    eventBusModuleService = container.resolve("eventBus") as any;
-                } catch {
-                    // Try using Modules constant
-                    const { Modules } = await import("@medusajs/framework/utils");
-                    eventBusModuleService = container.resolve(Modules.EVENT_BUS) as any;
-                }
-            }
-        } catch (err) {
-            logger.warn(`[create-order-from-stripe] eventBus not configured, skipping emit. Event: ${input.eventName}, Error: ${err instanceof Error ? err.message : err}`);
-            return new StepResponse({ success: false, skipped: true });
-        }
-
-        try {
-            await eventBusModuleService.emit({ name: input.eventName, data: input.data });
-        } catch (err) {
-            await eventBusModuleService.emit(input.eventName, input.data);
-        }
-        logger.info(`Event ${input.eventName} emitted with data: ${JSON.stringify(input.data)}`);
-        return new StepResponse({ success: true });
-    }
-);
 
 // ... imports
 import InventoryLocationResolver, { InventoryLocationResolverInput } from "../services/inventory-decrement-logic";
@@ -551,14 +517,14 @@ export const createOrderFromStripeWorkflow = createWorkflow(
         logOrderCreatedStep(logInput);
 
         // Step 9: Emit order.placed event to trigger email notification and payment capture scheduling
-        const eventData = transform({ order, tokenResult }, (data) => ({
-            eventName: "order.placed" as const,
-            data: {
+        // Using native emitEventStep from @medusajs/core-flows - event only emits after workflow success
+        emitEventStep({
+            eventName: "order.placed",
+            data: transform({ order, tokenResult }, (data) => ({
                 id: data.order.id,
                 modification_token: data.tokenResult.token,
-            },
-        }));
-        emitEventStep(eventData);
+            })),
+        });
 
         const successInput = transform({ order, input }, (data) => ({
             event: "order.create.succeeded",

@@ -46,11 +46,6 @@ vi.mock("../../src/workers/stripe-event-worker", () => ({
     startStripeEventWorker: vi.fn(),
 }));
 
-// Mock registerProjectSubscribers
-vi.mock("../../src/utils/register-subscribers", () => ({
-    registerProjectSubscribers: vi.fn(),
-}));
-
 describe("charge.refunded webhook handler", () => {
     let container: MedusaContainer;
 

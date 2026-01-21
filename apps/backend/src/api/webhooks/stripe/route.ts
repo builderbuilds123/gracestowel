@@ -5,7 +5,6 @@ import { getStripeClient } from "../../../utils/stripe";
 import { queueStripeEvent, isEventProcessed } from "../../../lib/stripe-event-queue";
 import { logger } from "../../../utils/logger";
 import { ensureStripeWorkerStarted } from "../../../loaders/stripe-event-worker";
-import { registerProjectSubscribers } from "../../../utils/register-subscribers";
 
 /**
  * Stripe Webhook Handler
@@ -52,10 +51,6 @@ export async function POST(
     req: MedusaRequest,
     res: MedusaResponse
 ): Promise<void> {
-    // Ensure subscribers are registered before processing webhook
-    // Medusa v2 doesn't auto-discover project subscribers, so we register manually
-    await registerProjectSubscribers(req.scope);
-
     // Start worker lazily on first webhook (fallback for loader auto-discovery)
     ensureStripeWorkerStarted(req.scope);
 

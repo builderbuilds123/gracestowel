@@ -4,7 +4,6 @@ import { startStripeEventWorker } from "../workers/stripe-event-worker";
 import { createOrderFromStripeWorkflow } from "../workflows/create-order-from-stripe";
 import { z } from "zod";
 import { logger } from "../utils/logger";
-import { registerProjectSubscribers } from "../utils/register-subscribers";
 import { Modules } from "@medusajs/framework/utils";
 
 const CartItemSchema = z.object({
@@ -716,15 +715,12 @@ export function ensureStripeWorkerStarted(container: MedusaContainer): void {
 }
 
 /**
- * Loader function - called by Medusa on startup (if auto-discovery works)
- * Currently not being auto-discovered by Medusa v2, so we trigger manually
+ * Loader function - called by Medusa on startup
+ * Subscribers are auto-discovered by Medusa v2 from src/subscribers/
  */
 export default async function stripeEventWorkerLoader(container: MedusaContainer): Promise<void> {
     logger.info("stripe-event-worker-loader", "Stripe event worker loader starting");
 
-    // Register subscribers first
-    await registerProjectSubscribers(container);
-
-    // Then start worker
+    // Start worker (subscribers are auto-registered by Medusa v2)
     ensureStripeWorkerStarted(container);
 }
