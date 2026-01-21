@@ -68,6 +68,10 @@ cd apps/backend && npm run migrate
 - Lock key = PaymentIntent ID (prevents duplicate webhook processing)
 - Config: 30s timeout, 120s TTL
 
+### 7. Feedback Collection (Recent Change)
+- PostHog Surveys are the single feedback mechanism.
+- The custom Medusa feedback module and `/store/feedback` endpoint are removed.
+
 ---
 
 ## CLI Commands (Preferred)
