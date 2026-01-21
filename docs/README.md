@@ -16,7 +16,7 @@
 
 ### Storefront (`apps/storefront`)
 - **Type:** Storefront Web App
-- **Tech Stack:** React Router v7, Cloudflare Workers, Hyperdrive
+- **Tech Stack:** React Router v7, Cloudflare Workers
 - **Root:** `apps/storefront`
 
 ### E2E Tests (`apps/e2e`)
@@ -36,7 +36,7 @@ System design and technical architecture documentation.
 - [Storefront](architecture/storefront.md) - Routing and frontend patterns
 - [Data Models](architecture/data-models.md) - Database schema and entities
 - [Data Layer](architecture/data-layer.md) - Product data, cart state, configuration
-- [Integrations](architecture/integrations.md) - Stripe, Medusa, Cloudflare, Hyperdrive
+- [Integrations](architecture/integrations.md) - Stripe, Medusa, Cloudflare
 
 ### Guides
 Developer guides and setup instructions.

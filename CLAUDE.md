@@ -15,7 +15,7 @@ Grace's Towel is an e-commerce platform for premium Turkish cotton towels, built
 
 ### 1. Architecture & Patterns
 
-- **Hybrid Data Access**: Storefront uses Hyperdrive for read-only operations and REST API for write operations
+- **API-Only Data Access**: Storefront uses Medusa API for reads and writes
 - **Monorepo Structure**: Code should be in the appropriate workspace (`apps/backend`, `apps/storefront`, `apps/e2e`)
 - **Separation of Concerns**: Backend handles business logic, storefront handles presentation
 - **Edge-First**: Storefront runs on Cloudflare Workers, so avoid Node.js-specific APIs

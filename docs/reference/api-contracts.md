@@ -20,8 +20,7 @@ The storefront implements a Backend-for-Frontend (BFF) pattern using React Route
     - **Purpose**: Health check endpoint for monitoring uptime.
 
 ### Testing
-- **`GET /api/test-hyperdrive`** (`api.test-hyperdrive.ts`)
-    - **Purpose**: Verifies Cloudflare Hyperdrive database connectivity.
+No additional infrastructure test routes.
 
 ## Backend APIs (`apps/backend/src/api`)
 The backend exposes the standard Medusa Admin and Store APIs, plus custom endpoints.

@@ -17,11 +17,11 @@
 
 ### Artifact Conflicts
 *   **Epics:** `epics.md` updated to include Epic 0.
-*   **Architecture:** `architecture.md` already specifies this pattern (Medusa + Hyperdrive), so this change **aligns** the implementation with the approved architecture.
+*   **Architecture:** `architecture.md` specifies Medusa API-only reads/writes, so this change **aligns** the implementation with the approved architecture.
 
 ### Technical Impact
 *   **Storefront:** Major refactor of all Loaders (Product, Collection, Cart).
-*   **Infrastructure:** Cloudflare Hyperdrive configuration required.
+*   **Infrastructure:** Cloudflare Workers configuration required.
 
 ## 3. Recommended Approach & Rationale
 **Selected Path:** Option 1: Direct Adjustment (Add Epic 0)
@@ -33,7 +33,7 @@
 ## 4. Detailed Change Proposals
 ### Epic 0: Architecture & Data Foundation
 (Added to `epics.md`)
-*   **Story 0.1:** Connect Medusa JS Client & Hyperdrive.
+*   **Story 0.1:** Connect Medusa JS Client.
 *   **Story 0.2:** Refactor PDP to use `medusa.products.retrieve`.
 
 ## 5. Implementation Handoff
@@ -41,8 +41,8 @@
 **Handoff Plan:**
 *   **Roles:**
     *   **Developer:** Execute Story 0.1 and 0.2 immediately.
-    *   **Architect:** Verify Hyperdrive performance and security.
-*   **Success Criteria:** Storefront PDP loads dynamic data from Railway-hosted Medusa backend via Cloudflare Hyperdrive.
+    *   **Architect:** Verify Medusa API performance and security.
+    *   **Success Criteria:** Storefront PDP loads dynamic data from Railway-hosted Medusa backend via Medusa API.
 
 ---
 **Approval:**

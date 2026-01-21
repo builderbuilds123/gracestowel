@@ -31,7 +31,7 @@ The backend serves as the central source of truth for data and business logic, e
 
 ## Key Features
 
-- **Hybrid Data Access**: Hyperdrive for fast reads, Medusa API for writes
+- **API-Only Data Access**: Medusa API for reads and writes
 - **1-Hour Grace Period**: Customers can modify orders within 1 hour of placement
 - **Guest Checkout**: Magic link access for guest order modifications
 - **Transactional Email**: BullMQ-powered async email delivery via Resend

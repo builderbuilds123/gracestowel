@@ -44,7 +44,7 @@ You have superpowers. Superpowers teach you new skills and capabilities. RIGHT N
 ┌─────────────────────────────────────────────────────────────┐
 │                    STOREFRONT (Edge)                         │
 ├─────────────────────────────────────────────────────────────┤
-│  READ  ───► Hyperdrive (Direct DB) ───► PostgreSQL          │
+│  READ  ───► Medusa REST API ───► Backend ───► DB            │
 │  WRITE ───► Medusa REST API ───► Backend ───► DB            │
 └─────────────────────────────────────────────────────────────┘
 ```

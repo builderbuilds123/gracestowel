@@ -26,7 +26,6 @@ flowchart TB
 
     subgraph "Infrastructure"
         CF["☁️ Cloudflare"]
-        HD["⚡ Hyperdrive"]
         R2["📦 R2 Storage"]
     end
 
@@ -42,14 +41,12 @@ flowchart TB
 
     SF --> Stripe
     SF --> PostHog
-    SF --> HD
     SF --> BE
     SF --> R2
     BE --> Stripe
     BE --> Resend
     BE --> PG
     BE --> Redis
-    HD --> PG
     Railway --> PG
     Railway --> Redis
 ```
@@ -257,13 +254,7 @@ The storefront runs on Cloudflare's edge network:
 {
   "name": "gracestowelstorefront",
   "compatibility_date": "2025-04-04",
-  "compatibility_flags": ["nodejs_compat"],
-  "hyperdrive": [
-    {
-      "binding": "HYPERDRIVE",
-      "id": "<YOUR_HYPERDRIVE_ID>"
-    }
-  ]
+  "compatibility_flags": ["nodejs_compat"]
 }
 ```
 
@@ -277,53 +268,6 @@ R2_ACCOUNT_ID=...
 R2_ACCESS_KEY_ID=...
 R2_SECRET_ACCESS_KEY=...
 ```
-
----
-
-## Hyperdrive Integration
-
-### Overview
-
-Hyperdrive provides connection pooling for PostgreSQL at Cloudflare's edge, enabling direct database access without the latency of going through the Medusa backend.
-
-**Benefits:**
-- Eliminates Medusa cold start time (~500-2000ms saved)
-- Connection pooling at regional edge locations
-- Optional query caching at the edge
-- Automatic failover to Medusa API if Hyperdrive fails
-
-### Architecture
-
-```mermaid
-flowchart LR
-    subgraph "Edge (Cloudflare)"
-        SF["Storefront"]
-        HD["Hyperdrive Pool"]
-    end
-
-    subgraph "Origin (Railway)"
-        PG[("PostgreSQL")]
-    end
-
-    SF -->|"~50-150ms"| HD
-    HD -->|"Connection Pool"| PG
-```
-
-### Operations via Hyperdrive
-
-| Operation | Via Hyperdrive | Via Medusa API |
-|-----------|----------------|----------------|
-| Product listing | ✅ | Fallback |
-| Product detail | ✅ | Fallback |
-| Product search | ✅ | Fallback |
-| Category browsing | ✅ | Fallback |
-| Cart operations | ❌ | ✅ Required |
-| Checkout | ❌ | ✅ Required |
-| Order management | ❌ | ✅ Required |
-| Customer auth | ❌ | ✅ Required |
-| Review submission | ❌ | ✅ Required |
-
----
 
 ## PostHog Integration
 
@@ -362,15 +306,14 @@ posthog.capture('product_added_to_cart', {
 sequenceDiagram
     participant C as Customer
     participant SF as Storefront
-    participant HD as Hyperdrive
     participant BE as Backend
     participant S as Stripe
     participant R as Resend
 
-    Note over C,R: Browse Products (Fast Path)
+    Note over C,R: Browse Products
     C->>SF: View products
-    SF->>HD: Query products
-    HD-->>SF: Product data
+    SF->>BE: Query products
+    BE-->>SF: Product data
     SF-->>C: Display products
 
     Note over C,R: Checkout (API Path)

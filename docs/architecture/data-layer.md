@@ -6,7 +6,7 @@ Grace's Towel uses a hybrid data approach:
 - **Static Data**: Product catalog defined in TypeScript files
 - **Dynamic Data**: Medusa API for real-time product management
 - **Client State**: React Context for cart and locale
-- **Edge Caching**: Hyperdrive for fast database reads
+- **Edge Caching**: CDN caching for static assets
 
 ## Data Flow Architecture
 
@@ -15,7 +15,6 @@ flowchart TB
     subgraph "Data Sources"
         Static["📄 Static Products<br/>(products.ts)"]
         Medusa["🖥️ Medusa API"]
-        HD["⚡ Hyperdrive"]
     end
 
     subgraph "State Management"
@@ -32,9 +31,7 @@ flowchart TB
 
     Static --> PLP
     Medusa --> PLP
-    HD --> PLP
     Medusa --> PDP
-    HD --> PDP
     Context --> Cart
     Session --> Context
     Context --> Checkout
@@ -47,14 +44,12 @@ flowchart LR
     subgraph "Cache Layers"
         L1["🌐 Browser Cache"]
         L2["☁️ CDN Edge Cache"]
-        L3["⚡ Hyperdrive Pool"]
-        L4["🐘 PostgreSQL"]
+        L3["🐘 PostgreSQL"]
     end
 
     Request --> L1
     L1 -->|Miss| L2
     L2 -->|Miss| L3
-    L3 --> L4
 ```
 
 | Data Type | Cache TTL | Strategy |
@@ -270,4 +265,4 @@ When cart total < $35:
 - [Architecture Overview](./overview.md) - High-level system design
 - [Data Models](./data-models.md) - Database schema
 - [Storefront Architecture](./storefront.md) - Frontend patterns
-- [Integrations](./integrations.md) - Hyperdrive and API details
+- [Integrations](./integrations.md) - API integration details

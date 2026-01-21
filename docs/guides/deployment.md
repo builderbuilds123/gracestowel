@@ -93,11 +93,11 @@ When using `pnpm deploy --prod`, only `dependencies` (not `devDependencies`) are
 - **Config**: `wrangler.jsonc` (patched dynamically during CI)
 - **Process**:
     1.  Build app: `npm run build`.
-    2.  Patch `wrangler.json` with environment-specific name and bindings (Hyperdrive).
+    2.  Patch `wrangler.json` with environment-specific name and bindings.
     3.  Deploy: `wrangler deploy`.
 
 ## Secrets Management
 
-- **GitHub Secrets**: Used for CI/CD credentials (`RAILWAY_TOKEN`, `CLOUDFLARE_API_TOKEN`, `HYPERDRIVE_ID`).
+- **GitHub Secrets**: Used for CI/CD credentials (`RAILWAY_TOKEN`, `CLOUDFLARE_API_TOKEN`).
 - **Railway Variables**: Managed in Railway dashboard.
 - **Cloudflare Secrets**: Managed via `wrangler secret put` or Cloudflare dashboard.

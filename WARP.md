@@ -163,7 +163,7 @@ The storefront is a full-stack React Router v7 application deployed to Cloudflar
   - `CustomerContext` – authenticated Medusa customer/session state.
 - `lib/` – integration utilities:
   - `medusa.server.ts` – server-side Medusa Store API client + price/stock helpers.
-  - `db.server.ts` – PostgreSQL client for server-side routes running on Workers (currently uses `DATABASE_URL` directly; future-proofed for Hyperdrive).
+  - `db.server.ts` – Removed; storefront uses Medusa API only.
   - `stripe.ts` – Stripe.js singleton loader for the client.
 - `data/` – static product and blog data; see `docs/DATA_LAYER.md`.
 - `config/site.ts` – central site configuration (branding, contact info, free gift/shipping thresholds, social URLs).
