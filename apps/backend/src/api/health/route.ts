@@ -1,5 +1,5 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
-import { getPostHog } from "../../utils/posthog"
+import { trackEvent } from "../../utils/analytics"
 import { logger } from "../../utils/logger"
 
 /**
@@ -20,7 +20,7 @@ interface HealthCheckResult {
 /**
  * Check database connectivity by querying Medusa's container
  */
-async function checkDatabase(req: MedusaRequest): Promise<{ status: 'ok' | 'error'; latency_ms?: number; error?: string }> {
+export async function checkDatabase(req: MedusaRequest): Promise<{ status: 'ok' | 'error'; latency_ms?: number; error?: string }> {
   const start = performance.now();
   try {
     // Use Medusa's query to check database - simple query to verify connection
@@ -43,7 +43,7 @@ async function checkDatabase(req: MedusaRequest): Promise<{ status: 'ok' | 'erro
 /**
  * Check Redis connectivity using ioredis
  */
-async function checkRedis(): Promise<{ status: 'ok' | 'error' | 'not_configured'; latency_ms?: number; error?: string }> {
+export async function checkRedis(): Promise<{ status: 'ok' | 'error' | 'not_configured'; latency_ms?: number; error?: string }> {
   const redisUrl = process.env.REDIS_URL;
   if (!redisUrl) {
     return { status: 'not_configured' };
@@ -84,7 +84,7 @@ async function checkRedis(): Promise<{ status: 'ok' | 'error' | 'not_configured'
  * - Database connectivity (via Medusa query)
  * - Redis connectivity (if configured)
  * 
- * Reports to PostHog with status, response time, and any errors.
+ * Reports to analytics with status, response time, and any errors.
  */
 export async function GET(
   req: MedusaRequest,
@@ -125,30 +125,21 @@ export async function GET(
     result.errors = errors;
   }
 
-  // Track health check in PostHog (AC: report status and response time)
-  try {
-    const posthog = getPostHog();
-    if (posthog) {
-      posthog.capture({
-        distinctId: 'system_health_check',
-        event: 'health_check',
-        properties: {
-          status: result.status,
-          service: result.service,
-          response_time_ms: responseTime,
-          database_status: dbCheck.status,
-          database_latency_ms: dbCheck.latency_ms,
-          redis_status: redisCheck.status,
-          redis_latency_ms: redisCheck.latency_ms,
-          error_count: errors.length,
-          errors: errors.length > 0 ? errors : undefined,
-          timestamp: result.timestamp,
-        }
-      });
-    }
-  } catch (error) {
-    logger.error('health', 'Failed to track health check in PostHog', {}, error as Error);
-  }
+  // Track health check in analytics (AC: report status and response time)
+  await trackEvent(req.scope, "system.health_check", {
+    properties: {
+      status: result.status,
+      service: result.service,
+      response_time_ms: responseTime,
+      database_status: dbCheck.status,
+      database_latency_ms: dbCheck.latency_ms,
+      redis_status: redisCheck.status,
+      redis_latency_ms: redisCheck.latency_ms,
+      error_count: errors.length,
+      errors: errors.length > 0 ? errors : undefined,
+      timestamp: result.timestamp,
+    },
+  });
 
   // Log health check result
   if (isHealthy) {
@@ -160,4 +151,3 @@ export async function GET(
   // Return appropriate status code
   res.status(isHealthy ? 200 : 503).json(result);
 }
-

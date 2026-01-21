@@ -16,6 +16,7 @@ import { Modules } from "@medusajs/framework/utils";
 import { modificationTokenService } from "../services/modification-token";
 import { InsufficientStockError } from "./add-item-to-order";
 import { formatModificationWindow } from "../lib/payment-capture-queue";
+import { trackWorkflowEventStep } from "./steps/track-analytics-event";
 
 /**
  * Lock configuration constants for concurrent order creation prevention
@@ -476,6 +477,15 @@ const resolveInventoryLocationsStep = createStep(
 export const createOrderFromStripeWorkflow = createWorkflow(
     "create-order-from-stripe",
     (input: CreateOrderFromStripeInput) => {
+        trackWorkflowEventStep({
+            event: "order.create.started",
+            failureEvent: "order.create.failed",
+            properties: {
+                payment_intent_id: input.paymentIntentId,
+                cart_id: input.cartId,
+            },
+        }).config({ name: "track-order-create-started" });
+
         // Step 0: Acquire lock on PaymentIntent ID
         acquireLockStep({
             key: input.paymentIntentId,
@@ -549,6 +559,15 @@ export const createOrderFromStripeWorkflow = createWorkflow(
             },
         }));
         emitEventStep(eventData);
+
+        const successInput = transform({ order, input }, (data) => ({
+            event: "order.create.succeeded",
+            properties: {
+                order_id: data.order.id,
+                payment_intent_id: data.input.paymentIntentId,
+            },
+        }));
+        trackWorkflowEventStep(successInput).config({ name: "track-order-create-succeeded" });
 
         // Release lock after successful workflow completion
         releaseLockStep({

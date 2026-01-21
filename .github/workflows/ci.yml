@@ -370,7 +370,7 @@ jobs:
       - name: Deploy to Railway Staging
         working-directory: .
         env:
-          RAILWAY_SERVICE_NAME: ${{ vars.RAILWAY_SERVICE_NAME }}
+          RAILWAY_SERVICE_NAME: ${{ vars.RAILWAY_SERVICE_NAME || 'medusa-backend' }}
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: pnpm dlx @railway/cli@4.12.0 up --service "$RAILWAY_SERVICE_NAME" --environment staging --detach
 
@@ -397,7 +397,7 @@ jobs:
       - name: Deploy to Railway Production
         working-directory: .
         env:
-          RAILWAY_SERVICE_NAME: ${{ vars.RAILWAY_SERVICE_NAME }}
+          RAILWAY_SERVICE_NAME: ${{ vars.RAILWAY_SERVICE_NAME || 'medusa-backend' }}
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: pnpm dlx @railway/cli@4.12.0 up --service "$RAILWAY_SERVICE_NAME" --environment production --detach
 

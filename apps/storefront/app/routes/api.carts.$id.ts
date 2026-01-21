@@ -245,15 +245,15 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
     return data({
       id: cart.id,
       region_id: cart.region_id,
-      currency_code: cart.currency_code,
-      subtotal: cart.subtotal,
-      discount_total: cart.discount_total,
-      shipping_total: cart.shipping_total,
-      tax_total: cart.tax_total,
-      total: cart.total,
       items: cart.items,
       shipping_address: cart.shipping_address,
-      promotions: (cart as Cart & { promotions?: any[] }).promotions,
+      currency_code: (cart as any).currency_code,
+      subtotal: (cart as any).subtotal,
+      shipping_total: (cart as any).shipping_total,
+      tax_total: (cart as any).tax_total,
+      discount_total: cart.discount_total,
+      total: (cart as any).total,
+      promotions: (cart as any).promotions,
     });
 
   } catch (error: any) {

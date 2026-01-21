@@ -5,7 +5,7 @@ import type {
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
 // import { sendOrderConfirmationWorkflow } from "../workflows/send-order-confirmation" // DEPRECATED - Replaced by BullMQ
 import { schedulePaymentCapture, formatModificationWindow } from "../lib/payment-capture-queue"
-import { getPostHog } from "../utils/posthog"
+import { trackEvent } from "../utils/analytics"
 import { enqueueEmail } from "../lib/email-queue"
 import { Templates } from "../modules/resend/service"
 import type { ModificationTokenService } from "../services/modification-token"
@@ -13,6 +13,7 @@ import { ensureStripeWorkerStarted } from "../loaders/stripe-event-worker"
 import { startPaymentCaptureWorker } from "../workers/payment-capture-worker"
 import { startEmailWorker } from "../workers/email-worker"
 import { sendAdminNotification, AdminNotificationType } from "../lib/admin-notifications"
+import { logger } from "../utils/logger"
 
 interface OrderPlacedEventData {
   id: string;
@@ -36,19 +37,18 @@ export default async function orderPlacedHandler({
     startPaymentCaptureWorker(container)
   }
 
-  const logger = container.resolve(ContainerRegistrationKeys.LOGGER)
+  // const logger = container.resolve(ContainerRegistrationKeys.LOGGER)
 
   if (!data?.id || typeof data.id !== "string") {
-    logger.error(`[ORDER_PLACED][CRITICAL] Missing order id in event payload - skipping`)
-    console.error("[ORDER_PLACED][CRITICAL] Missing order id in event payload - skipping", data)
+    logger.error("order-placed", "Missing order id in event payload - skipping", { data })
     return
   }
 
-  logger.info(`[ORDER_PLACED] 🎯 Order placed event received: ${data.id}`)
+  logger.info("order-placed", "Order placed event received", { order_id: data.id })
 
   // Log masked token for audit trail (Story 4.1 requirement) - logged BEFORE email attempt
   if (data.modification_token) {
-    logger.info(`[ORDER_PLACED] Token received (masked): ****...${data.modification_token.slice(-8)}`)
+    logger.info("order-placed", "Token received (masked)", { token_masked: `****...${data.modification_token.slice(-8)}` })
   }
 
   // Send order confirmation email via BullMQ
@@ -92,9 +92,9 @@ export default async function orderPlacedHandler({
         
         // DEBUG: Log first item to verify field mapping
         if (order.items && order.items.length > 0) {
-             logger.info(`[ORDER_PLACED_DEBUG] First Item for ${order.id}: ${JSON.stringify(order.items[0], null, 2)}`)
+             logger.debug("order-placed", "First Item debug", { first_item: order.items[0], order_id: order.id })
         } else {
-             logger.warn(`[ORDER_PLACED_DEBUG] No items found on order ${order.id}`)
+             logger.warn("order-placed", "No items found on order", { order_id: order.id })
         }
 
         const isGuest = !order.customer_id
@@ -131,13 +131,13 @@ export default async function orderPlacedHandler({
                 }
 
                 if (Object.keys(updatePayload).length > 0) {
-                    logger.info(`[CUSTOMER][SYSTEM] Syncing missing data for customer ${order.customer_id}:${validationLog}`);
+                    logger.info("customer-sync", `Syncing missing data for customer: ${validationLog}`, { customer_id: order.customer_id });
                     await customerModule.updateCustomers(order.customer_id, updatePayload);
                 }
 
                 // 2. Sync Address (Create new if not exists)
                 // Detailed logging for debugging (sanitized)
-                 logger.info(`[CUSTOMER][SYSTEM] Checking addresses for ${order.customer_id}. Found ${customer.addresses?.length || 0} existing.`);
+                 logger.info("customer-sync", "Checking addresses", { customer_id: order.customer_id, count: customer.addresses?.length || 0 });
 
                 // Basic duplicate check based on address_1 and postal_code
                 const addressExists = customer.addresses?.some(addr => {
@@ -149,11 +149,11 @@ export default async function orderPlacedHandler({
                     return match;
                 });
 
-                logger.info(`[CUSTOMER][SYSTEM] Address exist check result: ${addressExists ? "EXISTS" : "NEW"}`);
+                logger.info("customer-sync", "Address exist check result", { exists: addressExists });
 
                 const sa = order.shipping_address;
                 if (!addressExists && sa.address_1 && sa.postal_code) {
-                    logger.info(`[CUSTOMER][SYSTEM] Saving new address for customer ${order.customer_id}`);
+                    logger.info("customer-sync", "Saving new address for customer", { customer_id: order.customer_id });
                     const newAddresses = await customerModule.createCustomerAddresses([
                         {
                             customer_id: order.customer_id,
@@ -170,11 +170,11 @@ export default async function orderPlacedHandler({
                             metadata: { source: "guest_checkout_order" }
                         }
                     ]);
-                    logger.info(`[CUSTOMER][SYSTEM] Successfully created ${newAddresses.length} new addresses.`);
+                    logger.info("customer-sync", "Successfully created new addresses", { count: newAddresses.length });
                 }
 
             } catch (custErr: any) {
-                logger.error(`[CUSTOMER][SYSTEM] Failed to sync customer data for order ${order.id}`, custErr);
+                logger.error("customer-sync", "Failed to sync customer data", { order_id: order.id }, custErr);
             }
         }
 
@@ -211,20 +211,20 @@ export default async function orderPlacedHandler({
 
                       const storefrontUrl = process.env.STOREFRONT_URL;
                       if (!storefrontUrl) {
-                        logger.warn(`[EMAIL][WARN] STOREFRONT_URL not set - using localhost default for magic link`);
+                        logger.warn("email-magic-link", "STOREFRONT_URL not set - using localhost default for magic link");
                       }
                       const baseUrl = storefrontUrl || "http://localhost:5173";
                       magicLink = `${baseUrl}/order/status/${order.id}?token=${token}`;
 
-                      logger.info(`[EMAIL] Magic link generated for guest order ${order.id}`);
+                      logger.info("email-magic-link", "Magic link generated for guest order", { order_id: order.id });
                 } else {
-                    logger.warn(`[EMAIL][WARN] Could not find payment intent ID for guest order ${order.id} - magic link skipped`);
+                    logger.warn("email-magic-link", "Could not find payment intent ID - magic link skipped", { order_id: order.id });
                 }
             } catch (error: any) {
                 // Log warning but continue - email will be sent without magic link
                 // Sanitize error message to avoid PII leak
                 const safeErrorMessage = error.message ? error.message.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, '***') : 'Unknown error';
-                logger.warn(`[EMAIL][WARN] Failed to generate magic link for order ${order.id}: ${safeErrorMessage}`);
+                logger.warn("email-magic-link", "Failed to generate magic link", { order_id: order.id, error: safeErrorMessage });
             }
         }
 
@@ -274,18 +274,22 @@ export default async function orderPlacedHandler({
 
         // Skip if no email address
         if (!emailPayload.recipient) {
-            logger.warn(`[EMAIL][WARN] No email address for order ${order.id} - skipping`)
+            logger.warn("email-queue", "No email address for order - skipping", { order_id: order.id })
         } else {
             // Enqueue email (non-blocking)
-            await enqueueEmail(emailPayload)
-            logger.info(`[EMAIL][QUEUE] Order confirmation queued for ${order.id}`)
+            const result = await enqueueEmail(emailPayload)
+            if (result) {
+                logger.info("email-queue", "Order confirmation queued", { order_id: order.id })
+            } else {
+                logger.warn("email-queue", "Failed to queue order confirmation", { order_id: order.id })
+            }
         }
     } else {
-        logger.error(`[EMAIL][ERROR] Order ${data.id} not found for email`)
+        logger.error("email-queue", "Order not found for email", { order_id: data.id })
     }
   } catch (error: any) {
     // Log but don't throw - email failure shouldn't block order
-    logger.error(`[EMAIL][ERROR] Failed to queue confirmation for order ${data.id}: ${error.message}`)
+    logger.error("email-queue", "Failed to queue confirmation", { order_id: data.id }, error)
   }
 
   // Send admin notification for new order
@@ -296,9 +300,10 @@ export default async function orderPlacedHandler({
       description: `Order ${data.id} has been placed`,
       metadata: { order_id: data.id },
     })
+
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error)
-    logger.error(`[ADMIN_NOTIF][ERROR] Failed to send admin notification for order ${data.id}: ${message}`)
+    // const message = error instanceof Error ? error.message : String(error)
+    logger.error("admin-notification", "Failed to send admin notification", { order_id: data.id }, error as Error)
   }
 
   // Schedule payment capture after modification window
@@ -351,15 +356,15 @@ export default async function orderPlacedHandler({
 
       if (paymentIntentId) {
         try {
-          logger.info(`[CAPTURE_SCHEDULE] Attempting to schedule payment capture for order ${data.id}, PI: ${paymentIntentId}`)
+          logger.info("payment-capture", "Attempting to schedule payment capture", { order_id: data.id, pi: paymentIntentId })
           await schedulePaymentCapture(data.id, paymentIntentId)
-          logger.info(`[CAPTURE_SCHEDULE] ✅ Payment capture scheduled for order ${data.id} (${formatModificationWindow()} delay), PI: ${paymentIntentId}`)
+          logger.info("payment-capture", "Payment capture scheduled", { order_id: data.id, delay: formatModificationWindow(), pi: paymentIntentId })
         } catch (scheduleError: any) {
           // Story 6.2: Handle Redis connection failures gracefully
           const isRedisError = ['ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND'].includes(scheduleError?.code)
           
           if (isRedisError) {
-            logger.error(`[CRITICAL][DLQ] Redis connection failed for order ${data.id} - flagging for recovery`, scheduleError)
+            logger.error("payment-capture", "Redis connection failed - flagging for recovery", { order_id: data.id }, scheduleError)
             
             // Update order metadata with recovery flag
             const orderService = container.resolve("order")
@@ -371,7 +376,7 @@ export default async function orderPlacedHandler({
                 recovery_reason: 'redis_failure'
               }
             }])
-            logger.info(`[RECOVERY] Order ${data.id} flagged for recovery due to Redis failure`)
+            logger.info("payment-recovery", "Order flagged for recovery due to Redis failure", { order_id: data.id })
           } else {
             // Re-throw non-Redis errors
             throw scheduleError
@@ -379,37 +384,33 @@ export default async function orderPlacedHandler({
         }
       } else {
         // M1: Log as error/warn indicating data integrity issue
-        logger.error(`[CRITICAL] No payment intent ID found for order ${data.id} - Automatic capture will NOT happen.`)
+        logger.error("payment-capture", "No payment intent ID found - Automatic capture will NOT happen", { order_id: data.id })
       }
 
-      // Track order_placed event in PostHog
+      // Track order.placed event in analytics
       try {
-        const posthog = getPostHog()
-        if (posthog) {
-          posthog.capture({
-            distinctId: order.customer_id || `guest_${order.id}`,
-            event: 'order_placed',
-            properties: {
-              order_id: order.id,
-              total: order.total,
-              currency: order.currency_code,
-              item_count: order.items?.length || 0,
-              items: order.items?.map((item: any) => ({
-                product_id: item.product_id,
-                title: item.title,
-                quantity: item.quantity,
-                unit_price: item.unit_price,
-              })) || [],
-            },
-          })
-          logger.info(`[PostHog] order_placed event tracked for order ${data.id}`)
-        }
-      } catch (error) {
-        logger.error(`[PostHog] Failed to track order_placed event for order ${data.id}`, error)
+        await trackEvent(container, "order.placed", {
+          actorId: order.customer_id || undefined,
+          properties: {
+            order_id: order.id,
+            total: order.total,
+            currency: order.currency_code,
+            item_count: order.items?.length || 0,
+            items: order.items?.map((item: any) => ({
+              product_id: item.product_id,
+              quantity: item.quantity,
+              unit_price: item.unit_price,
+            })) || [],
+          },
+        })
+
+        logger.info("analytics", "order.placed event tracked", { order_id: data.id })
+      } catch (error: any) {
+        logger.error("analytics", "Failed to track order.placed event", { order_id: data.id }, error)
       }
     }
-  } catch (error) {
-    logger.error(`Failed to schedule payment capture for order ${data.id}`, error)
+  } catch (error: any) {
+    logger.error("payment-capture", "Failed to schedule payment capture", { order_id: data.id }, error)
   }
 }
 

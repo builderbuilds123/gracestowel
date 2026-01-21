@@ -2,7 +2,7 @@
 
 Date: 2026-01-19
 Owner: Engineering
-Status: Draft
+Status: Done
 
 ## Objective
 Bring the backend email system into alignment with Medusa Resend integration guidance and project email requirements. Address correctness, PII safety, delivery guarantees, and maintainability, while preserving non-blocking order flows.
@@ -31,55 +31,72 @@ Bring the backend email system into alignment with Medusa Resend integration gui
 
 ---
 
-## Plan (Prioritized)
+## Tasks
 
 ### Priority 0 — Compliance & Correctness (Blockers)
 
-1) **Remove PII from provider logs**
-   - Stop logging raw recipient addresses and full payloads in `ResendNotificationProviderService`.
-   - Use `maskEmail` and log only template + order/customer IDs.
+- [x] **Remove PII from provider logs**
+  - [x] Stop logging raw recipient addresses and full payloads in `ResendNotificationProviderService`
+  - [x] Use `maskEmail` and log only template + order/customer IDs
 
-2) **Fix provider option handling**
-   - Ensure provider uses injected `options` instead of reading `process.env` at runtime for test mode.
-   - Enforce required `api_key` and `from` in `validateOptions` per Medusa guide.
-   - If test mode is desired, gate it explicitly via a dedicated option (never auto-infer from env in production).
+- [x] **Fix provider option handling**
+  - [x] Ensure provider uses injected `options` instead of reading `process.env` at runtime for test mode
+  - [x] Enforce required `api_key` and `from` in `validateOptions` per Medusa guide
+  - [x] If test mode is desired, gate it explicitly via a dedicated option (never auto-infer from env in production)
 
 ### Priority 1 — Delivery Guarantees
 
-3) **Standardize all email sending through the queue**
-   - Expand `EmailJobPayload.template` to support all templates.
-   - Modify welcome, shipping-confirmation, and order-canceled flows to enqueue instead of direct send.
-   - Keep workflows for data assembly, but output should enqueue.
+- [x] **Standardize all email sending through the queue**
+  - [x] Expand `EmailJobPayload.template` to support all templates
+  - [x] Modify welcome, shipping-confirmation, and order-canceled flows to enqueue instead of direct send
+  - [x] Keep workflows for data assembly, but output should enqueue
 
-4) **Extend retry + DLQ logic across all templates**
-   - Ensure the worker handles retry/backoff and DLQ storage for all email types.
-   - Preserve invalid-email short-circuit handling.
+- [x] **Extend retry + DLQ logic across all templates**
+  - [x] Ensure the worker handles retry/backoff and DLQ storage for all email types
+  - [x] Preserve invalid-email short-circuit handling
 
 ### Priority 2 — Maintainability & Doc Alignment
 
-5) **Align provider identifier and optional template overrides**
-   - Rename provider id to `notification-resend` (or document why not).
-   - Add `html_templates` override support if needed for future customization.
+- [x] **Align provider identifier and optional template overrides**
+  - [x] Rename provider id to `notification-resend` (or document why not)
+  - [x] Add `html_templates` override support if needed for future customization
 
-6) **Remove duplicate/unused flows**
-   - Deprecate unused workflow paths (e.g., `send-order-confirmation` if queue path is canonical).
-   - Centralize template mapping and typing.
+- [x] **Remove duplicate/unused flows**
+  - [x] Deprecate unused workflow paths (e.g., `send-order-confirmation` if queue path is canonical)
+  - [x] Centralize template mapping and typing
 
 ### Priority 3 — Observability
 
-7) **Structured, minimal logging + metrics**
-   - Replace scattered `console.log` with logger where appropriate.
-   - Emit `[METRIC] email_sent`, `[METRIC] email_failed`, `[METRIC] email_dlq` per template.
+- [x] **Structured, minimal logging + metrics**
+  - [x] Replace scattered `console.log` with logger where appropriate
+  - [x] Emit `[METRIC] email_sent`, `[METRIC] email_failed`, `[METRIC] email_dlq` per template
 
----
+## Dev Agent Record
+
+### Debug Log
+
+- 2026-01-20: Finalized remediation after adversarial review.
+- 2026-01-20: Refactored 3 subscribers to use direct queueing, removing workflow dependency.
+- 2026-01-20: Improved Resend error mapping to enable status-based retry short-circuiting.
+- 2026-01-20: Fixed logging across all email paths (worker + subscribers).
+
+### Completion Notes
+All issues identified in the adversarial review have been addressed. The backend email system now uses a unified, non-blocking path via BullMQ for all transactional templates. Error handling is robust, distinguishing between transient and permanent failures. PII is protected in logs, and Redis hygiene is maintained with job TTLs.
+
+### Change Log
+
+- Modified `ResendNotificationProviderService` to propagate error status codes.
+- Refactored `customer-created.ts`, `fulfillment-created.ts`, `order-canceled.ts` to enqueue emails directly.
+- Cleaned up `email-worker.ts` and `email-queue.ts` (logging, job cleanup).
+- Deleted legacy workflows: `send-welcome-email`, `send-shipping-confirmation`, `send-order-canceled`.
 
 ## Acceptance Criteria
 
-- No raw PII (emails, addresses, order payloads) in logs.
-- All email types are queued, retried, and routed to DLQ on repeated failure.
-- Provider config matches Medusa Resend guide requirements.
-- Non-blocking order flow remains intact for all email types.
-- Clear single-path architecture for sending emails (no duplicate flows).
+- [x] No raw PII in logs.
+- [x] All email types are queued, retried, and routed to DLQ on repeated failure.
+- [x] Provider config matches Medusa Resend guide requirements.
+- [x] Non-blocking order flow remains intact for all email types.
+- [x] Clear single-path architecture for sending emails.
 
 ## Risks & Notes
 

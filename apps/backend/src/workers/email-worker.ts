@@ -64,12 +64,13 @@ async function moveToDLQDirectly(
 
   try {
     await redis.lpush(DLQ_KEY, JSON.stringify(dlqEntry));
-    logger.warn(`[EMAIL][INVALID] Invalid email address for entity ${entityId}, moved to DLQ`);
+    logger.warn("email", `Invalid email address for entity ${entityId}, moved to DLQ`);
 
     const timestamp = new Date().toISOString();
     const sanitizedError = errorMessage.replace(/\|/g, "-").replace(/\s/g, "_");
     logger.error(
-        `[EMAIL][ALERT] Email delivery failed | ` +
+        "email",
+        `Email delivery failed | ` +
         `entity=${entityId} ` +
         `template=${template} ` +
         `error=Invalid_email_${sanitizedError} ` +
@@ -77,11 +78,11 @@ async function moveToDLQDirectly(
         `timestamp=${timestamp}`
     );
 
-    logger.error(`[EMAIL][DLQ] Job ${job.id} moved to DLQ after ${job.attemptsMade + 1} attempts`);
-    logger.info(`[METRIC] email_dlq template=${template} entity=${entityId} reason=invalid_email`);
-    logger.info(`[METRIC] email_alert entity=${entityId} template=${template}`);
+    logger.error("email", `Job ${job.id} moved to DLQ after ${job.attemptsMade + 1} attempts`);
+    logger.info("metric", `email_dlq template=${template} entity=${entityId} reason=invalid_email`);
+    logger.info("metric", `email_alert entity=${entityId} template=${template}`);
   } catch (dlqError: any) {
-    logger.error(`[EMAIL][DLQ_ERROR] Failed to store job ${job.id} in DLQ: ${dlqError.message}`);
+    logger.error("email", `Failed to store job ${job.id} in DLQ: ${dlqError.message}`);
     // Re-throw to prevent silent data loss - BullMQ will retry the job
     throw new Error(`Failed to store invalid email in DLQ: ${dlqError.message}`);
   }
@@ -116,7 +117,7 @@ export function startEmailWorker(container: MedusaContainer): Worker {
   // Ensure queue logger is initialized (matches payment worker not exposing init logic)
   initEmailQueue(container);
 
-  const logger = container.resolve("logger");
+  const logger = container.resolve("logger") as any;
   const notificationService = container.resolve("notification") as INotificationModuleService;
 
   // Create a separate Redis connection for DLQ operations
@@ -133,9 +134,9 @@ export function startEmailWorker(container: MedusaContainer): Worker {
       const attemptNum = job.attemptsMade + 1;
 
       if (job.attemptsMade > 0) {
-        logger.info(`[EMAIL][RETRY] Attempt ${attemptNum}/3 for entity ${entityId}`);
+        logger.info("email", `Attempt ${attemptNum}/3 for entity ${entityId}`);
       } else {
-        logger.info(`[EMAIL][PROCESS] Processing ${template} for entity ${entityId}, attempt ${attemptNum}/3`);
+        logger.info("email", `Processing ${template} for entity ${entityId}, attempt ${attemptNum}/3`);
       }
 
       try {
@@ -148,22 +149,22 @@ export function startEmailWorker(container: MedusaContainer): Worker {
         
         const notificationId = notification?.id || "sent";
 
-        logger.info(`[EMAIL][SENT] Sent ${template} to ${maskedRecipient} for entity ${entityId}. ID: ${notificationId}`);
-        logger.info(`[METRIC] email_sent template=${template} entity=${entityId}`);
+        logger.info("email", `Sent ${template} to ${maskedRecipient} for entity ${entityId}. ID: ${notificationId}`);
+        logger.info("metric", `email_sent template=${template} entity=${entityId}`);
       } catch (error: any) {
         // Check if error is retryable
         if (!isRetryableError(error)) {
           // Invalid email - move directly to DLQ, don't retry
           if (!dlqRedis) {
-            logger.error(`[EMAIL][DLQ_ERROR] DLQ Redis client not initialized, cannot store failed job`);
+            logger.error("email", `DLQ Redis client not initialized, cannot store failed job`);
             throw new Error("DLQ Redis client not initialized");
           }
           await moveToDLQDirectly(job, error, dlqRedis, logger);
           return; // Don't throw - job completes (but email not sent)
         }
 
-        logger.error(`[EMAIL][FAILED] Failed ${template} for entity ${entityId} (attempt ${attemptNum}/3): ${error.message}`);
-        logger.info(`[METRIC] email_failed template=${template} entity=${entityId} error=${error.code || "unknown"}`);
+        logger.error("email", `Failed ${template} for entity ${entityId} (attempt ${attemptNum}/3): ${error.message}`);
+        logger.info("metric", `email_failed template=${template} entity=${entityId} error=${error.code || "unknown"}`);
         throw error; // Re-throw to trigger BullMQ retry
       }
     },
@@ -174,11 +175,11 @@ export function startEmailWorker(container: MedusaContainer): Worker {
   );
 
   emailWorker.on("completed", (job) => {
-    logger.info(`[EMAIL][COMPLETE] Job ${job.id} completed`);
+    logger.info("email", `Job ${job.id} completed`);
   });
 
   emailWorker.on("failed", async (job, error) => {
-    logger.error(`[EMAIL][JOB_FAILED] Job ${job?.id} failed: ${error.message}`);
+    logger.error("email", `Job ${job?.id} failed: ${error.message}`);
 
     if (job) {
         const { entityId, template, recipient } = job.data;
@@ -195,17 +196,18 @@ export function startEmailWorker(container: MedusaContainer): Worker {
         };
 
         if (!dlqRedis) {
-            logger.error(`[EMAIL][DLQ_ERROR] DLQ Redis client not initialized, cannot store failed job ${job.id}`);
+            logger.error("email", `DLQ Redis client not initialized, cannot store failed job ${job.id}`);
             return;
         }
 
         try {
             await dlqRedis.lpush(DLQ_KEY, JSON.stringify(dlqEntry));
-            logger.error(`[EMAIL][DLQ] Job ${job.id} moved to DLQ after ${job.attemptsMade} attempts: ${error.message}`);
+            logger.error("email", `Job ${job.id} moved to DLQ after ${job.attemptsMade} attempts: ${error.message}`);
 
             // ALERT log (parseable format)
             logger.error(
-                `[EMAIL][ALERT] Email delivery failed | ` +
+                "email",
+                `Email delivery failed | ` +
                 `entity=${entityId} ` +
                 `template=${template} ` +
                 `error=${error.message.replace(/\|/g, "-").replace(/\s/g, "_")} ` +
@@ -213,20 +215,20 @@ export function startEmailWorker(container: MedusaContainer): Worker {
                 `timestamp=${timestamp}`
             );
 
-            logger.info(`[METRIC] email_dlq template=${template} entity=${entityId}`);
-            logger.info(`[METRIC] email_alert entity=${entityId} template=${template}`);
+            logger.info("metric", `email_dlq template=${template} entity=${entityId}`);
+            logger.info("metric", `email_alert entity=${entityId} template=${template}`);
         } catch (dlqError: any) {
-            logger.error(`[EMAIL][DLQ_ERROR] Failed to store job ${job.id} in DLQ: ${dlqError.message}`);
+            logger.error("email", `Failed to store job ${job.id} in DLQ: ${dlqError.message}`);
         }
     }
   });
 
-  console.log("[EMAIL] Email worker started");
+  logger.info("email", "Email worker started");
 
   // Graceful shutdown (register once)
   if (!shutdownHandler) {
       shutdownHandler = async () => {
-          console.log("[EMAIL] Shutting down email worker...");
+          logger.info("email", "Shutting down email worker...");
           await emailWorker?.close();
           if (dlqRedis) {
               await dlqRedis.quit();

@@ -11,6 +11,7 @@ import { getStripeClient } from "../utils/stripe";
 import { modificationTokenService } from "../services/modification-token";
 import { retryWithBackoff, isRetryableStripeError } from "../utils/stripe-retry";
 import { logger } from "../utils/logger";
+import { trackWorkflowEventStep } from "./steps/track-analytics-event";
 import {
     InsufficientStockError,
     InvalidOrderStateError,
@@ -735,6 +736,16 @@ async (compensation, { container }) => {
 export const updateLineItemQuantityWorkflow = createWorkflow(
 "update-line-item-quantity",
 (input: UpdateLineItemQuantityInput) => {
+    trackWorkflowEventStep({
+        event: "order.edit.update_quantity.started",
+        failureEvent: "order.edit.update_quantity.failed",
+        properties: {
+            order_id: input.orderId,
+            item_id: input.itemId,
+            quantity: input.quantity,
+        },
+    }).config({ name: "track-order-edit-update-quantity-started" });
+
     const validation = validateUpdatePreconditionsStep({
         orderId: input.orderId,
         modificationToken: input.modificationToken,
@@ -777,6 +788,15 @@ export const updateLineItemQuantityWorkflow = createWorkflow(
         previousMetadata: validation.order.metadata,
     });
 
+    trackWorkflowEventStep({
+        event: "order.edit.update_quantity.succeeded",
+        properties: {
+            order_id: input.orderId,
+            item_id: input.itemId,
+            quantity: input.quantity,
+        },
+    }).config({ name: "track-order-edit-update-quantity-succeeded" });
+
     return new WorkflowResponse({
         orderId: input.orderId,
         newTotal: totals.newOrderTotal,
@@ -784,4 +804,3 @@ export const updateLineItemQuantityWorkflow = createWorkflow(
     });
 }
 );
-

@@ -64,11 +64,16 @@ export async function enqueueEmail(payload: EmailJobPayload): Promise<Job | null
         type: "exponential",
         delay: 1000, // 1s, 2s, 4s
       },
+      removeOnComplete: {
+        age: 3600, // keep for 1 hour
+        count: 100, // keep last 100
+      },
+      removeOnFail: {
+        age: 24 * 3600, // keep for 24 hours
+      }
     });
 
-    const safeTemplate =
-      payload.template === Templates.PASSWORD_RESET ? "password_reset" : payload.template;
-    logger.info(`[EMAIL][QUEUE] Enqueued ${safeTemplate} for entity ${payload.entityId}`);
+    logger.info(`[EMAIL][QUEUE] Enqueued ${payload.template} for entity ${payload.entityId}`);
     return job;
   } catch (error: unknown) {
     // CRITICAL: Catch all errors - never throw from email queue

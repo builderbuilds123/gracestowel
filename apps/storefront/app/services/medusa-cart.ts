@@ -7,7 +7,6 @@ import { createLogger } from "../lib/logger";
 export interface Cart {
   id: string;
   region_id?: string;
-  currency_code?: string;
   email: string | null;
   billing_address: object | null;
   shipping_address: object | null;

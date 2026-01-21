@@ -6,6 +6,17 @@ vi.mock("../../src/lib/email-queue", () => ({
   enqueueEmail: vi.fn(),
 }));
 
+vi.mock("../../src/utils/logger", () => ({
+  logger: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  },
+}));
+
+import { logger as mockLogger } from "../../src/utils/logger";
+
 vi.mock("../../src/lib/payment-capture-queue", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../src/lib/payment-capture-queue")>();
   return {
@@ -14,13 +25,13 @@ vi.mock("../../src/lib/payment-capture-queue", async (importOriginal) => {
   };
 });
 
-vi.mock("../../src/utils/posthog", () => ({
-  getPostHog: vi.fn().mockReturnValue(null),
+vi.mock("../../src/utils/analytics", () => ({
+  trackEvent: vi.fn().mockResolvedValue(undefined),
 }));
 
 describe("Order Placed Subscriber", () => {
   let mockContainer: any;
-  let mockLogger: any;
+  // let mockLogger: any; // Now using imported mock
   let mockQuery: any;
   const originalEnv = process.env;
   let generateTokenSpy: vi.SpyInstance;
@@ -30,11 +41,8 @@ describe("Order Placed Subscriber", () => {
     process.env = { ...originalEnv };
     process.env.STOREFRONT_URL = "http://test-store.com";
 
-    mockLogger = {
-      info: vi.fn(),
-      error: vi.fn(),
-      warn: vi.fn(),
-    };
+    // Mock logger is already setup by vi.mock, just clear it
+    // mockLogger = { ... }
 
     // Create a mock service instance with generateToken spy
     const mockModificationTokenService = {
@@ -45,7 +53,7 @@ describe("Order Placed Subscriber", () => {
 
     mockContainer = {
       resolve: vi.fn((key) => {
-        if (key === "logger") return mockLogger;
+        // if (key === "logger") return mockLogger;
         if (key === "query") return mockQuery;
         if (key === "modificationTokenService") return mockModificationTokenService;
         return null;
@@ -169,8 +177,14 @@ describe("Order Placed Subscriber", () => {
     await orderPlacedHandler({ event, container: mockContainer } as any);
 
     // Expect warned logs with SANITIZED message
+    // Expect warned logs with SANITIZED message
     expect(mockLogger.warn).toHaveBeenCalledWith(
-      expect.stringMatching(/\[EMAIL\]\[WARN\] Failed to generate magic link for order order_fail_1: Failed for user \*\*\* because reason/)
+      "email-magic-link",
+      "Failed to generate magic link",
+      expect.objectContaining({
+        order_id: "order_fail_1",
+        error: expect.stringMatching(/Failed for user \*\*\* because reason/)
+      })
     );
 
     // Should still enqueue email, just without modification token
@@ -208,8 +222,11 @@ describe("Order Placed Subscriber", () => {
     expect(generateTokenSpy).not.toHaveBeenCalled();
 
     // Ensure warning logged
+    // Ensure warning logged
     expect(mockLogger.warn).toHaveBeenCalledWith(
-      expect.stringContaining("Could not find payment intent ID for guest order")
+      "email-magic-link",
+      "Could not find payment intent ID - magic link skipped",
+      expect.objectContaining({ order_id: "order_nopay_1" })
     );
 
     // Email still sent
@@ -250,7 +267,8 @@ describe("Order Placed Subscriber", () => {
     await orderPlacedHandler({ event, container: mockContainer } as any);
 
     expect(mockLogger.warn).toHaveBeenCalledWith(
-      expect.stringContaining("STOREFRONT_URL not set")
+      "email-magic-link",
+      "STOREFRONT_URL not set - using localhost default for magic link"
     );
 
     expect(enqueueEmail).toHaveBeenCalledWith(
@@ -284,10 +302,10 @@ describe("Order Placed Subscriber", () => {
     await expect(orderPlacedHandler({ event, container: mockContainer } as any)).resolves.not.toThrow();
 
     expect(mockLogger.error).toHaveBeenCalledWith(
-      expect.stringContaining("[EMAIL][ERROR] Failed to queue confirmation")
-    );
-    expect(mockLogger.error).toHaveBeenCalledWith(
-      expect.stringContaining("Queue full")
+      "email-queue",
+      "Failed to queue confirmation",
+      expect.objectContaining({ order_id: "order_queue_fail" }),
+      expect.any(Error)
     );
   });
 
