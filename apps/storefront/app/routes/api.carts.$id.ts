@@ -247,8 +247,13 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
       region_id: cart.region_id,
       items: cart.items,
       shipping_address: cart.shipping_address,
+      currency_code: (cart as any).currency_code,
+      subtotal: (cart as any).subtotal,
+      shipping_total: (cart as any).shipping_total,
+      tax_total: (cart as any).tax_total,
       discount_total: cart.discount_total,
-      promotions: (cart as Cart & { promotions?: any[] }).promotions,
+      total: (cart as any).total,
+      promotions: (cart as any).promotions,
     });
 
   } catch (error: any) {

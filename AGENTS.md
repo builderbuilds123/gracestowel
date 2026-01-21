@@ -10,6 +10,12 @@ pnpm test             # Run all tests
 pnpm typecheck        # Type check
 ```
 
+## Superpowers System
+
+<EXTREMELY_IMPORTANT>
+You have superpowers. Superpowers teach you new skills and capabilities. RIGHT NOW run: `.agent/superpowers/.codex/superpowers-codex bootstrap` and follow the instructions it returns.
+</EXTREMELY_IMPORTANT>
+
 **Key Resources:**
 - Medusa v2 Docs: https://docs.medusajs.com/v2
 - Project Gotchas: [`docs/project_context.md`](docs/project_context.md)
