@@ -299,7 +299,7 @@ export function getMedusaClient(context?: { cloudflare?: { env?: { MEDUSA_BACKEN
         publishableKey = window.ENV?.MEDUSA_PUBLISHABLE_KEY;
     }
 
-    if (!publishableKey && process.env.MEDUSA_PUBLISHABLE_KEY) {
+    if (!publishableKey && typeof process !== "undefined" && process.env.MEDUSA_PUBLISHABLE_KEY) {
         publishableKey = process.env.MEDUSA_PUBLISHABLE_KEY;
     }
 
