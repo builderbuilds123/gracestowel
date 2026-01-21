@@ -34,7 +34,7 @@ module.exports = defineConfig({
     backendUrl: process.env.RAILWAY_PUBLIC_DOMAIN 
       ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` 
       : (process.env.MEDUSA_BACKEND_URL || "/"),
-    path: "/app"
+    path: "/dashboard"
   },
   modules: [
     {
