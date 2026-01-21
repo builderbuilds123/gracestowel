@@ -51,22 +51,21 @@ This document provides the complete epic and story breakdown for `gracestowel`, 
 
 ## Epic 0: Architecture & Data Foundation
 
-**Goal:** Transition storefront from static content to dynamic Medusa backend integration using Hyperdrive, establishing the "single source of truth."
+**Goal:** Transition storefront from static content to dynamic Medusa backend integration via the Medusa API, establishing the "single source of truth."
 
-### Story 0.1: Establish Medusa Client & Hyperdrive Connection
+### Story 0.1: Establish Medusa Client Connection
 
 As a developer,
-I want to configure the Medusa JS client and Cloudflare Hyperdrive in the storefront,
-So that I can securely and performantly fetch data from the Medusa backend.
+I want to configure the Medusa JS client in the storefront,
+So that I can securely fetch data from the Medusa backend.
 
 **Acceptance Criteria:**
 *   **Given** the storefront application is configured.
 *   **When** the application attempts to connect to the backend.
 *   **Then** the Medusa JS client is initialized with correct environment variables.
-*   **And** the Hyperdrive binding is configured in `wrangler.toml` and accessible in loaders.
 *   **And** the connection is verified by fetching a simple endpoint (e.g., store details).
 
-**Technical Notes:** Ensure `wrangler.toml` in `apps/storefront` is updated with local and production Hyperdrive bindings.
+**Technical Notes:** Ensure `wrangler.jsonc` in `apps/storefront` is updated with environment-specific API configuration.
 
 ### Story 0.2: Refactor PDP to Dynamic Data
 

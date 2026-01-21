@@ -1,8 +1,7 @@
 import type { Route } from "./+types/search";
 import { ProductCard } from "../components/ProductCard";
-import { getMedusaClient, castToMedusaProduct } from "../lib/medusa";
-import { getProductPrice, type MedusaProduct } from "../lib/medusa";
-import { getProductsFromDB, isHyperdriveAvailable } from "../lib/products.server";
+import { getMedusaClient, castToMedusaProduct, type MedusaProduct } from "../lib/medusa";
+import { getProductPrice } from "../lib/medusa";
 import { Search } from "lucide-react";
 import { useSearchParams, Form } from "react-router";
 
@@ -14,46 +13,31 @@ export async function loader({ context, request }: Route.LoaderArgs) {
         return { products: [], query: "", count: 0 };
     }
 
-    let response: { products: MedusaProduct[] } = { products: [] };
+    let searchResults: MedusaProduct[] = [];
 
-    let usedHyperdrive = false;
+    try {
+        const medusa = getMedusaClient(context);
+        const { products } = await medusa.store.product.list({ 
+            limit: 50, 
+            fields: "+variants,+variants.prices,+variants.inventory_quantity,+options,+options.values,+images,+categories,+metadata" 
+        });
 
-    // Try Hyperdrive first for faster search
-    if (isHyperdriveAvailable(context)) {
-        try {
-            const startTime = Date.now();
-            response = await getProductsFromDB(context, { limit: 50, search: query });
-            console.log(`✅ Hyperdrive search: Found ${response.products.length} products in ${Date.now() - startTime}ms`);
-            usedHyperdrive = true;
-        } catch (error) {
-            console.warn("⚠️ Hyperdrive search failed, falling back to Medusa:", error);
-        }
-    }
-
-    // Fallback to Medusa API only if Hyperdrive was not used (unavailable or failed)
-    // If Hyperdrive ran successfully and returned 0 results, we trust it and don't fallback
-    if (!usedHyperdrive) {
-        try {
-            const medusa = getMedusaClient(context);
-            const { products } = await medusa.store.product.list({ limit: 50, fields: "+variants,+variants.prices,+variants.inventory_quantity,+options,+options.values,+images,+categories,+metadata" });
-
-            // Filter products by search query (title, description, or handle)
-            const searchLower = query.toLowerCase();
-            response.products = products.map(castToMedusaProduct).filter((product: MedusaProduct) => {
-                return (
-                    product.title.toLowerCase().includes(searchLower) ||
-                    product.handle.toLowerCase().includes(searchLower) ||
-                    (product.description?.toLowerCase().includes(searchLower) ?? false)
-                );
-            });
-        } catch (error) {
-            console.error("Search failed:", error);
-            return { products: [], query, count: 0, error: "Search failed" };
-        }
+        // Filter products by search query (title, description, or handle)
+        const searchLower = query.toLowerCase();
+        searchResults = products.map(castToMedusaProduct).filter((product: MedusaProduct) => {
+            return (
+                product.title.toLowerCase().includes(searchLower) ||
+                product.handle.toLowerCase().includes(searchLower) ||
+                (product.description?.toLowerCase().includes(searchLower) ?? false)
+            );
+        });
+    } catch (error) {
+        console.error("Search failed:", error);
+        return { products: [], query, count: 0, error: "Search failed" };
     }
 
     // Transform to ProductCard format
-    const products = response.products.map((product: MedusaProduct) => {
+    const products = searchResults.map((product: MedusaProduct) => {
         const priceData = getProductPrice(product, "usd");
         return {
             id: product.id,

@@ -1,6 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { medusaFetch } from '../lib/medusa-fetch';
 import { monitoredFetch } from '../utils/monitored-fetch';
+import { createLogger } from '../lib/logger';
+
+const logger = createLogger({ context: "CustomerContext" });
 
 export interface CustomerAddress {
     id: string;
@@ -95,7 +98,7 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
                             last_name: data.customer.last_name,
                             created_at: data.customer.created_at,
                         });
-                        console.log('[PostHog] User identified:', data.customer.id);
+                        logger.info('[PostHog] User identified', { customerId: data.customer.id });
                     });
                 }
             } else {
@@ -105,7 +108,7 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
                 setCustomer(null);
             }
         } catch (error) {
-            console.error('Failed to fetch customer:', error);
+            logger.error('Failed to fetch customer', error as Error);
         } finally {
             setIsLoading(false);
         }
@@ -143,16 +146,16 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
                         },
                         label: 'cart-transfer-on-login',
                     });
-                    console.log('[CustomerContext] Cart transferred successfully:', cartId);
+                    logger.info('Cart transferred successfully', { cartId });
                 } catch (err) {
-                    console.error('[CustomerContext] Failed to transfer cart during login:', err);
+                    logger.error('Failed to transfer cart during login', err as Error);
                     // Continue anyway, as login was successful
                 }
             }
 
             return { success: true };
         } catch (error) {
-            console.error('Login error:', error);
+            logger.error('Login error', error as Error);
             return { success: false, error: 'An error occurred during login' };
         }
     };
@@ -215,15 +218,15 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
                         },
                         label: 'cart-transfer-on-register',
                     });
-                    console.log('[CustomerContext] Cart transferred successfully:', cartId);
+                    logger.info('Cart transferred successfully', { cartId });
                 } catch (err) {
-                    console.error('[CustomerContext] Failed to transfer cart during registration:', err);
+                    logger.error('Failed to transfer cart during registration', err as Error);
                 }
             }
 
             return { success: true };
         } catch (error) {
-            console.error('Registration error:', error);
+            logger.error('Registration error', error as Error);
             return { success: false, error: 'An error occurred during registration' };
         }
     };
@@ -237,7 +240,7 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
         if (typeof window !== 'undefined') {
             import('../utils/posthog').then(({ default: posthog }) => {
                 posthog.reset();
-                console.log('[PostHog] User identification reset');
+                logger.info('[PostHog] User identification reset');
             });
         }
     };
@@ -258,7 +261,7 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
 
             return { success: true };
         } catch (error) {
-            console.error('Password reset request error:', error);
+            logger.error('Password reset request error', error as Error);
             return { success: false, error: 'An error occurred while requesting password reset' };
         }
     };
@@ -282,7 +285,7 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
 
             return { success: true };
         } catch (error) {
-            console.error('Password update error:', error);
+            logger.error('Password update error', error as Error);
             return { success: false, error: 'An error occurred while updating password' };
         }
     };

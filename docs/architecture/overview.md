@@ -15,7 +15,6 @@ flowchart TB
     subgraph "Edge Layer (Cloudflare)"
         CF["☁️ Cloudflare Workers"]
         R2["📦 R2 Storage"]
-        HD["⚡ Hyperdrive"]
     end
 
     subgraph "Application Layer"
@@ -37,9 +36,7 @@ flowchart TB
     Browser --> CF
     Admin --> BE
     CF --> SF
-    SF --> HD
     SF --> BE
-    HD --> PG
     BE --> PG
     BE --> Redis
     BE --> Stripe
@@ -54,17 +51,16 @@ flowchart TB
 sequenceDiagram
     participant C as Customer
     participant SF as Storefront
-    participant HD as Hyperdrive
     participant BE as Backend
     participant DB as PostgreSQL
     participant S as Stripe
 
     Note over C,S: Read Path (Products, Collections)
     C->>SF: Browse products
-    SF->>HD: Direct SQL query
-    HD->>DB: Query
-    DB-->>HD: Results
-    HD-->>SF: Product data
+    SF->>BE: REST API call
+    BE->>DB: Query
+    DB-->>BE: Results
+    BE-->>SF: Product data
     SF-->>C: Rendered page
 
     Note over C,S: Write Path (Cart, Checkout)

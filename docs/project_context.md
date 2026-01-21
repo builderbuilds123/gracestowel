@@ -36,8 +36,7 @@ cd apps/backend && npm run migrate
 
 ### 1. Storefront Runs on Cloudflare Workers (Edge)
 - **No Node.js APIs** — `fs`, `path`, `child_process` will fail
-- **Database via Hyperdrive only** — use `env.HYPERDRIVE.connectionString`
-- **Reads from DB, Writes via Medusa API** — never write directly to DB from storefront
+- **Medusa API only** — all reads/writes go through Medusa APIs (no direct DB access)
 
 ### 2. Medusa v2 Only (Not v1)
 - Use `MedusaService({ Model })` not `TransactionBaseService`
@@ -67,6 +66,10 @@ cd apps/backend && npm run migrate
 - Use `acquireLockStep`/`releaseLockStep` from `@medusajs/core-flows`
 - Lock key = PaymentIntent ID (prevents duplicate webhook processing)
 - Config: 30s timeout, 120s TTL
+
+### 7. Feedback Collection (Recent Change)
+- PostHog Surveys are the single feedback mechanism.
+- The custom Medusa feedback module and `/store/feedback` endpoint are removed.
 
 ---
 

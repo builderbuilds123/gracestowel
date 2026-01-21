@@ -29,13 +29,11 @@ Configure these in **Settings > Environments > [environment] > Environment secre
 #### `staging` Environment
 | Secret | Description | Example |
 |--------|-------------|---------|
-| `HYPERDRIVE_ID` | Cloudflare Hyperdrive ID for staging DB | `abc123...` |
 | `MEDUSA_BACKEND_URL` | Railway staging backend URL | `https://gracestowel-staging.up.railway.app` |
 
 #### `production` Environment
 | Secret | Description | Example |
 |--------|-------------|---------|
-| `HYPERDRIVE_ID` | Cloudflare Hyperdrive ID for production DB | `def456...` |
 | `MEDUSA_BACKEND_URL` | Railway production backend URL | `https://gracestowel-backend.up.railway.app` |
 
 ## Railway Configuration
@@ -68,18 +66,6 @@ Railway Project
 
 ## Cloudflare Configuration
 
-### Hyperdrive Setup
-
-Create two Hyperdrive configurations in Cloudflare Dashboard:
-
-1. **Production Hyperdrive** (`HYPERDRIVE_ID` for production)
-   - Name: `gracestowel-hyperdrive-production`
-   - Database: Railway production PostgreSQL
-
-2. **Staging Hyperdrive** (`HYPERDRIVE_ID` for staging)
-   - Name: `gracestowel-hyperdrive-staging`
-   - Database: Railway staging PostgreSQL
-
 ### Worker Secrets (per environment)
 
 Set these via Cloudflare Dashboard or `wrangler secret put`:
@@ -106,7 +92,6 @@ wrangler secret put MEDUSA_PUBLISHABLE_KEY --env staging
 
 1. **`apps/storefront/.dev.vars`** (gitignored)
 ```env
-DATABASE_URL="postgresql://user:pass@localhost:5432/medusa"
 MEDUSA_BACKEND_URL="http://localhost:9000"
 MEDUSA_PUBLISHABLE_KEY="pk_xxx..."
 ```
@@ -156,9 +141,6 @@ COOKIE_SECRET="local-dev-secret"
 
 ## Troubleshooting
 
-### Hyperdrive Connection Issues
-1. Verify the Hyperdrive ID matches the GitHub secret
-2. Check that the Hyperdrive config points to the correct Railway database
 3. Ensure the database allows connections from Cloudflare IPs
 
 ### Railway Deployment Issues

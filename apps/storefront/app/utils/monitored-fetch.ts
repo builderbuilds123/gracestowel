@@ -19,7 +19,6 @@ type ServerPostHogConfig = {
  */
 export type CloudflareEnv = {
   ENVIRONMENT?: string;
-  DATABASE_URL?: string;
   MEDUSA_BACKEND_URL?: string;
   MEDUSA_PUBLISHABLE_KEY?: string;
   STRIPE_SECRET_KEY?: string;

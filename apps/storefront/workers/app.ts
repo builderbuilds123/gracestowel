@@ -1,4 +1,5 @@
 import { createRequestHandler } from "react-router";
+import { setServerEnv } from "../app/lib/medusa";
 
 declare module "react-router" {
   export interface AppLoadContext {
@@ -16,6 +17,9 @@ const requestHandler = createRequestHandler(
 
 export default {
   async fetch(request, env, ctx) {
+    // Initialize server-side env singleton for global utility access (Codex feedback fix)
+    setServerEnv(env);
+
     try {
       return await requestHandler(request, {
         cloudflare: { env, ctx },

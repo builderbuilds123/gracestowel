@@ -21,8 +21,7 @@ flowchart TB
     end
 
     subgraph "Data Sources"
-        HD["⚡ Hyperdrive<br/>(Direct DB reads)"]
-        BE["🖥️ Backend API<br/>(Writes)"]
+        BE["🖥️ Backend API<br/>(Reads & Writes)"]
     end
 
     UI --> Loader
@@ -30,29 +29,28 @@ flowchart TB
     UI --> API
     Stripe --> API
     PostHog --> PostHog["PostHog Cloud"]
-    Loader --> HD
+    Loader --> BE
     Actions --> BE
     API --> BE
-    HD --> PG[("PostgreSQL")]
-    BE --> PG
+    BE --> PG[("PostgreSQL")]
 ```
 
 ## Data Access Pattern
 
 ```mermaid
 flowchart LR
-    subgraph "READ Path (Fast)"
-        R1["Product Page"] --> R2["Hyperdrive"]
+    subgraph "READ Path"
+        R1["Product Page"] --> R2["Medusa API"]
         R2 --> R3[("PostgreSQL")]
     end
 
-    subgraph "WRITE Path (Safe)"
+    subgraph "WRITE Path"
         W1["Add to Cart"] --> W2["Medusa API"]
         W2 --> W3[("PostgreSQL")]
     end
 ```
 
-**Key Principle**: Reads go directly to the database via Hyperdrive for speed. Writes go through the Medusa API to ensure business logic execution.
+**Key Principle**: Reads and writes go through the Medusa API to ensure business logic execution.
 
 ## Core Capabilities
 
@@ -129,11 +127,11 @@ Since the storefront runs on Cloudflare Workers:
 | ❌ Not Available | ✅ Available |
 |-----------------|-------------|
 | Node.js `fs`, `path`, `child_process` | Web APIs (fetch, crypto, etc.) |
-| Direct database drivers | Hyperdrive for DB access |
+| Direct database drivers | Not allowed |
 | Node.js-specific libraries | Web-compatible libraries |
 | Long-running processes | Edge-optimized functions |
 
-**Important**: Always use `env.HYPERDRIVE.connectionString` for database access, never direct PostgreSQL URLs.
+**Important**: Do not use direct database drivers from the storefront.
 
 ---
 

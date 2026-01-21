@@ -42,7 +42,6 @@ This document tracks all environment variables across deployment environments.
 | `NODE_ENV` | Yes | Runtime environment | `development` | `development` | `production` | `production` |
 | `VITE_POSTHOG_API_KEY` | No | PostHog client key | Dev project | Skip | Staging project | Prod project |
 | `VITE_POSTHOG_HOST` | No | PostHog host | `https://us.i.posthog.com` | Skip | `https://us.i.posthog.com` | `https://us.i.posthog.com` |
-| `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE` | No | Local Hyperdrive bypass | Local DB | Test DB connection | Not used | Not used |
 
 ---
 

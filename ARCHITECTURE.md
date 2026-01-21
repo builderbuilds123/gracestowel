@@ -6,13 +6,12 @@ Grace Stowel is an e-commerce platform for premium Turkish cotton towels, built 
 
 - **Backend**: Medusa v2 (Node.js headless commerce engine)
 - **Storefront**: React Router v7 + Cloudflare Workers
-- **Infrastructure**: Railway (databases, backend hosting) + Cloudflare (frontend CDN, Hyperdrive)
+- **Infrastructure**: Railway (databases, backend hosting) + Cloudflare (frontend CDN)
 - **Payments**: Stripe (checkout, payment intents, shipping rates)
-- **Database Acceleration**: Cloudflare Hyperdrive (connection pooling for edge)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                      HYBRID PRODUCTION ARCHITECTURE                          │
+│                       PRODUCTION ARCHITECTURE                                │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
 │    ┌──────────────────────┐                                                 │
@@ -20,17 +19,12 @@ Grace Stowel is an e-commerce platform for premium Turkish cotton towels, built 
 │    │   (Edge Network)     │                                                 │
 │    ├──────────────────────┤           ┌──────────────────────┐             │
 │    │                      │   REST    │                      │             │
-│    │   READ-WRITE OPS     │ ───────▶  │   Medusa Backend     │             │
-│    │   (cart, checkout,   │           │   (Railway)          │             │
-│    │    orders, reviews)  │           │                      │             │
+│    │   READ/WRITE OPS     │ ───────▶  │   Medusa Backend     │             │
+│    │   (products, cart,   │           │   (Railway)          │             │
+│    │    checkout, orders) │           │                      │             │
 │    │                      │           └──────────────────────┘             │
-│    ├──────────────────────┤                                                 │
-│    │                      │           ┌──────────────────────┐             │
-│    │   READ-ONLY OPS      │ ───────▶  │   Hyperdrive         │──────┐      │
-│    │   (products, search) │           │   (Connection Pool)  │      │      │
-│    │                      │           └──────────────────────┘      │      │
-│    └──────────────────────┘                                         │      │
-│             │                                                       │      │
+│    └──────────────────────┘                                                 │
+│             │                                                               │
 │             │                         ┌──────────────────────┐      │      │
 │    ┌────────▼──────────────┐         │     PostgreSQL       │◀─────┘      │
 │    │       Stripe          │         │   + Redis (Cache)    │              │
@@ -40,23 +34,12 @@ Grace Stowel is an e-commerce platform for premium Turkish cotton towels, built 
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Hybrid Architecture Rationale
+### API-Only Architecture Rationale
 
-The storefront uses a **hybrid data access pattern**:
+The storefront uses a **Medusa API-only access pattern**:
 
-1. **Hyperdrive (Direct PostgreSQL)** - For read-only, high-frequency operations:
-   - Product listings and detail pages
-   - Product search
-   - Category browsing
-   - Benefits: Eliminates Medusa cold starts, edge connection pooling, ~50-100ms faster
-
-2. **Medusa REST API** - For operations requiring business logic:
-   - Cart management
-   - Checkout flow
-   - Order processing
-   - Customer authentication
-   - Reviews (writes)
-   - Benefits: Maintains business logic, data integrity, proper validation
+- All reads and writes go through the Medusa REST API.
+- This preserves business logic, data integrity, and validation consistency.
 
 ## Repository Structure
 
@@ -124,19 +107,11 @@ gracestowel/
 | Redis | Cache | Railway |
 | Backend hosting | API server | Railway |
 | CDN + Edge | Storefront | Cloudflare |
-| Hyperdrive | DB connection pooling | Cloudflare |
 | Payments | Transactions | Stripe |
 
 ## Data Flow
 
-### 1. Product Display Flow (Hyperdrive - Fast Path)
-```
-User → Cloudflare Edge → React Storefront → Hyperdrive → PostgreSQL
-                                   ↓
-                            Products rendered (~50-100ms faster)
-```
-
-**Fallback Path** (if Hyperdrive unavailable):
+### 1. Product Display Flow (Medusa API)
 ```
 User → Cloudflare Edge → React Storefront → Medusa API → PostgreSQL
 ```
@@ -201,4 +176,3 @@ User enters address → AddressElement onChange
 - [Medusa Auth Module Issue](./docs/troubleshooting/medusa-auth-module.md) - Known v2.11 bug and workarounds
 - [Stripe Errors](./docs/troubleshooting/stripe-errors.md) - Stripe error troubleshooting
 - [Payment Debugging](./docs/troubleshooting/payment-debugging.md) - Payment flow debugging
-

@@ -1,5 +1,8 @@
 import Medusa from "@medusajs/js-sdk"
 import { clampAvailability } from "./inventory"
+import { createLogger } from "./logger"
+
+const logger = createLogger({ context: "medusa-lib" })
 
 export const createMedusaClient = (backendUrl: string, publishableKey: string) => {
   return new Medusa({
@@ -77,7 +80,7 @@ export function validateMedusaProduct(item: unknown): MedusaProduct | null {
     // Check for critical identifying fields
     const p = item as any;
     if (typeof p.id !== 'string' || typeof p.handle !== 'string') {
-        console.warn('Invalid product data: missing id or handle', p);
+        logger.warn('Invalid product data: missing id or handle', { item: p });
         return null;
     }
 
@@ -133,7 +136,7 @@ export async function getDefaultRegion(
         
         return null;
     } catch (error) {
-        console.error("Failed to fetch default region:", error);
+        logger.error("Failed to fetch default region:", error as Error);
         return null;
     }
 }
@@ -245,22 +248,39 @@ declare global {
   }
 }
 
+// Singleton to store Cloudflare env on the server for utility access without context
+let serverEnv: { MEDUSA_BACKEND_URL?: string, MEDUSA_PUBLISHABLE_KEY?: string } | null = null;
+
+/**
+ * Sets the global server environment. Called from the worker entry point.
+ */
+export function setServerEnv(env: any) {
+    if (env && typeof env === 'object') {
+        serverEnv = env;
+    }
+}
+
 /**
  * Get the backend URL from context or environment variables
  * Centralizes the backend URL resolution logic
  */
 export function getBackendUrl(context?: { cloudflare?: { env?: { MEDUSA_BACKEND_URL?: string } } }): string {
-    // 1. Check Cloudflare context (server-side)
+    // 1. Check Cloudflare context (server-side explicit)
     if (context?.cloudflare?.env?.MEDUSA_BACKEND_URL) {
         return context.cloudflare.env.MEDUSA_BACKEND_URL;
     }
 
-    // 2. Check window.ENV (client-side hydration)
+    // 2. Check globally stored server env (server-side implicit fallback)
+    if (serverEnv?.MEDUSA_BACKEND_URL) {
+        return serverEnv.MEDUSA_BACKEND_URL;
+    }
+
+    // 3. Check window.ENV (client-side hydration)
     if (typeof window !== "undefined" && window.ENV?.MEDUSA_BACKEND_URL) {
         return window.ENV.MEDUSA_BACKEND_URL;
     }
 
-    // 3. Check import.meta.env (Vite build-time)
+    // 4. Check import.meta.env (Vite build-time)
     return import.meta.env.VITE_MEDUSA_BACKEND_URL || "http://localhost:9000";
 }
 
@@ -289,11 +309,19 @@ export function getMedusaClient(context?: { cloudflare?: { env?: { MEDUSA_BACKEN
 
     const backendUrl = getBackendUrl(context);
 
-    // Prioritize context key, then window.ENV
+    // Prioritize context key, then globally stored server env, then window.ENV, finally process.env (for tests)
     let publishableKey = context?.cloudflare?.env?.MEDUSA_PUBLISHABLE_KEY;
     
+    if (!publishableKey && serverEnv?.MEDUSA_PUBLISHABLE_KEY) {
+        publishableKey = serverEnv.MEDUSA_PUBLISHABLE_KEY;
+    }
+
     if (!publishableKey && typeof window !== "undefined") {
         publishableKey = window.ENV?.MEDUSA_PUBLISHABLE_KEY;
+    }
+
+    if (!publishableKey && typeof process !== "undefined" && process.env.MEDUSA_PUBLISHABLE_KEY) {
+        publishableKey = process.env.MEDUSA_PUBLISHABLE_KEY;
     }
 
     if (!publishableKey) {

@@ -659,51 +659,6 @@
             "description": "Health check endpoint that verifies worker is running and connection to Medusa backend is working."
           },
           "response": []
-        },
-        {
-          "name": "Test Hyperdrive",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Response status is 200', function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "pm.test('Contract Test: Hyperdrive test response structure', function () {",
-                  "    const response = pm.response.json();",
-                  "    pm.expect(response).to.have.property('connected');",
-                  "    pm.expect(response.connected).to.be.a('boolean');",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "id": "storefront-test-hyperdrive",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{storefront_url}}/api/test-hyperdrive",
-              "host": [
-                "{{storefront_url}}"
-              ],
-              "path": [
-                "api",
-                "test-hyperdrive"
-              ]
-            },
-            "description": "Test Hyperdrive connection to PostgreSQL database. Used for debugging database connectivity."
-          },
-          "response": []
         }
       ],
       "id": "storefront-infrastructure-section",
@@ -733,4 +688,3 @@
     }
   ]
 }
-

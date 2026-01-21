@@ -19,18 +19,4 @@ VITE_POSTHOG_API_KEY=${VITE_POSTHOG_API_KEY:-ph_test_placeholder_for_ci}
 VITE_POSTHOG_HOST=${VITE_POSTHOG_HOST:-https://us.i.posthog.com}
 EOF
 
-# Disable hyperdrive for CI by patching the wrangler.json
-# Hyperdrive requires Cloudflare's proxy and doesn't work in local Docker
-if [ -f /app/dist/server/wrangler.json ]; then
-  # Use node to patch the JSON (more reliable than sed for JSON)
-  node -e "
-    const fs = require('fs');
-    const config = JSON.parse(fs.readFileSync('/app/dist/server/wrangler.json', 'utf8'));
-    config.hyperdrive = [];
-    fs.writeFileSync('/app/dist/server/wrangler.json', JSON.stringify(config, null, 2));
-  "
-  echo 'Patched wrangler.json to disable hyperdrive for CI'
-fi
-
 exec "$@"
-

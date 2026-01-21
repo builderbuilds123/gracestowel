@@ -78,7 +78,7 @@ export class MedusaCartService {
         });
         return cart.id;
       } catch (error) {
-        console.error("Error creating Medusa cart:", error);
+        this.logger.error("Error creating Medusa cart:", error as Error);
         throw error;
       }
     });
@@ -126,7 +126,7 @@ export class MedusaCartService {
     // 1. Handle updates and additions
     for (const localItem of localItems) {
       if (!localItem.variantId) {
-        console.warn(`Skipping item without variantId: ${localItem.title}`);
+        this.logger.warn(`Skipping item without variantId: ${localItem.title}`);
         continue;
       }
 
@@ -284,7 +284,7 @@ export class MedusaCartService {
                 };
             });
         } catch (error) {
-        console.error("Error fetching shipping options:", error);
+        this.logger.error("Error fetching shipping options:", error as Error);
         throw error;
         }
     });
@@ -312,7 +312,7 @@ export class MedusaCartService {
         if (status >= 400 && status < 500) {
           throw error;
         }
-        console.error(`Error adding shipping method ${optionId} to cart ${cartId}:`, error);
+        this.logger.error(`Error adding shipping method ${optionId} to cart ${cartId}:`, error as Error);
         throw error;
       }
     });
