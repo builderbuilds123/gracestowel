@@ -20,8 +20,6 @@ export const storefrontEnvSchema = z.object({
     message: 'STRIPE_PUBLISHABLE_KEY must start with "pk_"',
   }),
 
-  // === Optional: Database (Hyperdrive) ===
-  DATABASE_URL: z.string().optional(),
 
   // === Optional: Session Security ===
   JWT_SECRET: z
@@ -73,9 +71,6 @@ export function validateStorefrontEnvWithWarnings(env: Record<string, unknown>):
   const validated = validateStorefrontEnv(env);
 
   // Warn about missing optional but recommended variables
-  if (!validated.DATABASE_URL) {
-    logger.warn('[ENV] DATABASE_URL not set. Direct database reads will not work.');
-  }
 
   if (!validated.VITE_POSTHOG_API_KEY) {
     logger.warn('[ENV] VITE_POSTHOG_API_KEY not set. Analytics will be disabled.');
