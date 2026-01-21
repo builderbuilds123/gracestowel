@@ -33,7 +33,7 @@
 
 **Evidence:**
 - Medusa container resolution in workflows/subscribers: `container.resolve("query")`, `container.resolve("logger")`, `container.resolve(Modules.PAYMENT)` (e.g. `apps/backend/src/workflows/create-order-from-stripe.ts`).
-- Module services built with `MedusaService` in custom modules: `apps/backend/src/modules/review/service.ts`, `apps/backend/src/modules/feedback/service.ts`.
+- Module services built with `MedusaService` in custom modules: `apps/backend/src/modules/review/service.ts`.
 
 **Potential issue:** None identified.
 
@@ -112,7 +112,7 @@
 ## 6) API Routes (Store/Admin/Webhooks)
 
 **Custom Store API:**
-- Reviews, feedback, order edit/cancel, order guest view, line items, shipping options, payment collection endpoints, health, debug (see `apps/backend/src/api/store/*`).
+- Reviews, order edit/cancel, order guest view, line items, shipping options, payment collection endpoints, health, debug (see `apps/backend/src/api/store/*`).
 
 **Custom Admin API:**
 - Reviews management, Stripe queue status, custom routes (`apps/backend/src/api/admin/*`).
@@ -160,14 +160,14 @@
 
 **Custom modules:**
 - Reviews (`apps/backend/src/modules/review/*`) with migrations.
-- Feedback (`apps/backend/src/modules/feedback/*`) with migrations.
+- Feedback handled via PostHog surveys in the storefront (no Medusa module).
 - Resend notification provider (`apps/backend/src/modules/resend/*`).
 
 **Correctness notes:**
 - Modules implemented using `MedusaService` and DML models.
 
 **Gaps:**
-- Confirm module registration in `medusa-config.ts` (review + feedback + resend is used as notification provider).
+- Confirm module registration in `medusa-config.ts` (review + resend is used as notification provider).
 
 ---
 
