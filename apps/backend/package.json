@@ -16,7 +16,7 @@
     "build": "medusa build",
     "migrate": "medusa db:migrate",
     "seed": "medusa exec ./src/scripts/seed.ts",
-    "start": "medusa build && medusa start --host 0.0.0.0 --port ${PORT:-8080}",
+    "start": "medusa start --host 0.0.0.0 --port ${PORT:-8080}",
     "dev": "medusa develop",
     "lint": "echo 'Lint not configured for backend'",
     "typecheck": "tsc --noEmit",

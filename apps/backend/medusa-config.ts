@@ -31,7 +31,10 @@ module.exports = defineConfig({
   admin: {
     // Disable admin for worker instances (saves ~100MB RAM)
     disable: process.env.DISABLE_MEDUSA_ADMIN === "true" || process.env.MEDUSA_WORKER_MODE === "worker",
-    backendUrl: process.env.RAILWAY_PUBLIC_DOMAIN || process.env.MEDUSA_BACKEND_URL || "/"
+    backendUrl: process.env.RAILWAY_PUBLIC_DOMAIN 
+      ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` 
+      : (process.env.MEDUSA_BACKEND_URL || "/"),
+    path: "/admin"
   },
   modules: [
     {
