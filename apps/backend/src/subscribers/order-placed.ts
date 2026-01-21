@@ -277,8 +277,12 @@ export default async function orderPlacedHandler({
             logger.warn(`[EMAIL][WARN] No email address for order ${order.id} - skipping`)
         } else {
             // Enqueue email (non-blocking)
-            await enqueueEmail(emailPayload)
-            logger.info(`[EMAIL][QUEUE] Order confirmation queued for ${order.id}`)
+            const result = await enqueueEmail(emailPayload)
+            if (result) {
+                logger.info(`[EMAIL][QUEUE] Order confirmation queued for ${order.id}`)
+            } else {
+                logger.warn(`[EMAIL][WARN] Failed to queue order confirmation for ${order.id}`)
+            }
         }
     } else {
         logger.error(`[EMAIL][ERROR] Order ${data.id} not found for email`)

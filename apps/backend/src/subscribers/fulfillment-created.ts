@@ -47,7 +47,7 @@ export default async function fulfillmentCreatedHandler({
     }
 
     if (fulfillment.order?.email) {
-      await enqueueEmail({
+      const result = await enqueueEmail({
         entityId: fulfillment.id,
         template: Templates.SHIPPING_CONFIRMATION,
         recipient: fulfillment.order.email,
@@ -63,7 +63,11 @@ export default async function fulfillmentCreatedHandler({
           },
         },
       })
-      logger.info(`[EMAIL][QUEUE] Shipping confirmation email queued for fulfillment ${data.id}`)
+      if (result) {
+        logger.info(`[EMAIL][QUEUE] Shipping confirmation email queued for fulfillment ${data.id}`)
+      } else {
+        logger.warn(`[EMAIL][WARN] Failed to queue shipping confirmation for fulfillment ${data.id}`)
+      }
     } else {
       logger.warn(`[EMAIL][WARN] No email address for order linked to fulfillment ${data.id} - shipping confirmation skipped`)
     }

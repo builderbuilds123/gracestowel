@@ -67,7 +67,7 @@ export default async function orderCanceledHandler({
     }
 
     if (order.email) {
-      await enqueueEmail({
+      const result = await enqueueEmail({
         entityId: order.id,
         template: Templates.ORDER_CANCELED,
         recipient: order.email,
@@ -90,7 +90,11 @@ export default async function orderCanceledHandler({
           reason: data.reason,
         },
       })
-      logger.info(`[EMAIL][QUEUE] Order canceled email queued for order ${data.id}`)
+      if (result) {
+        logger.info(`[EMAIL][QUEUE] Order canceled email queued for order ${data.id}`)
+      } else {
+        logger.warn(`[EMAIL][WARN] Failed to queue cancellation email for order ${data.id}`)
+      }
     } else {
       logger.warn(`[EMAIL][WARN] No email address for order ${data.id} - cancellation email skipped`)
     }

@@ -41,7 +41,7 @@ export default async function customerCreatedHandler({
     }
 
     if (customer.email) {
-      await enqueueEmail({
+      const result = await enqueueEmail({
         entityId: customer.id,
         template: Templates.WELCOME,
         recipient: customer.email,
@@ -54,7 +54,11 @@ export default async function customerCreatedHandler({
           },
         },
       })
-      logger.info(`[EMAIL][QUEUE] Welcome email queued for customer ${data.id}`)
+      if (result) {
+        logger.info(`[EMAIL][QUEUE] Welcome email queued for customer ${data.id}`)
+      } else {
+        logger.warn(`[EMAIL][WARN] Failed to queue welcome email for customer ${data.id}`)
+      }
     } else {
       logger.warn(`[EMAIL][WARN] No email address for customer ${data.id} - welcome email skipped`)
     }
