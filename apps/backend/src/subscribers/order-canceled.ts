@@ -8,6 +8,7 @@ import { startEmailWorker } from "../workers/email-worker"
 import { cancelPaymentCaptureJob } from "../lib/payment-capture-queue"
 import { sendAdminNotification, AdminNotificationType } from "../lib/admin-notifications"
 import { trackEvent } from "../utils/analytics"
+import { logger } from "../utils/logger"
 
 interface OrderCanceledEventData {
   id: string;
@@ -23,8 +24,8 @@ export default async function orderCanceledHandler({
     startEmailWorker(container)
   }
 
-  const logger = container.resolve("logger")
-  logger.info(`[ORDER_CANCELED] Order canceled event received: ${data.id}`)
+  // const logger = container.resolve("logger")
+  logger.info("order-canceled", "Order canceled event received", { order_id: data.id })
   await trackEvent(container, "order.canceled", {
     properties: {
       order_id: data.id,
@@ -36,10 +37,10 @@ export default async function orderCanceledHandler({
   try {
     const canceled = await cancelPaymentCaptureJob(data.id)
     if (canceled) {
-      logger.info(`[CAPTURE_CANCEL] Payment capture job canceled for order ${data.id}`)
+      logger.info("payment-capture", "Payment capture job canceled", { order_id: data.id })
     }
   } catch (error: any) {
-    logger.error(`[CAPTURE_CANCEL][ERROR] Failed to cancel payment capture job for order ${data.id}: ${error.message}`)
+    logger.error("payment-capture", "Failed to cancel payment capture job", { order_id: data.id }, error)
   }
 
   // Send order canceled email via BullMQ
@@ -62,7 +63,7 @@ export default async function orderCanceledHandler({
 
     const order = orders[0]
     if (!order) {
-      logger.error(`[EMAIL][ERROR] Order ${data.id} not found for cancellation email`)
+      logger.error("email-queue", "Order not found for cancellation email", { order_id: data.id })
       return
     }
 
@@ -91,15 +92,15 @@ export default async function orderCanceledHandler({
         },
       })
       if (result) {
-        logger.info(`[EMAIL][QUEUE] Order canceled email queued for order ${data.id}`)
+        logger.info("email-queue", "Order canceled email queued", { order_id: data.id })
       } else {
-        logger.warn(`[EMAIL][WARN] Failed to queue cancellation email for order ${data.id}`)
+        logger.warn("email-queue", "Failed to queue cancellation email", { order_id: data.id })
       }
     } else {
-      logger.warn(`[EMAIL][WARN] No email address for order ${data.id} - cancellation email skipped`)
+      logger.warn("email-queue", "No email address for order - cancellation email skipped", { order_id: data.id })
     }
   } catch (error: any) {
-    logger.error(`[EMAIL][ERROR] Failed to queue cancellation email for order ${data.id}: ${error.message}`)
+    logger.error("email-queue", "Failed to queue cancellation email", { order_id: data.id }, error)
   }
 
   // Send admin notification for canceled order
@@ -111,7 +112,7 @@ export default async function orderCanceledHandler({
       metadata: { order_id: data.id, reason: data.reason },
     })
   } catch (error: any) {
-    logger.error(`[ADMIN_NOTIF][ERROR] Failed to send admin notification for order cancellation ${data.id}: ${error.message}`)
+    logger.error("admin-notification", "Failed to send admin notification for order cancellation", { order_id: data.id }, error)
   }
 }
 
