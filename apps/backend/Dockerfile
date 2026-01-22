@@ -39,7 +39,7 @@ FROM base AS builder
 COPY --from=deps /repo/node_modules /repo/node_modules
 COPY --from=deps /repo/apps/backend/node_modules /repo/apps/backend/node_modules
 
-# Copy backend source
+# Copy backend source (including uploads directory for product images)
 COPY apps/backend ./apps/backend
 
 WORKDIR /repo/apps/backend
@@ -70,6 +70,9 @@ ENV HOST=0.0.0.0
 
 # Copy self-contained deployment from pnpm deploy (no symlinks)
 COPY --from=builder --chown=node:node /deploy/node_modules ./node_modules
+
+# Copy product images for seeding (needed for Railway staging)
+COPY --from=builder --chown=node:node /repo/apps/backend/uploads ./uploads
 COPY --from=builder --chown=node:node /deploy/package.json ./package.json
 # Copy built app artifacts from .medusa/server (all compiled JS)
 COPY --from=builder --chown=node:node /repo/apps/backend/.medusa ./.medusa
