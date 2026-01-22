@@ -45,6 +45,7 @@ export function Image({ src, ...props }: ImageProps) {
     <UnpicImage
       src={finalSrc}
       layout="constrained" // Keeps aspect ratio, responsive width
+      loading="lazy"
       // @ts-expect-error - 'weserv' is valid but types might be outdated or strict
       cdn="weserv" 
       {...props}
