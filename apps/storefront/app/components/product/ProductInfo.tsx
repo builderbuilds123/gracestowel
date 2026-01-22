@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Minus, Plus, ShoppingBag, Check } from "lucide-react";
 import { SimpleColorPicker } from "./SimpleColorPicker";
+import { Accordion, AccordionItem } from "../ui/Accordion";
 import type { ProductDetail } from "../../lib/product-transformer";
 
 interface ColorOption {
@@ -61,7 +62,7 @@ export function ProductInfo({
         </span>
         {product.originalPrice && product.originalPrice > product.price && (
           <span className="text-lg text-text-earthy/50 line-through">
-            ${(product.originalPrice / 100).toFixed(2)}
+            ${product.originalPrice.toFixed(2)}
           </span>
         )}
       </div>
@@ -144,18 +145,47 @@ export function ProductInfo({
       </div>
 
       {/* Features List (if available) */}
-      {product.features && product.features.length > 0 && (
-        <div className="pt-4 border-t border-card-earthy/30">
-          <ul className="space-y-2">
-            {product.features.slice(0, 4).map((feature, i) => (
-              <li key={i} className="flex items-start gap-2 text-text-earthy/70 text-sm">
-                <span className="text-accent-earthy mt-0.5">✓</span>
-                {feature}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+       {/* Product Details Accordion */}
+       <Accordion>
+         {product.features && product.features.length > 0 && (
+           <AccordionItem title="Details" defaultOpen={true}>
+             <ul className="space-y-2">
+               {product.features.map((feature, i) => (
+                 <li key={i} className="flex items-start gap-2">
+                   <span className="text-accent-earthy mt-1.5 w-1.5 h-1.5 rounded-full bg-current flex-shrink-0" />
+                   <span>{feature}</span>
+                 </li>
+               ))}
+             </ul>
+           </AccordionItem>
+         )}
+
+         {product.dimensions && product.dimensions.length > 0 && (
+           <AccordionItem title="Dimensions">
+             <ul className="space-y-1">
+               {product.dimensions.map((dim, i) => (
+                 <li key={i} className="grid grid-cols-2 gap-4">
+                   <span className="text-text-earthy/60">{dim.label}</span>
+                   <span className="font-medium text-text-earthy">{dim.value}</span>
+                 </li>
+               ))}
+             </ul>
+           </AccordionItem>
+         )}
+
+         {product.careInstructions && product.careInstructions.length > 0 && (
+           <AccordionItem title="Care Guide">
+             <ul className="space-y-2">
+               {product.careInstructions.map((instruction, i) => (
+                 <li key={i} className="flex items-start gap-2">
+                    <span className="text-accent-earthy mt-1">•</span>
+                   <span>{instruction}</span>
+                 </li>
+               ))}
+             </ul>
+           </AccordionItem>
+         )}
+       </Accordion>
     </div>
   );
 }

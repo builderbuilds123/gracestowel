@@ -93,7 +93,7 @@ export default function AccountPage() {
         return new Intl.NumberFormat('en-US', {
             style: 'currency',
             currency: currency.toUpperCase(),
-        }).format(amount / 100);
+        }).format(amount);
     };
 
     const formatDate = (dateString: string) => {

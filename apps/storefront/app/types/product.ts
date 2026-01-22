@@ -38,7 +38,7 @@ export interface Product {
     description: string;
     images: string[];
     features: string[];
-    dimensions: string;
+    dimensions: { label: string; value: string }[];
     careInstructions: string[];
     colors: string[];
     disableEmbroidery?: boolean;

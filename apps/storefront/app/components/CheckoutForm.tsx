@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useMemo } from 'react';
 import {
     useStripe,
     useElements,
@@ -347,7 +347,7 @@ export function CheckoutForm({
                     shippingRates: shippingOptions.map((opt) => ({
                         id: opt.id,
                         displayName: opt.displayName,
-                        amount: opt.amount, // Already in cents from shipping-rates API
+                        amount: Math.round(opt.amount * 100), // Stripe expects cents, but our internal shipping options are in dollars
                     })),
                 });
             } else {
@@ -498,10 +498,10 @@ export function CheckoutForm({
             <ShippingSection
                 shippingOptions={shippingOptions}
                 selectedShipping={selectedShipping}
-                onSelectShipping={(option) => {
+                onSelectShipping={useCallback((option) => {
                     checkoutActions.selectShippingOption(option);
                     setValidationErrors(prev => ({ ...prev, shipping: '' }));
-                }}
+                }, [checkoutActions])}
                 isCalculating={isCalculatingShipping}
                 error={validationErrors.shipping}
                 forwardedRef={shippingRef}
@@ -539,7 +539,7 @@ export function CheckoutForm({
 
 
 
-function StripeBadge() {
+const StripeBadge = React.memo(function StripeBadge() {
     return (
         <div className="flex justify-center items-center gap-2 text-gray-400 text-xs mt-4">
             <svg
@@ -549,15 +549,15 @@ function StripeBadge() {
                 className="h-6 opacity-50 hover:opacity-100 transition-opacity"
             >
                 <path
-                    d="M59.64 14.28h-4.06v-1.91c0-.58-.04-1.16-.1-1.72h4.16c.06.56.1 1.14.1 1.72v1.91zm-59.64-1.91h4.16c-.06.56-.1 1.14-.1 1.72v1.91h-4.06c0-.58.04-1.16.1-1.72v-1.91zm10.63 1.91h-4.06v-1.91c0-.58-.04-1.16-.1-1.72h4.16c.06.56.1 1.14.1 1.72v1.91zm4.75-1.91h4.16c-.06.56-.1 1.14-.1 1.72v1.91h-4.06c0-.58.04-1.16.1-1.72v-1.91zm10.63 1.91h-4.06v-1.91c0-.58-.04-1.16-.1-1.72h4.16c.06.56.1 1.14.1 1.72v1.91zm4.75-1.91h4.16c-.06.56-.1 1.14-.1 1.72v1.91h-4.06c0-.58.04-1.16.1-1.72v-1.91zm10.63 1.91h-4.06v-1.91c0-.58-.04-1.16-.1-1.72h4.16c.06.56.1 1.14.1 1.72v1.91zm4.75-1.91h4.16c-.06.56-.1 1.14-.1 1.72v1.91h-4.06c0-.58.04-1.16.1-1.72v-1.91z"
+                    d="M59.6 14.3h-4.1v-1.9c0-.6 0-1.2-.1-1.7h4.2c.1.6.1 1.1.1 1.7v1.9zm-59.6-1.9h4.2c-.1.6-.1 1.1-.1 1.7v1.9H0c0-.6 0-1.2.1-1.7v-1.9zm10.6 1.9H6.6v-1.9c0-.6 0-1.2-.1-1.7h4.2c.1.6.1 1.1.1 1.7v1.9zm4.8-1.9h4.2c-.1.6-.1 1.1-.1 1.7v1.9h-4.1c0-.6 0-1.2.1-1.7v-1.9zm10.6 1.9h-4.1v-1.9c0-.6 0-1.2-.1-1.7h4.2c.1.6.1 1.1.1 1.7v1.9zm4.8-1.9h4.2c-.1.6-.1 1.1-.1 1.7v1.9h-4.1c0-.6 0-1.2.1-1.7v-1.9zm10.6 1.9h-4.1v-1.9c0-.6 0-1.2-.1-1.7h4.2c.1.6.1 1.1.1 1.7v1.9zm4.8-1.9h4.2c-.1.6-.1 1.1-.1 1.7v1.9h-4.1c0-.6 0-1.2.1-1.7v-1.9z"
                     fill="currentColor"
                 />
                 <path
-                    d="M29.82 1.21c0-1.21 1.21-1.21 1.21-1.21h28.97v12.37h-4.06v-8.31h-22.01v8.31h-4.11V1.21zm-29.82 0c0-1.21 1.21-1.21 1.21-1.21h24.5v12.37h-4.11v-8.31h-17.54v8.31h-4.06V1.21z"
+                    d="M29.8 1.2c0-1.2 1.2-1.2 1.2-1.2h29v12.4h-4.1V4.1h-22v8.3h-4.1V1.2zm-29.8 0c0-1.2 1.2-1.2 1.2-1.2h24.5v12.4H21.6V4.1H4.1v8.3H0V1.2z"
                     fill="currentColor"
                 />
                 <path
-                    d="M29.82 23.79c0 1.21 1.21 1.21 1.21 1.21h28.97V12.63h-4.06v8.31h-22.01v-8.31h-4.11v11.16zm-29.82 0c0 1.21 1.21 1.21 1.21 1.21h24.5V12.63h-4.11v8.31h-17.54v-8.31h-4.06v11.16z"
+                    d="M29.8 23.8c0 1.2 1.2 1.2 1.2 1.2h29V12.6h-4.1v8.3h-22v-8.3h-4.1v11.2zm-29.8 0c0 1.2 1.2 1.2 1.2 1.2h24.5V12.6H21.6v8.3H4.1v-8.3H0v11.2z"
                     fill="currentColor"
                 />
             </svg>
@@ -566,7 +566,7 @@ function StripeBadge() {
             </span>
         </div>
     );
-}
+});
 
 export default CheckoutForm;
 

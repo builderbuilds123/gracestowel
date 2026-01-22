@@ -199,13 +199,11 @@ export function getFormattedPrice(
     );
 
     if (!price) return "$0.00";
-
-    // Medusa stores prices in cents
-    const amount = price.amount / 100;
+    
     return new Intl.NumberFormat("en-US", {
         style: "currency",
         currency: currencyCode.toUpperCase(),
-    }).format(amount);
+    }).format(price.amount);
 }
 
 /**
@@ -220,5 +218,5 @@ export function getPriceAmount(
         (p) => p.currency_code.toLowerCase() === currencyCode.toLowerCase()
     );
 
-    return price ? price.amount / 100 : 0;
+    return price ? price.amount : 0;
 }

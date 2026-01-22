@@ -1,12 +1,11 @@
 import { Link, useLocation } from "react-router";
-import { Menu, User, Heart, X, Search, Globe, DollarSign } from "lucide-react";
+import { Menu, User, Heart, X, Globe, DollarSign } from "lucide-react";
 import { Towel } from "@phosphor-icons/react";
 import { useCart } from "../context/CartContext";
 import { useLocale } from "../context/LocaleContext";
 import { useCustomer } from "../context/CustomerContext";
 import { useWishlist } from "../context/WishlistContext";
 import { Dropdown } from "./Dropdown";
-import { SearchBar } from "./SearchBar";
 import { useState, useEffect, useRef } from "react";
 import { SITE_CONFIG } from "../config/site";
 
@@ -201,7 +200,6 @@ export function Header() {
     const itemCount = items.reduce((acc, item) => acc + item.quantity, 0);
     const [isScrolled, setIsScrolled] = useState(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-    const [isSearchOpen, setIsSearchOpen] = useState(false);
     const location = useLocation();
     const isHome = location.pathname === "/";
 
@@ -224,7 +222,6 @@ export function Header() {
     // Close mobile menu on route change
     useEffect(() => {
         setIsMobileMenuOpen(false);
-        setIsSearchOpen(false);
     }, [location.pathname]);
 
     return (
@@ -281,14 +278,7 @@ export function Header() {
 
                         {/* Right Section: Actions */}
                         <div className="flex items-center gap-1 sm:gap-2 lg:gap-3">
-                            {/* Search Button */}
-                            <button
-                                onClick={() => setIsSearchOpen(true)}
-                                className={`p-2 hover:text-accent-earthy transition-colors ${showSolidHeader ? 'text-text-earthy' : 'text-white'}`}
-                                aria-label="Search"
-                            >
-                                <Search className="w-5 h-5" />
-                            </button>
+
 
                             {/* Language Selector - Desktop only */}
                             <div className="hidden lg:block">
@@ -364,21 +354,7 @@ export function Header() {
                     </div>
                 </div>
 
-                {/* Search Overlay - Full width on all screens */}
-                {isSearchOpen && (
-                    <div className={`absolute inset-x-0 top-full border-b shadow-lg ${
-                        showSolidHeader ? 'bg-white border-gray-200' : 'bg-white'
-                    }`}>
-                        <div className="container mx-auto px-4 py-3">
-                            <SearchBar
-                                showSolidHeader={true}
-                                autoFocus
-                                onClose={() => setIsSearchOpen(false)}
-                                fullWidth
-                            />
-                        </div>
-                    </div>
-                )}
+
             </header>
 
             {/* Mobile Menu Drawer */}

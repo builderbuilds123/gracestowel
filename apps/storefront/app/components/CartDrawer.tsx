@@ -8,7 +8,7 @@ import { ProductPrice } from './ProductPrice';
 import { useAutomaticPromotions } from '../hooks/useAutomaticPromotions';
 
 export function CartDrawer() {
-    const { items, isOpen, toggleCart, removeFromCart, updateQuantity, cartTotal } = useCart();
+    const { items, isOpen, toggleCart, removeFromCart, updateQuantity, cartTotal, isSyncing } = useCart();
     const { formatPrice, t } = useLocale();
     
     // PROMO-1 Phase 3: Fetch free shipping threshold from backend
@@ -145,7 +145,12 @@ export function CartDrawer() {
                 {items.length > 0 && (
                     <div className="p-6 border-t border-gray-100 bg-gray-50">
                         <div className="flex justify-between items-center mb-4">
-                            <span className="text-text-earthy/60">{t('cart.subtotal')}</span>
+                            <div className="flex flex-col">
+                                <span className="text-text-earthy/60">{t('cart.subtotal')}</span>
+                                {isSyncing && (
+                                    <span className="text-[10px] text-accent-earthy animate-pulse">Syncing...</span>
+                                )}
+                            </div>
                             <span className="text-xl font-bold text-text-earthy">{formatPrice(cartTotal)}</span>
                         </div>
                         <p className="text-xs text-text-earthy/40 mb-6 text-center">Shipping and taxes calculated at checkout.</p>

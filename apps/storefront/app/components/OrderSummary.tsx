@@ -32,6 +32,7 @@ export function OrderSummary() {
         promoSuccessMessage,
         displayDiscountTotal: discountTotal,
         automaticPromotions,
+        isSyncing,
     } = useCheckout();
 
     const { selectedShippingOption: selectedShipping } = checkoutState;
@@ -83,7 +84,12 @@ export function OrderSummary() {
             <div className="border-t border-gray-100 pt-4 space-y-3">
                 {/* Subtotal */}
                 <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Subtotal</span>
+                    <div className="flex items-center gap-2">
+                        <span className="text-gray-600">Subtotal</span>
+                        {isSyncing && (
+                            <Loader2 className="w-3 h-3 animate-spin text-accent-earthy" />
+                        )}
+                    </div>
                     <div className="flex items-center gap-2">
                         {hasDiscount && (
                             <span className="text-text-earthy/40 line-through text-sm">

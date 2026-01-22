@@ -469,14 +469,14 @@ export default function OrderStatus() {
                                      <p className="text-sm text-text-earthy/60">Qty: {item.quantity}</p>
                                  </div>
                                  <div className="text-right">
-                                     <p className="font-medium">{(item.unit_price / 100).toFixed(2)} {orderDetails.currency_code.toUpperCase()}</p>
+                                     <p className="font-medium">{item.unit_price.toFixed(2)} {orderDetails.currency_code.toUpperCase()}</p>
                                  </div>
                              </div>
                          ))}
                     </div>
                     <div className="mt-4 pt-4 border-t border-gray-200 flex justify-between items-center">
                         <span className="font-serif text-lg">Total</span>
-                        <span className="font-bold text-xl">{(orderDetails.total / 100).toFixed(2)} {orderDetails.currency_code.toUpperCase()}</span>
+                        <span className="font-bold text-xl">{orderDetails.total.toFixed(2)} {orderDetails.currency_code.toUpperCase()}</span>
                     </div>
                 </div>
 

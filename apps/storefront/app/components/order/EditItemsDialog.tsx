@@ -92,7 +92,7 @@ export function EditItemsDialog({
         return new Intl.NumberFormat('en-US', {
             style: 'currency',
             currency: currencyCode,
-        }).format(amount / 100);
+        }).format(amount);
     };
 
     if (!isOpen) return null;
