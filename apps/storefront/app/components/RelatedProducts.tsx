@@ -7,6 +7,7 @@
 
 import { Link } from "react-router";
 import { useLocale } from "../context/LocaleContext";
+import { Image } from "./ui/Image";
 
 interface RelatedProduct {
     id: string;
@@ -41,13 +42,12 @@ export function RelatedProducts({
                     <div key={product.id} className="group">
                         <div className="relative overflow-hidden rounded mb-3 bg-card-earthy/20 aspect-[4/5]">
                             <Link to={`/products/${product.handle}`}>
-                                <img
+                                <Image
                                     src={product.images[0]}
                                     alt={product.title}
                                     className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-500 ease-out"
-                                    loading="lazy"
-                                    width="400"
-                                    height="500"
+                                    width={400}
+                                    height={500}
                                 />
                             </Link>
                         </div>

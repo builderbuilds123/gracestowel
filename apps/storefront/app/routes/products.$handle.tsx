@@ -1,5 +1,5 @@
 import type { Route } from "./+types/products.$handle";
-import { useState, useEffect, useCallback, Suspense } from "react";
+import { useState, useEffect, useCallback, Suspense, useMemo } from "react";
 import { Await } from "react-router";
 
 import { type Review, type ReviewStats } from "../components/ReviewSection";
@@ -13,16 +13,8 @@ import { getMedusaClient, castToMedusaProduct, type MedusaProduct, getBackendUrl
 import { medusaFetch } from "../lib/medusa-fetch";
 import { transformToDetail, type ProductDetail } from "../lib/product-transformer";
 
-// Color hex mapping for swatches
-const COLOR_HEX: Record<string, string> = {
-    "Cloud White": "#F5F5F5",
-    "Sage": "#9CAF88",
-    "Terra Cotta": "#E2725B",
-    "Charcoal": "#36454F",
-    "Navy": "#202A44",
-    "Sand": "#E6DCD0",
-    "Stone": "#9EA3A8",
-};
+import { PRODUCT_COLOR_MAP } from "../lib/colors";
+
 
 export function meta({ data }: Route.MetaArgs) {
     if (!data?.product) {
@@ -91,7 +83,7 @@ export async function loader({ params, context }: Route.LoaderArgs) {
             handle,
             limit: 1,
             region_id: regionId,
-            fields: "+variants,+variants.calculated_price,+variants.prices,*variants.inventory_quantity,+options,+options.values,+images,+categories,+metadata"
+            fields: "+variants,+variants.calculated_price,+variants.prices,*variants.inventory_quantity,+variants.images,+options,+options.values,+images,+categories,+metadata"
         });
         medusaProduct = validateMedusaProduct(products[0]);
     } catch (error: unknown) {
@@ -209,6 +201,17 @@ export default function ProductDetailPage({ loaderData }: Route.ComponentProps) 
         }
     };
 
+    // Filter images based on selected color - Using Medusa's native variant images
+    const filteredImages = useMemo(() => {
+        // If we have a selected variant and it has native images, use them
+        if (selectedVariant?.images && selectedVariant.images.length > 0) {
+            return selectedVariant.images;
+        }
+
+        // Fallback: If no variant-specific images, use the general product images
+        return product.images || [];
+    }, [product.images, selectedVariant]);
+
     const handleAddToCart = useCallback(() => {
         const variantId = selectedVariant?.id;
 
@@ -218,7 +221,7 @@ export default function ProductDetailPage({ loaderData }: Route.ComponentProps) 
             sku: selectedVariant?.sku || undefined,
             title: product.title,
             price: product.formattedPrice,
-            image: product.images[0],
+            image: filteredImages[0] || product.images[0],
             quantity,
             color: selectedColor,
         });
@@ -235,11 +238,11 @@ export default function ProductDetailPage({ loaderData }: Route.ComponentProps) 
                 });
             });
         }
-    }, [addToCart, product, selectedVariant, quantity, selectedColor]);
+    }, [addToCart, product, selectedVariant, quantity, selectedColor, filteredImages]);
 
     const colorOptions = product.colors?.map(name => ({
         name,
-        hex: COLOR_HEX[name] || "#ccc",
+        hex: PRODUCT_COLOR_MAP[name] || "#ccc",
     })) || [];
 
     const jsonLd = {
@@ -275,6 +278,8 @@ export default function ProductDetailPage({ loaderData }: Route.ComponentProps) 
         } : {})
     };
 
+
+
     return (
         <div className="min-h-screen bg-bg-earthy">
             {/* JSON-LD */}
@@ -289,7 +294,8 @@ export default function ProductDetailPage({ loaderData }: Route.ComponentProps) 
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
                         {/* Left: Image Gallery */}
                         <ProductGallery
-                            images={product.images}
+                            key={`${product.id}-${selectedColor}`}
+                            images={filteredImages}
                             title={product.title}
                         />
 
@@ -355,7 +361,7 @@ export default function ProductDetailPage({ loaderData }: Route.ComponentProps) 
                 price={product.price}
                 currencySymbol="$"
                 selectedColor={selectedColor}
-                colorHex={COLOR_HEX[selectedColor]}
+                colorHex={PRODUCT_COLOR_MAP[selectedColor]}
                 quantity={quantity}
                 onQuantityChange={setQuantity}
                 onAddToCart={handleAddToCart}

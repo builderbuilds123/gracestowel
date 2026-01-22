@@ -14,16 +14,8 @@ import { Towel } from "@phosphor-icons/react";
 import { useCart } from "../context/CartContext";
 import { useLocale } from "../context/LocaleContext";
 
-// Color mapping for swatches
-const COLOR_MAP: Record<string, string> = {
-    "Cloud White": "#F5F5F5",
-    "Sage": "#9CAF88",
-    "Terra Cotta": "#E2725B",
-    "Charcoal": "#36454F",
-    "Navy": "#202A44",
-    "Sand": "#E6DCD0",
-    "Stone": "#9EA3A8"
-};
+import { PRODUCT_COLOR_MAP } from "../lib/colors";
+
 
 interface ProductActionsProps {
     product: {
@@ -109,7 +101,7 @@ export function ProductActions({ product, selectedVariant, selectedColor, onColo
                                         ? "border-accent-earthy ring-2 ring-accent-earthy/20 ring-offset-2"
                                         : "border-transparent hover:scale-110"
                                 }`}
-                                style={{ backgroundColor: COLOR_MAP[color] || "#ccc" }}
+                                style={{ backgroundColor: PRODUCT_COLOR_MAP[color] || "#ccc" }}
                                 aria-label={`Select color ${color}`}
                                 title={color}
                             />

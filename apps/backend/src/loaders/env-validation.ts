@@ -34,4 +34,21 @@ export default async function envValidationLoader(
 
   logger.info('[ENV Loader] Environment validation passed.');
   logger.debug(`[ENV Loader] NODE_ENV: ${env.NODE_ENV}`);
+
+  // DEBUG: Log payment capture delay configuration
+  const paymentCaptureDelayMs = process.env.PAYMENT_CAPTURE_DELAY_MS;
+  logger.info(`[ENV Loader][DEBUG] ====== PAYMENT CAPTURE CONFIGURATION ======`);
+  logger.info(`[ENV Loader][DEBUG] PAYMENT_CAPTURE_DELAY_MS from env: "${paymentCaptureDelayMs}"`);
+  if (paymentCaptureDelayMs) {
+    const delayMs = parseInt(paymentCaptureDelayMs, 10);
+    const delaySeconds = delayMs / 1000;
+    const delayMinutes = Math.floor(delaySeconds / 60);
+    const remainingSeconds = Math.round(delaySeconds % 60);
+    logger.info(`[ENV Loader][DEBUG] Parsed value: ${delayMs}ms = ${delayMinutes} minutes ${remainingSeconds} seconds`);
+  } else {
+    logger.warn(`[ENV Loader][DEBUG] PAYMENT_CAPTURE_DELAY_MS is NOT SET - will use default (~59 minutes)`);
+  }
+  logger.info(`[ENV Loader][DEBUG] CAPTURE_BUFFER_SECONDS from env: "${process.env.CAPTURE_BUFFER_SECONDS || '30 (default)'}"`)
+  logger.info(`[ENV Loader][DEBUG] REDIS_URL configured: ${!!process.env.REDIS_URL}`);
+  logger.info(`[ENV Loader][DEBUG] =============================================`);
 }

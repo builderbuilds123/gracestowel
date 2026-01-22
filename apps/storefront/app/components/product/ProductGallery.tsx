@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { Image } from "../ui/Image";
 
 interface ProductGalleryProps {
   images: string[];
@@ -11,6 +12,11 @@ interface ProductGalleryProps {
 export function ProductGallery({ images, title }: ProductGalleryProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
 
+  // Reset index when images array changes (e.g. variant change)
+  useEffect(() => {
+    setSelectedIndex(0);
+  }, [images]);
+
   const mainImage = images[selectedIndex] || images[0] || "/placeholder-towel.jpg";
   const hasMultipleImages = images.length > 1;
 
@@ -18,11 +24,13 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
     <div className="space-y-4">
       {/* Main Image */}
       <div className="relative aspect-[4/5] overflow-hidden rounded-2xl bg-card-earthy/10">
-        <img
+        <Image
           src={mainImage}
           alt={title}
+          width={600}
+          height={750}
+          priority={true} // Main image should load eagerly
           className="w-full h-full object-cover transition-opacity duration-300"
-          loading="eager"
         />
       </div>
 
@@ -41,11 +49,12 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
               aria-label={`View image ${index + 1}`}
               aria-current={index === selectedIndex ? "true" : undefined}
             >
-              <img
+              <Image
                 src={image}
                 alt={`${title} - view ${index + 1}`}
+                width={80}
+                height={80}
                 className="w-full h-full object-cover"
-                loading="lazy"
               />
             </button>
           ))}

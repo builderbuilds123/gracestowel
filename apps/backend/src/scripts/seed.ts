@@ -4,6 +4,12 @@ import {
   Modules,
   ProductStatus,
 } from "@medusajs/framework/utils";
+import * as path from "path";
+import * as fs from "fs";
+import { 
+  createProductVariantsWorkflow,
+  batchVariantImagesWorkflow
+} from "@medusajs/core-flows";
 import {
   createApiKeysWorkflow,
   createInventoryLevelsWorkflow,
@@ -846,6 +852,31 @@ export default async function seedDemoData({ container }: ExecArgs) {
     material: "50% Wool / 50% Cotton Blend",
   };
 
+  const nuzzleImages = [
+      { url: "/uploads/nuzzle-cloud-white-01.png" },
+      { url: "/uploads/nuzzle-cloud-white-02.png" },
+      { url: "/uploads/nuzzle-cloud-white-lifestyle.png" },
+      { url: "/uploads/nuzzle-terra-cotta-01.png" },
+      { url: "/uploads/nuzzle-terra-cotta-02.png" },
+      { url: "/uploads/nuzzle-terra-cotta-lifestyle.png" },
+      { url: "/uploads/nuzzle-general-lifestyle.jpg" }
+  ];
+
+  const bearhugImages = [
+      { url: "/uploads/bearhug-cloud-white-01.jpg" }, 
+      { url: "/uploads/bearhug-cloud-white-02.png" }, 
+      { url: "/uploads/bearhug-cloud-white-03.png" }
+  ];
+
+  const sandbarImages = [
+      { url: "/uploads/sandbar-sunset-orange-01.png" }, 
+      { url: "/uploads/sandbar-sunset-orange-02.png" },
+      { url: "/uploads/sandbar-sunset-orange-03.jpg" },
+      { url: "/uploads/sandbar-ocean-blue-01.png" }, 
+      { url: "/uploads/sandbar-ocean-blue-02.png" },
+      { url: "/uploads/sandbar-ocean-blue-03.jpg" }
+  ];
+
   const productsToCreate = [
       {
           title: "The Nuzzle",
@@ -858,7 +889,7 @@ export default async function seedDemoData({ container }: ExecArgs) {
           collection_id: collectionsMap.get("Bath & Spa"),
           type_id: typesMap.get("Washcloth"),
           tags: getTagIds(["luxury", "organic"]),
-          images: [{ url: "http://localhost:8000/washcloth-nuzzle.jpg" }],
+          images: nuzzleImages,
           metadata: { features: "100% Long-Staple Cotton, Perfect Face Cloth Size, Oeko-Tex Certified, Made in Portugal", care_instructions: "Machine wash warm, Tumble dry low, Do not bleach, Avoid fabric softeners" },
           options: [{ title: "Color", values: ["Cloud White", "Sage", "Terra Cotta"] }],
           variants: [
@@ -879,7 +910,7 @@ export default async function seedDemoData({ container }: ExecArgs) {
           collection_id: collectionsMap.get("Bath & Spa"),
           type_id: typesMap.get("Hand Towel"),
           tags: getTagIds(["luxury", "organic"]),
-          images: [{ url: "http://localhost:8000/hand-towel-cradle.jpg" }],
+          images: [{ url: "/uploads/cradle-cloud-white-01.jpg" }],
           metadata: { features: "High Absorbency, Quick Drying, Double-Stitched Hems, Sustainably Sourced", care_instructions: "Machine wash warm, Tumble dry low, Do not bleach, Avoid fabric softeners" },
           options: [{ title: "Color", values: ["Cloud White", "Charcoal", "Navy"] }],
           variants: [
@@ -900,7 +931,7 @@ export default async function seedDemoData({ container }: ExecArgs) {
           collection_id: collectionsMap.get("Bath & Spa"),
           type_id: typesMap.get("Bath Towel"),
           tags: getTagIds(["luxury", "cozy"]),
-          images: [{ url: "http://localhost:8000/bath-towel-bearhug.jpg" }, { url: "http://localhost:8000/white_bathtowel_laidout_product.png" }, { url: "http://localhost:8000/white_bathtowel_folded_product.png" }],
+          images: bearhugImages,
           metadata: { features: "Oversized for Comfort, 700 GSM Weight, Cloud-like Softness, Fade Resistant", care_instructions: "Machine wash warm, Tumble dry low, Do not bleach, Avoid fabric softeners" },
           options: [{ title: "Color", values: ["Cloud White", "Sand", "Stone"] }],
           variants: [
@@ -922,7 +953,7 @@ export default async function seedDemoData({ container }: ExecArgs) {
           collection_id: collectionsMap.get("Bath & Spa"),
           type_id: typesMap.get("Accessory"),
           tags: getTagIds(["eco-friendly", "home"]),
-          images: [{ url: "http://localhost:8000/wood_dryer_balls.png" }],
+          images: [{ url: "/wood_dryer_balls.png" }],
           metadata: { features: "100% New Zealand Wool, Reduces Drying Time, Hypoallergenic, Lasts for 1000+ Loads", care_instructions: "Store in a dry place, Recharge in sun monthly", disable_embroidery: "true" },
           options: [{ title: "Type", values: ["Natural"] }],
           variants: [
@@ -942,7 +973,7 @@ export default async function seedDemoData({ container }: ExecArgs) {
           collection_id: collectionsMap.get("Summer Essentials"),
           type_id: typesMap.get("Beach Towel"),
           tags: getTagIds(["summer", "beach", "outdoor", "luxury"]),
-          images: [{ url: "https://placehold.co/600x800/E89B5F/FFFFFF?text=The+Sandbar" }, { url: "https://placehold.co/600x800/5FA8E8/FFFFFF?text=Ocean+Blue" }],
+          images: sandbarImages,
           metadata: { features: "Oversized Lounger, Velour & Terry Dual-Texture, UV Resistant, Sand Repellent", care_instructions: "Machine wash cold, Tumble dry low, Shake sand before washing" },
           options: [{ title: "Color", values: ["Sunset Orange", "Ocean Blue"] }],
           variants: [
@@ -962,7 +993,7 @@ export default async function seedDemoData({ container }: ExecArgs) {
           collection_id: collectionsMap.get("Kitchen & Dining"),
           type_id: typesMap.get("Kitchen Towel"),
           tags: getTagIds(["kitchen", "cooking", "home"]),
-          images: [{ url: "https://placehold.co/600x800/B22222/FFFFFF?text=Chef's+Mate" }, { url: "https://placehold.co/600x800/2F4F4F/FFFFFF?text=Classic+Stripe" }],
+          images: [{ url: "https://placehold.co/600x800/B22222/FFFFFF?text=Checkered+Red" }, { url: "https://placehold.co/600x800/2F4F4F/FFFFFF?text=Classic+Stripe" }],
           metadata: { features: "Lint Free, Waffle Weave, Hanging Loop, Dries Instantly", care_instructions: "Machine wash hot, Tumble dry medium, Bleach safe (White only)" },
           options: [{ title: "Pattern", values: ["Checkered Red", "Classic Stripe"] }],
           variants: [
@@ -984,10 +1015,10 @@ export default async function seedDemoData({ container }: ExecArgs) {
           tags: getTagIds(["cozy", "winter", "living", "luxury"]),
           images: [{ url: "https://placehold.co/600x800/8B4513/FFFFFF?text=The+Hearth" }],
           metadata: { features: "Temperature Regulating, Soft-Touch Wool, Heirloom Quality, Fringed Edges", care_instructions: "Dry clean only, Spot clean spills immediately" },
-          options: [{ title: "Size", values: ["Throw (50x60)", "Queen (90x90)"] }],
+          options: [{ title: "Color", values: ["Walnut", "Slate"] }],
           variants: [
-              { title: "Throw (50x60)", sku: "HEARTH-THROW", options: { Size: "Throw (50x60)" }, ...blanketVariantAttrs, prices: [{ amount: 70, currency_code: "eur" }, { amount: 80, currency_code: "usd" }, { amount: 110, currency_code: "cad" }] },
-              { title: "Queen (90x90)", sku: "HEARTH-QUEEN", options: { Size: "Queen (90x90)" }, ...blanketVariantAttrs, weight: 2000, prices: [{ amount: 125, currency_code: "eur" }, { amount: 140, currency_code: "usd" }, { amount: 195, currency_code: "cad" }] }
+              { title: "Walnut", sku: "HEARTH-WALNUT", options: { Color: "Walnut" }, ...blanketVariantAttrs, prices: [{ amount: 70, currency_code: "eur" }, { amount: 80, currency_code: "usd" }, { amount: 110, currency_code: "cad" }] },
+              { title: "Slate", sku: "HEARTH-SLATE", options: { Color: "Slate" }, ...blanketVariantAttrs, prices: [{ amount: 75, currency_code: "eur" }, { amount: 85, currency_code: "usd" }, { amount: 115, currency_code: "cad" }] }
           ],
           sales_channels: [{ id: defaultSalesChannel[0].id }]
       }
@@ -1021,6 +1052,8 @@ export default async function seedDemoData({ container }: ExecArgs) {
 
   const existingProducts = await productModuleService.listProducts({
       handle: productsToCreate.map(p => p.handle)
+  }, {
+      relations: ["variants", "images"]
   });
   const existingHandles = new Set(existingProducts.map(p => p.handle));
 
@@ -1050,9 +1083,16 @@ export default async function seedDemoData({ container }: ExecArgs) {
     "the-wool-dryer-ball": { usd: 18, eur: 16, cad: 24 },
   };
 
-  // Ensure ALL existing products are linked to the default sales channel, published, and have variant attributes
+  // Re-fetch all products after potentially creating new ones to ensured we have all IDs and relations
+  const allProducts = await productModuleService.listProducts({
+      handle: productsToCreate.map(p => p.handle)
+  }, {
+      relations: ["variants", "images"]
+  });
+
+  // Ensure ALL products are linked to the default sales channel, published, and have variant attributes
   // This fixes products that were created but not properly linked or are in draft status
-  for (const existingProduct of existingProducts) {
+  for (const existingProduct of allProducts) {
     // Use query.graph to check if product is linked to sales channel
     let isLinked = false;
     try {
@@ -1153,6 +1193,53 @@ export default async function seedDemoData({ container }: ExecArgs) {
             } catch (e) {
                 logger.warn(`Failed to update variant attributes for ${variant.sku}: ${(e as Error).message}`);
             }
+        }
+
+        // Native Variant Image Association
+        try {
+            // Re-fetch product images and variants to ensure we have the latest IDs and relations
+            const [productWithImages] = await productModuleService.listProducts(
+                { id: existingProduct.id },
+                { relations: ["images", "variants"] }
+            );
+
+            if (productWithImages) {
+                for (const variant of productWithImages.variants || []) {
+                    const variantTitle = (variant as any).title.toLowerCase();
+                    // Match pattern: "cloud-white" should be in image URL like "/nuzzle-cloud-white-01.png"
+                    // Also handle patterns like "classic stripe" -> "classic-stripe" or "classic stripe"
+                    const searchTerms = [
+                        variantTitle,
+                        variantTitle.replace(/\s+/g, '-'),
+                        variantTitle.replace(/\s+/g, '+')
+                    ];
+
+                    const matchingImageIds = (productWithImages.images || [])
+                        .filter(img => {
+                            const url = img.url.toLowerCase();
+                            return searchTerms.some(term => url.includes(term));
+                        })
+                        .map(img => img.id);
+
+                    if (matchingImageIds.length > 0) {
+                        try {
+                            await batchVariantImagesWorkflow(container).run({
+                                input: {
+                                    variant_id: variant.id,
+                                    add: matchingImageIds,
+                                },
+                            });
+                            logger.info(`Associated ${matchingImageIds.length} images with variant "${(variant as any).title}" of "${existingProduct.handle}"`);
+                        } catch (e) {
+                            logger.warn(`Could not associate images with variant "${(variant as any).title}": ${(e as Error).message}`);
+                        }
+                    } else {
+                        logger.info(`No matching images found for variant "${(variant as any).title}" of "${existingProduct.handle}"`);
+                    }
+                }
+            }
+        } catch (e) {
+            logger.warn(`Failed to associate variant images for "${existingProduct.handle}": ${(e as Error).message}`);
         }
     }
   }

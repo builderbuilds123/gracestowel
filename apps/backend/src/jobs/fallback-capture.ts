@@ -29,6 +29,13 @@ const STALE_ORDER_THRESHOLD_MS = 65 * 60 * 1000;
 export default async function fallbackCaptureJob(container: MedusaContainer) {
     const logger = container.resolve(ContainerRegistrationKeys.LOGGER);
     logger.info("[FallbackCron] Starting fallback capture check...");
+
+    // DEBUG: Log when fallback cron runs
+    logger.info("[FallbackCron][DEBUG] ====== FALLBACK CRON EXECUTING ======");
+    logger.info(`[FallbackCron][DEBUG] Current time: ${new Date().toISOString()}`);
+    logger.info(`[FallbackCron][DEBUG] Stale threshold: ${STALE_ORDER_THRESHOLD_MS}ms (${STALE_ORDER_THRESHOLD_MS / 60000} minutes)`);
+    logger.info(`[FallbackCron][DEBUG] Orders older than: ${new Date(Date.now() - STALE_ORDER_THRESHOLD_MS).toISOString()}`);
+    logger.info("[FallbackCron][DEBUG] =====================================");
     if (!process.env.REDIS_URL) {
         logger.warn("[FallbackCron] REDIS_URL not configured - skipping fallback capture run");
         return;
@@ -150,7 +157,18 @@ export default async function fallbackCaptureJob(container: MedusaContainer) {
                 // Step 3: Job is MISSING or COMPLETED - trigger immediate capture
                 const sourceLabel = isRecoveryOrder ? "RECOVERY" : "FALLBACK";
                 logger.info(`[FallbackCron][${sourceLabel}] Order ${orderId}: No active capture job found (state: ${jobState}), triggering capture`);
-                
+
+                // DEBUG: Log immediate capture trigger
+                logger.info(`[FallbackCron][DEBUG] ====== TRIGGERING IMMEDIATE CAPTURE ======`);
+                logger.info(`[FallbackCron][DEBUG] Order ID: ${orderId}`);
+                logger.info(`[FallbackCron][DEBUG] Order created at: ${order.created_at}`);
+                logger.info(`[FallbackCron][DEBUG] Order age: ${Math.round((Date.now() - new Date(order.created_at).getTime()) / 60000)} minutes`);
+                logger.info(`[FallbackCron][DEBUG] Job state was: ${jobState}`);
+                logger.info(`[FallbackCron][DEBUG] Is recovery order: ${isRecoveryOrder}`);
+                logger.info(`[FallbackCron][DEBUG] Source: ${sourceLabel}`);
+                logger.info(`[FallbackCron][DEBUG] DELAY: 0 (IMMEDIATE)`);
+                logger.info(`[FallbackCron][DEBUG] ==========================================`);
+
                 // Schedule immediate capture (delay: 0)
                 await queue.add(
                     `capture-${orderId}`,

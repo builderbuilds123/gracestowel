@@ -6,6 +6,9 @@ import { useCart } from "../context/CartContext";
 import { useLocale } from "../context/LocaleContext";
 import { ArrowRight, Leaf, Heart, Sparkles, Star, Quote, Truck, RefreshCw, ShieldCheck } from "lucide-react";
 import { Towel } from "@phosphor-icons/react";
+import { getMedusaClient, getDefaultRegion, type MedusaProduct } from "../lib/medusa";
+import { transformToDetail, type ProductDetail } from "../lib/product-transformer";
+import { Image as OptimizedImage } from "../components/ui/Image";
 
 export function meta({ }: Route.MetaArgs) {
   return [
@@ -52,52 +55,58 @@ const testimonials = [
   },
 ];
 
-export default function Home() {
+export async function loader({ context }: Route.LoaderArgs) {
+  const medusa = getMedusaClient(context);
+  const regionInfo = await getDefaultRegion(medusa);
+  const regionId = regionInfo?.region_id;
+  const currencyCode = regionInfo?.currency_code || "cad";
+
+  try {
+    const { products } = await medusa.store.product.list({
+      handle: ["the-nuzzle", "the-cradle", "the-bear-hug"],
+      region_id: regionId,
+      fields: "+variants.calculated_price,+variants.prices,+images"
+    });
+
+    // Sort products back into the order we want (Nuzzle, Cradle, Bear Hug)
+    const featuredProducts = ["the-nuzzle", "the-cradle", "the-bear-hug"]
+      .map(handle => products.find(p => p.handle === handle))
+      .filter((p): p is any => !!p)
+      .map(p => {
+          const detail = transformToDetail(p as MedusaProduct, currencyCode);
+          return {
+              ...detail,
+              description: p.handle === "the-nuzzle" 
+                ? "Our signature washcloth. Gentle enough for a baby, durable enough for daily use."
+                : p.handle === "the-cradle"
+                ? "The perfect hand towel. Soft, absorbent, and ready to comfort your hands."
+                : "Wrap yourself in a warm embrace with our oversized, ultra-plush bath towel."
+          };
+      });
+
+    return { products: featuredProducts };
+  } catch (error) {
+    console.error("Failed to fetch featured products for home page:", error);
+    return { products: [] };
+  }
+}
+
+export default function Home({ loaderData }: Route.ComponentProps) {
+  const { products } = loaderData;
   const { addToCart } = useCart();
   const { formatPrice } = useLocale();
   const [activeTestimonial, setActiveTestimonial] = useState(0);
 
-  const handleQuickAdd = (product: typeof products[0]) => {
+  const handleQuickAdd = (product: ProductDetail) => {
     addToCart({
       id: product.id,
       title: product.title,
-      price: product.price,
-      image: product.image,
+      price: product.formattedPrice,
+      image: product.images[0],
+      variantId: product.variants?.[0]?.id,
+      sku: product.variants?.[0]?.sku || undefined,
     });
   };
-
-  const products = [
-    {
-      id: 1,
-      title: "The Nuzzle",
-      description: "Our signature washcloth. Gentle enough for a baby, durable enough for daily use.",
-      price: "$18.00",
-      image: "/washcloth-nuzzle.jpg",
-      handle: "the-nuzzle",
-      variantId: undefined,
-      sku: undefined,
-    },
-    {
-      id: 2,
-      title: "The Cradle",
-      description: "The perfect hand towel. Soft, absorbent, and ready to comfort your hands.",
-      price: "$25.00",
-      image: "/hand-towel-cradle.jpg",
-      handle: "the-cradle",
-      variantId: undefined,
-      sku: undefined,
-    },
-    {
-      id: 3,
-      title: "The Bear Hug",
-      description: "Wrap yourself in a warm embrace with our oversized, ultra-plush bath towel.",
-      price: "$35.00",
-      image: "/bath-towel-bearhug.jpg",
-      handle: "the-bear-hug",
-      variantId: undefined,
-      sku: undefined,
-    },
-  ];
 
   // JSON-LD structured data
   const organizationJsonLd = {
@@ -146,11 +155,14 @@ export default function Home() {
       <section className="relative -mt-24 min-h-screen overflow-hidden">
         {/* Background Image */}
         <div className="absolute inset-0">
-          <img
+          <OptimizedImage
             src="/hero-towels-new.jpg"
             alt="Luxuriously soft Turkish cotton towels in warm, inviting setting"
             className="w-full h-full object-cover object-[center_40%]"
-            fetchPriority="high"
+            priority={true}
+            width={1920}
+            height={1080}
+            layout="constrained"
           />
           {/* Warm overlay gradient */}
           <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/10 to-black/40"></div>
@@ -268,10 +280,11 @@ export default function Home() {
                 {/* Product Image Container */}
                 <div className="relative overflow-hidden rounded-lg mb-4 bg-card-earthy/20 aspect-[4/3]">
                   <Link to={`/products/${product.handle}`}>
-                    <img
-                      src={product.image}
+                    <OptimizedImage
+                      src={product.images[0]}
                       alt={product.title}
-                      loading="lazy"
+                      width={600}
+                      height={450}
                       className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-500 ease-out"
                     />
                   </Link>
@@ -296,7 +309,7 @@ export default function Home() {
                     {product.description}
                   </p>
                   <span className="text-accent-earthy font-semibold text-lg">
-                    {formatPrice(product.price)}
+                    {product.formattedPrice}
                   </span>
                 </div>
               </div>
@@ -444,10 +457,12 @@ export default function Home() {
       <section className="relative py-24 md:py-32 overflow-hidden">
         {/* Background Image */}
         <div className="absolute inset-0">
-          <img
+          <OptimizedImage
             src="/hero-towels.jpg"
             alt="Cozy bathroom setting with Grace's Towel products"
-            loading="lazy"
+            width={1920}
+            height={1080}
+            layout="constrained"
             className="w-full h-full object-cover"
           />
           <div className="absolute inset-0 bg-gradient-to-r from-text-earthy/80 to-text-earthy/40"></div>

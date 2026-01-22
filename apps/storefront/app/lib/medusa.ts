@@ -55,6 +55,7 @@ export interface MedusaProduct {
         hs_code?: string;
         origin_country?: string;
         material?: string;
+        images: Array<{ id: string; url: string }>;
     }>;
     options: Array<{
         id: string;

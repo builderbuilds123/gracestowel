@@ -4,7 +4,7 @@ import type {
 } from "@medusajs/framework"
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
 // import { sendOrderConfirmationWorkflow } from "../workflows/send-order-confirmation" // DEPRECATED - Replaced by BullMQ
-import { schedulePaymentCapture, formatModificationWindow } from "../lib/payment-capture-queue"
+import { schedulePaymentCapture, formatModificationWindow, PAYMENT_CAPTURE_DELAY_MS } from "../lib/payment-capture-queue"
 import { trackEvent } from "../utils/analytics"
 import { enqueueEmail } from "../lib/email-queue"
 import { Templates } from "../modules/resend/service"
@@ -308,19 +308,25 @@ export default async function orderPlacedHandler({
 
   // Schedule payment capture after modification window
   try {
+    // DEBUG: Log capture scheduling attempt
+    logger.info("payment-capture", "[DEBUG] Starting payment capture scheduling", {
+      order_id: data.id,
+      timestamp: new Date().toISOString()
+    })
+
     // Get the payment intent ID from order - check payment collections first, then metadata
     const query = container.resolve("query")
     const { data: orders } = await query.graph({
       entity: "order",
       fields: [
-        "id", 
-        "metadata", 
-        "customer_id", 
-        "total", 
-        "currency_code", 
-        "items.product_id", 
-        "items.title", 
-        "items.quantity", 
+        "id",
+        "metadata",
+        "customer_id",
+        "total",
+        "currency_code",
+        "items.product_id",
+        "items.title",
+        "items.quantity",
         "items.unit_price",
         // CHK-02-B FIX: Include payment collections to find payment_intent_id
         "payment_collections.payments.data"
@@ -356,6 +362,17 @@ export default async function orderPlacedHandler({
 
       if (paymentIntentId) {
         try {
+          // DEBUG: Log detailed scheduling info
+          logger.info("payment-capture", "[DEBUG] About to schedule payment capture", {
+            order_id: data.id,
+            pi: paymentIntentId,
+            delay_ms: PAYMENT_CAPTURE_DELAY_MS,
+            delay_seconds: PAYMENT_CAPTURE_DELAY_MS / 1000,
+            delay_minutes: Math.round(PAYMENT_CAPTURE_DELAY_MS / 60000),
+            scheduled_capture_time: new Date(Date.now() + PAYMENT_CAPTURE_DELAY_MS).toISOString(),
+            current_time: new Date().toISOString()
+          })
+
           logger.info("payment-capture", "Attempting to schedule payment capture", { order_id: data.id, pi: paymentIntentId })
           await schedulePaymentCapture(data.id, paymentIntentId)
           logger.info("payment-capture", "Payment capture scheduled", { order_id: data.id, delay: formatModificationWindow(), pi: paymentIntentId })

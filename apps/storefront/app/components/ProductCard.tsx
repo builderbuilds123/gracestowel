@@ -3,6 +3,7 @@ import { useLocale } from "../context/LocaleContext";
 import { Link } from "react-router";
 import { Towel } from "@phosphor-icons/react";
 import { WishlistButton } from "./WishlistButton";
+import { Image } from "./ui/Image";
 
 interface ProductCardProps {
     id: string | number;
@@ -31,12 +32,11 @@ export function ProductCard({ id, image, title, description, price, handle, vari
             <div className="relative overflow-hidden rounded mb-3 bg-card-earthy/20">
                 <Link to={`/products/${handle}`}>
                     {image ? (
-                        <img
+                        <Image
                             src={image}
                             alt={title}
-                            width="400"
-                            height="300"
-                            loading="lazy"
+                            width={400}
+                            height={300}
                             className="w-full h-48 object-cover transform group-hover:scale-105 transition-transform duration-500 ease-out"
                         />
                     ) : (

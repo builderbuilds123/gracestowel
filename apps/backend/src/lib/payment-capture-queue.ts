@@ -36,16 +36,32 @@ export const CAPTURE_BUFFER_SECONDS = parseInt(
 // Delay for payment capture - configurable via env, defaults to 59:30 (3570000ms)
 // Story 6.3: Uses 30s buffer before full hour to prevent edit/capture race
 const envDelay = process.env.PAYMENT_CAPTURE_DELAY_MS;
+
+// DEBUG: Log environment variable state at module load time
+console.log(`[CAPTURE_QUEUE][DEBUG] Module loading at ${new Date().toISOString()}`);
+console.log(`[CAPTURE_QUEUE][DEBUG] process.env.PAYMENT_CAPTURE_DELAY_MS = "${envDelay}" (type: ${typeof envDelay})`);
+console.log(`[CAPTURE_QUEUE][DEBUG] process.env.NODE_ENV = "${process.env.NODE_ENV}"`);
+console.log(`[CAPTURE_QUEUE][DEBUG] CAPTURE_BUFFER_SECONDS = ${CAPTURE_BUFFER_SECONDS}`);
+
 if (!envDelay) {
     console.error("[CRITICAL] PAYMENT_CAPTURE_DELAY_MS environment variable is missing. Using default of 59:30.");
 } else if (isNaN(parseInt(envDelay, 10))) {
     console.error(`[CRITICAL] PAYMENT_CAPTURE_DELAY_MS environment variable is invalid: "${envDelay}". Using default of 59:30.`);
 }
 
+const calculatedDefault = calculateCaptureDelayMs(CAPTURE_BUFFER_SECONDS);
 export const PAYMENT_CAPTURE_DELAY_MS = parseInt(
-    envDelay || String(calculateCaptureDelayMs(CAPTURE_BUFFER_SECONDS)),
+    envDelay || String(calculatedDefault),
     10
 );
+
+// DEBUG: Log final computed value (inline calculation to avoid forward reference)
+const _debugDelaySeconds = Math.floor(PAYMENT_CAPTURE_DELAY_MS / 1000);
+const _debugDelayMinutes = Math.floor(_debugDelaySeconds / 60);
+const _debugDelayRemainingSeconds = _debugDelaySeconds % 60;
+console.log(`[CAPTURE_QUEUE][DEBUG] Calculated default delay = ${calculatedDefault}ms (${calculatedDefault / 1000}s)`);
+console.log(`[CAPTURE_QUEUE][DEBUG] Final PAYMENT_CAPTURE_DELAY_MS = ${PAYMENT_CAPTURE_DELAY_MS}ms`);
+console.log(`[CAPTURE_QUEUE][DEBUG] Modification window = ${_debugDelayMinutes} minutes ${_debugDelayRemainingSeconds} seconds`);
 
 /**
  * Get the modification window duration in seconds
@@ -168,6 +184,12 @@ export async function schedulePaymentCapture(
 
     console.log(`[CAPTURE_QUEUE] 📋 Scheduling payment capture for order ${orderId}, PI: ${paymentIntentId}`);
 
+    // DEBUG: Log delay configuration
+    console.log(`[CAPTURE_QUEUE][DEBUG] ====== SCHEDULING CAPTURE JOB ======`);
+    console.log(`[CAPTURE_QUEUE][DEBUG] Order ID: ${orderId}`);
+    console.log(`[CAPTURE_QUEUE][DEBUG] PAYMENT_CAPTURE_DELAY_MS constant: ${PAYMENT_CAPTURE_DELAY_MS}ms`);
+    console.log(`[CAPTURE_QUEUE][DEBUG] delayOverride parameter: ${delayOverride !== undefined ? `${delayOverride}ms` : "undefined (using default)"}`);
+
     const queue = getPaymentCaptureQueue();
 
     const jobData: PaymentCaptureJobData = {
@@ -180,6 +202,12 @@ export async function schedulePaymentCapture(
     const delaySeconds = Math.round(finalDelay / 1000);
     const delayMinutes = Math.round(delaySeconds / 60);
     const captureTime = new Date(Date.now() + finalDelay).toISOString();
+
+    // DEBUG: Log final delay being used
+    console.log(`[CAPTURE_QUEUE][DEBUG] Final delay to be used: ${finalDelay}ms (${delaySeconds}s = ${delayMinutes} minutes)`);
+    console.log(`[CAPTURE_QUEUE][DEBUG] Current time: ${new Date().toISOString()}`);
+    console.log(`[CAPTURE_QUEUE][DEBUG] Expected capture time: ${captureTime}`);
+    console.log(`[CAPTURE_QUEUE][DEBUG] ====================================`);
 
     let job: Job<PaymentCaptureJobData> | null = null;
     try {

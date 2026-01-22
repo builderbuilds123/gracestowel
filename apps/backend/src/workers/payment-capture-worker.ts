@@ -650,8 +650,24 @@ async function capturePaymentViaPaymentModule(paymentId: string | null, amountCe
  * Exported for unit testing
  */
 export async function processPaymentCapture(job: Job<PaymentCaptureJobData>): Promise<void> {
-    const { orderId, paymentIntentId, scheduledAt } = job.data;
-    
+    const { orderId, paymentIntentId, scheduledAt, source } = job.data as PaymentCaptureJobData & { source?: string };
+
+    // DEBUG: Log detailed job information
+    const now = Date.now();
+    const scheduledDelay = now - scheduledAt;
+    console.log(`[PaymentCapture][DEBUG] ====== CAPTURE JOB PROCESSING ======`);
+    console.log(`[PaymentCapture][DEBUG] Order ID: ${orderId}`);
+    console.log(`[PaymentCapture][DEBUG] Payment Intent: ${paymentIntentId}`);
+    console.log(`[PaymentCapture][DEBUG] Job ID: ${job.id}`);
+    console.log(`[PaymentCapture][DEBUG] Job Name: ${job.name}`);
+    console.log(`[PaymentCapture][DEBUG] Source: ${source || "normal"}`);
+    console.log(`[PaymentCapture][DEBUG] Scheduled At: ${new Date(scheduledAt).toISOString()}`);
+    console.log(`[PaymentCapture][DEBUG] Processing At: ${new Date(now).toISOString()}`);
+    console.log(`[PaymentCapture][DEBUG] Actual Delay: ${scheduledDelay}ms (${Math.round(scheduledDelay / 1000)}s = ${Math.round(scheduledDelay / 60000)} minutes)`);
+    console.log(`[PaymentCapture][DEBUG] Job Delay Option: ${job.opts?.delay}ms`);
+    console.log(`[PaymentCapture][DEBUG] Job Attempts: ${job.attemptsMade}/${job.opts?.attempts || 3}`);
+    console.log(`[PaymentCapture][DEBUG] ====================================`);
+
     console.log(`[PaymentCapture] Processing capture for order ${orderId}`);
 
     if (!orderId || typeof orderId !== "string" || !orderId.startsWith("order_")) {

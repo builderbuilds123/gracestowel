@@ -86,8 +86,10 @@ function extractColors(product: MedusaProduct): string[] {
         ?.map(v => v.options?.find(o => o.value)?.value)
         .filter((c): c is string => !!c) || [];
     
-    // Method 2: From product options (for all available colors)
-    const colorOption = product.options?.find(o => o.title.toLowerCase() === 'color');
+    // Method 2: From product options (for all available colors/patterns)
+    const colorOption = product.options?.find(o => 
+        ['color', 'pattern'].includes(o.title.toLowerCase())
+    );
     const colorsFromOptions = colorOption?.values?.map(v => v.value) || [];
     
     // Prefer colors from options as it's the complete list
@@ -196,6 +198,7 @@ export function transformToDetail(
                 : undefined,
             options: v.options,
             prices: v.prices,
+            images: v.images?.map(img => img.url) || [],
         })) || [],
     };
 }
