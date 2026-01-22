@@ -234,7 +234,7 @@ export function CheckoutProvider({ children }: { children: React.ReactNode }) {
     ? (medusaShipping ?? (selectedShipping.amount ?? 0))
     : 0;
 
-  const displayFinalTotal = medusaTotal ?? (displayCartTotal - (medusaDiscount ?? totalDiscount) + displayShippingCost);
+  const displayFinalTotal = medusaTotal ?? (displayCartTotal + displayShippingCost);
 
   const {
     promotions: automaticPromotions,

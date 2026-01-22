@@ -1014,14 +1014,10 @@ export default async function seedDemoData({ container }: ExecArgs) {
       logger.info(`Deleting legacy products: ${legacyProducts.map(p => p.handle).join(", ")}`);
       await productModuleService.deleteProducts(legacyProducts.map(p => p.id));
   }
-
-  // Cleanup orphaned inventory items that might cause SKU collisions
+  
   const inventoryModuleService = container.resolve(Modules.INVENTORY);
-  const orphanedItems = await inventoryModuleService.listInventoryItems({sku: "DRYER-BALLS-3"});
-  if (orphanedItems && orphanedItems.length > 0) {
-      logger.info(`Deleting orphaned inventory items: ${orphanedItems.map(i => i.sku).join(", ")}`);
-      await inventoryModuleService.deleteInventoryItems(orphanedItems.map(i => i.id));
-  }
+
+
 
   const existingProducts = await productModuleService.listProducts({
       handle: productsToCreate.map(p => p.handle)

@@ -150,8 +150,8 @@ export function ProductInfo({
          {product.features && product.features.length > 0 && (
            <AccordionItem title="Details" defaultOpen={true}>
              <ul className="space-y-2">
-               {product.features.map((feature, i) => (
-                 <li key={i} className="flex items-start gap-2">
+               {product.features.map((feature) => (
+                 <li key={feature} className="flex items-start gap-2">
                    <span className="text-accent-earthy mt-1.5 w-1.5 h-1.5 rounded-full bg-current flex-shrink-0" />
                    <span>{feature}</span>
                  </li>
@@ -163,8 +163,8 @@ export function ProductInfo({
          {product.dimensions && product.dimensions.length > 0 && (
            <AccordionItem title="Dimensions">
              <ul className="space-y-1">
-               {product.dimensions.map((dim, i) => (
-                 <li key={i} className="grid grid-cols-2 gap-4">
+               {product.dimensions.map((dim) => (
+                 <li key={dim.label} className="grid grid-cols-2 gap-4">
                    <span className="text-text-earthy/60">{dim.label}</span>
                    <span className="font-medium text-text-earthy">{dim.value}</span>
                  </li>
@@ -176,8 +176,8 @@ export function ProductInfo({
          {product.careInstructions && product.careInstructions.length > 0 && (
            <AccordionItem title="Care Guide">
              <ul className="space-y-2">
-               {product.careInstructions.map((instruction, i) => (
-                 <li key={i} className="flex items-start gap-2">
+               {product.careInstructions.map((instruction) => (
+                 <li key={instruction} className="flex items-start gap-2">
                     <span className="text-accent-earthy mt-1">•</span>
                    <span>{instruction}</span>
                  </li>
