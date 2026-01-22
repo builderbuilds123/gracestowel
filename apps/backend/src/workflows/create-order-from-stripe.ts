@@ -394,7 +394,7 @@ const linkPaymentCollectionStep = createStep(
  * This step is wrapped in a try-catch to ensure that event emission failures
  * do not block the main workflow, allowing for graceful degradation.
  */
-const emitEventStep = createStep(
+const emitStripeOrderEventStep = createStep(
     "emit-event",
     async (input: { eventName: string; data: any }, { container }) => {
         const logger = container.resolve("logger");
@@ -561,8 +561,8 @@ export const createOrderFromStripeWorkflow = createWorkflow(
         logOrderCreatedStep(logInput);
 
         // Step 9: Emit order.placed event to trigger email notification and payment capture scheduling
-        // Using native emitEventStep from @medusajs/core-flows - event only emits after workflow success
-        emitEventStep({
+        // Using native emitStripeOrderEventStep from @medusajs/core-flows - event only emits after workflow success
+        emitStripeOrderEventStep({
             eventName: "order.placed",
             data: transform({ order, tokenResult }, (data) => ({
                 id: data.order.id,
