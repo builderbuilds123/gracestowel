@@ -97,6 +97,11 @@ export interface CartWithPromotions {
   shipping_total?: number;
   tax_total?: number;
   total?: number;
+  // Medusa v2 extra totals
+  item_total?: number;
+  item_subtotal?: number;
+  original_total?: number;
+  original_item_total?: number;
   promotions?: Array<{
     id?: string;
     code?: string;

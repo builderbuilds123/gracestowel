@@ -62,7 +62,7 @@ const mockLoaderData = {
     colors: ['White', 'Blue'],
     images: ['test-image.jpg'],
     features: ['Soft', 'Durable'],
-    dimensions: '50x100',
+    dimensions: [{ label: 'Width', value: '50cm' }, { label: 'Length', value: '100cm' }],
     careInstructions: ['Wash Cold'],
     disableEmbroidery: false,
   },

@@ -63,7 +63,7 @@ function PaymentForm({ amount, currencyCode, onClose, orderId, token }: {
                 <div className="flex justify-between items-center mb-1">
                     <span className="text-sm text-text-earthy/70">Amount Due</span>
                     <span className="text-xl font-bold text-accent-earthy">
-                        {(amount / 100).toFixed(2)} {currencyCode.toUpperCase()}
+                        {amount.toFixed(2)} {currencyCode.toUpperCase()}
                     </span>
                 </div>
                 <p className="text-xs text-text-earthy/60">
@@ -90,7 +90,7 @@ function PaymentForm({ amount, currencyCode, onClose, orderId, token }: {
                             Processing...
                         </>
                     ) : (
-                        `Pay ${(amount / 100).toFixed(2)} ${currencyCode.toUpperCase()}`
+                        `Pay ${amount.toFixed(2)} ${currencyCode.toUpperCase()}`
                     )}
                 </button>
                 <button

@@ -47,6 +47,14 @@ export interface MedusaProduct {
             option_id: string;
         }>;
         inventory_quantity?: number;
+        // Physical attributes
+        weight?: number;
+        length?: number;
+        height?: number;
+        width?: number;
+        hs_code?: string;
+        origin_country?: string;
+        material?: string;
     }>;
     options: Array<{
         id: string;
@@ -57,6 +65,14 @@ export interface MedusaProduct {
     metadata?: Record<string, unknown>;
     created_at: string;
     updated_at: string;
+    // Physical attributes (Medusa v2)
+    weight?: number;
+    length?: number;
+    height?: number;
+    width?: number;
+    hs_code?: string;
+    origin_country?: string;
+    material?: string;
 }
 
 export interface MedusaProductsResponse {

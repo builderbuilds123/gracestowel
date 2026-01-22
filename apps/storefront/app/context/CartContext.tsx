@@ -22,6 +22,7 @@ interface CartContextType {
     cartTotal: number;
     medusaCart?: CartWithPromotions | null;
     isLoading: boolean;
+    isSyncing: boolean;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -30,7 +31,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     const [items, setItems] = useState<CartItem[]>([]);
     const [isOpen, setIsOpen] = useState(false);
     const [isLoaded, setIsLoaded] = useState(false);
+    const [isSyncing, setIsSyncing] = useState(false);
     const cartCreateInFlight = React.useRef(false);
+    const lastSyncRequestId = React.useRef(0);
     const { cartId, cart: medusaCart, setCartId, isLoading, refreshCart } = useMedusaCart();
     const { regionId } = useLocale();
 
@@ -74,23 +77,44 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     useEffect(() => {
         if (!cartId || !isLoaded) return;
 
+        // Functional comparison to check if sync is actually needed
+        // but since items is an object array, simple deep check or just relying on items ref is fine
+        const requestId = ++lastSyncRequestId.current;
+
         const timeoutId = setTimeout(async () => {
             try {
+                setIsSyncing(true);
                 const response = await monitoredFetch(`/api/carts/${cartId}`, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ items }),
                     label: 'sync-cart-items-debounced',
                 });
+
+                // Ignore stale requests (Race Condition protection)
+                if (requestId !== lastSyncRequestId.current) return;
+
                 if (response.ok) {
-                    void refreshCart();
+                    await refreshCart();
+                } else {
+                    // If sync fails (e.g. invalid promo code), we still want to refresh
+                    // to see what the backend currently thinks the cart is
+                    const errorPayload = await response.json().catch(() => ({}));
+                    console.error('[CartContext] Sync failed:', errorPayload);
+                    await refreshCart();
                 }
             } catch (err) {
                 console.error('[CartContext] Failed to sync items with Medusa:', err);
+            } finally {
+                if (requestId === lastSyncRequestId.current) {
+                    setIsSyncing(false);
+                }
             }
-        }, 1000); // 1 second debounce
+        }, 800); // Slightly faster debounce (800ms)
 
-        return () => clearTimeout(timeoutId);
+        return () => {
+            clearTimeout(timeoutId);
+        };
     }, [items, cartId, isLoaded, refreshCart]);
 
     const addToCart = (newItem: Omit<CartItem, 'quantity'> & { quantity?: number }) => {
@@ -193,11 +217,42 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     };
 
     // Use the centralized price calculation utility
-    // Prefer Medusa subtotal for the main cart total display if available
-    const displayCartTotal =
-        typeof medusaCart?.subtotal === 'number'
-            ? fromCents(medusaCart.subtotal)
-            : calculateTotal(items);
+    // Optimistic calculation: Apply previous discount ratio to current local items
+    // to prevent the "jump up" UI flicker while syncing (Story 5.4 optimization)
+    const displayCartTotal = React.useMemo(() => {
+        const localSubtotal = calculateTotal(items);
+        
+        if (medusaCart && items.length > 0) {
+            // Calculate a temporary total based on Medusa's last known discount ratio
+            // medusaCart.total is the final amount (inc. tax/shipping/discounts)
+            // medusaCart.subtotal is the amount before tax/shipping but after discounts (in Medusa v2 terminology often)
+            // But let's look at discount_total specifically
+            const medusaDiscountTotal = medusaCart.discount_total || 0;
+            const medusaOriginalSubtotal = medusaCart.item_total || medusaCart.subtotal || 1; // item_total is best
+            
+            if (medusaDiscountTotal > 0 && medusaOriginalSubtotal > 0) {
+                const discountRatio = medusaDiscountTotal / medusaOriginalSubtotal;
+                const estimatedTotal = localSubtotal * (1 - discountRatio);
+                
+                // If we're syncing, always show the estimate to stay consistent
+                if (isSyncing) return estimatedTotal;
+                
+                // If not syncing, prefer the backend's precise total if available
+                if (typeof medusaCart.subtotal === 'number') {
+                    return medusaCart.subtotal;
+                }
+                
+                return estimatedTotal;
+            }
+        }
+
+        // If not syncing and we have a backend total, use it
+        if (!isSyncing && typeof medusaCart?.subtotal === 'number') {
+           return medusaCart.subtotal;
+        }
+
+        return localSubtotal;
+    }, [items, medusaCart, isSyncing]);
 
     return (
         <CartContext.Provider value={{ 
@@ -211,7 +266,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
             clearCart, 
             cartTotal: displayCartTotal,
             medusaCart,
-            isLoading
+            isLoading,
+            isSyncing
         }}>
             {children}
         </CartContext.Provider>

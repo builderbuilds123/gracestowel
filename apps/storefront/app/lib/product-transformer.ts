@@ -42,7 +42,7 @@ export interface ProductDetail {
     description: string;
     images: string[];
     features: string[];
-    dimensions: string;
+    dimensions: { label: string; value: string }[];
     careInstructions: string[];
     colors: string[];
     disableEmbroidery: boolean;
@@ -56,19 +56,22 @@ export interface ProductDetail {
 function parseMetadataArray(value: unknown): string[] {
     if (!value) return [];
     
-    if (Array.isArray(value)) {
-        return value.filter((v): v is string => typeof v === 'string');
-    }
-    
+    // Handle comma-separated strings (new format)
     if (typeof value === 'string') {
+        // Try parsing as JSON first
         try {
             const parsed = JSON.parse(value);
             if (Array.isArray(parsed)) {
                 return parsed.filter((v): v is string => typeof v === 'string');
             }
         } catch {
-            // If it's not valid JSON, return empty array
+            // Not JSON, treat as comma-separated string
+            return value.split(',').map(s => s.trim()).filter(Boolean);
         }
+    }
+    
+    if (Array.isArray(value)) {
+        return value.filter((v): v is string => typeof v === 'string');
     }
     
     return [];
@@ -143,6 +146,30 @@ export function transformToDetail(
     // Parse metadata arrays
     const features = parseMetadataArray(metadata.features);
     const careInstructions = parseMetadataArray(metadata.care_instructions);
+
+    // Construct dimensions string from physical attributes
+    // Prefer Product-level attributes, fallback to first Variant
+    const height = product.height || firstVariant?.height;
+    const width = product.width || firstVariant?.width;
+    const length = product.length || firstVariant?.length;
+    const weight = product.weight || firstVariant?.weight;
+
+    let dimensions: { label: string; value: string }[] = [];
+    
+    // Check if metadata.dimensions is a legacy object (unlikely now) or string, 
+    // but primarily we build from attributes.
+    // If metadata.dimensions IS still present and we can't parse attributes, we might want to respect it,
+    // but the requirement is to "use height width length etc in product attributes".
+    
+    if (height) dimensions.push({ label: "Height", value: `${height}cm` });
+    if (width) dimensions.push({ label: "Width", value: `${width}cm` });
+    if (length) dimensions.push({ label: "Length", value: `${length}cm` });
+    if (weight) dimensions.push({ label: "Weight", value: `${weight}g` });
+
+    // Fallback: If no attributes but metadata.dimensions string exists (legacy), 
+    // try to use it as a generic "Dimensions" entry? 
+    // The user explicitly asked to "list the attributes as is".
+
     
     return {
         id: product.id,
@@ -154,7 +181,7 @@ export function transformToDetail(
         description: product.description || "",
         images: product.images?.map(img => img.url) || [product.thumbnail || "/placeholder.jpg"],
         features,
-        dimensions: (metadata.dimensions as string) || "",
+        dimensions,
         careInstructions,
         colors,
         disableEmbroidery: metadata.disable_embroidery === "true",

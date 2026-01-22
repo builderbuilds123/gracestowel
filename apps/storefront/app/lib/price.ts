@@ -79,47 +79,37 @@ export function formatPrice(amount: number, currency: CurrencyCode = DEFAULT_CUR
 }
 
 /**
- * Format a price from cents to a display string
- * Used for Medusa prices which are stored in cents
+ * Format a price from "cents" to a display string
+ * NOTE: With Medusa configured for major units, this now expects dollars despite the name
  * 
- * @example
- * formatPriceCents(3500) // "$35.00"
- * formatPriceCents(3500, 'CAD') // "CA$35.00"
- * 
- * @param cents - Price in cents (smallest currency unit)
+ * @param amount - Price in dollars
  * @param currency - Currency code (default: USD)
  * @returns Formatted price string
  */
-export function formatPriceCents(cents: number, currency: CurrencyCode = DEFAULT_CURRENCY): string {
-    return formatPrice(cents / 100, currency);
+export function formatPriceCents(amount: number, currency: CurrencyCode = DEFAULT_CURRENCY): string {
+    return formatPrice(amount, currency);
 }
 
 /**
  * Convert a price from dollars to cents
- * 
- * @example
- * toCents(35) // 3500
- * toCents(35.99) // 3599
+ * NOTE: With Medusa configured for major units, this now returns the amount as-is
  * 
  * @param amount - Price in dollars
- * @returns Price in cents
+ * @returns Price (now treated as dollars)
  */
 export function toCents(amount: number): number {
-    return Math.round(amount * 100);
+    return amount;
 }
 
 /**
  * Convert a price from cents to dollars
+ * NOTE: With Medusa configured for major units, this now returns the amount as-is
  * 
- * @example
- * fromCents(3500) // 35
- * fromCents(3599) // 35.99
- * 
- * @param cents - Price in cents
+ * @param amount - Price (supposedly cents, but now dollars)
  * @returns Price in dollars
  */
-export function fromCents(cents: number): number {
-    return cents / 100;
+export function fromCents(amount: number): number {
+    return amount;
 }
 
 /**

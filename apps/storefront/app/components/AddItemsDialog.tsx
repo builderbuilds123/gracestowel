@@ -144,7 +144,7 @@ export function AddItemsDialog({ isOpen, onClose, onAdd, currencyCode, regionId 
         return new Intl.NumberFormat('en-US', {
             style: 'currency',
             currency: currencyCode,
-        }).format(amount / 100);
+        }).format(amount);
     };
 
     return (

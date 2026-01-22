@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback } from "react";
+import { useRef, useEffect, useCallback, useMemo } from "react";
 import { Link } from "react-router";
 import { ArrowLeft } from "lucide-react";
 import { useCheckout } from "./CheckoutProvider";
@@ -71,7 +71,7 @@ export function CheckoutContent() {
     actions.selectShippingOption(option);
   }, [actions]);
 
-  const handleAddressChange = async (event: StripeAddressElementChangeEvent) => {
+  const handleAddressChange = useCallback(async (event: StripeAddressElementChangeEvent) => {
     if (!event.complete || !event.value.address) return;
     const addr = event.value;
     let firstName = '';
@@ -95,7 +95,30 @@ export function CheckoutContent() {
       },
       phone: addr.phone || undefined
     });
-  };
+  }, [actions]);
+
+  const handleEmailChange = useCallback((email: string) => {
+    actions.setEmail(email);
+  }, [actions]);
+
+  const customerDataMemo = useMemo(() => {
+    if (!isAuthenticated || !customer) return undefined;
+    
+    return {
+      email: customer.email,
+      firstName: customer.first_name,
+      lastName: customer.last_name,
+      phone: customer.phone,
+      address: customer.addresses?.[0] ? {
+        line1: customer.addresses[0].address_1,
+        line2: customer.addresses[0].address_2,
+        city: customer.addresses[0].city,
+        state: customer.addresses[0].province,
+        postal_code: customer.addresses[0].postal_code,
+        country: customer.addresses[0].country_code?.toUpperCase(),
+      } : undefined
+    };
+  }, [isAuthenticated, customer]);
 
   const options = clientSecret ? {
     clientSecret,
@@ -180,21 +203,8 @@ export function CheckoutContent() {
                 <div className="bg-white p-6 lg:p-8 rounded-lg shadow-sm border border-card-earthy/20">
                   <CheckoutForm
                     onAddressChange={handleAddressChange}
-                    onEmailChange={(email) => actions.setEmail(email)}
-                    customerData={isAuthenticated && customer ? {
-                      email: customer.email,
-                      firstName: customer.first_name,
-                      lastName: customer.last_name,
-                      phone: customer.phone,
-                      address: customer.addresses?.[0] ? {
-                        line1: customer.addresses[0].address_1,
-                        line2: customer.addresses[0].address_2,
-                        city: customer.addresses[0].city,
-                        state: customer.addresses[0].province,
-                        postal_code: customer.addresses[0].postal_code,
-                        country: customer.addresses[0].country_code?.toUpperCase(),
-                      } : undefined
-                    } : undefined}
+                    onEmailChange={handleEmailChange}
+                    customerData={customerDataMemo}
                   />
                 </div>
               </Elements>

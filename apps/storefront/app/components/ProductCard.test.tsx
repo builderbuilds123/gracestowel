@@ -38,7 +38,7 @@ const mockProduct = {
   image: factoryProduct.thumbnail,
   title: factoryProduct.title,
   description: factoryProduct.description,
-  price: (factoryProduct.variants[0].prices[0].amount / 100).toFixed(2), // Convert cents to dollars string
+  price: factoryProduct.variants[0].prices[0].amount.toFixed(2), // Prices are now major units
   handle: factoryProduct.handle,
 };
 
@@ -61,7 +61,12 @@ describe("ProductCard", () => {
       expect(image).toHaveAttribute("src", mockProduct.image);
 
       // Check price is displayed
-      expect(screen.getByText(new RegExp(mockProduct.price))).toBeInTheDocument();
+      const formattedPricePart = new Intl.NumberFormat('en-US', {
+           minimumFractionDigits: 2,
+           maximumFractionDigits: 2,
+      }).format(Number(mockProduct.price));
+      
+      expect(screen.getByText(new RegExp(formattedPricePart))).toBeInTheDocument();
     });
 
     it("should have correct link to product page", () => {
@@ -226,7 +231,12 @@ describe("ProductCard", () => {
       renderProductCard(<ProductCard {...mockProduct} />);
 
       // Price should be formatted and displayed
-      expect(screen.getByText(new RegExp(mockProduct.price))).toBeInTheDocument();
+      const formattedPricePart = new Intl.NumberFormat('en-US', {
+           minimumFractionDigits: 2,
+           maximumFractionDigits: 2,
+      }).format(Number(mockProduct.price));
+      
+      expect(screen.getByText(new RegExp(formattedPricePart))).toBeInTheDocument();
     });
 
     it("should handle long product titles", () => {

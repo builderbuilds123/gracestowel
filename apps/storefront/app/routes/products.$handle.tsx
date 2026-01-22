@@ -49,7 +49,7 @@ export function meta({ data }: Route.MetaArgs) {
         { name: "twitter:title", content: title },
         { name: "twitter:description", content: description },
         { name: "twitter:image", content: product.images?.[0] || "" },
-        { property: "product:price:amount", content: String(product.price / 100) },
+        { property: "product:price:amount", content: String(product.price) },
         { property: "product:price:currency", content: "CAD" },
     ];
 }
@@ -257,7 +257,7 @@ export default function ProductDetailPage({ loaderData }: Route.ComponentProps) 
             "@type": "Offer",
             url: `https://gracestowel.com/products/${product.handle}`,
             priceCurrency: "CAD",
-            price: (product.price / 100).toFixed(2),
+            price: product.price.toFixed(2),
             availability: isOutOfStock
                 ? "https://schema.org/OutOfStock"
                 : "https://schema.org/InStock",
@@ -309,59 +309,7 @@ export default function ProductDetailPage({ loaderData }: Route.ComponentProps) 
             </section>
 
             {/* Product Details */}
-            {(product.features?.length || product.dimensions || product.careInstructions?.length) && (
-                <section className="py-12 px-6 border-t border-card-earthy/20">
-                    <div className="max-w-5xl mx-auto">
-                        <h2 className="text-2xl md:text-3xl font-serif text-text-earthy text-center mb-10">
-                            Product Details
-                        </h2>
 
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            {product.features && product.features.length > 0 && (
-                                <div className="p-6 bg-card-earthy/10 rounded-2xl">
-                                    <h3 className="font-serif text-lg text-text-earthy mb-4">Features</h3>
-                                    <ul className="space-y-2">
-                                        {product.features.map((feature, i) => (
-                                            <li key={`${feature}-${i}`} className="text-text-earthy/70 text-sm flex items-start gap-2">
-                                                <span className="text-accent-earthy">✓</span>
-                                                {feature}
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </div>
-                            )}
-
-                            {product.dimensions && Object.keys(product.dimensions).length > 0 && (
-                                <div className="p-6 bg-card-earthy/10 rounded-2xl">
-                                    <h3 className="font-serif text-lg text-text-earthy mb-4">Dimensions</h3>
-                                    <dl className="space-y-2">
-                                        {Object.entries(product.dimensions).map(([key, value]) => (
-                                            <div key={key} className="flex justify-between text-sm text-text-earthy/70">
-                                                <dt className="capitalize">{key}:</dt>
-                                                <dd className="font-medium">{value}</dd>
-                                            </div>
-                                        ))}
-                                    </dl>
-                                </div>
-                            )}
-
-                            {product.careInstructions && product.careInstructions.length > 0 && (
-                                <div className="p-6 bg-card-earthy/10 rounded-2xl">
-                                    <h3 className="font-serif text-lg text-text-earthy mb-4">Care</h3>
-                                    <ul className="space-y-2">
-                                        {product.careInstructions.map((instruction, i) => (
-                                            <li key={`${instruction}-${i}`} className="text-text-earthy/70 text-sm flex items-start gap-2">
-                                                <span className="text-accent-earthy">•</span>
-                                                {instruction}
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </section>
-            )}
 
             {/* Reviews */}
             <div id="reviews">
@@ -404,7 +352,7 @@ export default function ProductDetailPage({ loaderData }: Route.ComponentProps) 
             {/* Sticky Purchase Bar */}
             <StickyPurchaseBar
                 productTitle={product.title}
-                price={product.price / 100}
+                price={product.price}
                 currencySymbol="$"
                 selectedColor={selectedColor}
                 colorHex={COLOR_HEX[selectedColor]}

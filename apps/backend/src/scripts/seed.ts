@@ -626,7 +626,11 @@ export default async function seedDemoData({ container }: ExecArgs) {
     { name: "Bath Towels", handle: "bath-towels", is_active: true },
     { name: "Hand Towels", handle: "hand-towels", is_active: true },
     { name: "Washcloths", handle: "washcloths", is_active: true },
+
     { name: "Accessories", handle: "accessories", is_active: true },
+    { name: "Beach Towels", handle: "beach-towels", is_active: true },
+    { name: "Kitchen Towels", handle: "kitchen-towels", is_active: true },
+    { name: "Blankets", handle: "blankets", is_active: true },
   ];
 
   // Fetch all existing categories first to avoid case sensitivity issues in query
@@ -712,6 +716,55 @@ export default async function seedDemoData({ container }: ExecArgs) {
       return found.id;
   };
 
+  logger.info("Seeding collections, types, and tags...");
+
+  // Collections
+  const collectionsData = ["Summer Essentials", "Kitchen & Dining", "Living Room", "Bath & Spa"];
+  const collectionsMap = new Map<string, string>(); // Name -> ID
+
+  for (const name of collectionsData) {
+      const existing = await productModuleService.listProductCollections({ title: name }, { take: 1 });
+      if (existing.length) {
+          collectionsMap.set(name, existing[0].id);
+      } else {
+          const created = await productModuleService.createProductCollections({ title: name, handle: name.toLowerCase().replace(/ /g, "-").replace(/&/g, "and") });
+          collectionsMap.set(name, created.id);
+          logger.info(`Created collection: ${name}`);
+      }
+  }
+
+  // Types
+  const typesData = ["Beach Towel", "Kitchen Towel", "Blanket", "Washcloth", "Hand Towel", "Bath Towel", "Accessory"];
+  const typesMap = new Map<string, string>(); // Value -> ID
+
+  for (const value of typesData) {
+      const existing = await productModuleService.listProductTypes({ value }, { take: 1 });
+      if (existing.length) {
+          typesMap.set(value, existing[0].id);
+      } else {
+          const created = await productModuleService.createProductTypes({ value });
+          typesMap.set(value, created.id);
+          logger.info(`Created type: ${value}`);
+      }
+  }
+
+  // Tags
+  const tagsData = ["summer", "beach", "outdoor", "kitchen", "cooking", "home", "cozy", "winter", "luxury", "organic", "eco-friendly"];
+  const tagsMap = new Map<string, string>(); // Value -> ID
+
+  for (const value of tagsData) {
+      const existing = await productModuleService.listProductTags({ value }, { take: 1 });
+      if (existing.length) {
+          tagsMap.set(value, existing[0].id);
+      } else {
+          const created = await productModuleService.createProductTags({ value });
+          tagsMap.set(value, created.id);
+          logger.info(`Created tag: ${value}`);
+      }
+  }
+
+  const getTagIds = (tags: string[]) => tags.map(t => ({ id: tagsMap.get(t) || "" })).filter(t => t.id !== "");
+
   // Variant attributes for shipping/customs (applied to all variants of a product)
   // These are set at the variant level in Medusa v2
   const nuzzleVariantAttrs = {
@@ -723,6 +776,17 @@ export default async function seedDemoData({ container }: ExecArgs) {
     origin_country: "PT", // Made in Portugal
     mid_code: undefined,
     material: "100% Long-Staple Turkish Cotton",
+  };
+
+  const dryerBallsVariantAttrs = {
+    weight: 150,        // grams (for 3 balls)
+    height: 8,          // cm (3 inch diameter)
+    width: 8,           // cm
+    length: 8,          // cm
+    hs_code: "5105.39", // HS code for wool
+    origin_country: "NZ", // New Zealand wool
+    mid_code: undefined,
+    material: "100% New Zealand Wool",
   };
 
   const cradleVariantAttrs = {
@@ -747,15 +811,39 @@ export default async function seedDemoData({ container }: ExecArgs) {
     material: "100% Long-Staple Turkish Cotton",
   };
 
-  const dryerBallsVariantAttrs = {
-    weight: 150,        // grams (for 3 balls)
-    height: 8,          // cm (3 inch diameter)
-    width: 8,           // cm
-    length: 8,          // cm
-    hs_code: "5105.39", // HS code for wool
-    origin_country: "NZ", // New Zealand wool
+
+
+  const sandbarVariantAttrs = {
+    weight: 500,        // grams
+    height: 178,        // cm (70 inches)
+    width: 102,         // cm (40 inches)
+    length: 4,          // cm
+    hs_code: "6302.60",
+    origin_country: "PT",
     mid_code: undefined,
-    material: "100% New Zealand Wool",
+    material: "100% Cotton Velour",
+  };
+
+  const kitchenTowelVariantAttrs = {
+    weight: 80,         // grams
+    height: 64,         // cm (25 inches)
+    width: 38,          // cm (15 inches)
+    length: 1,          // cm
+    hs_code: "6302.91", // Cotton toilet/kitchen linen
+    origin_country: "PT",
+    mid_code: undefined,
+    material: "100% Waffle Weave Cotton",
+  };
+
+  const blanketVariantAttrs = {
+    weight: 1200,       // grams
+    height: 152,        // cm (60 inches)
+    width: 127,         // cm (50 inches)
+    length: 10,         // cm
+    hs_code: "6301.20", // Wool blankets
+    origin_country: "PT",
+    mid_code: undefined,
+    material: "50% Wool / 50% Cotton Blend",
   };
 
   const productsToCreate = [
@@ -764,11 +852,14 @@ export default async function seedDemoData({ container }: ExecArgs) {
           category_ids: [getCategoryId("Washcloths")],
           description: "Our signature washcloth...",
           handle: "the-nuzzle",
-          weight: 100,
           status: ProductStatus.PUBLISHED,
+          ...nuzzleVariantAttrs,
           shipping_profile_id: shippingProfile.id,
-          images: [{ url: "/washcloth-nuzzle.jpg" }],
-          metadata: { dimensions: '13" x 13"', features: ["100% Long-Staple Cotton", "Perfect Face Cloth Size", "Oeko-Tex Certified", "Made in Portugal"], care_instructions: ["Machine wash warm", "Tumble dry low", "Do not bleach", "Avoid fabric softeners"] },
+          collection_id: collectionsMap.get("Bath & Spa"),
+          type_id: typesMap.get("Washcloth"),
+          tags: getTagIds(["luxury", "organic"]),
+          images: [{ url: "http://localhost:8000/washcloth-nuzzle.jpg" }],
+          metadata: { features: "100% Long-Staple Cotton, Perfect Face Cloth Size, Oeko-Tex Certified, Made in Portugal", care_instructions: "Machine wash warm, Tumble dry low, Do not bleach, Avoid fabric softeners" },
           options: [{ title: "Color", values: ["Cloud White", "Sage", "Terra Cotta"] }],
           variants: [
               { title: "Cloud White", sku: "NUZZLE-WHITE", options: { Color: "Cloud White" }, ...nuzzleVariantAttrs, prices: [{ amount: 16, currency_code: "eur" }, { amount: 18, currency_code: "usd" }, { amount: 24, currency_code: "cad" }] },
@@ -782,11 +873,14 @@ export default async function seedDemoData({ container }: ExecArgs) {
           category_ids: [getCategoryId("Hand Towels")],
           description: "The perfect hand towel...",
           handle: "the-cradle",
-          weight: 200,
           status: ProductStatus.PUBLISHED,
+          ...cradleVariantAttrs,
           shipping_profile_id: shippingProfile.id,
-          images: [{ url: "/hand-towel-cradle.jpg" }],
-          metadata: { dimensions: '20" x 30"', features: ["High Absorbency", "Quick Drying", "Double-Stitched Hems", "Sustainably Sourced"], care_instructions: ["Machine wash warm", "Tumble dry low", "Do not bleach", "Avoid fabric softeners"] },
+          collection_id: collectionsMap.get("Bath & Spa"),
+          type_id: typesMap.get("Hand Towel"),
+          tags: getTagIds(["luxury", "organic"]),
+          images: [{ url: "http://localhost:8000/hand-towel-cradle.jpg" }],
+          metadata: { features: "High Absorbency, Quick Drying, Double-Stitched Hems, Sustainably Sourced", care_instructions: "Machine wash warm, Tumble dry low, Do not bleach, Avoid fabric softeners" },
           options: [{ title: "Color", values: ["Cloud White", "Charcoal", "Navy"] }],
           variants: [
               { title: "Cloud White", sku: "CRADLE-WHITE", options: { Color: "Cloud White" }, ...cradleVariantAttrs, prices: [{ amount: 22, currency_code: "eur" }, { amount: 25, currency_code: "usd" }, { amount: 34, currency_code: "cad" }] },
@@ -800,11 +894,14 @@ export default async function seedDemoData({ container }: ExecArgs) {
           category_ids: [getCategoryId("Bath Towels")],
           description: "Wrap yourself in a warm embrace...",
           handle: "the-bear-hug",
-          weight: 700,
           status: ProductStatus.PUBLISHED,
+          ...bearhugVariantAttrs,
           shipping_profile_id: shippingProfile.id,
-          images: [{ url: "/bath-towel-bearhug.jpg" }, { url: "/white_bathtowel_laidout_product.png" }, { url: "/white_bathtowel_folded_product.png" }],
-          metadata: { dimensions: '30" x 58"', features: ["Oversized for Comfort", "700 GSM Weight", "Cloud-like Softness", "Fade Resistant"], care_instructions: ["Machine wash warm", "Tumble dry low", "Do not bleach", "Avoid fabric softeners"] },
+          collection_id: collectionsMap.get("Bath & Spa"),
+          type_id: typesMap.get("Bath Towel"),
+          tags: getTagIds(["luxury", "cozy"]),
+          images: [{ url: "http://localhost:8000/bath-towel-bearhug.jpg" }, { url: "http://localhost:8000/white_bathtowel_laidout_product.png" }, { url: "http://localhost:8000/white_bathtowel_folded_product.png" }],
+          metadata: { features: "Oversized for Comfort, 700 GSM Weight, Cloud-like Softness, Fade Resistant", care_instructions: "Machine wash warm, Tumble dry low, Do not bleach, Avoid fabric softeners" },
           options: [{ title: "Color", values: ["Cloud White", "Sand", "Stone"] }],
           variants: [
               { title: "Cloud White", sku: "BEARHUG-WHITE", options: { Color: "Cloud White" }, ...bearhugVariantAttrs, prices: [{ amount: 30, currency_code: "eur" }, { amount: 35, currency_code: "usd" }, { amount: 48, currency_code: "cad" }] },
@@ -813,31 +910,114 @@ export default async function seedDemoData({ container }: ExecArgs) {
           ],
           sales_channels: [{ id: defaultSalesChannel[0].id }]
       },
+
       {
           title: "3 Wool Dryer Balls",
           category_ids: [getCategoryId("Accessories")],
           description: "Reduce drying time and soften fabrics naturally...",
           handle: "the-wool-dryer-ball",
-          weight: 150,
           status: ProductStatus.PUBLISHED,
+          ...dryerBallsVariantAttrs,
           shipping_profile_id: shippingProfile.id,
-          images: [{ url: "/wood_dryer_balls.png" }],
-          metadata: { dimensions: '3" Diameter', features: ["100% New Zealand Wool", "Reduces Drying Time", "Hypoallergenic", "Lasts for 1000+ Loads"], care_instructions: ["Store in a dry place", "Recharge in sun monthly"], disable_embroidery: "true" },
+          collection_id: collectionsMap.get("Bath & Spa"),
+          type_id: typesMap.get("Accessory"),
+          tags: getTagIds(["eco-friendly", "home"]),
+          images: [{ url: "http://localhost:8000/wood_dryer_balls.png" }],
+          metadata: { features: "100% New Zealand Wool, Reduces Drying Time, Hypoallergenic, Lasts for 1000+ Loads", care_instructions: "Store in a dry place, Recharge in sun monthly", disable_embroidery: "true" },
           options: [{ title: "Type", values: ["Natural"] }],
           variants: [
               { title: "Natural", sku: "DRYER-BALLS-3", options: { Type: "Natural" }, ...dryerBallsVariantAttrs, prices: [{ amount: 16, currency_code: "eur" }, { amount: 18, currency_code: "usd" }, { amount: 24, currency_code: "cad" }] }
+          ],
+          sales_channels: [{ id: defaultSalesChannel[0].id }]
+      },
+      // New Products
+      {
+          title: "The Sandbar",
+          category_ids: [getCategoryId("Beach Towels")],
+          description: "Oversized luxury for your beach days. The Sandbar features a plush velour front for lounging and a thirsty terry back for drying. Vibrant colors that won't fade in the sun.",
+          handle: "the-sandbar",
+          status: ProductStatus.PUBLISHED,
+          ...sandbarVariantAttrs,
+          shipping_profile_id: shippingProfile.id,
+          collection_id: collectionsMap.get("Summer Essentials"),
+          type_id: typesMap.get("Beach Towel"),
+          tags: getTagIds(["summer", "beach", "outdoor", "luxury"]),
+          images: [{ url: "https://placehold.co/600x800/E89B5F/FFFFFF?text=The+Sandbar" }, { url: "https://placehold.co/600x800/5FA8E8/FFFFFF?text=Ocean+Blue" }],
+          metadata: { features: "Oversized Lounger, Velour & Terry Dual-Texture, UV Resistant, Sand Repellent", care_instructions: "Machine wash cold, Tumble dry low, Shake sand before washing" },
+          options: [{ title: "Color", values: ["Sunset Orange", "Ocean Blue"] }],
+          variants: [
+              { title: "Sunset Orange", sku: "SANDBAR-ORANGE", options: { Color: "Sunset Orange" }, ...sandbarVariantAttrs, prices: [{ amount: 40, currency_code: "eur" }, { amount: 45, currency_code: "usd" }, { amount: 62, currency_code: "cad" }] },
+              { title: "Ocean Blue", sku: "SANDBAR-BLUE", options: { Color: "Ocean Blue" }, ...sandbarVariantAttrs, prices: [{ amount: 40, currency_code: "eur" }, { amount: 45, currency_code: "usd" }, { amount: 62, currency_code: "cad" }] }
+          ],
+          sales_channels: [{ id: defaultSalesChannel[0].id }]
+      },
+      {
+          title: "The Chef's Mate",
+          category_ids: [getCategoryId("Kitchen Towels")],
+          description: "Professional grade performance for your home kitchen. The Chef's Mate uses a classic waffle weave to trap moisture and crumbs.",
+          handle: "the-chefs-mate",
+          status: ProductStatus.PUBLISHED,
+          ...kitchenTowelVariantAttrs,
+          shipping_profile_id: shippingProfile.id,
+          collection_id: collectionsMap.get("Kitchen & Dining"),
+          type_id: typesMap.get("Kitchen Towel"),
+          tags: getTagIds(["kitchen", "cooking", "home"]),
+          images: [{ url: "https://placehold.co/600x800/B22222/FFFFFF?text=Chef's+Mate" }, { url: "https://placehold.co/600x800/2F4F4F/FFFFFF?text=Classic+Stripe" }],
+          metadata: { features: "Lint Free, Waffle Weave, Hanging Loop, Dries Instantly", care_instructions: "Machine wash hot, Tumble dry medium, Bleach safe (White only)" },
+          options: [{ title: "Pattern", values: ["Checkered Red", "Classic Stripe"] }],
+          variants: [
+              { title: "Checkered Red", sku: "CHEF-RED", options: { Pattern: "Checkered Red" }, ...kitchenTowelVariantAttrs, prices: [{ amount: 10, currency_code: "eur" }, { amount: 12, currency_code: "usd" }, { amount: 16, currency_code: "cad" }] },
+              { title: "Classic Stripe", sku: "CHEF-STRIPE", options: { Pattern: "Classic Stripe" }, ...kitchenTowelVariantAttrs, prices: [{ amount: 10, currency_code: "eur" }, { amount: 12, currency_code: "usd" }, { amount: 16, currency_code: "cad" }] }
+          ],
+          sales_channels: [{ id: defaultSalesChannel[0].id }]
+      },
+      {
+          title: "The Hearth",
+          category_ids: [getCategoryId("Blankets")],
+          description: "Cozy up with The Hearth. A premium wool-cotton blend that offers warmth without the itch. Perfect for movie nights or reading by the fire.",
+          handle: "the-hearth",
+          status: ProductStatus.PUBLISHED,
+          ...blanketVariantAttrs,
+          shipping_profile_id: shippingProfile.id,
+          collection_id: collectionsMap.get("Living Room"),
+          type_id: typesMap.get("Blanket"),
+          tags: getTagIds(["cozy", "winter", "living", "luxury"]),
+          images: [{ url: "https://placehold.co/600x800/8B4513/FFFFFF?text=The+Hearth" }],
+          metadata: { features: "Temperature Regulating, Soft-Touch Wool, Heirloom Quality, Fringed Edges", care_instructions: "Dry clean only, Spot clean spills immediately" },
+          options: [{ title: "Size", values: ["Throw (50x60)", "Queen (90x90)"] }],
+          variants: [
+              { title: "Throw (50x60)", sku: "HEARTH-THROW", options: { Size: "Throw (50x60)" }, ...blanketVariantAttrs, prices: [{ amount: 70, currency_code: "eur" }, { amount: 80, currency_code: "usd" }, { amount: 110, currency_code: "cad" }] },
+              { title: "Queen (90x90)", sku: "HEARTH-QUEEN", options: { Size: "Queen (90x90)" }, ...blanketVariantAttrs, weight: 2000, prices: [{ amount: 125, currency_code: "eur" }, { amount: 140, currency_code: "usd" }, { amount: 195, currency_code: "cad" }] }
           ],
           sales_channels: [{ id: defaultSalesChannel[0].id }]
       }
   ];
 
   // Cleanup legacy handles if they exist to facilitate rename
-  const legacyHandles = ["the-bearhug"];
+  const legacyHandles = [
+    "the-bearhug", 
+    // Garbage products to remove
+    "test-product", "practical-cotton-chips", "small-steel-chair", 
+    "incredible-rubber-tuna", "handmade-rubber-shoes", "handmade-aluminum-salad", 
+    "sleek-bronze-pizza", "recycled-aluminum-gloves", "fresh-cotton-pants", 
+    "intelligent-aluminum-gloves", "licensed-granite-tuna", "incredible-plastic-bacon", 
+    "intelligent-plastic-tuna", "oriental-cotton-hat", "tasty-rubber-car", 
+    "awesome-rubber-fish", "recycled-silk-computer", "recycled-metal-chicken", 
+    "fresh-marble-bike", "luxurious-steel-shoes", "fresh-rubber-cheese", 
+    "ergonomic-metal-chips", "awesome-bronze-chair", "incredible-gold-pants", 
+    "small-ceramic-salad", "frozen-bamboo-car", "electronic-concrete-keyboard", 
+    "recycled-ceramic-tuna", "small-wooden-soap", "refined-bronze-gloves", 
+    "fantastic-gold-chips", "handcrafted-wooden-sausages", "incredible-bamboo-towels"
+  ];
   const legacyProducts = await productModuleService.listProducts({ handle: legacyHandles });
   if (legacyProducts.length > 0) {
       logger.info(`Deleting legacy products: ${legacyProducts.map(p => p.handle).join(", ")}`);
       await productModuleService.deleteProducts(legacyProducts.map(p => p.id));
   }
+  
+  const inventoryModuleService = container.resolve(Modules.INVENTORY);
+
+
 
   const existingProducts = await productModuleService.listProducts({
       handle: productsToCreate.map(p => p.handle)
@@ -859,6 +1039,9 @@ export default async function seedDemoData({ container }: ExecArgs) {
     "the-cradle": cradleVariantAttrs,
     "the-bear-hug": bearhugVariantAttrs,
     "the-wool-dryer-ball": dryerBallsVariantAttrs,
+    "the-sandbar": sandbarVariantAttrs,
+    "the-chefs-mate": kitchenTowelVariantAttrs,
+    "the-hearth": blanketVariantAttrs,
   };
   const priceConfigByHandle: Record<string, { usd: number; eur: number; cad: number }> = {
     "the-nuzzle": { usd: 18, eur: 16, cad: 24 },
@@ -912,9 +1095,66 @@ export default async function seedDemoData({ container }: ExecArgs) {
       }
     }
 
-    // Variant attribute updates disabled due to Medusa v2 issues
-    // const variantAttrs = variantAttrsByHandle[existingProduct.handle as string];
-    // if (variantAttrs) { ... }
+    // Verify and Update Collection
+    const targetCollectionId = productsToCreate.find(p => p.handle === existingProduct.handle)?.collection_id;
+    if (targetCollectionId && existingProduct.collection_id !== targetCollectionId) {
+        await productModuleService.updateProducts(existingProduct.id, { collection_id: targetCollectionId });
+        logger.info(`Updated collection for "${existingProduct.handle}"`);
+    }
+
+     // Verify and Update Images
+     const targetImages = productsToCreate.find(p => p.handle === existingProduct.handle)?.images;
+     if (targetImages) {
+        // Simple check: update if image count differs or forced update
+        await productModuleService.updateProducts(existingProduct.id, { images: targetImages });
+        logger.info(`Updated images for "${existingProduct.handle}"`);
+     }
+
+     // Verify and Update Metadata
+     const targetMetadata = productsToCreate.find(p => p.handle === existingProduct.handle)?.metadata;
+     if (targetMetadata) {
+        await productModuleService.updateProducts(existingProduct.id, { metadata: targetMetadata });
+        logger.info(`Updated metadata for "${existingProduct.handle}"`);
+     }
+
+    // Update Product & Variant Attributes
+    const variantAttrs = variantAttrsByHandle[existingProduct.handle as string];
+    if (variantAttrs) {
+        // Update Product Level Attributes
+        try {
+            await productModuleService.updateProducts(existingProduct.id, {
+                weight: variantAttrs.weight,
+                height: variantAttrs.height,
+                width: variantAttrs.width,
+                length: variantAttrs.length,
+                hs_code: variantAttrs.hs_code,
+                origin_country: variantAttrs.origin_country,
+                material: variantAttrs.material,
+            });
+            logger.info(`Updated product-level attributes for "${existingProduct.handle}"`);
+        } catch (e) {
+             logger.warn(`Failed to update product attributes for "${existingProduct.handle}": ${(e as Error).message}`);
+        }
+
+        // Update Variant Level Attributes
+        const variants = await productModuleService.listProductVariants({ product_id: existingProduct.id });
+        for (const variant of variants) {
+            try {
+                await productModuleService.updateProductVariants(variant.id, {
+                    weight: variantAttrs.weight,
+                    height: variantAttrs.height,
+                    width: variantAttrs.width,
+                    length: variantAttrs.length,
+                    hs_code: variantAttrs.hs_code,
+                    origin_country: variantAttrs.origin_country,
+                    material: variantAttrs.material,
+                });
+                logger.info(`Updated attributes for variant ${variant.sku} of ${existingProduct.handle}`);
+            } catch (e) {
+                logger.warn(`Failed to update variant attributes for ${variant.sku}: ${(e as Error).message}`);
+            }
+        }
+    }
   }
 
   logger.info("Finished seeding product data (" + newProducts.length + " new).");
@@ -928,20 +1168,44 @@ export default async function seedDemoData({ container }: ExecArgs) {
       });
     
       const inventoryLevels: CreateInventoryLevelInput[] = [];
+      const stockLocationId = stockLocation.id;
+
       for (const inventoryItem of inventoryItems) {
-        const inventoryLevel = {
-          location_id: stockLocation.id,
-          stocked_quantity: 100, // Start with 100 units per variant
-          inventory_item_id: inventoryItem.id,
-        };
-        inventoryLevels.push(inventoryLevel);
+        // Check if level already exists
+        const [existingLevel] = await inventoryModuleService.listInventoryLevels({
+            inventory_item_id: inventoryItem.id,
+            location_id: stockLocationId,
+        });
+
+        if (existingLevel) {
+            // Update quantity if needed (optional, ensuring at least 100)
+             if (existingLevel.stocked_quantity < 100) {
+                 await inventoryModuleService.updateInventoryLevels({
+                     id: existingLevel.id,
+                     stocked_quantity: 100,
+                     inventory_item_id: inventoryItem.id,
+                     location_id: stockLocationId,
+                 });
+                 logger.info(`Updated inventory level for item ${inventoryItem.id} to 100.`);
+             }
+        } else {
+            const inventoryLevel = {
+                location_id: stockLocationId,
+                stocked_quantity: 100,
+                inventory_item_id: inventoryItem.id,
+            };
+            inventoryLevels.push(inventoryLevel);
+        }
       }
-    
-      await createInventoryLevelsWorkflow(container).run({
-        input: {
-          inventory_levels: inventoryLevels,
-        },
-      });
+
+      if (inventoryLevels.length > 0) {
+        await createInventoryLevelsWorkflow(container).run({
+            input: {
+            inventory_levels: inventoryLevels,
+            },
+        });
+         logger.info(`Created ${inventoryLevels.length} new inventory levels.`);
+      }
     
       logger.info("Finished seeding inventory levels data.");
   } catch (e) {
