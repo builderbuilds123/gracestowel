@@ -1,6 +1,6 @@
 ---
 description: 
-alwaysApply: true
+alwaysApply: false
 ---
 
 # React Best Practices
