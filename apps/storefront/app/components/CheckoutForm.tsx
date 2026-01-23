@@ -19,15 +19,9 @@ import { createLogger } from '../lib/logger';
 import { monitoredFetch } from '../utils/monitored-fetch';
 import { ShippingSection } from './checkout/ShippingSection';
 import { PaymentSection } from './checkout/PaymentSection';
-
-export interface ShippingOption {
-    id: string;
-    displayName: string;
-    amount: number;
-    originalAmount?: number;
-    isFree?: boolean;
-    deliveryEstimate?: string;
-}
+import { setCachedSessionStorage } from '../lib/storage-cache';
+// Re-export ShippingOption from types for backward compatibility
+export type { ShippingOption } from '../types/checkout';
 
 export interface CustomerData {
     email?: string;
@@ -160,7 +154,8 @@ export function CheckoutForm({
                 appliedPromoCodes: appliedPromoCodes.length,
                 total: orderData.total
             });
-            sessionStorage.setItem('lastOrder', JSON.stringify(orderData));
+            // Issue #42: Use cached sessionStorage for consistency
+            setCachedSessionStorage('lastOrder', JSON.stringify(orderData));
         } catch (error) {
             // Non-critical: storage failures don't block checkout
             // Errors can occur in private browsing mode, storage full, or storage disabled
@@ -457,9 +452,9 @@ export function CheckoutForm({
                     options={customerData?.email ? { defaultValues: { email: customerData.email } } : undefined}
                     onChange={handleEmailChange}
                 />
-                {validationErrors.email && (
+                {validationErrors.email ? (
                     <p className="text-red-600 text-sm mt-2">{validationErrors.email}</p>
-                )}
+                ) : null}
             </div>
 
             {/* Delivery Section */}
@@ -489,9 +484,9 @@ export function CheckoutForm({
                     }}
                     onChange={handleAddressInternalChange}
                 />
-                {validationErrors.address && (
+                {validationErrors.address ? (
                     <p className="text-red-600 text-sm mt-2">{validationErrors.address}</p>
-                )}
+                ) : null}
             </div>
 
             {/* Shipping Method Section */}
@@ -528,11 +523,11 @@ export function CheckoutForm({
             <StripeBadge />
 
             {/* Error Message */}
-            {message && (
+            {message ? (
                 <div id="payment-message" className="text-red-500 text-sm mt-2">
                     {message}
                 </div>
-            )}
+            ) : null}
         </form>
     );
 }

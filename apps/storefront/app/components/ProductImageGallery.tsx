@@ -26,7 +26,7 @@ export function ProductImageGallery({ images, title }: ProductImageGalleryProps)
             </div>
             
             {/* Thumbnail Grid */}
-            {images.length > 1 && (
+            {images.length > 1 ? (
                 <div className="grid grid-cols-2 gap-4">
                     {images.slice(1).map((img, idx) => (
                         <div
@@ -44,7 +44,7 @@ export function ProductImageGallery({ images, title }: ProductImageGalleryProps)
                         </div>
                     ))}
                 </div>
-            )}
+            ) : null}
         </div>
     );
 }

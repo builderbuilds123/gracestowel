@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Image } from "../ui/Image";
+import { createLogger } from "../../lib/logger";
 
 interface ProductGalleryProps {
   images: string[];
@@ -17,8 +18,34 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
     setSelectedIndex(0);
   }, [images]);
 
-  const mainImage = images[selectedIndex] || images[0] || "/placeholder-towel.jpg";
-  const hasMultipleImages = images.length > 1;
+  // ✅ Memoize filtered images array (Issue #6 fix)
+  const validImages = useMemo(
+    () => images.filter(img => img && typeof img === 'string' && img.trim() !== ''),
+    [images] // Only recalculate when images array reference changes
+  );
+  
+  // ✅ Memoize derived values
+  const mainImage = useMemo(
+    () => validImages[selectedIndex] || validImages[0] || "/placeholder-towel.jpg",
+    [validImages, selectedIndex]
+  );
+  
+  const hasMultipleImages = useMemo(
+    () => validImages.length > 1,
+    [validImages]
+  );
+
+  // Log if we have no valid images
+  useEffect(() => {
+    if (validImages.length === 0) {
+      const logger = createLogger({ context: "product-gallery" });
+      logger.warn("No valid images found for product", {
+        productTitle: title,
+        providedImageCount: images.length,
+        invalidImages: images.filter(img => !img || typeof img !== 'string' || img.trim() === '')
+      });
+    }
+  }, [validImages.length, title, images]);
 
   return (
     <div className="space-y-4">
@@ -35,9 +62,9 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
       </div>
 
       {/* Thumbnail Strip */}
-      {hasMultipleImages && (
+      {hasMultipleImages ? (
         <div className="flex gap-3 overflow-x-auto pb-2 hide-scrollbar">
-          {images.map((image, index) => (
+          {validImages.map((image, index) => (
             <button
               key={index}
               onClick={() => setSelectedIndex(index)}
@@ -59,7 +86,7 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
             </button>
           ))}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

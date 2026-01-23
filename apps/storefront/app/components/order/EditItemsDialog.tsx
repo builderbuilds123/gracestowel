@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { X, Loader2, Minus, Plus } from "lucide-react";
+import { X, Loader2, Minus, Plus } from "../../lib/icons";
 
 interface OrderItem {
     id: string;
@@ -108,11 +108,11 @@ export function EditItemsDialog({
                     </button>
                 </div>
 
-                {error && (
+                {error ? (
                     <div className="mx-6 mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
                         {error}
                     </div>
-                )}
+                ) : null}
 
                 <div className="p-6 overflow-y-auto flex-1">
                     <div className="space-y-4">

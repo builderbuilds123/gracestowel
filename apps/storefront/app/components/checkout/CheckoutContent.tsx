@@ -1,17 +1,25 @@
-import { useRef, useEffect, useCallback, useMemo } from "react";
+import { useRef, useEffect, useCallback, useMemo, lazy, Suspense } from "react";
 import { Link } from "react-router";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft } from "../../lib/icons";
 import { useCheckout } from "./CheckoutProvider";
 import { useLocale } from "../../context/LocaleContext";
 import { useCustomer } from "../../context/CustomerContext";
 import { Elements } from "@stripe/react-stripe-js";
 import { getStripe } from "../../lib/stripe";
-import { CheckoutForm, type ShippingOption } from "../CheckoutForm";
+// OPTIMIZATION (Issue #3): Lazy load CheckoutForm (heavy Stripe integration, ~45-60KB)
+// React Router v7: Use React.lazy() (not next/dynamic)
+const CheckoutForm = lazy(() => import("../CheckoutForm").then(m => ({ default: m.CheckoutForm })));
+import type { ShippingOption } from "../../types/checkout";
 import { OrderSummary } from "../OrderSummary";
 import type { StripeAddressElementChangeEvent } from "@stripe/stripe-js";
 import type { CartItem as ProductCartItem } from "../../types/product";
+import type { CustomerData } from "../CheckoutForm";
 
-export function CheckoutContent() {
+interface CheckoutContentProps {
+  orderPrefillData?: CustomerData;
+}
+
+export function CheckoutContent({ orderPrefillData }: CheckoutContentProps = {} as CheckoutContentProps) {
   const {
     state,
     actions,
@@ -101,24 +109,13 @@ export function CheckoutContent() {
     actions.setEmail(email);
   }, [actions]);
 
+  // Only prefill if and only if modification token exists and is valid
+  // Do not prefill from authenticated customer data - only from order modification
   const customerDataMemo = useMemo(() => {
-    if (!isAuthenticated || !customer) return undefined;
-    
-    return {
-      email: customer.email,
-      firstName: customer.first_name,
-      lastName: customer.last_name,
-      phone: customer.phone,
-      address: customer.addresses?.[0] ? {
-        line1: customer.addresses[0].address_1,
-        line2: customer.addresses[0].address_2,
-        city: customer.addresses[0].city,
-        state: customer.addresses[0].province,
-        postal_code: customer.addresses[0].postal_code,
-        country: customer.addresses[0].country_code?.toUpperCase(),
-      } : undefined
-    };
-  }, [isAuthenticated, customer]);
+    // Only prefill when order modification token exists and is valid
+    // This ensures fields are only prefilled during order editing, not normal checkout
+    return orderPrefillData || undefined;
+  }, [orderPrefillData]);
 
   const options = clientSecret ? {
     clientSecret,
@@ -176,36 +173,49 @@ export function CheckoutContent() {
           </Link>
         </div>
 
-        {cartSyncError && (
+        {cartSyncError ? (
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
             <p className="font-bold">Items Unavailable</p>
             <p>{cartSyncError}</p>
           </div>
-        )}
+        ) : null}
 
-        {paymentError && (
+        {paymentError ? (
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
             <p>{paymentError}</p>
           </div>
-        )}
+        ) : null}
 
-        {shippingPersistError && (
+        {shippingPersistError ? (
           <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded mb-6">
             <p className="font-medium">⚠️ Warning</p>
             <p className="text-sm mt-1">{shippingPersistError}</p>
           </div>
-        )}
+        ) : null}
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start">
           <div className="lg:col-span-7 space-y-8">
             {clientSecret && options ? (
               <Elements options={options} stripe={getStripe()} key={paymentCollectionId}>
                 <div className="bg-white p-6 lg:p-8 rounded-lg shadow-sm border border-card-earthy/20">
-                  <CheckoutForm
-                    onAddressChange={handleAddressChange}
-                    onEmailChange={handleEmailChange}
-                    customerData={customerDataMemo}
-                  />
+                  {/* Lazy loaded CheckoutForm with Suspense fallback */}
+                  <Suspense fallback={
+                    <div className="animate-pulse space-y-4">
+                      <div className="h-4 bg-gray-200 rounded w-1/4"></div>
+                      <div className="h-10 bg-gray-200 rounded"></div>
+                      <div className="h-4 bg-gray-200 rounded w-1/4 mt-6"></div>
+                      <div className="h-10 bg-gray-200 rounded"></div>
+                      <div className="h-10 bg-gray-200 rounded"></div>
+                      <div className="h-4 bg-gray-200 rounded w-1/4 mt-6"></div>
+                      <div className="h-10 bg-gray-200 rounded"></div>
+                    </div>
+                  }>
+                    <CheckoutForm
+                      onAddressChange={handleAddressChange}
+                      onEmailChange={handleEmailChange}
+                      customerData={customerDataMemo}
+                    />
+                  </Suspense>
                 </div>
               </Elements>
             ) : (

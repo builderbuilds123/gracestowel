@@ -40,7 +40,7 @@ export function Dropdown({ value, onChange, options, className = '' }: DropdownP
                 <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
             </button>
 
-            {isOpen && (
+            {isOpen ? (
                 <div className="absolute top-full right-0 mt-2 w-32 bg-white rounded shadow-xl border border-gray-100 py-1 z-50 animate-in fade-in zoom-in-95 duration-100">
                     {options.map((option) => (
                         <button
@@ -58,7 +58,7 @@ export function Dropdown({ value, onChange, options, className = '' }: DropdownP
                         </button>
                     ))}
                 </div>
-            )}
+            ) : null}
         </div>
     );
 }

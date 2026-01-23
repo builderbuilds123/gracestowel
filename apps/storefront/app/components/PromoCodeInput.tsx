@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { X, Tag, Loader2 } from "lucide-react";
+import { X, Tag, Loader2 } from "../lib/icons";
 import { formatCurrencyFixed } from "../utils/format-currency";
 
 interface PromoCodeInputProps {
@@ -45,7 +45,7 @@ export function PromoCodeInput({
       </div>
 
       {/* Applied promo code badges */}
-      {appliedCodes.length > 0 && (
+      {appliedCodes.length > 0 ? (
         <div className="space-y-2 mb-3">
           {appliedCodes.map((appliedCode) => (
             <AppliedPromoBadge
@@ -58,7 +58,7 @@ export function PromoCodeInput({
             />
           ))}
         </div>
-      )}
+      ) : null}
 
       {/* Promo code input - always visible */}
       <form onSubmit={handleSubmit} className="flex gap-2">
@@ -96,18 +96,18 @@ export function PromoCodeInput({
       </form>
 
       {/* Success message */}
-      {successMessage && (
+      {successMessage ? (
         <p className="mt-2 text-sm text-green-600 flex items-center gap-1" data-testid="promo-success-message">
           <span>✓</span> {successMessage}
         </p>
-      )}
+      ) : null}
 
       {/* Error message */}
-      {error && (
+      {error ? (
         <p className="mt-2 text-sm text-red-600" role="alert" data-testid="promo-error-message">
           {error}
         </p>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -149,14 +149,14 @@ function AppliedPromoBadge({
       <div className="flex items-center gap-2">
         <Tag className={`w-4 h-4 ${iconStyles}`} />
         <span className={`text-sm font-medium ${textStyles}`}>{code}</span>
-        {isAutomatic && (
+        {isAutomatic ? (
           <span className="text-xs text-purple-500 bg-purple-100 px-1.5 py-0.5 rounded">Auto</span>
-        )}
-        {discount > 0 && (
+        ) : null}
+        {discount > 0 ? (
           <span className={`text-sm ${discountStyles}`}>-{formattedDiscount}</span>
-        )}
+        ) : null}
       </div>
-      {!isAutomatic && (
+      {!isAutomatic ? (
         <button
           type="button"
           onClick={onRemove}
@@ -172,7 +172,7 @@ function AppliedPromoBadge({
             <X className="w-4 h-4" />
           )}
         </button>
-      )}
+      ) : null}
     </div>
   );
 }

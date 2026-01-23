@@ -1,4 +1,4 @@
-import { Star, CheckCircle, ThumbsUp } from "lucide-react";
+import { Star, CheckCircle, ThumbsUp } from "../../lib/icons";
 
 interface Review {
   id: string;
@@ -46,7 +46,7 @@ export function ReviewRiver({
           </h2>
 
           {/* Overall rating */}
-          {stats.count > 0 && (
+          {stats.count > 0 ? (
             <div className="flex flex-col items-center gap-4 mb-8">
               <div className="flex items-center gap-3">
                 <span className="text-5xl font-serif text-accent-earthy">
@@ -82,10 +82,10 @@ export function ReviewRiver({
                 })}
               </div>
             </div>
-          )}
+          ) : null}
 
           {/* Write review button */}
-          {onWriteReview && (
+          {onWriteReview ? (
             <button
               onClick={onWriteReview}
               className="inline-flex items-center gap-2 px-6 py-3 bg-accent-earthy text-white rounded-full hover:bg-accent-earthy/90 transition-colors"
@@ -93,7 +93,7 @@ export function ReviewRiver({
               <Star className="w-5 h-5" />
               Write a Review
             </button>
-          )}
+          ) : null}
         </div>
 
         {/* Reviews list */}
@@ -103,14 +103,14 @@ export function ReviewRiver({
               <p className="text-text-earthy/60 mb-4">
                 Be the first to share your experience!
               </p>
-              {onWriteReview && (
+              {onWriteReview ? (
                 <button
                   onClick={onWriteReview}
                   className="text-accent-earthy hover:underline"
                 >
                   Write a review
                 </button>
-              )}
+              ) : null}
             </div>
           ) : (
             reviews.map((review) => (
@@ -134,12 +134,12 @@ function ReviewCard({ review }: ReviewCardProps) {
         {/* Left: Rating and verification */}
         <div className="flex md:flex-col items-center md:items-start gap-3 md:gap-2">
           <StarRating rating={review.rating} />
-          {review.verified_purchase && (
+          {review.verified_purchase ? (
             <span className="flex items-center gap-1 text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full">
               <CheckCircle className="w-3 h-3" />
               Verified
             </span>
-          )}
+          ) : null}
         </div>
 
         {/* Right: Content */}
@@ -161,12 +161,12 @@ function ReviewCard({ review }: ReviewCardProps) {
               </time>
             </div>
 
-            {review.helpful_count !== undefined && review.helpful_count > 0 && (
+            {review.helpful_count !== undefined && review.helpful_count > 0 ? (
               <span className="flex items-center gap-1 text-text-earthy/50">
                 <ThumbsUp className="w-4 h-4" />
                 {review.helpful_count} found helpful
               </span>
-            )}
+            ) : null}
           </div>
         </div>
       </div>

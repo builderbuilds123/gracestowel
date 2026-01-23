@@ -145,11 +145,11 @@ export default function ResetPasswordPage() {
 
                 {/* Reset Password Form */}
                 <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-lg p-8 space-y-6">
-                    {error && (
+                    {error ? (
                         <div className="bg-red-50 text-red-700 px-4 py-3 rounded-lg text-sm">
                             {error}
                         </div>
-                    )}
+                    ) : null}
 
                     {/* Password Field */}
                     <div>

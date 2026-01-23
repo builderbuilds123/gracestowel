@@ -9,7 +9,7 @@
  * - Story 6.3: Edit status locking for race condition handling
  */
 
-import { Worker, Job, Queue } from "bullmq";
+import { Worker, Job } from "bullmq";
 import { MedusaContainer } from "@medusajs/framework/types";
 import { Modules } from "@medusajs/framework/utils";
 import { getStripeClient } from "../utils/stripe";
@@ -34,8 +34,8 @@ let worker: Worker<PaymentCaptureJobData> | null = null;
 let shutdownHandler: (() => Promise<void>) | null = null;
 let containerRef: MedusaContainer | null = null;
 
-let promoterQueue: Queue<PaymentCaptureJobData> | null = null;
-let promoterInterval: NodeJS.Timeout | null = null;
+// NOTE: Removed promoterQueue and promoterInterval - BullMQ Worker handles delayed job promotion automatically
+// Manual promotion was causing jobs to execute ~295 seconds too early
 
 async function getOrderMetadata(orderId: string): Promise<Record<string, any>> {
     if (!containerRef) {
@@ -80,17 +80,9 @@ async function getOrderStatus(orderId: string): Promise<string | undefined> {
     }
 }
 
-async function promoteDueCaptureJobs(): Promise<void> {
-    if (!promoterQueue) {
-        return;
-    }
-
-    try {
-        await promoterQueue.promoteJobs();
-    } catch (err) {
-        console.warn("[PaymentCapture] Failed to promote delayed jobs:", (err as Error)?.message || err);
-    }
-}
+// NOTE: Removed promoteDueCaptureJobs() function
+// BullMQ Worker automatically promotes delayed jobs when their delay expires
+// Manual promotion was causing premature job execution
 
 /**
  * Fetch the current order data from Medusa
@@ -881,14 +873,12 @@ export function startPaymentCaptureWorker(container?: MedusaContainer): Worker<P
         }
     );
 
-    if (!IS_JEST) {
-        promoterQueue = new Queue<PaymentCaptureJobData>(PAYMENT_CAPTURE_QUEUE, { connection });
-        void promoteDueCaptureJobs();
-        promoterInterval = setInterval(() => {
-            void promoteDueCaptureJobs();
-        }, 5000);
-        promoterInterval.unref?.();
-    }
+    // NOTE: Removed manual promoteJobs() calls - BullMQ Worker automatically promotes delayed jobs
+    // Manual promotion every 5 seconds was causing jobs to execute ~295 seconds too early
+    // BullMQ's Worker has built-in logic to promote delayed jobs at the correct time
+    // See: https://docs.bullmq.io/guide/jobs/delayed
+    // If manual promotion is needed in the future, it should only run every 60 seconds
+    // and should check job timestamps before promoting to avoid premature execution
 
     worker.on("completed", (job) => {
         console.log(`[PaymentCapture] Job ${job.id} completed`);
@@ -940,16 +930,6 @@ export function startPaymentCaptureWorker(container?: MedusaContainer): Worker<P
         shutdownHandler = async () => {
             console.log("[PaymentCapture] Shutting down worker...");
             await worker?.close();
-
-            if (promoterInterval) {
-                clearInterval(promoterInterval);
-                promoterInterval = null;
-            }
-
-            if (promoterQueue) {
-                await promoterQueue.close();
-                promoterQueue = null;
-            }
         };
         process.on("SIGTERM", shutdownHandler);
         process.on("SIGINT", shutdownHandler);

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, Loader2 } from "lucide-react";
+import { X, Loader2 } from "../lib/icons";
 
 interface Address {
     first_name: string;
@@ -76,11 +76,11 @@ export function EditAddressDialog({ isOpen, onClose, onSave, currentAddress }: E
 
                 <h2 className="text-xl font-serif text-text-earthy mb-6">Edit Shipping Address</h2>
 
-                {error && (
+                {error ? (
                     <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
                         {error}
                     </div>
-                )}
+                ) : null}
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">

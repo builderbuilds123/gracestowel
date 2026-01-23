@@ -1,4 +1,6 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
+import { getCachedStorage, setCachedStorage } from "../lib/storage-cache";
+import { createLogger } from "../lib/logger";
 
 export interface WishlistItem {
     id: string;
@@ -27,10 +29,10 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
     const [items, setItems] = useState<WishlistItem[]>([]);
     const [isHydrated, setIsHydrated] = useState(false);
 
-    // Load from localStorage on mount (client-side only)
+    // Load from localStorage on mount (client-side only) (Issue #24: Use cached storage)
     useEffect(() => {
         try {
-            const stored = localStorage.getItem(WISHLIST_STORAGE_KEY);
+            const stored = getCachedStorage(WISHLIST_STORAGE_KEY); // Cached read
             if (stored) {
                 const parsed = JSON.parse(stored);
                 if (Array.isArray(parsed)) {
@@ -38,18 +40,20 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
                 }
             }
         } catch (error) {
-            console.error("Failed to load wishlist from localStorage:", error);
+            const logger = createLogger({ context: "WishlistContext" });
+            logger.error("Failed to load wishlist from localStorage", error instanceof Error ? error : new Error(String(error)));
         }
         setIsHydrated(true);
     }, []);
 
-    // Persist to localStorage when items change
+    // Persist to localStorage when items change (Issue #24: Use cached storage)
     useEffect(() => {
         if (isHydrated) {
             try {
-                localStorage.setItem(WISHLIST_STORAGE_KEY, JSON.stringify(items));
+                setCachedStorage(WISHLIST_STORAGE_KEY, JSON.stringify(items)); // Cached write
             } catch (error) {
-                console.error("Failed to save wishlist to localStorage:", error);
+                const logger = createLogger({ context: "WishlistContext" });
+                logger.error("Failed to save wishlist to localStorage", error instanceof Error ? error : new Error(String(error)));
             }
         }
     }, [items, isHydrated]);

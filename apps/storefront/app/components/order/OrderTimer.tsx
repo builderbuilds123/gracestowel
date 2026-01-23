@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Clock } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Clock } from "../../lib/icons";
 
 interface OrderTimerProps {
     expiresAt: string;
@@ -14,6 +14,13 @@ export function OrderTimer({ expiresAt, serverTime, onExpire, className = "" }: 
     // Calculate initial offset: Server Time - Client Time
     // We assume this component mounts roughly when response is received
     const [offset] = useState(() => new Date(serverTime).getTime() - Date.now());
+    // Issue #40: Use useRef to stabilize callback and avoid unnecessary effect re-runs
+    const onExpireRef = useRef(onExpire);
+
+    // Update ref when callback changes
+    useEffect(() => {
+        onExpireRef.current = onExpire;
+    }, [onExpire]);
 
     useEffect(() => {
         const targetTime = new Date(expiresAt).getTime();
@@ -31,7 +38,7 @@ export function OrderTimer({ expiresAt, serverTime, onExpire, className = "" }: 
             }
 
             if (diff <= 0) {
-                onExpire();
+                onExpireRef.current();
                 return true; // Expired
             }
             return false;
@@ -46,7 +53,7 @@ export function OrderTimer({ expiresAt, serverTime, onExpire, className = "" }: 
         }, 1000);
 
         return () => clearInterval(timer);
-    }, [expiresAt, offset, onExpire]);
+    }, [expiresAt, offset]); // Issue #40: Removed onExpire from dependencies
 
     // Format time as MM:SS
     const minutes = Math.floor(timeLeft / 60);

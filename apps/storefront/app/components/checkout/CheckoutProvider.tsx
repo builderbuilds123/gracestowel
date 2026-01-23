@@ -14,7 +14,7 @@ import { useAutomaticPromotions, type AutomaticPromotionInfo } from '../../hooks
 import { generateTraceId, createLogger } from '../../lib/logger';
 import { parsePrice } from '../../lib/price';
 import { CHECKOUT_CONSTANTS } from '../../constants/checkout';
-import { type ShippingOption } from '../CheckoutForm';
+import type { ShippingOption } from '../../types/checkout';
 import type { CartItem, ProductId } from '../../types/product';
 import type { CartWithPromotions, AppliedPromoCode } from '../../types/promotion';
 import type { CheckoutState } from '../../types/checkout';
@@ -263,9 +263,9 @@ export function CheckoutProvider({ children }: { children: React.ReactNode }) {
 
   const paymentError = collectionError || sessionError;
 
-  // Stable dependency for promo codes to prevent infinite loops
+  // Stable dependency for promo codes to prevent infinite loops (Issue #20: Use .toSorted() for immutability)
   const promoCodesHash = useMemo(() => {
-    return JSON.stringify(appliedPromoCodes.map(c => c.code).sort());
+    return JSON.stringify(appliedPromoCodes.map(c => c.code).toSorted());
   }, [appliedPromoCodes]);
 
   useEffect(() => {

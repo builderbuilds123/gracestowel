@@ -1,4 +1,4 @@
-import { Heart } from "lucide-react";
+import { Heart } from "../lib/icons";
 import { useWishlist, type WishlistItem } from "../context/WishlistContext";
 
 interface WishlistButtonProps {
@@ -43,11 +43,11 @@ export function WishlistButton({
                         : "text-text-earthy/60 group-hover:text-red-400"
                 }`}
             />
-            {showLabel && (
+            {showLabel ? (
                 <span className={`text-sm ${isWishlisted ? "text-red-500" : "text-text-earthy/60 group-hover:text-text-earthy"}`}>
                     {isWishlisted ? "Saved" : "Save"}
                 </span>
-            )}
+            ) : null}
         </button>
     );
 }

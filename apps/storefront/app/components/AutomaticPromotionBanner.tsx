@@ -1,4 +1,4 @@
-import { Gift, Truck } from "lucide-react";
+import { Gift, Truck } from "../lib/icons";
 
 interface AutomaticPromotionBannerProps {
   type: "free_shipping" | "discount";
@@ -43,7 +43,7 @@ export function AutomaticPromotionBanner({
         <span className={`text-sm font-medium ${textColor}`}>{message}</span>
       </div>
       
-      {showProgress && !isApplied && (
+      {showProgress && !isApplied ? (
         <div className="mt-2">
           <div
             className="h-2 bg-gray-200 rounded-full overflow-hidden"
@@ -62,7 +62,7 @@ export function AutomaticPromotionBanner({
             {Math.floor(progressPercent)}% there
           </p>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

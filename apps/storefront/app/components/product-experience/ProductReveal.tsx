@@ -103,12 +103,12 @@ export function ProductReveal({
                 {currencySymbol}
                 {price.toFixed(2)}
               </span>
-              {originalPrice && originalPrice > price && (
+              {originalPrice && originalPrice > price ? (
                 <span className="text-lg text-text-earthy/50 line-through">
                   {currencySymbol}
                   {originalPrice.toFixed(2)}
                 </span>
-              )}
+              ) : null}
             </div>
 
             {/* Tagline fades up */}

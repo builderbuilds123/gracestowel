@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { calculateTotal, fromCents } from '../lib/price';
 import type { ProductId, CartItem, EmbroideryData } from '../types/product';
 import { productIdsEqual } from '../types/product';
@@ -6,6 +6,9 @@ import { monitoredFetch } from '../utils/monitored-fetch';
 import { useMedusaCart } from './MedusaCartContext';
 import { useLocale } from './LocaleContext';
 import type { CartWithPromotions } from '../types/promotion';
+import { getBackendUrl } from '../lib/medusa';
+import { createLogger } from '../lib/logger';
+import { getCachedStorage, setCachedStorage } from '../lib/storage-cache';
 
 // Re-export CartItem for backwards compatibility
 export type { CartItem, EmbroideryData } from '../types/product';
@@ -46,22 +49,27 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         return true;
     };
 
-    // Load cart from local storage on mount
+    // Load cart from local storage on mount (Issue #17: Use cached storage)
     useEffect(() => {
-        const savedCart = localStorage.getItem('cart');
+        const savedCart = getCachedStorage('cart');
         if (savedCart) {
             try {
                 const parsed = JSON.parse(savedCart);
                 if (Array.isArray(parsed)) {
                     const validItems = parsed.filter(validateCartItem);
                     if (validItems.length !== parsed.length) {
-                        console.warn("[CartContext] Purged invalid items from local storage:", 
-                            parsed.length - validItems.length, "items removed");
+                        const logger = createLogger({ context: "CartContext" });
+                        logger.warn("Purged invalid items from local storage", {
+                            removedCount: parsed.length - validItems.length,
+                            totalItems: parsed.length,
+                            validItems: validItems.length
+                        });
                     }
                     setItems(validItems);
                 }
             } catch (e) {
-                console.error("[CartContext] Failed to parse cart from local storage", e);
+                const logger = createLogger({ context: "CartContext" });
+                logger.error("Failed to parse cart from local storage", e instanceof Error ? e : new Error(String(e)));
                 // If corrupted, clear it to self-heal
                 localStorage.removeItem('cart');
             }
@@ -69,8 +77,19 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         setIsLoaded(true);
     }, []);
 
+    // ✅ Debounced localStorage writes with caching (Issues #9 & #17 fix)
     useEffect(() => {
-        localStorage.setItem('cart', JSON.stringify(items));
+        const timeoutId = setTimeout(() => {
+            try {
+                setCachedStorage('cart', JSON.stringify(items));
+            } catch (e) {
+                // Handle quota exceeded or other errors
+                const logger = createLogger({ context: "CartContext" });
+                logger.error("Failed to save to localStorage", e instanceof Error ? e : new Error(String(e)), { itemsCount: items.length });
+            }
+        }, 300); // Debounce by 300ms
+        
+        return () => clearTimeout(timeoutId);
     }, [items]);
 
     // Debounced sync with Medusa backend
@@ -100,11 +119,13 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
                     // If sync fails (e.g. invalid promo code), we still want to refresh
                     // to see what the backend currently thinks the cart is
                     const errorPayload = await response.json().catch(() => ({}));
-                    console.error('[CartContext] Sync failed:', errorPayload);
+                    const logger = createLogger({ context: "CartContext" });
+                    logger.error('Sync failed', undefined, errorPayload as Record<string, unknown>);
                     await refreshCart();
                 }
             } catch (err) {
-                console.error('[CartContext] Failed to sync items with Medusa:', err);
+                const logger = createLogger({ context: "CartContext" });
+                logger.error('Failed to sync items with Medusa', err instanceof Error ? err : new Error(String(err)));
             } finally {
                 if (requestId === lastSyncRequestId.current) {
                     setIsSyncing(false);
@@ -117,14 +138,21 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         };
     }, [items, cartId, isLoaded, refreshCart]);
 
-    const addToCart = (newItem: Omit<CartItem, 'quantity'> & { quantity?: number }) => {
+    // ✅ Memoize addToCart function (Issue #5 fix)
+    const addToCart = useCallback((newItem: Omit<CartItem, 'quantity'> & { quantity?: number }) => {
         const quantityToAdd = newItem.quantity ?? 1;
-        const itemToAdd = { ...newItem, quantity: quantityToAdd };
+        let image = newItem.image;
+        if (typeof image === 'string' && image.startsWith('/uploads/')) {
+            const base = getBackendUrl().replace(/\/$/, '');
+            image = `${base}${image}`;
+        }
+        const itemToAdd = { ...newItem, image, quantity: quantityToAdd };
         // Fail loudly if inputs are invalid (User Requirement)
         if (!validateCartItem(itemToAdd)) {
-            const error = `Attempted to add invalid item to cart: ${JSON.stringify(itemToAdd)}`;
-            console.error(error);
-            throw new Error(error);
+            const logger = createLogger({ context: "CartContext" });
+            const error = new Error(`Attempted to add invalid item to cart: ${JSON.stringify(itemToAdd)}`);
+            logger.error("Attempted to add invalid item to cart", error, { item: itemToAdd });
+            throw error;
         }
 
         setItems(prevItems => {
@@ -175,9 +203,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
                 }
             })();
         }
-    };
+    }, [cartId, regionId, setCartId]);
 
-    const removeFromCart = (id: ProductId, color?: string, variantId?: string) => {
+    // ✅ Memoize removeFromCart function (Issue #5 fix)
+    const removeFromCart = useCallback((id: ProductId, color?: string, variantId?: string) => {
         setItems(prevItems => prevItems.filter(item => {
             if (variantId) {
                 return item.variantId !== variantId;
@@ -187,9 +216,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
             }
             return !(productIdsEqual(item.id, id) && !item.variantId);
         }));
-    };
+    }, []);
 
-    const updateQuantity = (id: ProductId, quantity: number, color?: string, variantId?: string) => {
+    // ✅ Memoize updateQuantity function (Issue #5 fix)
+    const updateQuantity = useCallback((id: ProductId, quantity: number, color?: string, variantId?: string) => {
         if (quantity <= 0) {
             removeFromCart(id, color);
             return;
@@ -207,21 +237,29 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
                 return isMatch ? { ...item, quantity } : item;
             })
         );
-    };
+    }, []);
 
-    const toggleCart = () => setIsOpen(prev => !prev);
+    // ✅ Memoize toggleCart function (Issue #5 fix)
+    const toggleCart = useCallback(() => setIsOpen(prev => !prev), []);
 
-    const clearCart = () => {
+    // ✅ Memoize clearCart function (Issue #5 fix)
+    const clearCart = useCallback(() => {
         setItems([]);
         setIsOpen(false);
-    };
+    }, []);
+
+    // ✅ Optimized: Memoize the expensive calculation separately (Issue #8 fix)
+    // Only recalculate when items actually change
+    const localSubtotal = React.useMemo(
+        () => calculateTotal(items),
+        [items] // Only recalculate when items array reference changes
+    );
 
     // Use the centralized price calculation utility
     // Optimistic calculation: Apply previous discount ratio to current local items
     // to prevent the "jump up" UI flicker while syncing (Story 5.4 optimization)
     const displayCartTotal = React.useMemo(() => {
-        const localSubtotal = calculateTotal(items);
-        
+        // Use pre-calculated localSubtotal
         if (medusaCart && items.length > 0) {
             // Calculate a temporary total based on Medusa's last known discount ratio
             // medusaCart.total is the final amount (inc. tax/shipping/discounts)
@@ -252,23 +290,40 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         }
 
         return localSubtotal;
-    }, [items, medusaCart, isSyncing]);
+    }, [localSubtotal, medusaCart, isSyncing, items.length]);
+
+    // ✅ Memoize the provider value object (Issue #5 fix)
+    // This prevents all consumers from re-rendering when the object reference changes
+    const contextValue = React.useMemo(() => ({
+        items, 
+        isOpen, 
+        isLoaded, 
+        addToCart,      // Already stable (useCallback)
+        removeFromCart,  // Already stable (useCallback)
+        updateQuantity,  // Already stable (useCallback)
+        toggleCart,      // Already stable (useCallback)
+        clearCart,       // Already stable (useCallback)
+        cartTotal: displayCartTotal,
+        medusaCart,
+        isLoading,
+        isSyncing
+    }), [
+        items,           // Primitive array - reference changes when items change
+        isOpen,          // Primitive boolean
+        isLoaded,        // Primitive boolean
+        addToCart,       // Stable function reference (useCallback)
+        removeFromCart,  // Stable function reference (useCallback)
+        updateQuantity,  // Stable function reference (useCallback)
+        toggleCart,      // Stable function reference (useCallback)
+        clearCart,       // Stable function reference (useCallback)
+        displayCartTotal, // Memoized value
+        medusaCart,      // Object - reference changes when cart updates
+        isLoading,       // Primitive boolean
+        isSyncing        // Primitive boolean
+    ]);
 
     return (
-        <CartContext.Provider value={{ 
-            items, 
-            isOpen, 
-            isLoaded, 
-            addToCart, 
-            removeFromCart, 
-            updateQuantity, 
-            toggleCart, 
-            clearCart, 
-            cartTotal: displayCartTotal,
-            medusaCart,
-            isLoading,
-            isSyncing
-        }}>
+        <CartContext.Provider value={contextValue}>
             {children}
         </CartContext.Provider>
     );

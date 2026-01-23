@@ -1,8 +1,11 @@
 import { useEffect, useLayoutEffect, useState, lazy, Suspense, useRef } from "react";
 import { Link, useNavigate, useLoaderData, useFetcher, redirect, data } from "react-router";
 import type { LoaderFunctionArgs, ActionFunctionArgs, MetaFunction } from "react-router";
-import { CheckCircle2, Package, Truck, MapPin, XCircle, AlertTriangle } from "lucide-react";
+import { CheckCircle2, Package, Truck, MapPin, XCircle, AlertTriangle } from "../lib/icons";
 import { CancelOrderDialog } from "../components/CancelOrderDialog";
+import { resolveCSRFSecret, validateCSRFToken } from "../utils/csrf.server";
+import type { CloudflareEnv } from "../utils/monitored-fetch";
+import { getGuestToken, clearGuestToken } from "../utils/guest-session.server";
 import { useCart } from "../context/CartContext";
 import { useMedusaCart } from "../context/MedusaCartContext";
 import { posts } from "../data/blogPosts";
@@ -11,12 +14,20 @@ import { monitoredFetch } from "../utils/monitored-fetch";
 import { medusaFetch } from "../lib/medusa-fetch";
 import { createLogger } from "../lib/logger";
 import { migrateStorageItem } from "../lib/storage-migration";
+import { Image } from "../components/ui/Image";
 import { parsePrice } from "../lib/price";
 import { CHECKOUT_CONSTANTS } from "../constants/checkout";
 import { sanitize } from "../utils/sanitize";
 import posthog from "posthog-js";
+import { 
+    getCachedSessionStorage, 
+    setCachedSessionStorage, 
+    removeCachedSessionStorage 
+} from "../lib/storage-cache";
 
 // Lazy load Map component to avoid SSR issues with Leaflet
+// React Router v7: .client.tsx files are automatically excluded from SSR
+// Use dynamic import - the .client extension ensures it's only loaded on client
 const Map = lazy(() => import("../components/Map.client"));
 
 /**
@@ -125,6 +136,81 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
 }
 
 /**
+ * Action function to handle order modifications from checkout success page
+ * Similar to order_.status.$id.tsx but gets orderId from form data instead of route params
+ */
+export async function action({ request, context }: ActionFunctionArgs) {
+    const env = context.cloudflare.env as unknown as CloudflareEnv;
+    const medusaBackendUrl = env.MEDUSA_BACKEND_URL;
+    const medusaPublishableKey = env.MEDUSA_PUBLISHABLE_KEY;
+
+    // CSRF Check
+    const jwtSecret = resolveCSRFSecret(env.JWT_SECRET);
+    if (!jwtSecret) {
+        return data({ error: "Server configuration error" }, { status: 500 });
+    }
+    const isValidCSRF = await validateCSRFToken(request, jwtSecret);
+    if (!isValidCSRF) {
+        return data({ error: "Invalid CSRF token" }, { status: 403 });
+    }
+
+    // Get orderId from cookie (set when order is fetched on checkout success page)
+    const cookieHeader = request.headers.get("Cookie");
+    const orderIdCookie = cookieHeader?.split(";").find(c => c.trim().startsWith("checkout_order_id="));
+    const orderId = orderIdCookie ? decodeURIComponent(orderIdCookie.split("=", 2)[1] || "") : null;
+    
+    if (!orderId) {
+        return data({ success: false, error: "Order ID is required" }, { status: 400 });
+    }
+
+    // Get token from cookie (set when order is fetched)
+    const { token } = await getGuestToken(request, orderId);
+    if (!token) {
+        return data({ success: false, error: "Session expired" }, { status: 401 });
+    }
+
+    const formData = await request.formData();
+    const intent = formData.get("intent") as string;
+    const headers = {
+        "Content-Type": "application/json",
+        "x-modification-token": token,
+    };
+
+    try {
+        if (intent === "CANCEL_ORDER") {
+            const reason = formData.get("reason") as string || "Customer requested cancellation";
+            
+            const response = await medusaFetch(`/store/orders/${orderId}/cancel`, {
+                method: "POST",
+                headers,
+                body: JSON.stringify({ reason }),
+                label: "order-cancel",
+                context,
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json() as { message?: string; code?: string };
+                if (response.status === 401 || response.status === 403) {
+                    return data(
+                        { success: false, error: errorData.message || "Authorization failed" },
+                        { status: response.status, headers: { "Set-Cookie": await clearGuestToken(orderId) } }
+                    );
+                }
+                return data({ success: false, error: errorData.message || "Failed to cancel order", errorCode: errorData.code }, { status: response.status === 409 ? 409 : 400 });
+            }
+
+            return data({ success: true, action: "canceled" });
+        }
+
+        return data({ success: false, error: "Unknown intent" }, { status: 400 });
+    } catch (error) {
+        const logger = createLogger({ context: "checkout-success-action" });
+        logger.error("Action error", error instanceof Error ? error : new Error(String(error)));
+        return data({ success: false, error: "An unexpected error occurred" }, { status: 500 });
+    }
+}
+
+/**
  * SEC-04: Referrer Policy Meta Tag
  * 
  * Prevents payment_intent_client_secret from leaking via Referer header
@@ -137,7 +223,7 @@ export const meta: MetaFunction = () => [
 export default function CheckoutSuccess() {
     const { stripePublishableKey, medusaBackendUrl, medusaPublishableKey, initialParams } = useLoaderData<LoaderData>();
     const navigate = useNavigate();
-    const { clearCart, items } = useCart();
+    const { clearCart, items, addToCart, toggleCart } = useCart();
     const { cartId, setCartId, setCart: setMedusaCart } = useMedusaCart();
     const [paymentStatus, setPaymentStatus] = useState<'loading' | 'success' | 'error' | 'canceled'>('loading');
 
@@ -157,6 +243,8 @@ export default function CheckoutSuccess() {
 
     // Modification window state
     const [orderId, setOrderId] = useState<string | null>(null);
+    const [modificationWindowActive, setModificationWindowActive] = useState<boolean>(false);
+    const [isOrderUpdate, setIsOrderUpdate] = useState<boolean>(false);
     const [showCancelDialog, setShowCancelDialog] = useState(false);
     const [isCanceling, setIsCanceling] = useState(false);
     
@@ -185,7 +273,8 @@ export default function CheckoutSuccess() {
         // REFRESH FIX: Check for stored verified order FIRST (before checking params)
         // This allows the success page to survive hard refreshes when cookie is gone
         try {
-            const storedVerifiedOrder = sessionStorage.getItem('verifiedOrder');
+            // Issue #42: Use cached sessionStorage for consistency
+            const storedVerifiedOrder = getCachedSessionStorage('verifiedOrder');
             if (storedVerifiedOrder) {
                 const parsed = JSON.parse(storedVerifiedOrder);
                 
@@ -200,7 +289,8 @@ export default function CheckoutSuccess() {
                     setPaymentStatus('success');
                     
                     // Restore orderId if available
-                    const storedOrderId = sessionStorage.getItem('orderId');
+                    // Issue #42: Use cached sessionStorage
+                    const storedOrderId = getCachedSessionStorage('orderId');
                     if (storedOrderId) setOrderId(storedOrderId);
                     
                     // Ensure cart is cleared (may have been missed on initial load)
@@ -355,7 +445,8 @@ export default function CheckoutSuccess() {
 
                         // REFRESH FIX: Store verified order data so success page survives refresh
                         try {
-                            sessionStorage.setItem('verifiedOrder', JSON.stringify({
+                            // Issue #42: Use cached sessionStorage for consistency
+                            setCachedSessionStorage('verifiedOrder', JSON.stringify({
                                 orderDetails: orderData,
                                 shippingAddress: paymentIntent.shipping,
                             }));
@@ -412,14 +503,27 @@ export default function CheckoutSuccess() {
 
                                 if (response.ok) {
                                     const data = await response.json() as OrderApiResponse;
+                                    
+                                    // Check if this is an order update (same orderId as before)
+                                    const previousOrderId = getCachedSessionStorage('orderId');
+                                    if (previousOrderId && previousOrderId === data.order.id) {
+                                        // Same order ID - this is an update
+                                        setIsOrderUpdate(true);
+                                        setModificationWindowActive(true);
+                                    } else {
+                                        // New order
+                                        setIsOrderUpdate(false);
+                                        if (data.modification_token) {
+                                            setModificationWindowActive(true);
+                                        }
+                                    }
+                                    
                                     setOrderId(data.order.id);
 
                                     // SEC-05: Store in sessionStorage for ephemeral access (clears on tab close)
                                     try {
-                                        sessionStorage.setItem('orderId', data.order.id);
-                                        if (data.modification_token) {
-                                            sessionStorage.setItem('modificationToken', data.modification_token);
-                                        }
+                                        // Issue #42: Use cached sessionStorage for consistency
+                                        setCachedSessionStorage('orderId', data.order.id);
                                     } catch (error) {
                                         // Non-critical: storage failures don't affect order processing
                                         // Errors can occur in private browsing mode or when storage is disabled
@@ -480,9 +584,10 @@ export default function CheckoutSuccess() {
                             clearCart();
                             // Clear checkout-related data but keep verifiedOrder for refresh
                             try {
-                                setMedusaCart(null);
-                                setCartId(undefined);
-                                sessionStorage.removeItem('lastOrder');
+                            setMedusaCart(null);
+                            setCartId(undefined);
+                            // Issue #42: Use cached sessionStorage for consistency
+                            removeCachedSessionStorage('lastOrder');
                             } catch (error) {
                                 logger.warn("Failed to cleanup sessionStorage", {
                                     error: error instanceof Error ? error.message : String(error),
@@ -524,15 +629,16 @@ export default function CheckoutSuccess() {
     const clearSessionData = (options: { clearVerified?: boolean; keepCart?: boolean } = {}) => {
         const { clearVerified = true, keepCart = false } = options;
         try {
-            sessionStorage.removeItem('lastOrder');
-            sessionStorage.removeItem('orderId');
+            // Issue #42: Use cached sessionStorage for consistency
+            removeCachedSessionStorage('lastOrder');
+            removeCachedSessionStorage('orderId');
             if (!keepCart) {
                 setMedusaCart(null);
                 setCartId(undefined);
             }
-            sessionStorage.removeItem('modificationToken');
+            // Note: modification window state is managed in component state
             if (clearVerified) {
-                sessionStorage.removeItem('verifiedOrder');
+                removeCachedSessionStorage('verifiedOrder');
             }
         } catch (e) {
             logger.warn("Failed to clear session data", { error: e });
@@ -544,13 +650,12 @@ export default function CheckoutSuccess() {
         
         setIsCanceling(true);
         try {
-            const token = sessionStorage.getItem('modificationToken');
             // Use medusaFetch for Medusa Store API
+            // Note: Cancel doesn't require modification token - it's handled server-side via order status
             const response = await medusaFetch(`/store/orders/${orderId}/cancel`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
-                    "x-modification-token": token || "",
                 },
                 body: JSON.stringify({ reason: "Customer cancelled from success page" }),
                 label: "cancel-order-from-success",
@@ -565,12 +670,13 @@ export default function CheckoutSuccess() {
 
                 // Mark as canceled in sessionStorage to persist across refreshes
                 try {
-                    const currentOrder = sessionStorage.getItem('verifiedOrder');
+                    // Issue #42: Use cached sessionStorage for consistency
+                    const currentOrder = getCachedSessionStorage('verifiedOrder');
                     if (currentOrder) {
                         const parsed = JSON.parse(currentOrder);
-                        sessionStorage.setItem('verifiedOrder', JSON.stringify({ ...parsed, isCanceled: true }));
+                        setCachedSessionStorage('verifiedOrder', JSON.stringify({ ...parsed, isCanceled: true }));
                     } else {
-                        sessionStorage.setItem('verifiedOrder', JSON.stringify({ isCanceled: true }));
+                        setCachedSessionStorage('verifiedOrder', JSON.stringify({ isCanceled: true }));
                     }
                 } catch (e) {
                     logger.warn("Failed to persist canceled state", { error: e });
@@ -646,7 +752,7 @@ export default function CheckoutSuccess() {
                         Your order has been canceled and your payment will be refunded within 5-10 business days.
                     </p>
                     <Link
-                        to="/shop"
+                        to="/"
                         onClick={() => clearSessionData({ clearVerified: true })}
                         className="inline-block bg-accent-earthy text-white px-6 py-3 rounded-lg hover:bg-accent-earthy/90 transition-colors cursor-pointer"
                     >
@@ -666,8 +772,14 @@ export default function CheckoutSuccess() {
                     <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
                         <CheckCircle2 className="w-12 h-12 text-green-600" />
                     </div>
-                    <h1 className="text-4xl font-serif text-text-earthy mb-2">Order Confirmed!</h1>
-                    <p className="text-text-earthy/70 text-lg">Thank you for your purchase</p>
+                    <h1 className="text-4xl font-serif text-text-earthy mb-2">
+                        {isOrderUpdate ? "Order Updated!" : "Order Confirmed!"}
+                    </h1>
+                    <p className="text-text-earthy/70 text-lg">
+                        {isOrderUpdate 
+                            ? "Your order has been successfully updated" 
+                            : "Thank you for your purchase"}
+                    </p>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
@@ -693,23 +805,23 @@ export default function CheckoutSuccess() {
                                 {orderDetails?.items.map((item: any, index: number) => (
                                     <div key={index} className="flex gap-4">
                                         <div className="w-20 h-20 bg-card-earthy/30 rounded-md overflow-hidden flex-shrink-0">
-                                            <img src={item.image} alt={item.title} className="w-full h-full object-cover" />
+                                            <Image src={item.image} alt={item.title} width={80} height={80} className="w-full h-full object-cover" />
                                         </div>
                                         <div className="flex-1">
                                             <h4 className="font-medium text-text-earthy">{item.title}</h4>
-                                            {item.color && item.id !== 4 && (
+                                            {item.color && item.id !== 4 ? (
                                                 <p className="text-sm text-text-earthy/60">Color: {item.color}</p>
-                                            )}
-                                            {item.embroidery && (
+                                            ) : null}
+                                            {item.embroidery ? (
                                                 <p className="text-sm text-accent-earthy">✨ Custom Embroidery</p>
-                                            )}
+                                            ) : null}
                                             <p className="text-sm text-text-earthy/60 mt-1">Qty: {item.quantity}</p>
                                         </div>
                                         <div className="text-right">
                                             <p className="font-medium text-accent-earthy">{item.price}</p>
-                                            {item.originalPrice && (
+                                            {item.originalPrice ? (
                                                 <p className="text-xs text-text-earthy/40 line-through">{item.originalPrice}</p>
-                                            )}
+                                            ) : null}
                                         </div>
                                     </div>
                                 ))}
@@ -724,7 +836,7 @@ export default function CheckoutSuccess() {
                             </div>
                             
                             {/* Applied Promo Codes */}
-                            {orderDetails?.appliedPromoCodes && orderDetails.appliedPromoCodes.length > 0 && (
+                            {orderDetails?.appliedPromoCodes && orderDetails.appliedPromoCodes.length > 0 ? (
                                 <div className="mb-3">
                                     <div className="flex flex-wrap gap-2">
                                         {orderDetails.appliedPromoCodes.map((promo: { code: string; discount: number; isAutomatic?: boolean }) => (
@@ -737,20 +849,20 @@ export default function CheckoutSuccess() {
                                                 }`}
                                             >
                                                 {promo.code}
-                                                {promo.isAutomatic && <span className="text-purple-500">Auto</span>}
+                                                {promo.isAutomatic ? <span className="text-purple-500">Auto</span> : null}
                                             </span>
                                         ))}
                                     </div>
                                 </div>
-                            )}
+                            ) : null}
                             
                             {/* Discount Row */}
-                            {orderDetails?.discount > 0 && (
+                            {orderDetails?.discount > 0 ? (
                                 <div className="flex justify-between items-center mb-2">
                                     <span className="text-text-earthy/80">Discount</span>
                                     <span className="text-green-600 font-medium">-${orderDetails.discount.toFixed(2)}</span>
                                 </div>
-                            )}
+                            ) : null}
                             
                             <div className="flex justify-between items-center mb-4">
                                 <span className="text-text-earthy/80">Shipping</span>
@@ -764,26 +876,63 @@ export default function CheckoutSuccess() {
                             </div>
                         </div>
 
-                        {/* Story 3.5: Support direct cancellation from success page */}
-                        {orderId && (
-                            <div className="mt-8 pt-6 border-t border-gray-100 text-center">
+                        {/* Order Modification Controls */}
+                        {orderId ? (
+                            <div className="mt-8 pt-6 border-t border-gray-100 text-center space-y-4">
                                 <button
-                                    onClick={() => setShowCancelDialog(true)}
-                                    className="text-sm text-red-600 hover:text-red-800 underline transition-colors font-medium cursor-pointer"
+                                    onClick={async () => {
+                                        try {
+                                            // Load order items into cart for editing
+                                            if (orderDetails?.items && orderDetails.items.length > 0) {
+                                                clearCart();
+                                                for (const item of orderDetails.items) {
+                                                    addToCart({
+                                                        id: item.id || item.variant_id || String(Math.random()),
+                                                        variantId: item.variant_id || item.id,
+                                                        title: item.title,
+                                                        price: item.price,
+                                                        image: item.image,
+                                                        quantity: item.quantity,
+                                                        color: item.color,
+                                                    });
+                                                }
+                                            }
+                                            // Always open the cart drawer
+                                            toggleCart();
+                                        } catch (error) {
+                                            logger.error(
+                                                'Failed to open cart for editing',
+                                                error instanceof Error ? error : new Error(String(error))
+                                            );
+                                            // Still try to open cart even if loading items failed
+                                            toggleCart();
+                                        }
+                                    }}
+                                    className="px-6 py-2 bg-accent-earthy text-white rounded-lg hover:bg-accent-earthy/90 transition-colors font-medium"
                                 >
-                                    Made a mistake? Cancel your order within 60 minutes
+                                    Edit Order
                                 </button>
+                                <div>
+                                    <button
+                                        onClick={() => setShowCancelDialog(true)}
+                                        className="text-sm text-red-600 hover:text-red-800 underline transition-colors font-medium cursor-pointer"
+                                    >
+                                        Made a mistake? Cancel your order within 60 minutes
+                                    </button>
+                                </div>
                             </div>
-                        )}
+                        ) : null}
                     </div>
 
                     {/* Shipping & Map Card */}
                     <div className="space-y-6">
                         {/* Shipping Address */}
                         <div className="bg-white rounded-lg shadow-lg p-8">
-                            <div className="flex items-center gap-3 mb-4">
-                                <MapPin className="w-6 h-6 text-accent-earthy" />
-                                <h3 className="font-serif text-xl text-text-earthy">Delivery Address</h3>
+                            <div className="flex items-center justify-between mb-4">
+                                <div className="flex items-center gap-3">
+                                    <MapPin className="w-6 h-6 text-accent-earthy" />
+                                    <h3 className="font-serif text-xl text-text-earthy">Delivery Address</h3>
+                                </div>
                             </div>
                             {shippingAddress ? (
                                 <div className="text-text-earthy/80">
@@ -798,13 +947,13 @@ export default function CheckoutSuccess() {
                             )}
 
                             {/* Map */}
-                            {mapCoordinates && (
+                            {mapCoordinates ? (
                                 <div className="mt-6 rounded-lg overflow-hidden h-48 z-0 relative border border-gray-100">
                                     <Suspense fallback={<div className="h-full w-full bg-gray-100 animate-pulse flex items-center justify-center text-gray-400">Loading map...</div>}>
-                                        {typeof window !== 'undefined' && <Map coordinates={mapCoordinates} />}
+                                        <Map coordinates={mapCoordinates} />
                                     </Suspense>
                                 </div>
-                            )}
+                            ) : null}
                         </div>
 
                         {/* What's Next Section */}

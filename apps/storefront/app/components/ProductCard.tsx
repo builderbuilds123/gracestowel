@@ -1,7 +1,8 @@
+import React from "react";
 import { useCart } from "../context/CartContext";
 import { useLocale } from "../context/LocaleContext";
 import { Link } from "react-router";
-import { Towel } from "@phosphor-icons/react";
+import { Towel } from "../lib/icons";
 import { WishlistButton } from "./WishlistButton";
 import { Image } from "./ui/Image";
 
@@ -16,7 +17,8 @@ interface ProductCardProps {
     sku?: string;        // First variant SKU for cart operations
 }
 
-export function ProductCard({ id, image, title, description, price, handle, variantId, sku }: ProductCardProps) {
+// ✅ Memoized component to prevent unnecessary re-renders (Issue #7 fix)
+export const ProductCard = React.memo(function ProductCard({ id, image, title, description, price, handle, variantId, sku }: ProductCardProps) {
     const { addToCart } = useCart();
 
     const { formatPrice } = useLocale();
@@ -71,4 +73,15 @@ export function ProductCard({ id, image, title, description, price, handle, vari
             </div>
         </div>
     );
-}
+}, (prevProps, nextProps) => {
+    // Custom comparison function - only re-render if these props actually changed
+    return (
+        prevProps.id === nextProps.id &&
+        prevProps.price === nextProps.price &&
+        prevProps.image === nextProps.image &&
+        prevProps.title === nextProps.title &&
+        prevProps.handle === nextProps.handle &&
+        prevProps.variantId === nextProps.variantId &&
+        prevProps.sku === nextProps.sku
+    );
+});

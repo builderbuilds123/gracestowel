@@ -5,7 +5,7 @@
  * Extracted from products.$handle.tsx for better component organization.
  */
 
-import { Truck, ShieldCheck } from "lucide-react";
+import { Truck, ShieldCheck } from "../lib/icons";
 import { useLocale } from "../context/LocaleContext";
 
 interface ProductDetailsProps {
@@ -20,7 +20,7 @@ export function ProductDetails({ features, dimensions, careInstructions }: Produ
     return (
         <>
             {/* Features List */}
-            {features.length > 0 && (
+            {features.length > 0 ? (
                 <div className="space-y-4 mb-8">
                     {features.map((feature, idx) => (
                         <div key={idx} className="flex items-center text-text-earthy/80">
@@ -29,7 +29,7 @@ export function ProductDetails({ features, dimensions, careInstructions }: Produ
                         </div>
                     ))}
                 </div>
-            )}
+            ) : null}
 
             {/* Product Details Card */}
             <div className="mb-8 p-6 bg-card-earthy/20 rounded-lg">
@@ -37,15 +37,15 @@ export function ProductDetails({ features, dimensions, careInstructions }: Produ
                     {t('product.details')}
                 </h3>
                 <div className="grid grid-cols-2 gap-4 text-sm">
-                    {dimensions && (
+                    {dimensions ? (
                         <div>
                             <span className="block font-semibold text-text-earthy/70 mb-1">
                                 {t('product.dimensions')}
                             </span>
                             <span className="text-text-earthy">{dimensions}</span>
                         </div>
-                    )}
-                    {careInstructions.length > 0 && (
+                    ) : null}
+                    {careInstructions.length > 0 ? (
                         <div>
                             <span className="block font-semibold text-text-earthy/70 mb-1">
                                 {t('product.care')}
@@ -56,7 +56,7 @@ export function ProductDetails({ features, dimensions, careInstructions }: Produ
                                 ))}
                             </ul>
                         </div>
-                    )}
+                    ) : null}
                 </div>
             </div>
 

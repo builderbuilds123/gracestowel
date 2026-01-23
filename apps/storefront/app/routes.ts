@@ -28,6 +28,7 @@ export default [
     route("api/payment-collections/:id/sessions", "routes/api.payment-collections.$id.sessions.ts"),
     // Utility routes
     route("api/health", "routes/api.health.ts"),
+    route("api/set-guest-token", "routes/api.set-guest-token.ts"),
     route("blog/:id", "routes/blog.$id.tsx"),
     // SEO routes
     route("sitemap.xml", "routes/sitemap[.]xml.tsx"),

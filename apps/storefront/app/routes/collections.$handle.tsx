@@ -2,6 +2,7 @@ import { useParams, Link, useLoaderData } from "react-router";
 import { ProductCard } from "../components/ProductCard";
 import { getMedusaClient, getDefaultRegion } from "../lib/medusa";
 import { transformToListItems, type ProductListItem } from "../lib/product-transformer";
+import { createLogger } from "../lib/logger";
 import type { Route } from "./+types/collections.$handle";
 
 export async function loader({ params, context }: Route.LoaderArgs) {
@@ -9,18 +10,24 @@ export async function loader({ params, context }: Route.LoaderArgs) {
     if (!handle) throw new Response("Not Found", { status: 404 });
 
     const medusa = getMedusaClient(context);
-    const regionInfo = await getDefaultRegion(medusa);
+    
+    // OPTIMIZATION (Issue #19): Fetch region and products in parallel using Promise.all()
+    // Products can be fetched without region_id (Medusa uses default), then we use region for currency
+    const [regionInfo, productResponse] = await Promise.all([
+        getDefaultRegion(medusa),
+        medusa.store.product.list({
+            category_id: [handle], // Often handle matches category handle in my seed
+            // Don't wait for region_id - Medusa will use default region
+            // We'll use region info for currency display after both resolve
+            fields: "+variants.calculated_price,+variants.prices,+images"
+        })
+    ]);
+    
     const regionId = regionInfo?.region_id;
     const currencyCode = regionInfo?.currency_code || "cad";
+    const { products } = productResponse;
 
     try {
-        // Find category ID first if needed, or filter by category handle
-        // Medusa v2 store API allows filtering by category_id or handle
-        const { products } = await medusa.store.product.list({
-            category_id: [handle], // Often handle matches category handle in my seed
-            region_id: regionId,
-            fields: "+variants.calculated_price,+variants.prices,+images"
-        });
 
         // If no products found by ID, try searching categories by handle first
         let collectionProducts = products;

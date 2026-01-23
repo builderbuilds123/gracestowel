@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown } from "../../lib/icons";
 import { useParallax } from "./hooks";
 import { FloatingFibers } from "./FloatingFibers";
 

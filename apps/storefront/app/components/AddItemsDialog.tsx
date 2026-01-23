@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
-import { X, Loader2, Plus, Minus, ShoppingBag } from "lucide-react";
+import { X, Loader2, Plus, Minus, ShoppingBag } from "../lib/icons";
 import { medusaFetch } from "../lib/medusa-fetch";
+import { createLogger } from "../lib/logger";
 
 interface Product {
     id: string;
@@ -69,7 +70,8 @@ export function AddItemsDialog({ isOpen, onClose, onAdd, currencyCode, regionId 
                 setProducts(data.products || []);
             }
         } catch (err) {
-            console.error("Failed to fetch products:", err);
+            const logger = createLogger({ context: "AddItemsDialog" });
+            logger.error("Failed to fetch products", err instanceof Error ? err : new Error(String(err)));
         } finally {
             setIsLoadingProducts(false);
         }
@@ -166,11 +168,11 @@ export function AddItemsDialog({ isOpen, onClose, onAdd, currencyCode, regionId 
                     </button>
                 </div>
 
-                {error && (
+                {error ? (
                     <div className="mx-6 mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
                         {error}
                     </div>
-                )}
+                ) : null}
 
                 {/* Products Grid */}
                 <div className="flex-1 overflow-y-auto p-6">
@@ -234,7 +236,7 @@ export function AddItemsDialog({ isOpen, onClose, onAdd, currencyCode, regionId 
                 </div>
 
                 {/* Footer */}
-                {selectedItems.length > 0 && (
+                {selectedItems.length > 0 ? (
                     <div className="p-6 border-t border-gray-200 bg-gray-50">
                         <div className="flex items-center justify-between mb-4">
                             <span className="text-text-earthy">
@@ -259,7 +261,7 @@ export function AddItemsDialog({ isOpen, onClose, onAdd, currencyCode, regionId 
                             )}
                         </button>
                     </div>
-                )}
+                ) : null}
             </div>
         </div>
     );

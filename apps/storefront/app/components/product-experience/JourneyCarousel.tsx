@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "../../lib/icons";
 import { useInViewReveal } from "./hooks";
 
 interface JourneyStep {
@@ -213,11 +213,11 @@ export function JourneyCarousel({
                   >
                     {index + 1}
                   </span>
-                  {step.icon && (
+                  {step.icon ? (
                     <span className="text-3xl" role="img" aria-hidden="true">
                       {step.icon}
                     </span>
-                  )}
+                  ) : null}
                 </div>
 
                 {/* Step content */}

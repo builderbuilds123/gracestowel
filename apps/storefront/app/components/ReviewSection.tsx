@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Star, ThumbsUp, ChevronDown } from "lucide-react";
+import { Star, ThumbsUp, ChevronDown } from "../lib/icons";
 
 export interface Review {
     id: string;
@@ -69,9 +69,9 @@ function ReviewCard({ review }: { review: Review }) {
                 <div>
                     <div className="flex items-center gap-2 mb-1">
                         <StarRating rating={review.rating} />
-                        {review.verified_purchase && (
+                        {review.verified_purchase ? (
                             <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">Verified Purchase</span>
-                        )}
+                        ) : null}
                     </div>
                     <h4 className="font-medium text-text-earthy">{review.title}</h4>
                 </div>
@@ -109,7 +109,7 @@ export function ReviewSection({ reviews, stats, productId, onLoadMore, hasMore =
                     </div>
                 </div>
                 <div className="md:col-span-2">
-                    {reviews.length > 0 && onSortChange && (
+                    {reviews.length > 0 && onSortChange ? (
                         <div className="flex justify-end mb-4">
                             <div className="relative">
                                 <select value={currentSort} onChange={(e) => onSortChange(e.target.value)}
@@ -123,16 +123,16 @@ export function ReviewSection({ reviews, stats, productId, onLoadMore, hasMore =
                                 <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
                             </div>
                         </div>
-                    )}
+                    ) : null}
                     {reviews.length > 0 ? (
                         <div>
                             {reviews.map((review) => (<ReviewCard key={review.id} review={review} />))}
-                            {hasMore && (
+                            {hasMore ? (
                                 <button onClick={onLoadMore} disabled={isLoading}
                                     className="mt-6 w-full py-3 border border-accent-earthy text-accent-earthy rounded-lg hover:bg-accent-earthy hover:text-white transition-colors disabled:opacity-50">
                                     {isLoading ? "Loading..." : "Load More Reviews"}
                                 </button>
-                            )}
+                            ) : null}
                         </div>
                     ) : (
                         <div className="text-center py-12 bg-gray-50 rounded-lg">

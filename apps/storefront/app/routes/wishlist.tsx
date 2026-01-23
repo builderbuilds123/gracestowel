@@ -1,8 +1,9 @@
 import { Link } from "react-router";
-import { Heart, ShoppingBag, Trash2 } from "lucide-react";
+import { Heart, ShoppingBag, Trash2 } from "../lib/icons";
 import { useWishlist } from "../context/WishlistContext";
 import { useCart } from "../context/CartContext";
 import { useLocale } from "../context/LocaleContext";
+import { Image } from "../components/ui/Image";
 
 export default function WishlistPage() {
     const { items, removeItem, clearWishlist } = useWishlist();
@@ -82,9 +83,11 @@ export default function WishlistPage() {
                         <div key={item.id} className="bg-white rounded-lg border border-card-earthy/20 overflow-hidden group">
                             <Link to={`/products/${item.handle}`} className="block">
                                 <div className="relative aspect-square bg-card-earthy/10">
-                                    <img
+                                    <Image
                                         src={item.image}
                                         alt={item.title}
+                                        width={400}
+                                        height={400}
                                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                                     />
                                 </div>

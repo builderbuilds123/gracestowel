@@ -10,7 +10,7 @@
  */
 
 import { useState } from "react";
-import { Towel } from "@phosphor-icons/react";
+import { Towel } from "../lib/icons";
 import { useCart } from "../context/CartContext";
 import { useLocale } from "../context/LocaleContext";
 
@@ -86,7 +86,7 @@ export function ProductActions({ product, selectedVariant, selectedColor, onColo
     return (
         <>
             {/* Color Selector */}
-            {product.colors.length > 0 && (
+            {product.colors.length > 0 ? (
                 <div className="mb-8">
                     <span className="block text-sm font-medium text-text-earthy mb-3">
                         Color: <span className="text-text-earthy/60">{selectedColor}</span>
@@ -108,7 +108,7 @@ export function ProductActions({ product, selectedVariant, selectedColor, onColo
                         ))}
                     </div>
                 </div>
-            )}
+            ) : null}
 
             {/* Quantity and Add Button */}
             <div className="flex flex-col sm:flex-row gap-4 mb-10">

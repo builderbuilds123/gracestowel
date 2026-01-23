@@ -2,6 +2,14 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import { monitoredFetch } from "../utils/monitored-fetch";
 import type { CartWithPromotions } from "../types/promotion";
 import { useLocale } from "./LocaleContext";
+import { 
+  getCachedStorage, 
+  setCachedStorage, 
+  removeCachedStorage,
+  getCachedSessionStorage,
+  setCachedSessionStorage,
+  removeCachedSessionStorage
+} from "../lib/storage-cache";
 
 interface MedusaCartContextValue {
   cartId?: string;
@@ -16,11 +24,12 @@ interface MedusaCartContextValue {
 const MedusaCartContext = createContext<MedusaCartContextValue | undefined>(undefined);
 
 export function MedusaCartProvider({ children }: { children: React.ReactNode }) {
+  // Issue #32: Use cached storage for sessionStorage and localStorage
   const [cartId, setCartIdState] = useState<string | undefined>(() => {
     if (typeof window === "undefined") return undefined;
     return (
-      sessionStorage.getItem("medusa_cart_id") ||
-      localStorage.getItem("medusa_cart_id") ||
+      getCachedSessionStorage("medusa_cart_id") ||
+      getCachedStorage("medusa_cart_id") ||
       undefined
     );
   });
@@ -30,14 +39,15 @@ export function MedusaCartProvider({ children }: { children: React.ReactNode }) 
   const regionSyncInFlight = React.useRef<string | null>(null);
   const { regionId } = useLocale();
 
+  // Issue #32: Use cached storage for sessionStorage and localStorage
   const persistCartId = useCallback((nextId?: string) => {
     if (typeof window === "undefined") return;
     if (nextId) {
-      sessionStorage.setItem("medusa_cart_id", nextId);
-      localStorage.setItem("medusa_cart_id", nextId);
+      setCachedSessionStorage("medusa_cart_id", nextId);
+      setCachedStorage("medusa_cart_id", nextId);
     } else {
-      sessionStorage.removeItem("medusa_cart_id");
-      localStorage.removeItem("medusa_cart_id");
+      removeCachedSessionStorage("medusa_cart_id");
+      removeCachedStorage("medusa_cart_id");
     }
   }, []);
 

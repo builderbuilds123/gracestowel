@@ -18,6 +18,7 @@ import { WishlistProvider } from "./context/WishlistContext";
 import { CartDrawer } from "./components/CartDrawer";
 import { Header } from "./components/Header";
 import { Footer } from "./components/Footer";
+import { ErrorBoundary as ErrorBoundaryComponent } from "./components/ErrorBoundary";
 
 import { initPostHog, reportWebVitals, setupErrorTracking, captureException } from "./utils/posthog";
 import {
@@ -27,41 +28,88 @@ import {
   useFormTracking
 } from "./hooks";
 import posthog from "posthog-js";
+import { createLogger } from "./lib/logger";
+import { useEffect } from "react";
 import "./app.css";
 
-// Initialize PostHog on client-side only
-// Note: Must wait for window.ENV to be populated from loader
-if (typeof window !== 'undefined') {
-  // Wait for window.ENV to be set (injected by EnvScript component)
-  const initPostHogWhenReady = () => {
-    initPostHog();
-    reportWebVitals();
-    setupErrorTracking();
-    
-    // Verify initialization after a short delay
-    if (import.meta.env.MODE !== 'production') {
-      setTimeout(() => {
-        // @ts-expect-error - posthog might not be initialized
-        const ph = window.posthog;
-        if (ph && typeof ph.capture === 'function') {
-          console.log('[PostHog Init] ✅ Successfully initialized');
-          console.log('[PostHog Init] Distinct ID:', ph.get_distinct_id?.() || 'unknown');
-        } else {
-          console.error('[PostHog Init] ❌ PostHog NOT initialized - check API key');
-        }
-      }, 1000);
-    }
-  };
+/**
+ * PostHog Initializer Component (Issue #4 fix)
+ * 
+ * Moves PostHog initialization to useEffect to run after hydration.
+ * Uses requestIdleCallback to defer initialization until browser is idle,
+ * preventing blocking of critical rendering path.
+ */
+function PostHogInitializer() {
+  useEffect(() => {
+    // Defer to next tick to not block hydration
+    const initAnalytics = () => {
+      try {
+        initPostHog();
+        reportWebVitals();
+        setupErrorTracking();
+        
+        // Verification (only in dev, non-blocking)
+        if (import.meta.env.MODE !== 'production') {
+          // Use requestIdleCallback if available, fallback to setTimeout
+          const verifyInit = () => {
+            const logger = createLogger({ context: "PostHogInit" });
+            // @ts-expect-error - posthog might not be initialized
+            const ph = window.posthog;
+            if (ph && typeof ph.capture === 'function') {
+              logger.info('PostHog successfully initialized', {
+                distinctId: ph.get_distinct_id?.() || 'unknown'
+              });
+            } else {
+              logger.error('PostHog NOT initialized - check API key');
+            }
+          };
 
-  // If window.ENV is already set, initialize immediately
-  // Otherwise wait for DOMContentLoaded (when EnvScript runs)
-  if ((window as any).ENV) {
-    initPostHogWhenReady();
-  } else if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initPostHogWhenReady);
-  } else {
-    initPostHogWhenReady();
-  }
+          if ('requestIdleCallback' in window) {
+            requestIdleCallback(verifyInit, { timeout: 2000 });
+          } else {
+            setTimeout(verifyInit, 1000);
+          }
+        }
+      } catch (error) {
+        const logger = createLogger({ context: "PostHogInit" });
+        logger.error('Failed to initialize PostHog', error instanceof Error ? error : new Error(String(error)));
+      }
+    };
+
+    // Wait for window.ENV to be available
+    if ((window as any).ENV) {
+      // Use requestIdleCallback to defer after critical work
+      if ('requestIdleCallback' in window) {
+        requestIdleCallback(initAnalytics, { timeout: 3000 });
+      } else {
+        // Fallback: defer to next tick
+        setTimeout(initAnalytics, 0);
+      }
+    } else {
+      // Wait for EnvScript to inject window.ENV
+      const checkEnv = () => {
+        if ((window as any).ENV) {
+          if ('requestIdleCallback' in window) {
+            requestIdleCallback(initAnalytics, { timeout: 3000 });
+          } else {
+            setTimeout(initAnalytics, 0);
+          }
+        } else if (document.readyState === 'loading') {
+          // Only add listener if still loading
+          document.addEventListener('DOMContentLoaded', checkEnv, { once: true });
+        }
+      };
+      
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', checkEnv, { once: true });
+      } else {
+        // Already loaded, check immediately
+        checkEnv();
+      }
+    }
+  }, []); // Empty deps - only run once
+
+  return null; // This component renders nothing
 }
 
 /**
@@ -110,8 +158,15 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   try {
       const client = getMedusaClient({ cloudflare: { env } });
       await client.store.product.list({ limit: 1 });
-      console.log("✅ Medusa connection verified via loader");
+      // Note: Server-side logging - structured logger not available in loader
+      // This is acceptable as it's only in development
+      if (import.meta.env.MODE !== 'production') {
+        // eslint-disable-next-line no-console
+        console.log("✅ Medusa connection verified via loader");
+      }
   } catch (err) {
+      // Server-side error - structured logger not available in loader
+      // eslint-disable-next-line no-console
       console.error("❌ Failed to verify Medusa connection:", err);
   }
   
@@ -162,15 +217,24 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   <Links />
                 </head>
                 <body className="flex flex-col min-h-screen font-sans text-text-earthy bg-background-earthy antialiased selection:bg-accent-earthy/20">
-                  <Header />
-                  <main className="flex-grow">
-                    {children}
-                  </main>
-                  <Footer />
-                  <CartDrawer />
+                  <ErrorBoundaryComponent>
+                    <Header />
+                  </ErrorBoundaryComponent>
+                  <ErrorBoundaryComponent>
+                    <main className="flex-grow">
+                      {children}
+                    </main>
+                  </ErrorBoundaryComponent>
+                  <ErrorBoundaryComponent>
+                    <Footer />
+                  </ErrorBoundaryComponent>
+                  <ErrorBoundaryComponent>
+                    <CartDrawer />
+                  </ErrorBoundaryComponent>
 
                   <ScrollRestoration />
                   <EnvScript />
+                  <PostHogInitializer />
                   <Scripts />
                 </body>
               </html>
@@ -242,11 +306,11 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
     <main className="pt-16 p-4 container mx-auto">
       <h1>{message}</h1>
       <p>{details}</p>
-      {stack && (
+      {stack ? (
         <pre className="w-full p-4 overflow-x-auto">
           <code>{stack}</code>
         </pre>
-      )}
+      ) : null}
     </main>
   );
 }

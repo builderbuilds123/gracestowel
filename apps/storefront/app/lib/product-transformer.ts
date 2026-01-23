@@ -65,8 +65,15 @@ function parseMetadataArray(value: unknown): string[] {
                 return parsed.filter((v): v is string => typeof v === 'string');
             }
         } catch {
-            // Not JSON, treat as comma-separated string
-            return value.split(',').map(s => s.trim()).filter(Boolean);
+            // Not JSON, treat as comma-separated string (Issue #35: Combine iterations)
+            const parts: string[] = [];
+            for (const part of value.split(',')) {
+                const trimmed = part.trim();
+                if (trimmed) {
+                    parts.push(trimmed);
+                }
+            }
+            return parts;
         }
     }
     

@@ -4,11 +4,12 @@ import type { CloudflareEnv } from "../utils/monitored-fetch";
 import { useLoaderData, useRevalidator, useNavigate, useActionData, useSubmit } from "react-router";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { useState, useCallback, useEffect } from "react";
-import { CheckCircle2, MapPin, Package, Truck, AlertCircle } from "lucide-react";
+import { CheckCircle2, MapPin, Package, Truck, AlertCircle } from "../lib/icons";
 import { OrderTimer } from "../components/order/OrderTimer";
 import { OrderModificationDialogs } from "../components/order/OrderModificationDialogs";
 import { getGuestToken, setGuestToken, clearGuestToken } from "../utils/guest-session.server";
 import { medusaFetch } from "../lib/medusa-fetch";
+import { createLogger } from "../lib/logger";
 
 interface LoaderData {
     order: any;
@@ -340,8 +341,9 @@ export async function action({ params, request, context }: ActionFunctionArgs) {
 
         return data({ success: false, error: "Unknown intent" }, { status: 400 });
     } catch (error) {
-        // Structured logging - only log error message, not full object
-        console.error("Action error:", error instanceof Error ? error.message : "Unknown error");
+        // Issue #37: Use structured logging
+        const logger = createLogger({ context: "order-status-action" });
+        logger.error("Action error", error instanceof Error ? error : new Error(String(error)));
         return data({ success: false, error: "An unexpected error occurred" }, { status: 500 });
     }
 }
@@ -424,7 +426,7 @@ export default function OrderStatus() {
                     <p className="text-text-earthy/70">Order #{orderDetails.display_id}</p>
                 </div>
 
-                {isModificationActive && (
+                {isModificationActive ? (
                     <div className="bg-white rounded-lg shadow-lg p-4 mb-6 flex flex-col sm:flex-row items-center justify-between gap-4 border border-accent-earthy/20">
                          <div className="flex items-center gap-3">
                              <OrderTimer 
@@ -446,14 +448,14 @@ export default function OrderStatus() {
                             onOrderCanceled={() => navigate("/")}
                          />
                     </div>
-                )}
+                ) : null}
 
-                {!isModificationActive && (
+                {!isModificationActive ? (
                      <div className="bg-gray-100 rounded-lg p-4 mb-6 text-center text-text-earthy/60 flex items-center justify-center gap-2">
                          <CheckCircle2 className="w-5 h-5" />
                          <span>Order is being processed. Modifications are no longer available.</span>
                      </div>
-                )}
+                ) : null}
 
                 {/* Display Read-Only Order Details (Masked) */}
                 <div className="bg-white rounded-lg shadow-lg p-8 mb-6">

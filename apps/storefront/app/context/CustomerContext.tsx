@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { medusaFetch } from '../lib/medusa-fetch';
 import { monitoredFetch } from '../utils/monitored-fetch';
 import { createLogger } from '../lib/logger';
+import { getCachedStorage, setCachedStorage, removeCachedStorage } from '../lib/storage-cache';
 
 const logger = createLogger({ context: "CustomerContext" });
 
@@ -53,9 +54,9 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
     const [isLoading, setIsLoading] = useState(true);
     const [token, setToken] = useState<string | null>(null);
 
-    // Load token from localStorage on mount
+    // Load token from localStorage on mount (Issue #25: Use cached storage)
     useEffect(() => {
-        const savedToken = localStorage.getItem(TOKEN_KEY);
+        const savedToken = getCachedStorage(TOKEN_KEY); // Cached read
         if (savedToken) {
             setToken(savedToken);
         } else {
@@ -102,8 +103,8 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
                     });
                 }
             } else {
-                // Token is invalid, clear it
-                localStorage.removeItem(TOKEN_KEY);
+                // Token is invalid, clear it (Issue #25: Use cached storage)
+                removeCachedStorage(TOKEN_KEY);
                 setToken(null);
                 setCustomer(null);
             }
@@ -131,8 +132,8 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
 
             const { token: newToken } = (await authResponse.json()) as { token: string };
             
-            // Store token and update state
-            localStorage.setItem(TOKEN_KEY, newToken);
+            // Store token and update state (Issue #25: Use cached storage)
+            setCachedStorage(TOKEN_KEY, newToken);
             setToken(newToken);
 
             // Step 2: Transfer cart if guest cart exists
@@ -203,8 +204,8 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
                 return { success: false, error: error.message || 'Failed to create customer profile' };
             }
 
-            // Store token and update state
-            localStorage.setItem(TOKEN_KEY, regToken);
+            // Store token and update state (Issue #25: Use cached storage)
+            setCachedStorage(TOKEN_KEY, regToken);
             setToken(regToken);
 
             // Step 3: Transfer cart if guest cart exists
@@ -232,7 +233,7 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
     };
 
     const logout = async () => {
-        localStorage.removeItem(TOKEN_KEY);
+        removeCachedStorage(TOKEN_KEY); // Issue #25: Use cached storage
         setToken(null);
         setCustomer(null);
         
@@ -326,6 +327,7 @@ export function useCustomer() {
  */
 export function getAuthToken(): string | null {
     if (typeof window === 'undefined') return null;
-    return localStorage.getItem(TOKEN_KEY);
+    // Issue #25: Use cached storage
+    return getCachedStorage(TOKEN_KEY);
 }
 

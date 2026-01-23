@@ -6,7 +6,7 @@ import { EditAddressDialog } from "../EditAddressDialog";
 import { AddItemsDialog } from "../AddItemsDialog";
 import { EditItemsDialog } from "./EditItemsDialog";
 import { OrderEditPaymentDialog } from "./OrderEditPaymentDialog";
-import { Pencil, Plus, ShoppingBag } from "lucide-react";
+import { Pencil, Plus, ShoppingBag } from "../../lib/icons";
 
 interface Address {
     first_name: string;
@@ -187,22 +187,22 @@ export function OrderModificationDialogs({
     return (
         <>
             {/* Error Display - Story 6.4: Different styling for payment errors */}
-            {error && (
+            {error ? (
                 <div className={`mb-4 p-3 rounded-lg text-sm ${
                     isPaymentError 
                         ? 'bg-amber-50 border border-amber-200 text-amber-800'
                         : 'bg-red-50 border border-red-200 text-red-700'
                 }`}>
                     <p>{error}</p>
-                    {isPaymentError && (
+                    {isPaymentError ? (
                         <p className="mt-2 font-medium">
                             {isRetryable 
                                 ? "You can try again or use a different payment method."
                                 : "Please use a different card to continue."}
                         </p>
-                    )}
+                    ) : null}
                 </div>
-            )}
+            ) : null}
 
             {/* Buttons Row */}
             <div className="flex flex-wrap gap-2">
@@ -287,7 +287,7 @@ export function OrderModificationDialogs({
                 currencyCode={currencyCode}
             />
 
-            {pendingPayment && (
+            {pendingPayment ? (
                 <OrderEditPaymentDialog
                     isOpen={showPaymentDialog}
                     onClose={() => setShowPaymentDialog(false)}
@@ -298,7 +298,7 @@ export function OrderModificationDialogs({
                     amount={pendingPayment.amount}
                     currencyCode={currencyCode}
                 />
-            )}
+            ) : null}
         </>
     );
 }

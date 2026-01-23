@@ -4,11 +4,11 @@ import { Link } from "react-router";
 import { useState } from "react";
 import { useCart } from "../context/CartContext";
 import { useLocale } from "../context/LocaleContext";
-import { ArrowRight, Leaf, Heart, Sparkles, Star, Quote, Truck, RefreshCw, ShieldCheck } from "lucide-react";
-import { Towel } from "@phosphor-icons/react";
+import { ArrowRight, Leaf, Heart, Sparkles, Star, Quote, Truck, RefreshCw, ShieldCheck, Towel } from "../lib/icons";
 import { getMedusaClient, getDefaultRegion, type MedusaProduct } from "../lib/medusa";
 import { transformToDetail, type ProductDetail } from "../lib/product-transformer";
 import { Image as OptimizedImage } from "../components/ui/Image";
+import { createLogger } from "../lib/logger";
 
 export function meta({ }: Route.MetaArgs) {
   return [
@@ -57,16 +57,23 @@ const testimonials = [
 
 export async function loader({ context }: Route.LoaderArgs) {
   const medusa = getMedusaClient(context);
-  const regionInfo = await getDefaultRegion(medusa);
-  const regionId = regionInfo?.region_id;
-  const currencyCode = regionInfo?.currency_code || "cad";
 
   try {
-    const { products } = await medusa.store.product.list({
-      handle: ["the-nuzzle", "the-cradle", "the-bear-hug"],
-      region_id: regionId,
-      fields: "+variants.calculated_price,+variants.prices,+images"
-    });
+    // OPTIMIZATION: Fetch region and products in parallel using Promise.all()
+    // Products can be fetched without region_id (Medusa uses default), then we use region for currency
+    const [regionInfo, productResponse] = await Promise.all([
+      getDefaultRegion(medusa),
+      medusa.store.product.list({
+        handle: ["the-nuzzle", "the-cradle", "the-bear-hug"],
+        // Don't wait for region_id - Medusa will use default region
+        // We'll use region info for currency display after both resolve
+        fields: "+variants.calculated_price,+variants.prices,+images"
+      })
+    ]);
+
+    const regionId = regionInfo?.region_id;
+    const currencyCode = regionInfo?.currency_code || "cad";
+    const { products } = productResponse;
 
     // Sort products back into the order we want (Nuzzle, Cradle, Bear Hug)
     const featuredProducts = ["the-nuzzle", "the-cradle", "the-bear-hug"]
@@ -76,7 +83,7 @@ export async function loader({ context }: Route.LoaderArgs) {
           const detail = transformToDetail(p as MedusaProduct, currencyCode);
           return {
               ...detail,
-              description: p.handle === "the-nuzzle" 
+              description: p.handle === "the-nuzzle"
                 ? "Our signature washcloth. Gentle enough for a baby, durable enough for daily use."
                 : p.handle === "the-cradle"
                 ? "The perfect hand towel. Soft, absorbent, and ready to comfort your hands."
@@ -86,7 +93,8 @@ export async function loader({ context }: Route.LoaderArgs) {
 
     return { products: featuredProducts };
   } catch (error) {
-    console.error("Failed to fetch featured products for home page:", error);
+    const logger = createLogger({ context: "home-loader" });
+    logger.error("Failed to fetch featured products for home page", error instanceof Error ? error : new Error(String(error)));
     return { products: [] };
   }
 }

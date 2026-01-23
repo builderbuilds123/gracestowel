@@ -223,9 +223,10 @@ export function useCheckoutError(): UseCheckoutErrorResult {
 
   /**
    * Get errors as sorted array (most recent first).
+   * Issue #20: Use .toSorted() for immutability
    */
   const errorList = useMemo(() => 
-    (Array.from(errors.values()) as CheckoutError[]).sort((a, b) => b.timestamp - a.timestamp),
+    (Array.from(errors.values()) as CheckoutError[]).toSorted((a, b) => b.timestamp - a.timestamp),
     [errors]
   );
 
@@ -281,14 +282,14 @@ export function CheckoutErrorBanner({ error }: { error: CheckoutError }) {
         <span>{icon}</span>
         <div className="flex-1">
           <p className="font-medium" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(error.message) }} />
-          {error.action && (
+          {error.action ? (
             <button
               onClick={error.action.handler}
               className="text-sm underline mt-1 hover:no-underline"
             >
               {error.action.label}
             </button>
-          )}
+          ) : null}
         </div>
       </div>
     </div>

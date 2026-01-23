@@ -1,4 +1,4 @@
-import { Towel } from "@phosphor-icons/react";
+import { Towel } from "../lib/icons";
 import { Image as OptimizedImage } from "../components/ui/Image";
 
 export default function About() {
@@ -43,7 +43,7 @@ export default function About() {
                         <div className="space-y-6 md:col-start-2">
                             <div className="aspect-square bg-card-earthy/20 rounded-2xl overflow-hidden">
                                 <OptimizedImage
-                                    src="/hand-towel-cradle.jpg"
+                                    src="/cradle-cloud-white-01.jpg"
                                     alt="Sustainability"
                                     className="w-full h-full object-cover"
                                     width={800}

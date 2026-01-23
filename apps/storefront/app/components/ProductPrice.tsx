@@ -16,11 +16,11 @@ export function ProductPrice({ price, originalPrice, className = '' }: ProductPr
 
     return (
         <div className={`flex items-center gap-2 ${className}`}>
-            {hasDiscount && (
+            {hasDiscount ? (
                 <span className="text-text-earthy/40 line-through text-sm">
                     {typeof originalPrice === 'string' ? originalPrice : formatPrice(originalPrice)}
                 </span>
-            )}
+            ) : null}
             <span className={`font-medium ${isFree ? 'text-green-600' : 'text-accent-earthy'}`}>
                 {currentPrice}
             </span>

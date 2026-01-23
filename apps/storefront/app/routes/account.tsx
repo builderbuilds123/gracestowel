@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router';
 import { useCustomer, getAuthToken } from '../context/CustomerContext';
 import { medusaFetch } from '../lib/medusa-fetch';
 import { Package, MapPin, User, LogOut, ChevronRight } from 'lucide-react';
+import { createLogger } from '../lib/logger';
 
 export function meta() {
     return [
@@ -63,7 +64,8 @@ export default function AccountPage() {
                     setOrders(data.orders || []);
                 }
             } catch (error) {
-                console.error('Failed to fetch orders:', error);
+                const logger = createLogger({ context: "account-orders" });
+                logger.error("Failed to fetch orders", error instanceof Error ? error : new Error(String(error)));
             } finally {
                 setOrdersLoading(false);
             }
@@ -156,7 +158,7 @@ export default function AccountPage() {
             </div>
 
             {/* Orders Tab */}
-            {activeTab === 'orders' && (
+            {activeTab === 'orders' ? (
                 <div className="space-y-4">
                     {ordersLoading ? (
                         <div className="text-center py-12">
@@ -201,10 +203,10 @@ export default function AccountPage() {
                         ))
                     )}
                 </div>
-            )}
+            ) : null}
 
             {/* Addresses Tab */}
-            {activeTab === 'addresses' && (
+            {activeTab === 'addresses' ? (
                 <div className="bg-white rounded-2xl shadow-sm p-6">
                     {customer.addresses && customer.addresses.length > 0 ? (
                         <div className="grid gap-4 md:grid-cols-2">
@@ -221,11 +223,11 @@ export default function AccountPage() {
                                         {address.city}, {address.province} {address.postal_code}
                                     </p>
                                     <p className="text-text-earthy/70 text-sm">{address.country_code?.toUpperCase()}</p>
-                                    {address.is_default_shipping && (
+                                    {address.is_default_shipping ? (
                                         <span className="inline-block mt-2 px-2 py-1 bg-accent-earthy/10 text-accent-earthy text-xs rounded">
                                             Default Shipping
                                         </span>
-                                    )}
+                                    ) : null}
                                 </div>
                             ))}
                         </div>
@@ -237,10 +239,10 @@ export default function AccountPage() {
                         </div>
                     )}
                 </div>
-            )}
+            ) : null}
 
             {/* Profile Tab */}
-            {activeTab === 'profile' && (
+            {activeTab === 'profile' ? (
                 <div className="bg-white rounded-2xl shadow-sm p-6 max-w-lg">
                     <h3 className="text-lg font-medium text-text-earthy mb-4">Profile Information</h3>
                     <div className="space-y-4">
@@ -268,7 +270,7 @@ export default function AccountPage() {
                         </div>
                     </div>
                 </div>
-            )}
+            ) : null}
         </div>
     );
 }

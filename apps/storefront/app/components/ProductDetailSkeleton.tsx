@@ -1,8 +1,7 @@
 import { useCart } from "../context/CartContext";
 import { useLocale } from "../context/LocaleContext";
 import { Link } from "react-router";
-import { Star, Truck, ShieldCheck } from "lucide-react";
-import { Towel } from "@phosphor-icons/react";
+import { Star, Truck, ShieldCheck, Towel } from "../lib/icons";
 
 interface Product {
     id: number;

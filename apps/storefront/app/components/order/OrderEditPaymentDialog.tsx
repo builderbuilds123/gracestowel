@@ -1,6 +1,6 @@
 
 import { useEffect, useState } from "react";
-import { X, Loader2, ShieldCheck } from "lucide-react";
+import { X, Loader2, ShieldCheck } from "../../lib/icons";
 import {
     PaymentElement,
     useStripe,
@@ -73,11 +73,11 @@ function PaymentForm({ amount, currencyCode, onClose, orderId, token }: {
 
             <PaymentElement options={{ layout: "tabs" }} />
 
-            {error && (
+            {error ? (
                 <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
                     {error}
                 </div>
-            )}
+            ) : null}
 
             <div className="flex flex-col gap-3">
                 <button

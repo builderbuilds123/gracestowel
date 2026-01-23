@@ -17,15 +17,17 @@ const SURVEY_COOLDOWNS: Record<string, number> = {
  */
 const COOLDOWN_PREFIX = 'ph_survey_cooldown_';
 
+import { getCachedStorage, setCachedStorage } from '../lib/storage-cache';
+
 /**
- * Check if a survey is currently in cooldown period
+ * Check if a survey is currently in cooldown period (Issue #34: Use cached storage)
  */
 function isSurveyOnCooldown(surveyId: string): boolean {
   if (typeof window === 'undefined') return true;
 
   try {
     const key = `${COOLDOWN_PREFIX}${surveyId}`;
-    const lastShown = localStorage.getItem(key);
+    const lastShown = getCachedStorage(key); // Cached read
 
     if (!lastShown) return false;
 
@@ -39,14 +41,14 @@ function isSurveyOnCooldown(surveyId: string): boolean {
 }
 
 /**
- * Record that a survey was shown (starts cooldown)
+ * Record that a survey was shown (starts cooldown) (Issue #34: Use cached storage)
  */
 function recordSurveyShown(surveyId: string): void {
   if (typeof window === 'undefined') return;
 
   try {
     const key = `${COOLDOWN_PREFIX}${surveyId}`;
-    localStorage.setItem(key, Date.now().toString());
+    setCachedStorage(key, Date.now().toString()); // Cached write
   } catch {
     // Storage access failed - continue without recording
   }
@@ -232,11 +234,11 @@ export function usePostHogSurveys(): UsePostHogSurveysReturn {
     // Use feature-specific cooldown key
     const featureSpecificId = `${POSTHOG_SURVEY_IDS.BETA_FEEDBACK}_${featureName}`;
 
-    // Check feature-specific cooldown
+    // Check feature-specific cooldown (Issue #34: Use cached storage)
     if (typeof window !== 'undefined') {
       try {
         const key = `${COOLDOWN_PREFIX}${featureSpecificId}`;
-        const lastShown = localStorage.getItem(key);
+        const lastShown = getCachedStorage(key); // Cached read
 
         if (lastShown) {
           const cooldownMs = SURVEY_COOLDOWNS[POSTHOG_SURVEY_IDS.BETA_FEEDBACK];
@@ -247,7 +249,7 @@ export function usePostHogSurveys(): UsePostHogSurveysReturn {
         }
 
         // Record feature-specific cooldown
-        localStorage.setItem(key, Date.now().toString());
+        setCachedStorage(key, Date.now().toString()); // Cached write
       } catch {
         // Storage access failed - continue anyway
       }

@@ -13,47 +13,57 @@ test.describe("Backend API workflows (admin)", () => {
   }) => {
     const product = await productFactory.createProduct();
     test.skip(!product.id, "Product creation endpoint unavailable");
+    const originalTitle = product.title;
+    const originalStatus = product.status || "published";
 
-    const published = await apiRequest<{ product: { status: string } }>({
-      method: "POST",
-      url: `/admin/products/${product.id}`,
-      data: { status: "published", title: `${product.title} Updated` },
-    });
-    expect(published.product.status).toBe("published");
+    try {
+      const published = await apiRequest<{ product: { status: string } }>({
+        method: "POST",
+        url: `/admin/products/${product.id}`,
+        data: { status: "published", title: `${product.title} Updated` },
+      });
+      expect(published.product.status).toBe("published");
 
-    const unpublished = await apiRequest<{ product: { status: string } }>({
-      method: "POST",
-      url: `/admin/products/${product.id}`,
-      data: { status: "draft" },
-    });
-    expect(unpublished.product.status).toBe("draft");
+      const unpublished = await apiRequest<{ product: { status: string } }>({
+        method: "POST",
+        url: `/admin/products/${product.id}`,
+        data: { status: "draft" },
+      });
+      expect(unpublished.product.status).toBe("draft");
 
-    // Verify update (V2 style: update variant price via variant endpoint)
-    const variantId = product.variants?.[0]?.id || (product as any).variant_id;
-    const existingUsdPrice = product.variants?.[0]?.prices?.find((p: any) => p.currency_code === "usd");
-    
-    await apiRequest({
-      method: "POST",
-      url: `/admin/products/${product.id}/variants/${variantId}`,
-      data: {
-        prices: [
-          {
-            id: existingUsdPrice?.id,
-            amount: 1500,
-            currency_code: "usd",
-          },
-        ],
-      },
-    });
+      // Verify update (V2 style: update variant price via variant endpoint)
+      const variantId = product.variants?.[0]?.id || (product as any).variant_id;
+      const existingUsdPrice = product.variants?.[0]?.prices?.find((p: any) => p.currency_code === "usd");
+      
+      await apiRequest({
+        method: "POST",
+        url: `/admin/products/${product.id}/variants/${variantId}`,
+        data: {
+          prices: [
+            {
+              id: existingUsdPrice?.id,
+              amount: 1500,
+              currency_code: "usd",
+            },
+          ],
+        },
+      });
 
-    const updatedResponse = await apiRequest<{ product: Product }>({
-      method: "GET",
-      url: `/admin/products/${product.id}`,
-    });
+      const updatedResponse = await apiRequest<{ product: Product }>({
+        method: "GET",
+        url: `/admin/products/${product.id}`,
+      });
 
-    const updatedVariant = updatedResponse.product.variants?.[0];
-    const usdPrice = updatedVariant?.prices?.find((p: any) => p.currency_code === "usd");
-    expect(usdPrice?.amount).toBe(1500);
+      const updatedVariant = updatedResponse.product.variants?.[0];
+      const usdPrice = updatedVariant?.prices?.find((p: any) => p.currency_code === "usd");
+      expect(usdPrice?.amount).toBe(1500);
+    } finally {
+      await apiRequest({
+        method: "POST",
+        url: `/admin/products/${product.id}`,
+        data: { status: originalStatus, title: originalTitle },
+      });
+    }
   });
 
   test("customers issue tokens and manage addresses", async ({

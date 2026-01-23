@@ -5,7 +5,7 @@
  * Extracted from products.$handle.tsx for better component organization.
  */
 
-import { Star } from "lucide-react";
+import { Star } from "../lib/icons";
 import { WishlistButton } from "./WishlistButton";
 import { useLocale } from "../context/LocaleContext";
 import type { StockStatus } from "../lib/medusa";

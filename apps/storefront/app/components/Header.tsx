@@ -1,6 +1,5 @@
 import { Link, useLocation } from "react-router";
-import { Menu, User, Heart, X, Globe, DollarSign } from "lucide-react";
-import { Towel } from "@phosphor-icons/react";
+import { Menu, User, Heart, X, Globe, DollarSign, Towel } from "../lib/icons";
 import { useCart } from "../context/CartContext";
 import { useLocale } from "../context/LocaleContext";
 import { useCustomer } from "../context/CustomerContext";
@@ -213,7 +212,8 @@ export function Header() {
             }
         };
 
-        window.addEventListener('scroll', handleScroll);
+        // Issue #26: Add passive: true for smooth scrolling performance
+        window.addEventListener('scroll', handleScroll, { passive: true });
         return () => window.removeEventListener('scroll', handleScroll);
     }, []);
 
@@ -314,15 +314,15 @@ export function Header() {
                                 aria-label="Wishlist"
                             >
                                 <Heart className="w-5 h-5" />
-                                {wishlistCount > 0 && (
+                                {wishlistCount > 0 ? (
                                     <span className="absolute top-0 right-0 bg-red-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
                                         {wishlistCount}
                                     </span>
-                                )}
+                                ) : null}
                             </Link>
 
                             {/* Account Link */}
-                            {!authLoading && (
+                            {!authLoading ? (
                                 <Link
                                     to={isAuthenticated ? "/account" : "/account/login"}
                                     className={`hidden sm:flex p-2 hover:text-accent-earthy transition-colors relative ${showSolidHeader ? 'text-text-earthy' : 'text-white'}`}
@@ -330,11 +330,11 @@ export function Header() {
                                     aria-label={isAuthenticated ? "Account" : "Sign In"}
                                 >
                                     <User className="w-5 h-5" />
-                                    {isAuthenticated && (
+                                    {isAuthenticated ? (
                                         <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-green-500 rounded-full" />
-                                    )}
+                                    ) : null}
                                 </Link>
-                            )}
+                            ) : null}
 
                             {/* Cart Button - Always visible */}
                             <button

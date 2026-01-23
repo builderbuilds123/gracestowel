@@ -1,7 +1,7 @@
 import { useRef, useCallback, useReducer } from "react";
 import { createLogger } from "../lib/logger";
 import { monitoredFetch } from "../utils/monitored-fetch";
-import type { ShippingOption } from "../components/CheckoutForm";
+import type { ShippingOption } from "../types/checkout";
 
 interface ShippingPersistenceState {
   error: string | null;

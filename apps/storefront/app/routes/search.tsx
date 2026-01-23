@@ -2,8 +2,9 @@ import type { Route } from "./+types/search";
 import { ProductCard } from "../components/ProductCard";
 import { getMedusaClient, castToMedusaProduct, type MedusaProduct } from "../lib/medusa";
 import { getProductPrice } from "../lib/medusa";
-import { Search } from "lucide-react";
+import { Search } from "../lib/icons";
 import { useSearchParams, Form } from "react-router";
+import { createLogger } from "../lib/logger";
 
 export async function loader({ context, request }: Route.LoaderArgs) {
     const url = new URL(request.url);
@@ -13,45 +14,57 @@ export async function loader({ context, request }: Route.LoaderArgs) {
         return { products: [], query: "", count: 0 };
     }
 
-    let searchResults: MedusaProduct[] = [];
-
     try {
         const medusa = getMedusaClient(context);
-        const { products } = await medusa.store.product.list({ 
+        const { products: rawProducts } = await medusa.store.product.list({ 
             limit: 50, 
             fields: "+variants,+variants.prices,+variants.inventory_quantity,+options,+options.values,+images,+categories,+metadata" 
         });
 
-        // Filter products by search query (title, description, or handle)
+        // OPTIMIZATION (Issue #22): Combine filter and transform into single loop
         const searchLower = query.toLowerCase();
-        searchResults = products.map(castToMedusaProduct).filter((product: MedusaProduct) => {
-            return (
+        const products: Array<{
+            id: string;
+            handle: string;
+            title: string;
+            price: string;
+            image: string;
+            description: string;
+            variantId?: string;
+            sku?: string;
+        }> = [];
+
+        for (const rawProduct of rawProducts) {
+            const product = castToMedusaProduct(rawProduct);
+            
+            // Filter check
+            const matches = 
                 product.title.toLowerCase().includes(searchLower) ||
                 product.handle.toLowerCase().includes(searchLower) ||
-                (product.description?.toLowerCase().includes(searchLower) ?? false)
-            );
-        });
+                (product.description?.toLowerCase().includes(searchLower) ?? false);
+            
+            if (!matches) continue;
+            
+            // Transform during same iteration
+            const priceData = getProductPrice(product, "usd");
+            products.push({
+                id: product.id,
+                handle: product.handle,
+                title: product.title,
+                price: priceData?.formatted || "$0.00",
+                image: product.images?.[0]?.url || product.thumbnail || "/placeholder.jpg",
+                description: product.description || "",
+                variantId: product.variants?.[0]?.id,
+                sku: product.variants?.[0]?.sku || undefined,
+            });
+        }
+
+        return { products, query, count: products.length };
     } catch (error) {
-        console.error("Search failed:", error);
+        const logger = createLogger({ context: "search-loader" });
+        logger.error("Search failed", error instanceof Error ? error : new Error(String(error)));
         return { products: [], query, count: 0, error: "Search failed" };
     }
-
-    // Transform to ProductCard format
-    const products = searchResults.map((product: MedusaProduct) => {
-        const priceData = getProductPrice(product, "usd");
-        return {
-            id: product.id,
-            handle: product.handle,
-            title: product.title,
-            price: priceData?.formatted || "$0.00",
-            image: product.images?.[0]?.url || product.thumbnail || "/placeholder.jpg",
-            description: product.description || "",
-            variantId: product.variants?.[0]?.id,
-            sku: product.variants?.[0]?.sku || undefined,
-        };
-    });
-
-    return { products, query, count: products.length };
 }
 
 export default function SearchPage({ loaderData }: Route.ComponentProps) {
@@ -90,7 +103,7 @@ export default function SearchPage({ loaderData }: Route.ComponentProps) {
                 </div>
 
                 {/* Results */}
-                {query && (
+                {query ? (
                     <div className="mb-8">
                         <p className="text-text-earthy/80 text-center">
                             {count === 0 
@@ -99,7 +112,7 @@ export default function SearchPage({ loaderData }: Route.ComponentProps) {
                             }
                         </p>
                     </div>
-                )}
+                ) : null}
 
                 {/* Product Grid */}
                 {products.length > 0 ? (
