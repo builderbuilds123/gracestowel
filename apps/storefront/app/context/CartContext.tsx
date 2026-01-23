@@ -13,6 +13,39 @@ import { getCachedStorage, setCachedStorage } from '../lib/storage-cache';
 // Re-export CartItem for backwards compatibility
 export type { CartItem, EmbroideryData } from '../types/product';
 
+// Story 3.1: Active order expiry (24 hours default)
+const ACTIVE_ORDER_EXPIRY_MS = parseInt(
+  import.meta.env.ACTIVE_ORDER_EXPIRY_HOURS || "24",
+  10
+) * 60 * 60 * 1000;
+
+/**
+ * Story 3.1: Active Order Data Structure
+ * Represents a recently placed order that can be modified
+ */
+export interface ActiveOrderData {
+  orderId: string;
+  items: Array<{
+    id: string;
+    title: string;
+    quantity: number;
+    thumbnail?: string;
+    unit_price: number;
+  }>;
+  shippingAddress: {
+    first_name: string;
+    last_name: string;
+    address_1: string;
+    city: string;
+    postal_code: string;
+    country_code: string;
+  };
+  shippingMethodId: string;
+  email: string;
+  customerName: string;
+  createdAt: string;
+}
+
 interface CartContextType {
     items: CartItem[];
     isOpen: boolean;
@@ -26,6 +59,11 @@ interface CartContextType {
     medusaCart?: CartWithPromotions | null;
     isLoading: boolean;
     isSyncing: boolean;
+    // Story 3.1: Active order state for modification
+    activeOrder: ActiveOrderData | null;
+    isModifyingOrder: boolean;
+    setActiveOrder: (data: ActiveOrderData) => void;
+    clearActiveOrder: () => void;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -35,10 +73,33 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     const [isOpen, setIsOpen] = useState(false);
     const [isLoaded, setIsLoaded] = useState(false);
     const [isSyncing, setIsSyncing] = useState(false);
+    // Story 3.1: Active order state
+    const [activeOrder, setActiveOrderState] = useState<ActiveOrderData | null>(null);
     const cartCreateInFlight = React.useRef(false);
     const lastSyncRequestId = React.useRef(0);
     const { cartId, cart: medusaCart, setCartId, isLoading, refreshCart } = useMedusaCart();
     const { regionId } = useLocale();
+
+    // Story 3.1: Load active order from sessionStorage on mount
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        
+        const stored = sessionStorage.getItem("activeOrder");
+        if (stored) {
+            try {
+                const data: ActiveOrderData = JSON.parse(stored);
+                const age = Date.now() - new Date(data.createdAt).getTime();
+
+                if (age < ACTIVE_ORDER_EXPIRY_MS) {
+                    setActiveOrderState(data);
+                } else {
+                    sessionStorage.removeItem("activeOrder");
+                }
+            } catch {
+                sessionStorage.removeItem("activeOrder");
+            }
+        }
+    }, []);
 
     // Validate cart item integrity
     const validateCartItem = (item: any): boolean => {
@@ -75,6 +136,27 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
             }
         }
         setIsLoaded(true);
+    }, []);
+
+    // Story 3.1: Load active order from sessionStorage on mount
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        
+        const stored = sessionStorage.getItem("activeOrder");
+        if (stored) {
+            try {
+                const data: ActiveOrderData = JSON.parse(stored);
+                const age = Date.now() - new Date(data.createdAt).getTime();
+
+                if (age < ACTIVE_ORDER_EXPIRY_MS) {
+                    setActiveOrderState(data);
+                } else {
+                    sessionStorage.removeItem("activeOrder");
+                }
+            } catch {
+                sessionStorage.removeItem("activeOrder");
+            }
+        }
     }, []);
 
     // ✅ Debounced localStorage writes with caching (Issues #9 & #17 fix)
@@ -248,6 +330,25 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         setIsOpen(false);
     }, []);
 
+    // Story 3.1: Set active order (stores in sessionStorage)
+    const setActiveOrder = useCallback((data: ActiveOrderData) => {
+        if (typeof window !== 'undefined') {
+            sessionStorage.setItem("activeOrder", JSON.stringify(data));
+        }
+        setActiveOrderState(data);
+    }, []);
+
+    // Story 3.1: Clear active order (removes from sessionStorage)
+    const clearActiveOrder = useCallback(() => {
+        if (typeof window !== 'undefined') {
+            sessionStorage.removeItem("activeOrder");
+        }
+        setActiveOrderState(null);
+    }, []);
+
+    // Story 3.1: Computed flag for order modification mode
+    const isModifyingOrder = activeOrder !== null;
+
     // ✅ Optimized: Memoize the expensive calculation separately (Issue #8 fix)
     // Only recalculate when items actually change
     const localSubtotal = React.useMemo(
@@ -306,7 +407,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         cartTotal: displayCartTotal,
         medusaCart,
         isLoading,
-        isSyncing
+        isSyncing,
+        // Story 3.1: Active order state
+        activeOrder,
+        isModifyingOrder,
+        setActiveOrder,  // Stable function reference (useCallback)
+        clearActiveOrder, // Stable function reference (useCallback)
     }), [
         items,           // Primitive array - reference changes when items change
         isOpen,          // Primitive boolean
@@ -319,7 +425,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         displayCartTotal, // Memoized value
         medusaCart,      // Object - reference changes when cart updates
         isLoading,       // Primitive boolean
-        isSyncing        // Primitive boolean
+        isSyncing,       // Primitive boolean
+        activeOrder,     // Object - reference changes when order changes
+        isModifyingOrder, // Computed boolean
+        setActiveOrder,  // Stable function reference (useCallback)
+        clearActiveOrder, // Stable function reference (useCallback)
     ]);
 
     return (

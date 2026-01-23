@@ -17,9 +17,15 @@ import type { CustomerData } from "../CheckoutForm";
 
 interface CheckoutContentProps {
   orderPrefillData?: CustomerData;
+  editMode?: boolean;
+  orderId?: string;
 }
 
-export function CheckoutContent({ orderPrefillData }: CheckoutContentProps = {} as CheckoutContentProps) {
+export function CheckoutContent({ 
+  orderPrefillData, 
+  editMode = false,
+  orderId,
+}: CheckoutContentProps = {} as CheckoutContentProps) {
   const {
     state,
     actions,
@@ -193,6 +199,16 @@ export function CheckoutContent({ orderPrefillData }: CheckoutContentProps = {} 
           </div>
         ) : null}
 
+        {/* Story 3.3: Edit Mode Banner */}
+        {editMode && (
+          <div className="bg-blue-50 border border-blue-200 p-4 mb-6 rounded-lg">
+            <h2 className="font-medium text-blue-800">Editing Order</h2>
+            <p className="text-sm text-blue-700 mt-1">
+              Update your shipping details below. Contact and payment cannot be changed.
+            </p>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start">
           <div className="lg:col-span-7 space-y-8">
             {clientSecret && options ? (
@@ -214,6 +230,8 @@ export function CheckoutContent({ orderPrefillData }: CheckoutContentProps = {} 
                       onAddressChange={handleAddressChange}
                       onEmailChange={handleEmailChange}
                       customerData={customerDataMemo}
+                      editMode={editMode}
+                      orderId={orderId}
                     />
                   </Suspense>
                 </div>

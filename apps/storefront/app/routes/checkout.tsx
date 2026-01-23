@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useLoaderData } from "react-router";
+import { useLoaderData, redirect } from "react-router";
 import type { LoaderFunctionArgs } from "react-router";
 import { initStripe } from "../lib/stripe";
 import { CheckoutContent } from "../components/checkout/CheckoutContent";
@@ -11,6 +11,8 @@ import type { CloudflareEnv } from "../utils/monitored-fetch";
 
 interface LoaderData {
   stripePublishableKey: string;
+  editMode?: boolean;
+  orderId?: string;
   orderPrefillData?: {
     email?: string;
     firstName?: string;
@@ -24,9 +26,17 @@ interface LoaderData {
       postal_code?: string;
       country?: string;
     };
+    shippingMethodId?: string;
   };
 }
 
+/**
+ * Story 3.3: Checkout Edit Mode Loader
+ * 
+ * Supports:
+ * - Normal checkout (no orderId)
+ * - Edit mode (orderId query param) - requires auth and eligibility check
+ */
 export async function loader({
   request,
   context,
@@ -42,74 +52,116 @@ export async function loader({
     nodeEnv?.STRIPE_PUBLISHABLE_KEY ??
     nodeEnv?.VITE_STRIPE_PUBLISHABLE_KEY;
 
-  // Check for modification token - only prefill if token exists and is valid
-  const cookieHeader = request.headers.get("Cookie");
-  const orderIdCookie = cookieHeader?.split(";").find(c => c.trim().startsWith("checkout_order_id="));
-  const orderId = orderIdCookie ? decodeURIComponent(orderIdCookie.split("=", 2)[1] || "") : null;
+  // Story 3.3: Check for orderId in query params (edit mode)
+  const url = new URL(request.url);
+  const orderId = url.searchParams.get("orderId");
 
-  let orderPrefillData: LoaderData['orderPrefillData'] | undefined = undefined;
+  // Base loader data
+  const baseData: LoaderData = {
+    stripePublishableKey: stripeKey || "",
+    editMode: false,
+  };
 
-  if (orderId) {
-    // Check if we have a valid modification token
-    const { token } = await getGuestToken(request, orderId);
-    
-    if (token) {
-      // Token exists - fetch order data to prefill
-      try {
-        const env = context.cloudflare.env as unknown as CloudflareEnv;
-        const response = await medusaFetch(`/store/orders/${orderId}/guest-view`, {
-          method: "GET",
-          headers: {
-            "x-modification-token": token,
-          },
-          label: "checkout-order-prefill",
-          context,
-        });
-
-        if (response.ok) {
-          const orderData = await response.json() as { order: any };
-          const order = orderData.order;
-          
-          // Extract shipping address and email from order
-          const shippingAddress = order.shipping_address;
-          const email = order.email;
-          
-          if (shippingAddress && email) {
-            orderPrefillData = {
-              email: email,
-              firstName: shippingAddress.first_name,
-              lastName: shippingAddress.last_name,
-              phone: shippingAddress.phone,
-              address: {
-                line1: shippingAddress.address_1,
-                line2: shippingAddress.address_2,
-                city: shippingAddress.city,
-                state: shippingAddress.province,
-                postal_code: shippingAddress.postal_code,
-                country: shippingAddress.country_code?.toUpperCase(),
-              },
-            };
-          }
-        }
-        // If token is invalid/expired, silently fail - don't prefill
-      } catch (error) {
-        // Silently fail - don't prefill if there's an error
-      }
-    }
+  if (!orderId) {
+    return baseData;
   }
 
+  // Edit mode - fetch and verify order
+  const env = context.cloudflare.env as unknown as CloudflareEnv;
+  
+  // Build auth headers (customer session or guest token)
+  const authHeaders: HeadersInit = {};
+  
+  // Check for customer session (Authorization header from cookie)
+  const authHeader = request.headers.get("Authorization");
+  const customerToken = authHeader?.startsWith("Bearer ") 
+      ? authHeader.slice(7) 
+      : null;
+
+  // Check for guest token
+  const { token: guestToken } = await getGuestToken(request, orderId);
+
+  if (customerToken) {
+      authHeaders["Authorization"] = `Bearer ${customerToken}`;
+  } else if (guestToken) {
+      authHeaders["x-modification-token"] = guestToken;
+  } else {
+      // No auth - redirect to order status
+      return redirect(`/order/status/${orderId}?error=UNAUTHORIZED`);
+  }
+
+  // Fetch order
+  const orderResponse = await medusaFetch(`/store/orders/${orderId}`, {
+      method: "GET",
+      headers: authHeaders,
+      label: "checkout-order-fetch",
+      context,
+  });
+
+  if (!orderResponse.ok) {
+      if (orderResponse.status === 401 || orderResponse.status === 403) {
+          return redirect(`/order/status/${orderId}?error=UNAUTHORIZED`);
+      }
+      return redirect(`/order/status/${orderId}?error=ORDER_NOT_FOUND`);
+  }
+
+  const { order } = await orderResponse.json() as { order: any };
+
+  // Check eligibility
+  const eligibilityResponse = await medusaFetch(
+      `/store/orders/${orderId}/eligibility`,
+      {
+          method: "GET",
+          headers: authHeaders,
+          label: "checkout-eligibility-check",
+          context,
+      }
+  );
+
+  if (!eligibilityResponse.ok) {
+      return redirect(`/order/status/${orderId}?error=ELIGIBILITY_CHECK_FAILED`);
+  }
+
+  const { eligible, errorCode } = await eligibilityResponse.json() as { eligible: boolean; errorCode?: string };
+
+  if (!eligible) {
+      return redirect(`/order/status/${orderId}?error=${errorCode || "EDIT_NOT_ALLOWED"}`);
+  }
+
+  // Extract prefill data
+  const shippingAddress = order.shipping_address;
+  const shippingMethods = order.shipping_methods || [];
+  const shippingMethodId = shippingMethods[0]?.shipping_option_id;
+
   return {
-    stripePublishableKey: stripeKey || "",
-    orderPrefillData,
+      ...baseData,
+      editMode: true,
+      orderId,
+      orderPrefillData: {
+          email: order.email, // Display only
+          firstName: shippingAddress?.first_name,
+          lastName: shippingAddress?.last_name,
+          phone: shippingAddress?.phone,
+          address: shippingAddress ? {
+              line1: shippingAddress.address_1,
+              line2: shippingAddress.address_2,
+              city: shippingAddress.city,
+              state: shippingAddress.province,
+              postal_code: shippingAddress.postal_code,
+              country: shippingAddress.country_code?.toUpperCase(),
+          } : undefined,
+          shippingMethodId,
+      },
   };
 }
 
 export default function Checkout() {
-  const { stripePublishableKey, orderPrefillData } = useLoaderData<LoaderData>();
+  const { stripePublishableKey, orderPrefillData, editMode, orderId } = useLoaderData<LoaderData>();
 
   // Initialize Stripe once
   useEffect(() => {
-    if (stripePublishableKey) {
+    if (stripePublishableKey && !editMode) {
+      // Only initialize Stripe for new orders (not edit mode)
       initStripe(stripePublishableKey);
     }
     
@@ -120,11 +172,15 @@ export default function Checkout() {
         removeCachedSessionStorage('lastOrder');
       } catch (e) {}
     }
-  }, [stripePublishableKey]);
+  }, [stripePublishableKey, editMode]);
 
   return (
     <CheckoutProvider>
-      <CheckoutContent orderPrefillData={orderPrefillData} />
+      <CheckoutContent 
+        orderPrefillData={orderPrefillData} 
+        editMode={editMode}
+        orderId={orderId}
+      />
     </CheckoutProvider>
   );
 }
