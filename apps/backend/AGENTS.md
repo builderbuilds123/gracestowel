@@ -1,3 +1,9 @@
+---
+description: 
+globs: apps/backend/*
+alwaysApply: false
+---
+
 # Backend AGENTS.md — Medusa v2 Patterns
 
 <!-- Inherits from root AGENTS.md. This file contains backend-specific guidance. -->

@@ -1,3 +1,10 @@
+---
+description: 
+globs: apps/e2e/*
+alwaysApply: false
+---
+
+
 # E2E Tests AGENTS.md — Playwright
 
 <!-- Inherits from root AGENTS.md. This file contains E2E test-specific guidance. -->
