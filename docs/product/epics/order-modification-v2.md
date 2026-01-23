@@ -519,115 +519,77 @@ So that we leverage tested, maintained code instead of custom implementations.
 **Acceptance Criteria:**
 
 **Given** an order edit is initiated
-**When** changes are made (items, shipping method)
+**When** changes are made (items, shipping address, shipping method)
 **Then** the system should use Medusa v2 workflows:
-  - `beginOrderEditOrderWorkflow` - Start edit session
-  - `updateOrderWorkflow` - Update shipping address
-  - `updateOrderEditShippingMethodWorkflow` - Change shipping method (requires action_id from order edit session)
-  - `confirmOrderEditRequestWorkflow` - Apply changes
-**And** custom edit logic should be removed
+  - `beginOrderEditOrderWorkflow` - Start edit session (creates order_change with status "created")
+  - `updateOrderWorkflow` - Update shipping address directly (no order edit session needed)
+  - `createOrderEditShippingMethodWorkflow` - Create NEW shipping method in order edit (if no existing shipping method action)
+  - `updateOrderEditShippingMethodWorkflow` - Update EXISTING shipping method in order edit (requires action_id from order edit session)
+  - `requestOrderEditRequestWorkflow` - Request the order edit (changes status from "created" to "requested")
+  - `confirmOrderEditRequestWorkflow` - Apply changes (changes status from "requested" to "confirmed")
+**And** custom edit logic should be replaced with native workflows
+**And** existing `createOrderChangeWorkflow` usage should be replaced with `beginOrderEditOrderWorkflow`
 
 **File to Modify:** `apps/backend/src/services/guest-order-edit.ts`
 
-**Implementation:**
+**Verified Workflow Names (from Medusa v2 docs via MCP):**
+- ✅ `beginOrderEditOrderWorkflow` - Creates order edit request (status: "created")
+- ✅ `updateOrderWorkflow` - Updates order details including `shipping_address` field (no order edit session needed)
+- ✅ `createOrderEditShippingMethodWorkflow` - Creates a NEW shipping method in order edit (when adding shipping method)
+- ✅ `updateOrderEditShippingMethodWorkflow` - Updates EXISTING shipping method in order edit (requires `action_id` from existing shipping method action)
+- ✅ `requestOrderEditRequestWorkflow` - Requests the order edit (status: "created" → "requested")
+- ✅ `confirmOrderEditRequestWorkflow` - Confirms the order edit (status: "requested" → "confirmed")
 
-```typescript
-import {
-  beginOrderEditOrderWorkflow,
-  confirmOrderEditRequestWorkflow,
-  updateOrderEditShippingMethodWorkflow, // ⚠️ CORRECTED: Not createOrderEditShippingMethodWorkflow
-} from "@medusajs/medusa/core-flows";
-import { updateOrderWorkflow } from "@medusajs/medusa/core-flows";
-import { MedusaContainer } from "@medusajs/medusa";
+**Implementation Notes:**
 
-export class OrderEditService {
-  constructor(private container: MedusaContainer) {}
+1. **Begin Edit**: Replace `createOrderChangeWorkflow` with `beginOrderEditOrderWorkflow`
+   ```typescript
+   const { result } = await beginOrderEditOrderWorkflow(container).run({
+     input: {
+       order_id: orderId,
+       description: "Customer-initiated order edit",
+     },
+   });
+   ```
 
-  /**
-   * Start an order edit session
-   */
-  async beginEdit(orderId: string): Promise<{ order_change_id: string }> {
-    const { result } = await beginOrderEditOrderWorkflow(this.container).run({
-      input: {
-        order_id: orderId,
-        description: "Customer-initiated order edit",
-      },
-    });
-    return result;
-  }
+2. **Update Shipping Address**: Use `updateOrderWorkflow` directly (no order edit session needed)
+   ```typescript
+   const { result } = await updateOrderWorkflow(container).run({
+     input: {
+       id: orderId,
+       shipping_address: {
+         first_name: address.first_name,
+         last_name: address.last_name,
+         address_1: address.address_1,
+         address_2: address.address_2,
+         city: address.city,
+         province: address.province,
+         postal_code: address.postal_code,
+         country_code: address.country_code,
+         phone: address.phone,
+       },
+     },
+   });
+   ```
 
-  /**
-   * Update shipping address (direct update, no OrderChange needed)
-   */
-  async updateShippingAddress(
-    orderId: string,
-    address: {
-      first_name?: string;
-      last_name?: string;
-      address_1?: string;
-      address_2?: string;
-      city?: string;
-      province?: string;
-      postal_code?: string;
-      country_code?: string;
-      phone?: string;
-    }
-  ) {
-    const { result } = await updateOrderWorkflow(this.container).run({
-      input: {
-        id: orderId,
-        shipping_address: address,
-      },
-    });
-    return result;
-  }
+3. **Update Shipping Method**: 
+   - **If shipping method already exists in order edit**: Use `updateOrderEditShippingMethodWorkflow` with `action_id` from the existing shipping method's action
+   - **If creating new shipping method**: Use `createOrderEditShippingMethodWorkflow` (no action_id needed)
+   - Must have an active order edit session (from `beginOrderEditOrderWorkflow`)
+   - To determine which to use: Query the order edit's actions to check if a shipping method action exists
 
-  /**
-   * Update shipping method
-   */
-  async updateShippingMethod(orderId: string, shippingOptionId: string, actionId: string) {
-    // ⚠️ CORRECTED: updateOrderEditShippingMethodWorkflow requires action_id
-    // You must first begin the order edit to get the action_id, or retrieve existing order edit
-    const { result } = await updateOrderEditShippingMethodWorkflow(this.container).run({
-      input: {
-        order_id: orderId,
-        action_id: actionId, // Required - from order edit session
-        data: {
-          shipping_option_id: shippingOptionId,
-        },
-      },
-    });
-    return result;
-  }
+4. **Workflow Locking**: All workflows must acquire/release locks when used in nested workflows
 
-  /**
-   * Confirm and apply all pending changes
-   */
-  async confirmEdit(orderId: string) {
-    const { result } = await confirmOrderEditRequestWorkflow(this.container).run({
-      input: {
-        order_id: orderId,
-      },
-    });
-    return result;
-  }
-}
-```
-
-**📋 REVIEW NOTES:**
-- ✅ **Workflow Names Verified**: 
-  - ✅ `beginOrderEditOrderWorkflow` exists
-  - ✅ `updateOrderWorkflow` exists (for shipping address updates)
-  - ✅ `confirmOrderEditRequestWorkflow` exists
-  - ❌ **CORRECTION NEEDED**: `createOrderEditShippingMethodWorkflow` does NOT exist
-  - ✅ **CORRECT WORKFLOW**: `updateOrderEditShippingMethodWorkflow` (requires `action_id` parameter)
-- ⚠️ **Shipping Method Update**: The workflow requires an `action_id` from an existing order edit session. You must:
-  1. Call `beginOrderEditOrderWorkflow` first to create/edit session
-  2. Get the `action_id` from the order edit
-  3. Then call `updateOrderEditShippingMethodWorkflow` with that `action_id`
-- ✅ **Shipping Address Update**: `updateOrderWorkflow` can directly update shipping address without order edit session
-- ⚠️ **Workflow Locking**: Medusa docs note that if using these workflows in nested workflows, you must acquire/release locks
-- ✅ **Migration Strategy**: Moving from custom logic to Medusa native workflows is the right approach
+**📋 REVIEW NOTES (Updated via Medusa MCP):**
+- ✅ **Workflow Names Verified**: All workflow names confirmed correct via Medusa MCP documentation lookup
+- ✅ **Shipping Address**: `updateOrderWorkflow` accepts `shipping_address` field directly (no order edit session needed)
+- ✅ **Shipping Method - Two Workflows**:
+  - `createOrderEditShippingMethodWorkflow` - Creates NEW shipping method (used when adding shipping method to order edit)
+  - `updateOrderEditShippingMethodWorkflow` - Updates EXISTING shipping method (requires `action_id` from existing shipping method action)
+- ⚠️ **Order Edit Flow**: Must follow sequence: `beginOrderEditOrderWorkflow` → make changes → `requestOrderEditRequestWorkflow` → `confirmOrderEditRequestWorkflow`
+- ⚠️ **Current Implementation**: Uses `createOrderChangeWorkflow` which should be replaced with `beginOrderEditOrderWorkflow`
+- ✅ **Migration Strategy**: Replace low-level `createOrderChangeWorkflow` with higher-level `beginOrderEditOrderWorkflow` workflow
+- ⚠️ **Shipping Method Decision Logic**: Need to query order edit actions to determine if shipping method action exists before choosing create vs update workflow
 
 ---
 
@@ -1664,10 +1626,12 @@ JWT_SECRET=...
    - **Resolution**: Updated to **3 days** (259200000ms) as conservative window to accommodate shorter card network periods (e.g., Visa's 5-day window)
    - **Status**: ✅ All references updated throughout document
 
-2. **✅ FIXED: Incorrect Workflow Name**
-   - **Original Issue**: Story 1.5 referenced `createOrderEditShippingMethodWorkflow` which does not exist
-   - **Resolution**: Corrected to `updateOrderEditShippingMethodWorkflow` with proper `action_id` parameter usage
-   - **Status**: ✅ Code implementation and acceptance criteria updated
+2. **✅ VERIFIED: Shipping Method Workflows**
+   - **Original Issue**: Story 1.5 referenced `createOrderEditShippingMethodWorkflow` which was thought not to exist
+   - **Resolution**: Verified via Medusa MCP - BOTH workflows exist:
+     - `createOrderEditShippingMethodWorkflow` - Creates NEW shipping method in order edit
+     - `updateOrderEditShippingMethodWorkflow` - Updates EXISTING shipping method via `action_id`
+   - **Status**: ✅ Epic updated with correct workflow usage patterns
 
 3. **✅ FIXED: Incorrect Authentication Middleware Option**
    - **Original Issue**: Story 2.2 used `allowUnregistered: true` which doesn't exist
@@ -1696,10 +1660,10 @@ JWT_SECRET=...
 ### Recommendations
 
 1. **✅ COMPLETED: Authorization Window**: Updated to 3 days (259200000ms) as conservative window
-2. **✅ COMPLETED: Workflow Names**: Corrected to `updateOrderEditShippingMethodWorkflow` with proper usage
+2. **✅ COMPLETED: Workflow Names**: Verified via Medusa MCP - both `createOrderEditShippingMethodWorkflow` and `updateOrderEditShippingMethodWorkflow` exist and serve different purposes
 3. **✅ COMPLETED: Auth Middleware**: Corrected to `allowUnauthenticated: true`
 4. **⚠️ OPTIONAL: Payment Capture**: Consider using `capturePaymentWorkflow` instead of direct Stripe calls (current approach works but not following Medusa best practices)
-5. **✅ VERIFIED: Shipping Method Update**: Implementation includes proper order edit session flow (begin → get action_id → update)
+5. **✅ VERIFIED: Shipping Method Workflows**: Both create and update workflows exist - implementation needs logic to choose based on whether shipping method action already exists
 6. **📋 TODO: Testing**: Add integration tests for all corrected patterns before implementation
 
 ### Overall Assessment

@@ -792,13 +792,15 @@ export async function processPaymentCapture(job: Job<PaymentCaptureJobData>): Pr
                 throw new Error(`Amount to capture (${totalCents}) exceeds authorized amount (${authorizedAmount})`);
             }
 
+            // Story 1.2: Fix idempotency key - use orderId + paymentIntentId (not timestamp)
+            // This ensures identical keys across all capture paths (scheduled, fulfillment, fallback)
             const captured = await stripe.paymentIntents.capture(
                 paymentIntentId,
                 {
                     amount_to_capture: totalCents,
                 },
                 {
-                    idempotencyKey: `capture_${orderId}_${scheduledAt}`,
+                    idempotencyKey: `capture_${orderId}_${paymentIntentId}`,
                 }
             );
 

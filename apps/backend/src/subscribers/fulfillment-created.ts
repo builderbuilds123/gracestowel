@@ -7,6 +7,7 @@ import { Templates } from "../modules/resend/service"
 import { startEmailWorker } from "../workers/email-worker"
 import { sendAdminNotification, AdminNotificationType } from "../lib/admin-notifications"
 import { trackEvent } from "../utils/analytics"
+import { capturePayment } from "../services/stripe-capture"
 
 export default async function fulfillmentCreatedHandler({
   event: { data },
@@ -36,6 +37,9 @@ export default async function fulfillmentCreatedHandler({
         "order.id",
         "order.email",
         "order.shipping_address.*",
+        "order.payment_collections.id",
+        "order.payment_collections.payments.id",
+        "order.payment_collections.payments.data",
       ],
       filters: { id: data.id },
     })
@@ -44,6 +48,44 @@ export default async function fulfillmentCreatedHandler({
     if (!fulfillment) {
       logger.error(`[EMAIL][ERROR] Fulfillment ${data.id} not found for shipping confirmation`)
       return
+    }
+
+    // Story 1.3: Fulfillment-triggered capture
+    try {
+      const order = fulfillment.order
+      if (order?.id) {
+        const paymentIntentId = order.payment_collections?.[0]?.payments?.[0]?.data?.id as string | undefined
+
+        if (paymentIntentId) {
+          // Check if payment is still authorized (not already captured)
+          const payment = order.payment_collections?.[0]?.payments?.[0]
+          // Note: We check via Stripe API in the capture service, but we can skip if we know it's already captured
+          // For now, let the capture service handle all checks
+
+          logger.info(`[FULFILLMENT_CREATED] Triggering capture on fulfillment`, {
+            orderId: order.id,
+            paymentIntentId,
+            fulfillmentId: data.id,
+          })
+
+          await capturePayment(order.id, paymentIntentId, container)
+          logger.info(`[FULFILLMENT_CREATED] Payment capture triggered successfully`, {
+            orderId: order.id,
+            paymentIntentId,
+          })
+        } else {
+          logger.warn(`[FULFILLMENT_CREATED] No payment intent found for order ${order.id}`)
+        }
+      }
+    } catch (captureError: any) {
+      // Story 1.3 AC: Do NOT silently fail - log error and alert
+      logger.error(`[FULFILLMENT_CREATED] Capture failed`, {
+        fulfillmentId: data.id,
+        orderId: fulfillment.order?.id,
+        error: captureError?.message || String(captureError),
+      })
+      // Re-throw to ensure it's tracked/altered
+      throw captureError
     }
 
     if (fulfillment.order?.email) {

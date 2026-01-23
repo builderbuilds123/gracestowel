@@ -25,9 +25,18 @@ export interface TokenValidationResult {
 
 /**
  * Configuration for the modification token
- * Uses PAYMENT_CAPTURE_DELAY_MS from environment for consistent window duration
+ * Story 1.6: Token expiry = min(captureDelay, TOKEN_MAX_AGE)
+ * This ensures tokens don't remain valid for excessively long periods during testing
  */
-const MODIFICATION_WINDOW_SECONDS = Math.floor(PAYMENT_CAPTURE_DELAY_MS / 1000);
+const TOKEN_MAX_AGE_HOURS = parseInt(
+  process.env.MODIFICATION_TOKEN_MAX_AGE_HOURS || "168", // 7 days default
+  10
+);
+const TOKEN_MAX_AGE_MS = TOKEN_MAX_AGE_HOURS * 60 * 60 * 1000;
+
+// Token expiry = min(captureDelay, TOKEN_MAX_AGE)
+const TOKEN_EXPIRY_MS = Math.min(PAYMENT_CAPTURE_DELAY_MS, TOKEN_MAX_AGE_MS);
+const MODIFICATION_WINDOW_SECONDS = Math.floor(TOKEN_EXPIRY_MS / 1000);
 
 /**
  * ModificationTokenService

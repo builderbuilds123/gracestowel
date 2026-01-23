@@ -7,6 +7,7 @@ import {
 import { MedusaError } from "@medusajs/framework/utils";
 import { trackEvent } from "../utils/analytics";
 import { logger } from "../utils/logger";
+import { orderEditRateLimiter } from "../utils/rate-limiter";
 
 function normalizeCartCountryCodesMiddleware(
     req: MedusaRequest,
@@ -105,6 +106,11 @@ export default defineMiddlewares({
         {
             matcher: "/store/orders/:id*",
             middlewares: [moveTokenToHeaderMiddleware],
+        },
+        {
+            // Story 1.7: Rate limiting for order edit endpoints
+            matcher: /^\/store\/orders\/[^/]+\/(edit|cancel|address)$/,
+            middlewares: [orderEditRateLimiter],
         },
     ],
     errorHandler: errorHandlerMiddleware,

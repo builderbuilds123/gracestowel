@@ -1,9 +1,12 @@
 
 import { MedusaRequest } from "@medusajs/framework/http";
 import { 
-    createOrderChangeWorkflow,
+    beginOrderEditOrderWorkflow, // Story 1.5: Replace createOrderChangeWorkflow
     requestOrderEditRequestWorkflow,
     confirmOrderEditRequestWorkflow,
+    updateOrderWorkflow, // Story 1.5: For shipping address updates
+    createOrderEditShippingMethodWorkflow, // Story 1.5: Create new shipping method
+    updateOrderEditShippingMethodWorkflow, // Story 1.5: Update existing shipping method
     orderEditAddNewItemWorkflow,
     removeItemOrderEditActionWorkflow,
     orderEditUpdateItemQuantityWorkflow,
@@ -76,14 +79,14 @@ class GuestOrderEditService {
             return edit;
         }
 
-        // Create new Order Change (Edit)
+        // Story 1.5: Create new Order Edit using beginOrderEditOrderWorkflow
         try {
-            const { result } = await createOrderChangeWorkflow(container).run({
+            const { result } = await beginOrderEditOrderWorkflow(container).run({
                 input: {
                     order_id: orderId,
-                    change_type: "edit",
                     created_by: userId || "guest_user",
-                    description: "Guest Order Modification", 
+                    description: "Customer-initiated order edit",
+                    internal_note: "Guest Order Modification",
                 },
             });
             this.logAudit("order_edit_init", { orderId, userId, orderEditId: result.id, source: "created" });
@@ -130,6 +133,113 @@ class GuestOrderEditService {
         } catch (error) {
             const safeError = error instanceof Error ? error : new Error(String(error));
             this.logAudit("order_edit_remove_item", { orderId, userId, actionId }, safeError);
+            throw error;
+        }
+    }
+
+    /**
+     * Story 1.5: Update shipping address using updateOrderWorkflow
+     * This directly updates the order's shipping address without requiring an order edit session
+     */
+    async updateShippingAddress(
+        container: any,
+        orderId: string,
+        address: {
+            first_name?: string;
+            last_name?: string;
+            address_1?: string;
+            address_2?: string;
+            city?: string;
+            province?: string;
+            postal_code?: string;
+            country_code?: string;
+            phone?: string;
+        },
+        userId = "guest"
+    ) {
+        try {
+            const { result } = await updateOrderWorkflow(container).run({
+                input: {
+                    id: orderId,
+                    shipping_address: address,
+                },
+            });
+            this.logAudit("order_edit_update_shipping_address", { orderId, userId, address });
+            return result;
+        } catch (error) {
+            const safeError = error instanceof Error ? error : new Error(String(error));
+            this.logAudit("order_edit_update_shipping_address", { orderId, userId, address }, safeError);
+            throw error;
+        }
+    }
+
+    /**
+     * Story 1.5: Update shipping method in order edit
+     * Requires an active order edit session and action_id from the shipping method action
+     * 
+     * @param container - Medusa container
+     * @param orderId - The order ID
+     * @param shippingOptionId - The shipping option ID to use
+     * @param actionId - The action_id from the order edit's shipping method action (required for update)
+     * @param userId - User ID for audit logging
+     */
+    async updateShippingMethod(
+        container: any,
+        orderId: string,
+        shippingOptionId: string,
+        actionId: string,
+        userId = "guest"
+    ) {
+        try {
+            // Story 1.5: Use updateOrderEditShippingMethodWorkflow for existing shipping method
+            const { result } = await updateOrderEditShippingMethodWorkflow(container).run({
+                input: {
+                    order_id: orderId,
+                    action_id: actionId, // Required - from order edit session
+                    data: {
+                        shipping_option_id: shippingOptionId,
+                    },
+                },
+            });
+            this.logAudit("order_edit_update_shipping_method", { orderId, userId, shippingOptionId, actionId });
+            return result;
+        } catch (error) {
+            const safeError = error instanceof Error ? error : new Error(String(error));
+            this.logAudit("order_edit_update_shipping_method", { orderId, userId, shippingOptionId, actionId }, safeError);
+            throw error;
+        }
+    }
+
+    /**
+     * Story 1.5: Create new shipping method in order edit
+     * Use this when there's no existing shipping method action in the order edit
+     * 
+     * @param container - Medusa container
+     * @param orderId - The order ID
+     * @param shippingOptionId - The shipping option ID to create
+     * @param userId - User ID for audit logging
+     */
+    async createShippingMethod(
+        container: any,
+        orderId: string,
+        shippingOptionId: string,
+        userId = "guest"
+    ) {
+        try {
+            // Story 1.5: Use createOrderEditShippingMethodWorkflow for new shipping method
+            const { result } = await createOrderEditShippingMethodWorkflow(container).run({
+                input: {
+                    order_id: orderId,
+                    data: {
+                        shipping_option_id: shippingOptionId,
+                    },
+                },
+            });
+            this.logAudit("order_edit_create_shipping_method", { orderId, userId, shippingOptionId });
+            return result;
+        } catch (error) {
+            const safeError = error instanceof Error ? error : new Error(String(error));
+            this.logAudit("order_edit_create_shipping_method", { orderId, userId, shippingOptionId }, safeError);
             throw error;
         }
     }
