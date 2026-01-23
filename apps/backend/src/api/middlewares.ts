@@ -110,7 +110,8 @@ export default defineMiddlewares({
         },
         {
             // Story 1.7: Rate limiting for order edit endpoints
-            matcher: /^\/store\/orders\/[^/]+\/(edit|cancel|address)$/,
+            // Includes eligibility endpoint to prevent enumeration attacks
+            matcher: /^\/store\/orders\/[^/]+\/(edit|cancel|address|eligibility)$/,
             middlewares: [orderEditRateLimiter],
         },
         {
