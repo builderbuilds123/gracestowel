@@ -71,22 +71,40 @@ export async function apiRequest<T = unknown>({
     // This is less common but safe
   }
 
-  const response = await request.fetch(requestUrl.toString(), {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-      "x-publishable-api-key": process.env.MEDUSA_PUBLISHABLE_KEY || "",
-      ...(finalAuthToken ? { Authorization: `Bearer ${finalAuthToken}` } : {}),
-      ...headers,
-    },
-    data,
-  });
+  try {
+    const response = await request.fetch(requestUrl.toString(), {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        "x-publishable-api-key": process.env.MEDUSA_PUBLISHABLE_KEY || "",
+        ...(finalAuthToken ? { Authorization: `Bearer ${finalAuthToken}` } : {}),
+        ...headers,
+      },
+      data,
+    });
 
-  if (!response.ok()) {
-    const errorText = await response.text();
-    console.error(`API Error ${response.status()} at ${url}:`, errorText);
-    throw new ApiError(response.status(), response.statusText(), errorText);
+    if (!response.ok()) {
+      const errorText = await response.text();
+      console.error(`API Error ${response.status()} at ${url}:`, errorText);
+      throw new ApiError(response.status(), response.statusText(), errorText);
+    }
+
+    return response.json();
+  } catch (error: unknown) {
+    // Handle connection errors (backend not running)
+    if (error instanceof Error && (
+      error.message.includes('ECONNREFUSED') ||
+      error.message.includes('connect') ||
+      error.message.includes('fetch failed')
+    )) {
+      const connectionError = new Error(
+        `Backend API not available at ${baseUrl}. ` +
+        `Please ensure the backend is running (pnpm dev:backend) or set API_URL/BACKEND_URL in .env`
+      );
+      connectionError.name = 'ConnectionError';
+      throw connectionError;
+    }
+    // Re-throw other errors
+    throw error;
   }
-
-  return response.json();
 }

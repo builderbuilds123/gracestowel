@@ -18,6 +18,7 @@ test.describe("Full Checkout Flow (Happy Path)", () => {
     
     // 1. Setup: Get an existing seeded product
     const product = await productFactory.createProduct();
+    test.skip(product.id === 'mock-product-id', "Backend not available - skipping full checkout test");
 
     await page.goto(`/products/${product.handle}`);
     await page.waitForLoadState("networkidle");

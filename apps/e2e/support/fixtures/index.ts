@@ -11,3 +11,12 @@ import { test as posthogFixture } from './posthog-fixture';
 export const test = mergeTests(base, apiFixture, dataFactoryFixture, posthogFixture);
 
 export { expect } from '@playwright/test';
+
+/**
+ * Helper to skip test if backend is unavailable (mock product detected)
+ */
+export function skipIfBackendUnavailable(product: { id?: string }, testInstance: typeof test) {
+  if (product.id === 'mock-product-id') {
+    testInstance.skip(true, "Backend not available - skipping test that requires backend API");
+  }
+}

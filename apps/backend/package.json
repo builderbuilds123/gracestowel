@@ -47,6 +47,7 @@
     "@medusajs/types": "2.12.5",
     "@react-email/components": "^1.0.5",
     "bullmq": "^5.66.5",
+    "express-rate-limit": "^8.2.1",
     "fetch-event-stream": "^0.1.6",
     "happy-dom": "20.3.3",
     "ioredis": "^5.9.1",

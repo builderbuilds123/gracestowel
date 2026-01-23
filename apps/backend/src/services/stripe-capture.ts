@@ -10,8 +10,8 @@
  */
 
 import { MedusaContainer } from "@medusajs/medusa";
-import { schedulePaymentCapture } from "../lib/payment-capture-queue";
-import { cancelPaymentCaptureJob } from "../lib/payment-capture-queue";
+import { schedulePaymentCapture as defaultSchedulePaymentCapture } from "../lib/payment-capture-queue";
+import { cancelPaymentCaptureJob as defaultCancelPaymentCaptureJob } from "../lib/payment-capture-queue";
 import { logger } from "../utils/logger";
 
 /**
@@ -22,12 +22,21 @@ import { logger } from "../utils/logger";
  * @param orderId - The Medusa order ID
  * @param paymentIntentId - The Stripe PaymentIntent ID
  * @param container - Medusa container for accessing services
+ * @param options - Optional dependencies for testing
+ * @param options.schedulePaymentCapture - Optional schedule function (for testing)
+ * @param options.cancelPaymentCaptureJob - Optional cancel function (for testing)
  */
 export async function capturePayment(
   orderId: string,
   paymentIntentId: string,
-  container: MedusaContainer
+  container: MedusaContainer,
+  options?: {
+    schedulePaymentCapture?: typeof defaultSchedulePaymentCapture;
+    cancelPaymentCaptureJob?: typeof defaultCancelPaymentCaptureJob;
+  }
 ): Promise<void> {
+  const schedulePaymentCapture = options?.schedulePaymentCapture ?? defaultSchedulePaymentCapture;
+  const cancelPaymentCaptureJob = options?.cancelPaymentCaptureJob ?? defaultCancelPaymentCaptureJob;
   const idempotencyKey = `capture_${orderId}_${paymentIntentId}`;
 
   logger.info("stripe-capture", "Triggering immediate capture on fulfillment", {
@@ -37,10 +46,20 @@ export async function capturePayment(
   });
 
   // Story 1.3 AC1: Remove scheduled fallback job
-  const jobRemoved = await cancelPaymentCaptureJob(orderId);
-  logger.info("stripe-capture", `Fallback job ${jobRemoved ? "removed" : "not found"}`, {
-    orderId,
-  });
+  // Handle cancel failures gracefully - still attempt to schedule even if cancel fails
+  let jobRemoved = false;
+  try {
+    jobRemoved = await cancelPaymentCaptureJob(orderId);
+    logger.info("stripe-capture", `Fallback job ${jobRemoved ? "removed" : "not found"}`, {
+      orderId,
+    });
+  } catch (cancelError) {
+    // Log but don't fail - still attempt to schedule immediate capture
+    logger.warn("stripe-capture", "Failed to cancel fallback job, proceeding with immediate capture", {
+      orderId,
+      error: cancelError instanceof Error ? cancelError.message : String(cancelError),
+    });
+  }
 
   // Story 1.3 AC2: Schedule immediate capture (delay: 0)
   // This reuses all existing worker logic (Payment Module, order total fetching, etc.)

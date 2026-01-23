@@ -63,6 +63,7 @@ describe("PAYMENT_CAPTURE_DELAY_MS Configuration", () => {
             // The ModificationTokenService reads env at construction time
             // We can't reset modules, but we can verify the class exists and has expected behavior
             const { ModificationTokenService } = await import("../../src/services/modification-token");
+            const { PAYMENT_CAPTURE_DELAY_MS } = await import("../../src/lib/payment-capture-queue");
             const service = new ModificationTokenService();
 
             // Verify windowSeconds is a valid positive number
@@ -70,9 +71,19 @@ describe("PAYMENT_CAPTURE_DELAY_MS Configuration", () => {
             expect(windowSeconds).toBeTypeOf("number");
             expect(windowSeconds).toBeGreaterThan(0);
 
-            // Window should be at most 1 hour (3600 seconds) - the default
-            // or whatever is set in PAYMENT_CAPTURE_DELAY_MS / 1000
-            expect(windowSeconds).toBeLessThanOrEqual(3600);
+            // Window should be calculated from PAYMENT_CAPTURE_DELAY_MS (default is 3 days = 259200 seconds)
+            // It's min(PAYMENT_CAPTURE_DELAY_MS, TOKEN_MAX_AGE_MS) / 1000
+            // Default TOKEN_MAX_AGE is 7 days (604800 seconds), so window should be min(259200, 604800) = 259200
+            const TOKEN_MAX_AGE_HOURS = parseInt(
+                process.env.MODIFICATION_TOKEN_MAX_AGE_HOURS || "168", // 7 days default
+                10
+            );
+            const TOKEN_MAX_AGE_MS = TOKEN_MAX_AGE_HOURS * 60 * 60 * 1000;
+            const expectedWindowSeconds = Math.min(
+                Math.floor(PAYMENT_CAPTURE_DELAY_MS / 1000),
+                Math.floor(TOKEN_MAX_AGE_MS / 1000)
+            );
+            expect(windowSeconds).toBe(expectedWindowSeconds);
         });
 
         it("should generate and validate tokens correctly regardless of configured window", async () => {

@@ -38,27 +38,39 @@ module.exports = defineConfig({
   },
   modules: [
     {
-      resolve: "@medusajs/medusa/analytics",
+      resolve: "@medusajs/medusa/auth",
       options: {
-        providers: process.env.NODE_ENV === "production"
-          ? [
-              {
-                resolve: "@medusajs/analytics-posthog",
-                id: "posthog",
-                options: {
-                  posthogEventsKey: process.env.POSTHOG_EVENTS_API_KEY,
-                  posthogHost: process.env.POSTHOG_HOST,
-                },
-              },
-            ]
-          : [
-              {
-                resolve: "@medusajs/analytics-local",
-                id: "local",
-              },
-            ],
+        providers: [
+          {
+            resolve: "@medusajs/auth-emailpass",
+            id: "emailpass",
+          },
+        ],
       },
     },
+    // Temporarily disabled to debug auth issue
+    // {
+    //   resolve: "@medusajs/medusa/analytics",
+    //   options: {
+    //     providers: process.env.NODE_ENV === "production"
+    //       ? [
+    //           {
+    //             resolve: "@medusajs/analytics-posthog",
+    //             id: "posthog",
+    //             options: {
+    //               posthogEventsKey: process.env.POSTHOG_EVENTS_API_KEY,
+    //               posthogHost: process.env.POSTHOG_HOST,
+    //             },
+    //           },
+    //         ]
+    //       : [
+    //           {
+    //             resolve: "@medusajs/analytics-local",
+    //             id: "local",
+    //           },
+    //         ],
+    //   },
+    // },
     {
       // Event bus backed by Redis for durable cross-instance delivery (useful in dev/staging/prod)
       key: "eventBusService",

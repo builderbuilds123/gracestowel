@@ -101,6 +101,13 @@ export default defineMiddlewares({
             bodyParser: false,
         },
         {
+            // Admin routes require authentication
+            matcher: "/admin/*",
+            middlewares: [
+                authenticate("user", ["session", "bearer", "api-key"]),
+            ],
+        },
+        {
             matcher: "/store/carts*",
             middlewares: [normalizeCartCountryCodesMiddleware],
         },

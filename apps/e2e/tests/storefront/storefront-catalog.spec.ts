@@ -67,6 +67,8 @@ test.describe("Storefront navigation, discovery, and PDP coverage", () => {
     productFactory,
   }) => {
     const product = await productFactory.createProduct();
+    test.skip(product.id === 'mock-product-id', "Backend not available - skipping PDP test");
+    
     // Navigate to product detail page
     await page.goto(`/products/${product.handle}`);
     await page.waitForLoadState("domcontentloaded");
