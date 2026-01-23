@@ -12,9 +12,15 @@ import { medusaFetch } from "../lib/medusa-fetch";
 import { createLogger } from "../lib/logger";
 
 interface LoaderData {
-    order: any;
-    token: string;
-    modification_window: {
+    order?: any;
+    token?: string;
+    authMethod?: "customer_session" | "guest_token" | "none";
+    canEdit?: boolean;
+    needsAuth?: boolean;
+    orderId?: string;
+    error?: string;
+    message?: string;
+    modification_window?: {
         status: "active" | "expired";
         expires_at: string;
         server_time: string;
@@ -30,75 +36,115 @@ interface ErrorData {
     message: string;
 }
 
+/**
+ * Story 2.4: Detect auth method in order status loader
+ * 
+ * Priority:
+ * 1. Customer session (Authorization header from cookies)
+ * 2. Guest token (cookie or URL param)
+ * 3. Show login form if neither
+ */
 export async function loader({ params, request, context }: LoaderFunctionArgs) {
     const { id } = params;
     const env = context.cloudflare.env as unknown as CloudflareEnv;
     const medusaBackendUrl = env.MEDUSA_BACKEND_URL;
     const medusaPublishableKey = env.MEDUSA_PUBLISHABLE_KEY;
 
-    // Story 4-3: Cookie-first token retrieval
-    const { token, source } = await getGuestToken(request, id!);
+    // Check URL for token (from email link)
+    const url = new URL(request.url);
+    const urlToken = url.searchParams.get("token");
 
-    if (!token) {
-        // No token in cookie or URL
-        throw new Response("Missing Access Token", { status: 401 });
+    // Check for existing guest token in cookie
+    const { token: cookieToken, source } = await getGuestToken(request, id!);
+
+    // Determine auth method and build headers
+    // Note: Customer sessions are handled via cookies automatically by Medusa middleware
+    // We only need to explicitly set guest token header
+    let authHeaders: HeadersInit = {};
+    let authMethod: "customer_session" | "guest_token" | "none" = "none";
+
+    if (urlToken || cookieToken) {
+        // Guest token (Priority 2 - customer session takes precedence on backend)
+        const token = urlToken || cookieToken;
+        authHeaders["x-modification-token"] = token!;
+        authMethod = "guest_token";
     }
+    // If no guest token, backend will check for customer session cookie automatically
+    // If neither exists, backend will return 401
 
-    // Call backend with token in header (preferred method per Story 4-2)
-    const response = await medusaFetch(`/store/orders/${id}/guest-view`, {
+    // Fetch order with appropriate auth
+    const response = await medusaFetch(`/store/orders/${id}`, {
         method: "GET",
-        headers: {
-            "x-modification-token": token,
-        },
-        label: "order-guest-view",
+        headers: authHeaders,
+        label: "order-view",
         context,
     });
 
-    if (response.status === 401 || response.status === 403) {
-        // Token expired, invalid, or mismatched - clear cookie
-        const clearCookieHeader = await clearGuestToken(id!);
-        const errorResp = await response.json() as any;
-        
-        if (errorResp.code === "TOKEN_EXPIRED") {
-            // Return error data with Clear-Cookie header
-            return data(
-                { error: "TOKEN_EXPIRED", message: "This link has expired" } as ErrorData,
-                { 
-                    status: 403,
-                    headers: { "Set-Cookie": clearCookieHeader }
-                }
-            );
-        }
-        if (errorResp.code === "TOKEN_MISMATCH") {
-            throw new Response("Invalid Access Link", { 
-                status: 403,
-                headers: { "Set-Cookie": clearCookieHeader }
-            });
-        }
-        // TOKEN_INVALID or other 401/403 errors
-        throw new Response("Unauthorized", { 
-            status: 401,
-            headers: { "Set-Cookie": clearCookieHeader }
-        });
-    }
-
     if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+            // Clear guest token cookie on auth errors
+            if (authMethod === "guest_token") {
+                const clearCookieHeader = await clearGuestToken(id!);
+                return data(
+                    { 
+                        needsAuth: true, 
+                        orderId: id,
+                        error: "UNAUTHORIZED",
+                        message: "You do not have permission to view this order."
+                    } as LoaderData,
+                    { 
+                        status: 401,
+                        headers: { "Set-Cookie": clearCookieHeader }
+                    }
+                );
+            }
+            return data({ 
+                needsAuth: true, 
+                orderId: id,
+                error: "UNAUTHORIZED",
+                message: "You do not have permission to view this order."
+            } as LoaderData, { status: 401 });
+        }
         throw new Response("Order Not Found", { status: 404 });
     }
 
-    const responseData = await response.json() as { order: any; modification_window: any };
+    const responseData = await response.json() as { 
+        order: any; 
+        authMethod: string;
+        canEdit: boolean;
+        modification?: {
+            can_modify: boolean;
+            remaining_seconds: number;
+            expires_at: string;
+        };
+    };
 
     // Build response headers
     const responseHeaders: HeadersInit = {};
     
-    // Story 4-3: Set cookie if token came from URL (first visit via magic link)
-    if (source === 'url') {
-        responseHeaders["Set-Cookie"] = await setGuestToken(token, id!);
+    // Story 2.4: Set cookie if token came from URL (first visit via magic link)
+    if (authMethod === "guest_token" && source === 'url') {
+        const token = urlToken || cookieToken;
+        if (token) {
+            responseHeaders["Set-Cookie"] = await setGuestToken(token, id!);
+        }
     }
+
+    // Build modification window data (for guest tokens)
+    const modification_window = responseData.modification 
+        ? {
+            status: responseData.modification.can_modify ? "active" as const : "expired" as const,
+            expires_at: responseData.modification.expires_at,
+            server_time: new Date().toISOString(),
+            remaining_seconds: responseData.modification.remaining_seconds,
+        }
+        : undefined;
 
     return data({
         order: responseData.order,
-        modification_window: responseData.modification_window,
+        authMethod: responseData.authMethod,
+        canEdit: responseData.canEdit,
+        modification_window,
         env: {
             STRIPE_PUBLISHABLE_KEY: env.STRIPE_PUBLISHABLE_KEY
         }
@@ -353,7 +399,38 @@ export default function OrderStatus() {
     const revalidator = useRevalidator();
     const navigate = useNavigate();
     
-    // Handle Token Expired View
+    // Story 2.4: Handle needsAuth case (no authentication provided)
+    if ('needsAuth' in loaderData && loaderData.needsAuth) {
+        return (
+            <div className="min-h-screen bg-background-earthy flex items-center justify-center p-4">
+                <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8 text-center">
+                    <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <AlertCircle className="w-8 h-8 text-amber-600" />
+                    </div>
+                    <h1 className="text-2xl font-serif text-text-earthy mb-2">Access Required</h1>
+                    <p className="text-text-earthy/70 mb-6">
+                        {loaderData.message || "Please sign in or use the order link from your email to view this order."}
+                    </p>
+                    <div className="flex gap-4 justify-center">
+                        <button 
+                            onClick={() => navigate('/account/login')}
+                            className="bg-accent-earthy text-white px-6 py-2 rounded-lg hover:bg-accent-earthy/90"
+                        >
+                            Sign In
+                        </button>
+                        <button 
+                            onClick={() => navigate('/')}
+                            className="bg-gray-200 text-text-earthy px-6 py-2 rounded-lg hover:bg-gray-300"
+                        >
+                            Go Home
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+    
+    // Handle Token Expired View (legacy error format)
     if ('error' in loaderData) {
          return (
             <div className="min-h-screen bg-background-earthy flex items-center justify-center p-4">
@@ -376,10 +453,23 @@ export default function OrderStatus() {
          );
     }
     
-    const { order, modification_window } = loaderData as LoaderData;
+    // Story 2.4: Handle order data with new structure
+    const { order, modification_window, authMethod, canEdit } = loaderData as LoaderData;
+    
+    if (!order) {
+        return (
+            <div className="min-h-screen bg-background-earthy flex items-center justify-center p-4">
+                <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8 text-center">
+                    <AlertCircle className="w-16 h-16 text-red-600 mx-auto mb-4" />
+                    <h1 className="text-2xl font-serif text-text-earthy mb-2">Order Not Found</h1>
+                </div>
+            </div>
+        );
+    }
+    
     const [orderDetails, setOrderDetails] = useState(order);
     const [shippingAddress, setShippingAddress] = useState(order.shipping_address);
-    const isModificationActive = modification_window.status === "active";
+    const isModificationActive = modification_window?.status === "active" || canEdit === true;
     const submit = useSubmit();
     const actionData = useActionData<any>();
 
@@ -428,25 +518,40 @@ export default function OrderStatus() {
 
                 {isModificationActive ? (
                     <div className="bg-white rounded-lg shadow-lg p-4 mb-6 flex flex-col sm:flex-row items-center justify-between gap-4 border border-accent-earthy/20">
-                         <div className="flex items-center gap-3">
-                             <OrderTimer 
-                                expiresAt={modification_window.expires_at}
-                                serverTime={modification_window.server_time}
-                                onExpire={handleExpire}
-                             />
-                         </div>
+                         {modification_window && (
+                             <div className="flex items-center gap-3">
+                                 <OrderTimer 
+                                    expiresAt={modification_window.expires_at}
+                                    serverTime={modification_window.server_time}
+                                    onExpire={handleExpire}
+                                 />
+                             </div>
+                         )}
+                         {!modification_window && (
+                             <div className="flex items-center gap-3">
+                                 <p className="text-sm text-text-earthy">
+                                     You can modify this order until it ships.
+                                 </p>
+                             </div>
+                         )}
                          <OrderModificationDialogs 
                             orderId={orderDetails.id}
                             orderNumber={orderDetails.display_id}
                             currencyCode={orderDetails.currency_code}
                             items={orderDetails.items}
                             currentAddress={shippingAddress}
-                            token={loaderData.token}
+                            token={loaderData.token} // Optional - only for guest tokens
                             stripePublishableKey={loaderData.env?.STRIPE_PUBLISHABLE_KEY || ""}
                             onOrderUpdated={handleOrderUpdate}
                             onAddressUpdated={setShippingAddress}
                             onOrderCanceled={() => navigate("/")}
                          />
+                         {/* Story 2.4: Display auth method for debugging */}
+                         {process.env.NODE_ENV === 'development' && authMethod && (
+                             <div className="text-xs text-gray-500 mt-2">
+                                 Auth: {authMethod}
+                             </div>
+                         )}
                     </div>
                 ) : null}
 

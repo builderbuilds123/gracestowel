@@ -1,50 +1,29 @@
-import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
-import { modificationTokenService } from "../../../../services/modification-token";
+import { 
+    MedusaRequest, 
+    MedusaResponse,
+    AuthenticatedMedusaRequest,
+} from "@medusajs/framework/http";
+import { authenticateOrderAccess } from "../../../../utils/order-auth";
+import { logger } from "../../../../utils/logger";
+import { logOrderModificationAttempt } from "../../../../utils/audit-logger";
 
 /**
  * GET /store/orders/:id
  * 
- * Fetch order details with modification token validation.
- * Returns order information including remaining modification time.
+ * Story 2.2, 2.3: Fetch order details with dual authentication support
+ * 
+ * Supports:
+ * - Customer session (logged-in customers)
+ * - Guest token (via x-modification-token header)
  * 
  * Query Parameters:
- * - token: The modification JWT token (required)
+ * - token: The modification JWT token (optional if customer is logged in)
  */
 export async function GET(
-    req: MedusaRequest,
+    req: MedusaRequest | AuthenticatedMedusaRequest,
     res: MedusaResponse
 ): Promise<void> {
     const { id } = req.params;
-    const token = (req.query.token as string) || (req.headers["x-modification-token"] as string);
-
-    if (!token) {
-        res.status(400).json({
-            error: "Modification token is required",
-            code: "TOKEN_REQUIRED",
-        });
-        return;
-    }
-
-    // Validate the token
-    const validation = modificationTokenService.validateToken(token);
-
-    if (!validation.valid) {
-        res.status(401).json({
-            error: validation.error,
-            code: validation.expired ? "TOKEN_EXPIRED" : "TOKEN_INVALID",
-            expired: validation.expired,
-        });
-        return;
-    }
-
-    // Verify the token is for this order
-    if (validation.payload?.order_id !== id) {
-        res.status(403).json({
-            error: "Token does not match this order",
-            code: "TOKEN_MISMATCH",
-        });
-        return;
-    }
 
     try {
         // Fetch order from database
@@ -61,11 +40,14 @@ export async function GET(
                 "tax_total",
                 "shipping_total",
                 "created_at",
+                "customer_id",
                 "items.*",
                 "items.variant.*",
                 "items.variant.product.*",
                 "shipping_address.*",
                 "metadata",
+                "payment_collections.*",
+                "payment_collections.payments.*",
             ],
             filters: { id },
         });
@@ -79,8 +61,52 @@ export async function GET(
         }
 
         const order = orders[0];
-        const remainingTime = modificationTokenService.getRemainingTime(token);
-        const canModify = remainingTime > 0 && order.status !== "canceled";
+
+        // Story 2.3: Unified authentication
+        const authResult = await authenticateOrderAccess(req, order);
+
+        // Story 2.5: Audit logging
+        const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0] || 
+                   (req.headers["x-real-ip"] as string) || 
+                   req.ip || 
+                   "unknown";
+        const userAgent = req.headers["user-agent"] || "unknown";
+
+        logOrderModificationAttempt({
+            orderId: order.id,
+            action: "view",
+            authMethod: authResult.method,
+            customerId: authResult.customerId,
+            ip,
+            userAgent,
+            success: authResult.authenticated,
+            failureReason: authResult.authenticated ? undefined : "UNAUTHORIZED",
+        });
+
+        if (!authResult.authenticated) {
+            res.status(401).json({
+                error: "You do not have permission to view this order.",
+                code: "UNAUTHORIZED",
+            });
+            return;
+        }
+
+        // Calculate modification window (if guest token)
+        let remainingTime = 0;
+        let canModify = false;
+        
+        if (authResult.method === "guest_token") {
+            const token = req.headers["x-modification-token"] as string;
+            if (token) {
+                const { modificationTokenService } = await import("../../../../services/modification-token");
+                remainingTime = modificationTokenService.getRemainingTime(token);
+                canModify = remainingTime > 0 && order.status !== "canceled";
+            }
+        } else {
+            // For customer sessions, check eligibility via separate endpoint
+            // Frontend will call /store/orders/:id/eligibility separately
+            canModify = false; // Will be determined by eligibility check
+        }
 
         res.status(200).json({
             order: {
@@ -103,16 +129,17 @@ export async function GET(
                     metadata: item.metadata,
                 })),
                 shipping_address: order.shipping_address,
-                payment_intent_id: validation.payload?.payment_intent_id,
             },
-            modification: {
+            authMethod: authResult.method,
+            canEdit: canModify, // Frontend will call eligibility endpoint separately
+            modification: authResult.method === "guest_token" ? {
                 can_modify: canModify,
                 remaining_seconds: remainingTime,
                 expires_at: new Date(Date.now() + remainingTime * 1000).toISOString(),
-            },
+            } : undefined,
         });
     } catch (error) {
-        console.error("Error fetching order:", error);
+        logger.error("order-view", "Error fetching order", { orderId: id }, error as Error);
         res.status(500).json({
             error: "Failed to fetch order",
             code: "INTERNAL_ERROR",

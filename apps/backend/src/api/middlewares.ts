@@ -3,6 +3,7 @@ import {
     MedusaNextFunction,
     type MedusaRequest,
     type MedusaResponse,
+    authenticate,
 } from "@medusajs/framework/http";
 import { MedusaError } from "@medusajs/framework/utils";
 import { trackEvent } from "../utils/analytics";
@@ -111,6 +112,14 @@ export default defineMiddlewares({
             // Story 1.7: Rate limiting for order edit endpoints
             matcher: /^\/store\/orders\/[^/]+\/(edit|cancel|address)$/,
             middlewares: [orderEditRateLimiter],
+        },
+        {
+            // Story 2.2: Allow both authenticated customers and guests with tokens
+            // This allows customer sessions OR guest tokens (via x-modification-token header)
+            matcher: /^\/store\/orders\/[^/]+$/,
+            middlewares: [
+                authenticate("customer", ["session", "bearer"], { allowUnauthenticated: true }),
+            ],
         },
     ],
     errorHandler: errorHandlerMiddleware,
