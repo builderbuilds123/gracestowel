@@ -138,27 +138,6 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         setIsLoaded(true);
     }, []);
 
-    // Story 3.1: Load active order from sessionStorage on mount
-    useEffect(() => {
-        if (typeof window === 'undefined') return;
-        
-        const stored = sessionStorage.getItem("activeOrder");
-        if (stored) {
-            try {
-                const data: ActiveOrderData = JSON.parse(stored);
-                const age = Date.now() - new Date(data.createdAt).getTime();
-
-                if (age < ACTIVE_ORDER_EXPIRY_MS) {
-                    setActiveOrderState(data);
-                } else {
-                    sessionStorage.removeItem("activeOrder");
-                }
-            } catch {
-                sessionStorage.removeItem("activeOrder");
-            }
-        }
-    }, []);
-
     // ✅ Debounced localStorage writes with caching (Issues #9 & #17 fix)
     useEffect(() => {
         const timeoutId = setTimeout(() => {

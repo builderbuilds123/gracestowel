@@ -161,6 +161,7 @@ class GuestOrderEditService {
             const { result } = await updateOrderWorkflow(container).run({
                 input: {
                     id: orderId,
+                    user_id: userId,
                     shipping_address: address,
                 },
             });
@@ -174,46 +175,49 @@ class GuestOrderEditService {
     }
 
     /**
-     * Story 1.5: Update shipping method in order edit
-     * Requires an active order edit session and action_id from the shipping method action
-     * 
+     * Story 1.5: Update shipping method custom amount in order edit
+     * Note: updateOrderEditShippingMethodWorkflow only supports updating custom_amount,
+     * internal_note, and metadata - NOT the shipping_option_id.
+     * To change shipping option, use createShippingMethod instead.
+     *
      * @param container - Medusa container
      * @param orderId - The order ID
-     * @param shippingOptionId - The shipping option ID to use
-     * @param actionId - The action_id from the order edit's shipping method action (required for update)
+     * @param actionId - The action_id from the order edit's shipping method action
+     * @param customAmount - The custom amount to set (optional)
      * @param userId - User ID for audit logging
      */
-    async updateShippingMethod(
+    async updateShippingMethodAmount(
         container: any,
         orderId: string,
-        shippingOptionId: string,
         actionId: string,
+        customAmount?: number,
         userId = "guest"
     ) {
         try {
-            // Story 1.5: Use updateOrderEditShippingMethodWorkflow for existing shipping method
+            // Story 1.5: updateOrderEditShippingMethodWorkflow only updates amount/note/metadata
             const { result } = await updateOrderEditShippingMethodWorkflow(container).run({
                 input: {
                     order_id: orderId,
-                    action_id: actionId, // Required - from order edit session
+                    action_id: actionId,
                     data: {
-                        shipping_option_id: shippingOptionId,
+                        ...(customAmount !== undefined && { custom_amount: customAmount }),
                     },
                 },
             });
-            this.logAudit("order_edit_update_shipping_method", { orderId, userId, shippingOptionId, actionId });
+            this.logAudit("order_edit_update_shipping_method_amount", { orderId, userId, actionId, customAmount });
             return result;
         } catch (error) {
             const safeError = error instanceof Error ? error : new Error(String(error));
-            this.logAudit("order_edit_update_shipping_method", { orderId, userId, shippingOptionId, actionId }, safeError);
+            this.logAudit("order_edit_update_shipping_method_amount", { orderId, userId, actionId, customAmount }, safeError);
             throw error;
         }
     }
 
     /**
      * Story 1.5: Create new shipping method in order edit
-     * Use this when there's no existing shipping method action in the order edit
-     * 
+     * Use this to add a shipping method with a specific shipping option.
+     * Per Medusa docs, input requires order_id and shipping_option_id at top level.
+     *
      * @param container - Medusa container
      * @param orderId - The order ID
      * @param shippingOptionId - The shipping option ID to create
@@ -227,12 +231,11 @@ class GuestOrderEditService {
     ) {
         try {
             // Story 1.5: Use createOrderEditShippingMethodWorkflow for new shipping method
+            // Per Medusa docs: input requires order_id and shipping_option_id at top level
             const { result } = await createOrderEditShippingMethodWorkflow(container).run({
                 input: {
                     order_id: orderId,
-                    data: {
-                        shipping_option_id: shippingOptionId,
-                    },
+                    shipping_option_id: shippingOptionId,
                 },
             });
             this.logAudit("order_edit_create_shipping_method", { orderId, userId, shippingOptionId });
