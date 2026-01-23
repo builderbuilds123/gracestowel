@@ -5,11 +5,12 @@ import { useLoaderData, useRevalidator, useNavigate, useActionData, useSubmit } 
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { useState, useCallback, useEffect } from "react";
 import { CheckCircle2, MapPin, Package, Truck, AlertCircle } from "../lib/icons";
-import { OrderTimer } from "../components/order/OrderTimer";
+// Story 4.2: OrderTimer removed - replaced with simple status message
 import { OrderModificationDialogs } from "../components/order/OrderModificationDialogs";
 import { getGuestToken, setGuestToken, clearGuestToken } from "../utils/guest-session.server";
 import { medusaFetch } from "../lib/medusa-fetch";
 import { createLogger } from "../lib/logger";
+import { getErrorDisplay } from "../utils/error-messages";
 
 interface LoaderData {
     order?: any;
@@ -19,6 +20,7 @@ interface LoaderData {
     needsAuth?: boolean;
     orderId?: string;
     error?: string;
+    errorCode?: string; // Story 4.1: Error code for user-friendly display
     message?: string;
     modification_window?: {
         status: "active" | "expired";
@@ -50,9 +52,10 @@ export async function loader({ params, request, context }: LoaderFunctionArgs) {
     const medusaBackendUrl = env.MEDUSA_BACKEND_URL;
     const medusaPublishableKey = env.MEDUSA_PUBLISHABLE_KEY;
 
-    // Check URL for token (from email link)
+    // Check URL for token (from email link) and error codes
     const url = new URL(request.url);
     const urlToken = url.searchParams.get("token");
+    const errorCode = url.searchParams.get("error"); // Story 4.1: Error code from redirects
 
     // Check for existing guest token in cookie
     const { token: cookieToken, source } = await getGuestToken(request, id!);
@@ -82,6 +85,8 @@ export async function loader({ params, request, context }: LoaderFunctionArgs) {
 
     if (!response.ok) {
         if (response.status === 401 || response.status === 403) {
+            // Story 4.1: Use error messages utility
+            const errorDisplay = getErrorDisplay("UNAUTHORIZED");
             // Clear guest token cookie on auth errors
             if (authMethod === "guest_token") {
                 const clearCookieHeader = await clearGuestToken(id!);
@@ -90,7 +95,8 @@ export async function loader({ params, request, context }: LoaderFunctionArgs) {
                         needsAuth: true, 
                         orderId: id,
                         error: "UNAUTHORIZED",
-                        message: "You do not have permission to view this order."
+                        errorCode: "UNAUTHORIZED",
+                        message: errorDisplay.message,
                     } as LoaderData,
                     { 
                         status: 401,
@@ -102,7 +108,8 @@ export async function loader({ params, request, context }: LoaderFunctionArgs) {
                 needsAuth: true, 
                 orderId: id,
                 error: "UNAUTHORIZED",
-                message: "You do not have permission to view this order."
+                errorCode: "UNAUTHORIZED",
+                message: errorDisplay.message,
             } as LoaderData, { status: 401 });
         }
         throw new Response("Order Not Found", { status: 404 });
@@ -140,11 +147,15 @@ export async function loader({ params, request, context }: LoaderFunctionArgs) {
         }
         : undefined;
 
+    // Story 4.1: Check for error code in URL (from redirects)
+    const errorDisplay = errorCode ? getErrorDisplay(errorCode) : null;
+
     return data({
         order: responseData.order,
         authMethod: responseData.authMethod,
         canEdit: responseData.canEdit,
         modification_window,
+        errorCode: errorCode || undefined, // Story 4.1: Pass error code for display
         env: {
             STRIPE_PUBLISHABLE_KEY: env.STRIPE_PUBLISHABLE_KEY
         }
@@ -401,16 +412,20 @@ export default function OrderStatus() {
     
     // Story 2.4: Handle needsAuth case (no authentication provided)
     if ('needsAuth' in loaderData && loaderData.needsAuth) {
+        // Story 4.1: Use error messages utility for consistent display
+        const errorDisplay = getErrorDisplay(loaderData.errorCode || loaderData.error);
+        
         return (
             <div className="min-h-screen bg-background-earthy flex items-center justify-center p-4">
                 <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8 text-center">
                     <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
                         <AlertCircle className="w-8 h-8 text-amber-600" />
                     </div>
-                    <h1 className="text-2xl font-serif text-text-earthy mb-2">Access Required</h1>
-                    <p className="text-text-earthy/70 mb-6">
-                        {loaderData.message || "Please sign in or use the order link from your email to view this order."}
-                    </p>
+                    <h1 className="text-2xl font-serif text-text-earthy mb-2">{errorDisplay.title}</h1>
+                    <p className="text-text-earthy/70 mb-3">{errorDisplay.message}</p>
+                    {errorDisplay.action && (
+                        <p className="text-sm text-text-earthy/60 mb-6">{errorDisplay.action}</p>
+                    )}
                     <div className="flex gap-4 justify-center">
                         <button 
                             onClick={() => navigate('/account/login')}
@@ -432,16 +447,20 @@ export default function OrderStatus() {
     
     // Handle Token Expired View (legacy error format)
     if ('error' in loaderData) {
-         return (
+        // Story 4.1: Use error messages utility
+        const errorDisplay = getErrorDisplay(loaderData.error);
+        
+        return (
             <div className="min-h-screen bg-background-earthy flex items-center justify-center p-4">
                 <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8 text-center">
                     <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
                         <AlertCircle className="w-8 h-8 text-red-600" />
                     </div>
-                    <h1 className="text-2xl font-serif text-text-earthy mb-2">Link Expired</h1>
-                    <p className="text-text-earthy/70 mb-6">
-                        This modification link has expired for security reasons.
-                    </p>
+                    <h1 className="text-2xl font-serif text-text-earthy mb-2">{errorDisplay.title}</h1>
+                    <p className="text-text-earthy/70 mb-3">{errorDisplay.message}</p>
+                    {errorDisplay.action && (
+                        <p className="text-sm text-text-earthy/60 mb-6">{errorDisplay.action}</p>
+                    )}
                     <button 
                         onClick={() => window.location.reload()} // Placeholder for "Resend Link" flow
                         className="bg-accent-earthy text-white px-6 py-2 rounded-lg hover:bg-accent-earthy/90"
@@ -450,11 +469,14 @@ export default function OrderStatus() {
                     </button>
                 </div>
             </div>
-         );
+        );
     }
     
     // Story 2.4: Handle order data with new structure
-    const { order, modification_window, authMethod, canEdit } = loaderData as LoaderData;
+    const { order, modification_window, authMethod, canEdit, errorCode } = loaderData as LoaderData;
+    
+    // Story 4.1: Display error message if error code is present
+    const errorDisplay = errorCode ? getErrorDisplay(errorCode) : null;
     
     if (!order) {
         return (
@@ -500,10 +522,7 @@ export default function OrderStatus() {
         revalidator.revalidate();
     };
     
-    const handleExpire = useCallback(() => {
-        // When timer expires, force revalidation to update server state/UI
-        revalidator.revalidate();
-    }, [revalidator]);
+    // Story 4.2: Removed handleExpire callback - no longer needed without timer
 
     return (
         <div className="min-h-screen bg-background-earthy py-12 px-4">
@@ -516,24 +535,25 @@ export default function OrderStatus() {
                     <p className="text-text-earthy/70">Order #{orderDetails.display_id}</p>
                 </div>
 
+                {/* Story 4.1: Display user-friendly error message if error code is present */}
+                {errorDisplay && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-6 mb-6">
+                        <h2 className="text-lg font-medium text-red-800 mb-2">{errorDisplay.title}</h2>
+                        <p className="text-red-700 mb-3">{errorDisplay.message}</p>
+                        {errorDisplay.action && (
+                            <p className="text-sm text-red-600">{errorDisplay.action}</p>
+                        )}
+                    </div>
+                )}
+
                 {isModificationActive ? (
                     <div className="bg-white rounded-lg shadow-lg p-4 mb-6 flex flex-col sm:flex-row items-center justify-between gap-4 border border-accent-earthy/20">
-                         {modification_window && (
-                             <div className="flex items-center gap-3">
-                                 <OrderTimer 
-                                    expiresAt={modification_window.expires_at}
-                                    serverTime={modification_window.server_time}
-                                    onExpire={handleExpire}
-                                 />
-                             </div>
-                         )}
-                         {!modification_window && (
-                             <div className="flex items-center gap-3">
-                                 <p className="text-sm text-text-earthy">
-                                     You can modify this order until it ships.
-                                 </p>
-                             </div>
-                         )}
+                         {/* Story 4.2: Simple status message instead of countdown timer */}
+                         <div className="flex items-center gap-3">
+                             <p className="text-sm text-text-earthy">
+                                 You can modify this order until it ships.
+                             </p>
+                         </div>
                          <OrderModificationDialogs 
                             orderId={orderDetails.id}
                             orderNumber={orderDetails.display_id}
