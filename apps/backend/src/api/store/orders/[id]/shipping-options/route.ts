@@ -1,19 +1,27 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
+import { Modules } from "@medusajs/framework/utils";
+import { listShippingOptionsForCartWorkflow } from "@medusajs/medusa/core-flows";
 import { modificationTokenService } from "../../../../../services/modification-token";
 import { logger } from "../../../../../utils/logger";
 
 /**
  * GET /store/orders/:id/shipping-options
  *
- * Get available shipping options for an order's region.
- * Used when editing an order to allow changing the shipping method.
+ * Get available shipping options for an order using temporary cart approach.
+ * This ensures pricing matches the checkout flow (includes calculated prices,
+ * promotions, and pricing rules).
+ *
+ * Implementation:
+ * 1. Creates a temporary cart with order's region, address, and items
+ * 2. Uses listShippingOptionsForCartWorkflow for accurate pricing
+ * 3. Deletes the temporary cart in finally block (prevents abandoned cart metrics pollution)
  *
  * Headers:
  * - x-modification-token: JWT token from order creation (REQUIRED)
  * - x-publishable-api-key: Medusa publishable key (required)
  *
  * Returns:
- * - shipping_options: Array of available shipping options with prices
+ * - shipping_options: Array of available shipping options with calculated prices
  * - current_shipping_option_id: ID of the currently selected shipping option
  *
  * Error Codes:
@@ -23,6 +31,26 @@ import { logger } from "../../../../../utils/logger";
  * - 403 TOKEN_MISMATCH: Token order_id doesn't match route parameter
  * - 404 ORDER_NOT_FOUND: Order does not exist
  */
+
+interface OrderItem {
+    title: string;
+    unit_price: number;
+    quantity: number;
+    variant_id?: string;
+}
+
+interface ShippingAddress {
+    first_name?: string;
+    last_name?: string;
+    address_1?: string;
+    address_2?: string;
+    city?: string;
+    province?: string;
+    postal_code?: string;
+    country_code?: string;
+    phone?: string;
+}
+
 export async function GET(
     req: MedusaRequest,
     res: MedusaResponse
@@ -62,16 +90,21 @@ export async function GET(
         return;
     }
 
+    let tempCartId: string | null = null;
+
     try {
-        // Fetch order with region and shipping methods
+        // Fetch order with region, shipping methods, items, and address
         const query = req.scope.resolve("query");
         const { data: orders } = await query.graph({
             entity: "order",
             fields: [
                 "id",
                 "region_id",
+                "currency_code",
+                "shipping_address.*",
                 "shipping_methods.*",
                 "shipping_methods.shipping_option.*",
+                "items.*",
             ],
             filters: { id },
         });
@@ -85,7 +118,17 @@ export async function GET(
         }
 
         const order = orders[0];
-        const regionId = order.region_id;
+        const regionId = order.region_id as string | null;
+        const currencyCode = (order.currency_code as string | null) || "usd";
+
+        // Validate region exists (required for shipping options)
+        if (!regionId) {
+            res.status(400).json({
+                code: "NO_REGION",
+                message: "Order does not have a region assigned",
+            });
+            return;
+        }
 
         // Get the current shipping option ID
         const currentShippingMethod = order.shipping_methods?.[0] as {
@@ -94,44 +137,78 @@ export async function GET(
         } | undefined;
         const currentShippingOptionId = currentShippingMethod?.shipping_option_id || null;
 
-        // Fetch shipping options for the region using fulfillment module
-        const fulfillmentModuleService = req.scope.resolve("fulfillment");
+        // Create temporary cart for accurate shipping option pricing
+        // This ensures we get the same calculated_price values as checkout
+        const cartModuleService = req.scope.resolve(Modules.CART);
 
-        // List shipping options for the region
-        const shippingOptions = await fulfillmentModuleService.listShippingOptions({
-            context: {
-                is_return: false,
-                enabled_in_store: true,
-            },
-        }, {
-            relations: ["service_zone", "service_zone.geo_zones", "prices"],
-        });
-
-        // Filter shipping options that serve this region
-        // Shipping options are linked to service zones which have geo zones
-        const filteredOptions = shippingOptions.filter((option: any) => {
-            // Skip return options
-            if (option.service_zone?.fulfillment_set?.type === "return") {
-                return false;
-            }
-
-            // Check if any geo zone matches the region
-            const geoZones = option.service_zone?.geo_zones || [];
-            return geoZones.some((gz: any) => {
-                // Geo zones can be country-level or more specific
-                // For now, we just check if the option is available
-                return true; // Simplified - in production, match against order's country
-            });
-        });
-
-        // Format response - get price from prices array for flat rate options
-        const formattedOptions = filteredOptions.map((opt: any) => ({
-            id: opt.id,
-            name: opt.name,
-            amount: opt.prices?.[0]?.amount || 0,
-            price_type: opt.price_type,
-            provider_id: opt.provider_id,
+        // Prepare cart items from order items
+        const orderItems = (order.items || []) as OrderItem[];
+        const cartItems = orderItems.map((item) => ({
+            title: item.title,
+            unit_price: item.unit_price,
+            quantity: item.quantity,
+            variant_id: item.variant_id,
         }));
+
+        // Prepare shipping address
+        const orderAddress = order.shipping_address as ShippingAddress | undefined;
+        const shippingAddress = orderAddress ? {
+            first_name: orderAddress.first_name || "",
+            last_name: orderAddress.last_name || "",
+            address_1: orderAddress.address_1 || "",
+            address_2: orderAddress.address_2,
+            city: orderAddress.city || "",
+            province: orderAddress.province,
+            postal_code: orderAddress.postal_code || "",
+            country_code: orderAddress.country_code || "us",
+            phone: orderAddress.phone,
+        } : undefined;
+
+        // Create temporary cart
+        const tempCart = await cartModuleService.createCarts({
+            currency_code: currencyCode,
+            region_id: regionId,
+            items: cartItems,
+            shipping_address: shippingAddress,
+            // Mark as temporary for debugging/audit purposes
+            metadata: {
+                _temp_for_order_edit: true,
+                _source_order_id: id,
+            },
+        });
+
+        tempCartId = tempCart.id;
+
+        logger.info("order-shipping-options", "Created temporary cart for shipping options", {
+            orderId: id,
+            tempCartId,
+            itemCount: cartItems.length,
+        });
+
+        // Use the workflow to get shipping options with proper pricing
+        const { result: shippingOptions } = await listShippingOptionsForCartWorkflow(req.scope)
+            .run({
+                input: {
+                    cart_id: tempCartId,
+                },
+            });
+
+        // Format response - use calculated_price for accurate pricing
+        const formattedOptions = (shippingOptions || [])
+            .filter((opt: any) => !opt.is_return)
+            .map((opt: any) => {
+                // Use calculated_price for tiered/rule-based pricing (matches checkout flow)
+                const calculatedPrice = opt.calculated_price;
+                const amount = calculatedPrice?.calculated_amount ?? opt.amount ?? 0;
+
+                return {
+                    id: opt.id,
+                    name: opt.name,
+                    amount,
+                    price_type: opt.price_type,
+                    provider_id: opt.provider_id,
+                };
+            });
 
         logger.info("order-shipping-options", "Fetched shipping options for order", {
             orderId: id,
@@ -149,12 +226,32 @@ export async function GET(
         logger.error(
             "order-shipping-options",
             "Error fetching shipping options",
-            { orderId: id },
+            { orderId: id, tempCartId },
             error instanceof Error ? error : new Error(String(error))
         );
         res.status(500).json({
             code: "FETCH_FAILED",
             message: "Failed to fetch shipping options",
         });
+    } finally {
+        // CRITICAL: Always delete the temporary cart to prevent abandoned cart metrics pollution
+        if (tempCartId) {
+            try {
+                const cartModuleService = req.scope.resolve(Modules.CART);
+                await cartModuleService.deleteCarts([tempCartId]);
+                logger.info("order-shipping-options", "Deleted temporary cart", {
+                    tempCartId,
+                    orderId: id,
+                });
+            } catch (deleteError) {
+                // Log but don't fail the request - the response has already been sent
+                logger.error(
+                    "order-shipping-options",
+                    "Failed to delete temporary cart (manual cleanup may be needed)",
+                    { tempCartId, orderId: id },
+                    deleteError instanceof Error ? deleteError : new Error(String(deleteError))
+                );
+            }
+        }
     }
 }
