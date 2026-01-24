@@ -106,8 +106,22 @@ export async function loader({ params, request, context }: LoaderFunctionArgs) {
     const urlToken = url.searchParams.get("token");
 
     // Get token from cookie or URL
-    const { token: cookieToken, source } = await getGuestToken(request, id!);
-    const token = urlToken || cookieToken;
+    // Check multiple cookie sources:
+    // 1. guest_order_{orderId} cookie (path=/order) - set for order status page
+    // 2. checkout_mod_token cookie (path=/) - set for checkout success page
+    const { token: guestCookieToken, source } = await getGuestToken(request, id!);
+
+    // Also check checkout_mod_token cookie (set by checkout success page)
+    let checkoutModToken: string | null = null;
+    const cookieHeader = request.headers.get("Cookie");
+    if (cookieHeader) {
+        const modTokenCookie = cookieHeader.split(";").find(c => c.trim().startsWith("checkout_mod_token="));
+        if (modTokenCookie) {
+            checkoutModToken = decodeURIComponent(modTokenCookie.split("=", 2)[1] || "");
+        }
+    }
+
+    const token = urlToken || guestCookieToken || checkoutModToken;
 
     if (!token) {
         // No auth - redirect to order status with error
@@ -186,9 +200,11 @@ export async function loader({ params, request, context }: LoaderFunctionArgs) {
         responseHeaders["Set-Cookie"] = csrfCookie;
     }
 
-    // Set guest token cookie if token came from URL (first visit via magic link)
-    if (source === "url" && urlToken) {
-        const guestCookie = await setGuestToken(urlToken, id!);
+    // Set guest token cookie if token came from URL or checkout_mod_token
+    // This ensures the guest_order_{orderId} cookie is set for future requests to /order/* routes
+    const tokenFromUrlOrCheckout = urlToken || (checkoutModToken && !guestCookieToken);
+    if (tokenFromUrlOrCheckout && token) {
+        const guestCookie = await setGuestToken(token, id!);
         // Combine cookies if both CSRF and guest token need to be set
         if (responseHeaders["Set-Cookie"]) {
             // Headers with same key need to be combined
@@ -228,7 +244,20 @@ export async function action({ params, request, context }: ActionFunctionArgs) {
     }
 
     // Get token from HttpOnly cookie
-    const { token } = await getGuestToken(request, id!);
+    // Check multiple cookie sources (same as loader)
+    const { token: guestCookieToken } = await getGuestToken(request, id!);
+
+    // Also check checkout_mod_token cookie
+    let checkoutModToken: string | null = null;
+    const cookieHeader = request.headers.get("Cookie");
+    if (cookieHeader) {
+        const modTokenCookie = cookieHeader.split(";").find(c => c.trim().startsWith("checkout_mod_token="));
+        if (modTokenCookie) {
+            checkoutModToken = decodeURIComponent(modTokenCookie.split("=", 2)[1] || "");
+        }
+    }
+
+    const token = guestCookieToken || checkoutModToken;
 
     if (!token) {
         return data({ success: false, error: "Session expired", errorCode: "TOKEN_EXPIRED" } as ActionData, { status: 401 });
