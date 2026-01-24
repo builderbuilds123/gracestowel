@@ -1,11 +1,8 @@
 import { useEffect, useLayoutEffect, useState, lazy, Suspense, useRef } from "react";
 import { Link, useLoaderData, redirect, data } from "react-router";
-import type { LoaderFunctionArgs, ActionFunctionArgs, MetaFunction } from "react-router";
-import { CheckCircle2, Package, Truck, MapPin, XCircle, AlertTriangle } from "../lib/icons";
+import type { LoaderFunctionArgs, MetaFunction } from "react-router";
+import { CheckCircle2, Package, Truck, MapPin, XCircle } from "../lib/icons";
 import { CancelOrderDialog } from "../components/CancelOrderDialog";
-import { resolveCSRFSecret, validateCSRFToken } from "../utils/csrf.server";
-import type { CloudflareEnv } from "../utils/monitored-fetch";
-import { getGuestToken, clearGuestToken } from "../utils/guest-session.server";
 import { useCart } from "../context/CartContext";
 import { useMedusaCart } from "../context/MedusaCartContext";
 import { posts } from "../data/blogPosts";
@@ -136,94 +133,6 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
 }
 
 /**
- * Action function to handle order modifications from checkout success page
- * Similar to order_.status.$id.tsx but gets orderId from form data instead of route params
- */
-export async function action({ request, context }: ActionFunctionArgs) {
-    const env = context.cloudflare.env as unknown as CloudflareEnv;
-    const medusaBackendUrl = env.MEDUSA_BACKEND_URL;
-    const medusaPublishableKey = env.MEDUSA_PUBLISHABLE_KEY;
-
-    // CSRF Check
-    const jwtSecret = resolveCSRFSecret(env.JWT_SECRET);
-    if (!jwtSecret) {
-        return data({ error: "Server configuration error" }, { status: 500 });
-    }
-    const isValidCSRF = await validateCSRFToken(request, jwtSecret);
-    if (!isValidCSRF) {
-        return data({ error: "Invalid CSRF token" }, { status: 403 });
-    }
-
-    // Get orderId from cookie (set when order is fetched on checkout success page)
-    const cookieHeader = request.headers.get("Cookie");
-    const orderIdCookie = cookieHeader?.split(";").find(c => c.trim().startsWith("checkout_order_id="));
-    const orderId = orderIdCookie ? decodeURIComponent(orderIdCookie.split("=", 2)[1] || "") : null;
-
-    if (!orderId) {
-        return data({ success: false, error: "Order ID is required" }, { status: 400 });
-    }
-
-    // Get token from cookie - try checkout-specific cookie first, then fall back to guest token
-    let token: string | null = null;
-
-    // Try checkout_mod_token cookie (set by set-guest-token API for checkout success page)
-    const modTokenCookie = cookieHeader?.split(";").find(c => c.trim().startsWith("checkout_mod_token="));
-    if (modTokenCookie) {
-        token = decodeURIComponent(modTokenCookie.split("=", 2)[1] || "");
-    }
-
-    // Fall back to guest_order cookie if checkout_mod_token not found
-    if (!token) {
-        const guestResult = await getGuestToken(request, orderId);
-        token = guestResult.token;
-    }
-
-    if (!token) {
-        return data({ success: false, error: "Session expired" }, { status: 401 });
-    }
-
-    const formData = await request.formData();
-    const intent = formData.get("intent") as string;
-    const headers = {
-        "Content-Type": "application/json",
-        "x-modification-token": token,
-    };
-
-    try {
-        if (intent === "CANCEL_ORDER") {
-            const reason = formData.get("reason") as string || "Customer requested cancellation";
-            
-            const response = await medusaFetch(`/store/orders/${orderId}/cancel`, {
-                method: "POST",
-                headers,
-                body: JSON.stringify({ reason }),
-                label: "order-cancel",
-                context,
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json() as { message?: string; code?: string };
-                if (response.status === 401 || response.status === 403) {
-                    return data(
-                        { success: false, error: errorData.message || "Authorization failed" },
-                        { status: response.status, headers: { "Set-Cookie": await clearGuestToken(orderId) } }
-                    );
-                }
-                return data({ success: false, error: errorData.message || "Failed to cancel order", errorCode: errorData.code }, { status: response.status === 409 ? 409 : 400 });
-            }
-
-            return data({ success: true, action: "canceled" });
-        }
-
-        return data({ success: false, error: "Unknown intent" }, { status: 400 });
-    } catch (error) {
-        const logger = createLogger({ context: "checkout-success-action" });
-        logger.error("Action error", error instanceof Error ? error : new Error(String(error)));
-        return data({ success: false, error: "An unexpected error occurred" }, { status: 500 });
-    }
-}
-
-/**
  * SEC-04: Referrer Policy Meta Tag
  * 
  * Prevents payment_intent_client_secret from leaking via Referer header
@@ -235,7 +144,7 @@ export const meta: MetaFunction = () => [
 
 export default function CheckoutSuccess() {
     const { stripePublishableKey, medusaBackendUrl, medusaPublishableKey, initialParams } = useLoaderData<LoaderData>();
-    const { items, cartTotal, setPostCheckoutMode } = useCart();
+    const { items, cartTotal, clearCart } = useCart();
     const { cartId, setCartId, setCart: setMedusaCart } = useMedusaCart();
     const [paymentStatus, setPaymentStatus] = useState<'loading' | 'success' | 'error' | 'canceled'>('loading');
 
@@ -305,12 +214,10 @@ export default function CheckoutSuccess() {
                     if (restoredOrderId) {
                         setOrderId(restoredOrderId);
                         setModificationWindowActive(true);
-                        // Set post-checkout mode to preserve cart for 24h edit window
-                        setPostCheckoutMode(restoredOrderId);
                     }
 
-                    // NOTE: Do NOT clearCart() here - cart items should be preserved for order editing
-                    // The post-checkout mode allows users to edit their order within 24 hours
+                    // Clear the cart after successful checkout
+                    clearCart();
 
                     logger.info('Restored verified order from sessionStorage');
                     return;
@@ -682,24 +589,15 @@ export default function CheckoutSuccess() {
                         fetchOrderWithToken();
 
                         // Set post-checkout mode after a delay to ensure order data is stored
-                        // NOTE: Do NOT clearCart() here - cart items should be preserved for 24h order editing
-                        // The post-checkout mode allows users to edit their order within 24 hours
+                        // Clear cart and Medusa cart state after successful checkout
                         setTimeout(() => {
-                            // Get orderId from sessionStorage (stored by fetchOrderWithToken)
-                            const storedOrderId = getCachedSessionStorage('orderId');
-                            if (storedOrderId) {
-                                setPostCheckoutMode(storedOrderId);
-                                logger.info('Post-checkout mode enabled for order editing', {
-                                    orderIdPrefix: storedOrderId.substring(0, 10) + '...',
-                                });
-                            }
-                            // Clear Medusa cart state (but NOT local cart items)
-                            // Local cart items are preserved for order editing
                             try {
-                            setMedusaCart(null);
-                            setCartId(undefined);
-                            // Issue #42: Use cached sessionStorage for consistency
-                            removeCachedSessionStorage('lastOrder');
+                                clearCart();
+                                setMedusaCart(null);
+                                setCartId(undefined);
+                                // Issue #42: Use cached sessionStorage for consistency
+                                removeCachedSessionStorage('lastOrder');
+                                logger.info('Cart cleared after successful checkout');
                             } catch (error) {
                                 logger.warn("Failed to cleanup sessionStorage", {
                                     error: error instanceof Error ? error.message : String(error),
@@ -1000,14 +898,16 @@ export default function CheckoutSuccess() {
                             </div>
                         </div>
 
-                        {/* Order Modification Controls - Always shown, backend handles validation */}
+                        {/* Order Modification Controls - Only show when orderId is available */}
                         <div className="mt-8 pt-6 border-t border-gray-100 text-center space-y-4">
-                            <Link
-                                to={`/order/${orderId || getCachedSessionStorage('orderId')}/edit`}
-                                className="inline-block px-6 py-2 bg-accent-earthy text-white rounded-lg hover:bg-accent-earthy/90 transition-colors font-medium"
-                            >
-                                Edit Order
-                            </Link>
+                            {orderId ? (
+                                <Link
+                                    to={`/order/${orderId}/edit`}
+                                    className="inline-block px-6 py-2 bg-accent-earthy text-white rounded-lg hover:bg-accent-earthy/90 transition-colors font-medium"
+                                >
+                                    Edit Order
+                                </Link>
+                            ) : null}
                             <div>
                                 <button
                                     onClick={() => setShowCancelDialog(true)}

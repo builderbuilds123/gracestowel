@@ -56,12 +56,16 @@ function calculateMaxAge(token: string): number {
  * Path changed from `/order/status/${orderId}` to `/order` to support:
  * - /order/status/{id} - Order status page
  * - /order/{id}/edit - Order edit page (new dedicated route)
+ *
+ * SameSite=Lax is required for React Router v7 client-side navigation.
+ * With SameSite=strict, cookies may not be sent on initial navigation
+ * from pages outside the /order/* path (e.g., checkout success page).
  */
 function createGuestCookie(orderId: string, maxAge: number) {
     return createCookie(`guest_order_${orderId}`, {
         httpOnly: true,
         secure: import.meta.env.PROD,
-        sameSite: "strict",
+        sameSite: "lax",
         maxAge,
         path: `/order`,
     });
