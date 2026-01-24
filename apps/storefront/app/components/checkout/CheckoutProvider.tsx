@@ -94,10 +94,9 @@ export function useCheckout() {
 
 interface CheckoutProviderProps {
   children: React.ReactNode;
-  editMode?: boolean;
 }
 
-export function CheckoutProvider({ children, editMode = false }: CheckoutProviderProps) {
+export function CheckoutProvider({ children }: CheckoutProviderProps) {
   const { items, cartTotal, updateQuantity, removeFromCart, isLoaded, isSyncing } = useCart();
   const { currency, regionId } = useLocale();
   const { customer, isAuthenticated } = useCustomer();
@@ -283,23 +282,22 @@ export function CheckoutProvider({ children, editMode = false }: CheckoutProvide
     return total + originalPrice * item.quantity;
   }, 0), [items]);
 
-  // Skip payment collection in editMode - payment has already been processed
   const {
     paymentCollectionId,
     initialPaymentSession,
     error: collectionError
-  } = usePaymentCollection(editMode ? undefined : cartId, isCartSynced && !editMode);
+  } = usePaymentCollection(cartId, isCartSynced);
 
   const {
     clientSecret,
     error: sessionError
   } = usePaymentSession(
-    editMode ? null : paymentCollectionId,
-    isCartSynced && !editMode,
-    editMode ? null : initialPaymentSession
+    paymentCollectionId,
+    isCartSynced,
+    initialPaymentSession
   );
 
-  const paymentError = editMode ? null : (collectionError || sessionError);
+  const paymentError = collectionError || sessionError;
 
   // Best Practice: rerender-dependencies - Use primitive dependencies for effects
   // Stable string hash to prevent infinite loops when array reference changes

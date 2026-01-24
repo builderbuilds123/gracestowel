@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
     useStripe,
     useElements,
@@ -15,46 +15,28 @@ import type {
 } from '@stripe/stripe-js';
 import { useCheckout } from './checkout/CheckoutProvider';
 import { useCart } from '../context/CartContext';
-import type { CartItem } from '../context/CartContext';
 import { createLogger } from '../lib/logger';
 import { monitoredFetch } from '../utils/monitored-fetch';
-import { medusaFetch } from '../lib/medusa-fetch';
 import { ShippingSection } from './checkout/ShippingSection';
 import { PaymentSection } from './checkout/PaymentSection';
 import { setCachedSessionStorage } from '../lib/storage-cache';
-import { getCachedStorage } from '../lib/storage-cache';
 // Re-export ShippingOption from types for backward compatibility
 export type { ShippingOption } from '../types/checkout';
-
-export interface CustomerData {
-    email?: string;
-    firstName?: string;
-    lastName?: string;
-    phone?: string;
-    address?: {
-        line1?: string;
-        line2?: string;
-        city?: string;
-        state?: string;
-        postal_code?: string;
-        country?: string;
-    };
-}
 
 export interface CheckoutFormProps {
     onAddressChange?: (event: StripeAddressElementChangeEvent) => void;
     onEmailChange?: (email: string) => void;
-    customerData?: CustomerData;
-    editMode?: boolean;
-    orderId?: string;
 }
 
+/**
+ * CheckoutForm - Pure checkout form with Stripe integration
+ *
+ * Note: Order editing is now handled by the dedicated /order/{id}/edit route.
+ * This form is for new checkouts only.
+ */
 export function CheckoutForm({
     onAddressChange,
     onEmailChange,
-    customerData,
-    editMode = false,
-    orderId,
 }: CheckoutFormProps) {
     const {
         items,
@@ -92,15 +74,8 @@ export function CheckoutForm({
     const paymentRef = useRef<HTMLDivElement>(null);
 
     // Track component completeness
-    // Initialize based on customerData if available (for returning customers)
-    const [isEmailComplete, setIsEmailComplete] = useState(!!customerData?.email);
-    const [isAddressComplete, setIsAddressComplete] = useState(
-        !!(customerData?.address?.line1 && 
-           customerData?.address?.city && 
-           customerData?.address?.state && 
-           customerData?.address?.postal_code && 
-           customerData?.address?.country)
-    );
+    const [isEmailComplete, setIsEmailComplete] = useState(false);
+    const [isAddressComplete, setIsAddressComplete] = useState(false);
     const [isPaymentComplete, setIsPaymentComplete] = useState(false);
 
     // Track latest email value locally for atomic sync (even if incomplete or parent update lags)
@@ -238,7 +213,7 @@ export function CheckoutForm({
             // ignoring parent state lag or "complete" event filters.
             
             if (cartId) {
-                const latestEmail = currentEmailRef.current || guestEmail || customerData?.email;
+                const latestEmail = currentEmailRef.current || guestEmail;
                 
                 // Get fully validated address directly from Stripe Element
                 const addressElement = elements.getElement(AddressElement);
@@ -427,139 +402,40 @@ export function CheckoutForm({
         }
     };
 
-    // Story 3.3: Handle edit mode submission (update order instead of payment)
-    const handleEditSubmit = useCallback(async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!orderId) return;
-
-        setIsLoading(true);
-        setMessage(null);
-
-        try {
-            // Get address from Stripe Element
-            const addressElement = elements?.getElement(AddressElement);
-            if (!addressElement) {
-                setMessage('Please complete the shipping address.');
-                setIsLoading(false);
-                return;
-            }
-
-            const addressResult = await addressElement.getValue();
-            if (!addressResult.complete || !addressResult.value) {
-                setMessage('Please complete the shipping address.');
-                setIsLoading(false);
-                return;
-            }
-
-            const addr = addressResult.value;
-            let firstName = '';
-            let lastName = '';
-            if (addr.name) {
-                const parts = addr.name.split(' ');
-                firstName = parts[0];
-                lastName = parts.slice(1).join(' ');
-            }
-
-            // Story 3.3: Update shipping address via order edit API
-            // Build auth headers (customer session or guest token cookie will be handled by backend)
-            const authHeaders: HeadersInit = { "Content-Type": "application/json" };
-            
-            // Check for customer session token (for logged-in customers)
-            const customerToken = getCachedStorage('medusa_customer_token');
-            if (customerToken) {
-                authHeaders["Authorization"] = `Bearer ${customerToken}`;
-            }
-            // Note: Guest tokens are in HttpOnly cookies, so backend middleware will handle them automatically
-
-            const addressResponse = await medusaFetch(`/store/orders/${orderId}/address`, {
-                method: "POST",
-                headers: authHeaders,
-                body: JSON.stringify({
-                    address: {
-                        first_name: firstName,
-                        last_name: lastName,
-                        address_1: addr.address.line1,
-                        address_2: addr.address.line2,
-                        city: addr.address.city,
-                        province: addr.address.state,
-                        postal_code: addr.address.postal_code,
-                        country_code: addr.address.country,
-                        phone: addr.phone,
-                    },
-                }),
-                label: 'order-edit-address',
-            });
-
-            if (!addressResponse.ok) {
-                const errorData = await addressResponse.json().catch(() => ({})) as { message?: string };
-                throw new Error(errorData.message || 'Failed to update address');
-            }
-
-            // Update shipping method if changed
-            if (selectedShipping) {
-                // TODO: Call order edit shipping method API
-                // This will be implemented when shipping method update endpoint is available
-            }
-
-            // Redirect to order status page
-            window.location.href = `/order/status/${orderId}`;
-        } catch (err: any) {
-            logger.error('Order edit submission failed', err);
-            setMessage(err.message || 'Failed to save changes. Please try again.');
-        } finally {
-            setIsLoading(false);
-        }
-    }, [orderId, elements, selectedShipping, logger]);
-
     return (
-        <form id="payment-form" onSubmit={editMode ? handleEditSubmit : handleSubmit} className="space-y-8">
-            {/* Express Checkout Section - Hidden in edit mode */}
-            {!editMode && (
-                <>
-                    <div className="mb-8">
-                        <ExpressCheckoutElement
-                            onConfirm={handleExpressConfirm}
-                            onShippingAddressChange={handleExpressShippingAddressChange}
-                            onShippingRateChange={handleExpressShippingRateChange}
-                            options={{
-                                buttonType: {
-                                    applePay: 'check-out',
-                                    googlePay: 'checkout',
-                                    paypal: 'checkout'
-                                },
-                            }}
-                        />
-                    </div>
+        <form id="payment-form" onSubmit={handleSubmit} className="space-y-8">
+            {/* Express Checkout Section */}
+            <div className="mb-8">
+                <ExpressCheckoutElement
+                    onConfirm={handleExpressConfirm}
+                    onShippingAddressChange={handleExpressShippingAddressChange}
+                    onShippingRateChange={handleExpressShippingRateChange}
+                    options={{
+                        buttonType: {
+                            applePay: 'check-out',
+                            googlePay: 'checkout',
+                            paypal: 'checkout'
+                        },
+                    }}
+                />
+            </div>
 
-                    <div className="relative flex py-5 items-center">
-                        <div className="flex-grow border-t border-gray-200"></div>
-                        <span className="flex-shrink-0 mx-4 text-gray-400 text-sm">Or</span>
-                        <div className="flex-grow border-t border-gray-200"></div>
-                    </div>
-                </>
-            )}
+            <div className="relative flex py-5 items-center">
+                <div className="flex-grow border-t border-gray-200"></div>
+                <span className="flex-shrink-0 mx-4 text-gray-400 text-sm">Or</span>
+                <div className="flex-grow border-t border-gray-200"></div>
+            </div>
 
             {/* Contact Section */}
-            <div 
-                ref={emailRef} 
+            <div
+                ref={emailRef}
                 className={`p-4 rounded-lg transition-all ${validationErrors.email ? 'border-2 border-red-500 bg-red-50' : 'border border-transparent'}`}
             >
                 <h2 className="text-lg font-medium mb-4">Contact</h2>
-                {editMode ? (
-                    // Story 3.3: Show email as read-only in edit mode
-                    <div className="bg-gray-50 p-4 rounded-lg">
-                        <p className="text-gray-600">{customerData?.email || 'No email on file'}</p>
-                        <p className="text-xs text-gray-400 mt-1">
-                            Contact cannot be changed for existing orders.
-                        </p>
-                    </div>
-                ) : (
-                    <LinkAuthenticationElement
-                        id="link-authentication-element"
-                        options={customerData?.email ? { defaultValues: { email: customerData.email } } : undefined}
-                        onChange={handleEmailChange}
-                    />
-                )}
+                <LinkAuthenticationElement
+                    id="link-authentication-element"
+                    onChange={handleEmailChange}
+                />
                 {validationErrors.email ? (
                     <p className="text-red-600 text-sm mt-2">{validationErrors.email}</p>
                 ) : null}
@@ -571,43 +447,13 @@ export function CheckoutForm({
                 className={`p-4 rounded-lg transition-all ${validationErrors.address ? 'border-2 border-red-500 bg-red-50' : 'border border-transparent'}`}
             >
                 <h2 className="text-lg font-medium mb-4">Delivery</h2>
-
-                {/* Show name as locked in edit mode */}
-                {editMode && customerData?.firstName ? (
-                    <div className="mb-4 bg-gray-50 p-4 rounded-lg">
-                        <p className="text-sm text-gray-500 mb-1">Name</p>
-                        <p className="text-gray-700">
-                            {customerData.firstName} {customerData.lastName}
-                        </p>
-                        <p className="text-xs text-gray-400 mt-1">
-                            Name cannot be changed for existing orders.
-                        </p>
-                    </div>
-                ) : null}
-
                 <AddressElement
                     id="address-element"
                     options={{
                         mode: 'shipping',
                         fields: {
                             phone: 'always',
-                            // In edit mode, hide name field (we show it as read-only above)
-                            // Note: 'name' field is valid per Stripe docs but types may be outdated
-                            ...(editMode ? { name: 'never' as const } : {}),
-                        } as { phone: 'auto' | 'always' | 'never' },
-                        // Remove split name to use default full name field (Stripe Standard)
-                        defaultValues: customerData ? {
-                            name: `${customerData.firstName || ''} ${customerData.lastName || ''}`.trim(),
-                            phone: customerData.phone ?? '',
-                            address: customerData.address ? {
-                                line1: customerData.address.line1 ?? '',
-                                line2: customerData.address.line2 ?? '',
-                                city: customerData.address.city ?? '',
-                                state: customerData.address.state ?? '',
-                                postal_code: customerData.address.postal_code ?? '',
-                                country: customerData.address.country ?? 'US',
-                            } : undefined,
-                        } : undefined,
+                        },
                     }}
                     onChange={handleAddressInternalChange}
                 />
@@ -629,37 +475,27 @@ export function CheckoutForm({
                 forwardedRef={shippingRef}
             />
 
-            {/* Payment Section - Hidden in edit mode, show notice instead */}
-            {editMode ? (
-                <div className="p-4 rounded-lg border border-gray-200 bg-gray-50">
-                    <h2 className="text-lg font-medium mb-2">Payment</h2>
-                    <p className="text-gray-600 text-sm">
-                        Payment method cannot be changed for existing orders.
-                    </p>
-                </div>
-            ) : (
-                <PaymentSection
-                    error={validationErrors.payment}
-                    forwardedRef={paymentRef}
-                />
-            )}
+            {/* Payment Section */}
+            <PaymentSection
+                error={validationErrors.payment}
+                forwardedRef={paymentRef}
+            />
 
             {/* Submit Button */}
             <button
-                disabled={isLoading || (!editMode && (!stripe || !elements))}
+                disabled={isLoading || !stripe || !elements}
                 id="submit"
                 className="w-full bg-accent-earthy hover:bg-accent-earthy/90 text-white font-medium py-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-md active:scale-[0.98] transform"
             >
                 <span id="button-text">
                     {isLoading
-                        ? (editMode ? 'Saving changes...' : isPostCheckout ? 'Updating...' : 'Processing...')
-                        : (editMode ? 'Save Changes' : isPostCheckout ? 'Update Now' : 'Pay now')
+                        ? (isPostCheckout ? 'Updating...' : 'Processing...')
+                        : (isPostCheckout ? 'Update Now' : 'Pay now')
                     }
                 </span>
             </button>
 
-            {/* Stripe Badge - Hidden in edit mode */}
-            {!editMode && <StripeBadge />}
+            <StripeBadge />
 
             {/* Error Message */}
             {message ? (

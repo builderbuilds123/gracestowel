@@ -1,46 +1,26 @@
 import { useEffect } from "react";
-import { useLoaderData, redirect } from "react-router";
+import { useLoaderData } from "react-router";
 import type { LoaderFunctionArgs } from "react-router";
 import { initStripe } from "../lib/stripe";
 import { CheckoutContent } from "../components/checkout/CheckoutContent";
 import { CheckoutProvider } from "../components/checkout/CheckoutProvider";
 import { removeCachedSessionStorage } from "../lib/storage-cache";
-import { getGuestToken } from "../utils/guest-session.server";
-import { medusaFetch } from "../lib/medusa-fetch";
-import type { CloudflareEnv } from "../utils/monitored-fetch";
 
 interface LoaderData {
   stripePublishableKey: string;
-  editMode?: boolean;
-  orderId?: string;
-  orderPrefillData?: {
-    email?: string;
-    firstName?: string;
-    lastName?: string;
-    phone?: string;
-    address?: {
-      line1?: string;
-      line2?: string;
-      city?: string;
-      state?: string;
-      postal_code?: string;
-      country?: string;
-    };
-    shippingMethodId?: string;
-  };
 }
 
 /**
- * Story 3.3: Checkout Edit Mode Loader
- * 
- * Supports:
- * - Normal checkout (no orderId)
- * - Edit mode (orderId query param) - requires auth and eligibility check
+ * Checkout Page Loader
+ *
+ * Provides Stripe publishable key for payment processing.
+ *
+ * Note: Order editing is now handled by the dedicated /order/{id}/edit route.
+ * This route is for new checkouts only.
  */
 export async function loader({
-  request,
   context,
-}: LoaderFunctionArgs): Promise<LoaderData | Response> {
+}: LoaderFunctionArgs): Promise<LoaderData> {
   // Support both Cloudflare (context.env) and Node/Vite (process.env)
   const cloudflareEnv = context?.cloudflare?.env as { STRIPE_PUBLISHABLE_KEY?: string; VITE_STRIPE_PUBLISHABLE_KEY?: string } | undefined;
   const nodeEnv = (typeof process !== 'undefined'
@@ -52,132 +32,20 @@ export async function loader({
     nodeEnv?.STRIPE_PUBLISHABLE_KEY ??
     nodeEnv?.VITE_STRIPE_PUBLISHABLE_KEY;
 
-  // Story 3.3: Check for orderId in query params (edit mode)
-  const url = new URL(request.url);
-  const orderId = url.searchParams.get("orderId");
-
-  // Base loader data
-  const baseData: LoaderData = {
-    stripePublishableKey: stripeKey || "",
-    editMode: false,
-  };
-
-  if (!orderId) {
-    return baseData;
-  }
-
-  // Edit mode - fetch and verify order
-  const env = context.cloudflare.env as unknown as CloudflareEnv;
-  
-  // Build auth headers (customer session or guest token)
-  const authHeaders: HeadersInit = {};
-
-  // Check for customer session (Authorization header from cookie)
-  const authHeader = request.headers.get("Authorization");
-  const customerToken = authHeader?.startsWith("Bearer ")
-      ? authHeader.slice(7)
-      : null;
-
-  // Check for guest token - try multiple sources
-  // 1. First try the order-scoped cookie (guest_order_{orderId})
-  const { token: guestToken } = await getGuestToken(request, orderId);
-
-  // 2. Fall back to checkout_mod_token cookie (set by api.set-guest-token for /checkout path)
-  let checkoutModToken: string | null = null;
-  if (!guestToken) {
-      const cookieHeader = request.headers.get("Cookie");
-      const modTokenCookie = cookieHeader?.split(";").find(c => c.trim().startsWith("checkout_mod_token="));
-      if (modTokenCookie) {
-          checkoutModToken = decodeURIComponent(modTokenCookie.split("=", 2)[1] || "");
-      }
-  }
-
-  const effectiveGuestToken = guestToken || checkoutModToken;
-
-  if (customerToken) {
-      authHeaders["Authorization"] = `Bearer ${customerToken}`;
-  } else if (effectiveGuestToken) {
-      authHeaders["x-modification-token"] = effectiveGuestToken;
-  } else {
-      // No auth - redirect to order status
-      return redirect(`/order/status/${orderId}?error=UNAUTHORIZED`);
-  }
-
-  // Fetch order
-  const orderResponse = await medusaFetch(`/store/orders/${orderId}`, {
-      method: "GET",
-      headers: authHeaders,
-      label: "checkout-order-fetch",
-      context,
-  });
-
-  if (!orderResponse.ok) {
-      if (orderResponse.status === 401 || orderResponse.status === 403) {
-          return redirect(`/order/status/${orderId}?error=UNAUTHORIZED`);
-      }
-      return redirect(`/order/status/${orderId}?error=ORDER_NOT_FOUND`);
-  }
-
-  const { order } = await orderResponse.json() as { order: any };
-
-  // Check eligibility
-  const eligibilityResponse = await medusaFetch(
-      `/store/orders/${orderId}/eligibility`,
-      {
-          method: "GET",
-          headers: authHeaders,
-          label: "checkout-eligibility-check",
-          context,
-      }
-  );
-
-  if (!eligibilityResponse.ok) {
-      return redirect(`/order/status/${orderId}?error=ELIGIBILITY_CHECK_FAILED`);
-  }
-
-  const { eligible, errorCode } = await eligibilityResponse.json() as { eligible: boolean; errorCode?: string };
-
-  if (!eligible) {
-      return redirect(`/order/status/${orderId}?error=${errorCode || "EDIT_NOT_ALLOWED"}`);
-  }
-
-  // Extract prefill data
-  const shippingAddress = order.shipping_address;
-  const shippingMethods = order.shipping_methods || [];
-  const shippingMethodId = shippingMethods[0]?.shipping_option_id;
-
   return {
-      ...baseData,
-      editMode: true,
-      orderId,
-      orderPrefillData: {
-          email: order.email, // Display only
-          firstName: shippingAddress?.first_name,
-          lastName: shippingAddress?.last_name,
-          phone: shippingAddress?.phone,
-          address: shippingAddress ? {
-              line1: shippingAddress.address_1,
-              line2: shippingAddress.address_2,
-              city: shippingAddress.city,
-              state: shippingAddress.province,
-              postal_code: shippingAddress.postal_code,
-              country: shippingAddress.country_code?.toUpperCase(),
-          } : undefined,
-          shippingMethodId,
-      },
+    stripePublishableKey: stripeKey || "",
   };
 }
 
 export default function Checkout() {
-  const { stripePublishableKey, orderPrefillData, editMode, orderId } = useLoaderData<LoaderData>();
+  const { stripePublishableKey } = useLoaderData<LoaderData>();
 
   // Initialize Stripe once
   useEffect(() => {
-    if (stripePublishableKey && !editMode) {
-      // Only initialize Stripe for new orders (not edit mode)
+    if (stripePublishableKey) {
       initStripe(stripePublishableKey);
     }
-    
+
     // Issue #41: Use cached sessionStorage for consistency
     if (typeof window !== 'undefined') {
       try {
@@ -185,15 +53,11 @@ export default function Checkout() {
         removeCachedSessionStorage('lastOrder');
       } catch (e) {}
     }
-  }, [stripePublishableKey, editMode]);
+  }, [stripePublishableKey]);
 
   return (
-    <CheckoutProvider editMode={editMode}>
-      <CheckoutContent
-        orderPrefillData={orderPrefillData}
-        editMode={editMode}
-        orderId={orderId}
-      />
+    <CheckoutProvider>
+      <CheckoutContent />
     </CheckoutProvider>
   );
 }

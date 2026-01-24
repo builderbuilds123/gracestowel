@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback, useMemo, lazy, Suspense } from "react";
+import { useRef, useEffect, useCallback, lazy, Suspense } from "react";
 import { Link } from "react-router";
 import { ArrowLeft } from "../../lib/icons";
 import { useCheckout } from "./CheckoutProvider";
@@ -13,19 +13,14 @@ import type { ShippingOption } from "../../types/checkout";
 import { OrderSummary } from "../OrderSummary";
 import type { StripeAddressElementChangeEvent } from "@stripe/stripe-js";
 import type { CartItem as ProductCartItem } from "../../types/product";
-import type { CustomerData } from "../CheckoutForm";
 
-interface CheckoutContentProps {
-  orderPrefillData?: CustomerData;
-  editMode?: boolean;
-  orderId?: string;
-}
-
-export function CheckoutContent({ 
-  orderPrefillData, 
-  editMode = false,
-  orderId,
-}: CheckoutContentProps = {} as CheckoutContentProps) {
+/**
+ * CheckoutContent - Pure checkout flow component
+ *
+ * Note: Order editing is now handled by the dedicated /order/{id}/edit route.
+ * This component is for new checkouts only.
+ */
+export function CheckoutContent() {
   const {
     state,
     actions,
@@ -115,14 +110,6 @@ export function CheckoutContent({
     actions.setEmail(email);
   }, [actions]);
 
-  // Only prefill if and only if modification token exists and is valid
-  // Do not prefill from authenticated customer data - only from order modification
-  const customerDataMemo = useMemo(() => {
-    // Only prefill when order modification token exists and is valid
-    // This ensures fields are only prefilled during order editing, not normal checkout
-    return orderPrefillData || undefined;
-  }, [orderPrefillData]);
-
   const options = clientSecret ? {
     clientSecret,
     appearance: {
@@ -158,7 +145,9 @@ export function CheckoutContent({
     );
   }
 
-  if (displayCartTotal <= 0) {
+  // BUG FIX: Check items.length instead of displayCartTotal
+  // Products can have $0 price (test products, free samples, etc.)
+  if (items.length === 0) {
     return (
       <div className="min-h-screen bg-card-earthy/10 flex items-center justify-center">
         <div className="text-center">
@@ -199,16 +188,6 @@ export function CheckoutContent({
           </div>
         ) : null}
 
-        {/* Story 3.3: Edit Mode Banner */}
-        {editMode && (
-          <div className="bg-blue-50 border border-blue-200 p-4 mb-6 rounded-lg">
-            <h2 className="font-medium text-blue-800">Editing Order</h2>
-            <p className="text-sm text-blue-700 mt-1">
-              Update your shipping details below. Contact and payment cannot be changed.
-            </p>
-          </div>
-        )}
-
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start">
           <div className="lg:col-span-7 space-y-8">
             {clientSecret && options ? (
@@ -229,9 +208,6 @@ export function CheckoutContent({
                     <CheckoutForm
                       onAddressChange={handleAddressChange}
                       onEmailChange={handleEmailChange}
-                      customerData={customerDataMemo}
-                      editMode={editMode}
-                      orderId={orderId}
                     />
                   </Suspense>
                 </div>
