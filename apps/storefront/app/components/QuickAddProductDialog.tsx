@@ -56,7 +56,7 @@ interface QuickAddProductDialogProps {
  */
 export function QuickAddProductDialog({ isOpen, onToggle, regionId }: QuickAddProductDialogProps) {
     const { addToCart } = useCart();
-    const { currencyCode } = useLocale();
+    const { currency: currencyCode } = useLocale();
     const [isLoadingProducts, setIsLoadingProducts] = useState(false);
     const [products, setProducts] = useState<Product[]>([]);
     const [selectedVariants, setSelectedVariants] = useState<Record<string, string>>({});

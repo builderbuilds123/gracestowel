@@ -58,7 +58,7 @@ interface OrderModificationDialogsProps {
     currencyCode: string;
     items?: OrderItem[]; // Made optional to prevent breaking if not passed yet
     currentAddress?: Address;
-    token: string;
+    token?: string;
     stripePublishableKey: string;
     onOrderUpdated: (newTotal?: number) => void;
     onAddressUpdated: (address: Address) => void;
@@ -294,7 +294,7 @@ export function OrderModificationDialogs({
                     clientSecret={pendingPayment.clientSecret}
                     stripePublishableKey={stripePublishableKey}
                     orderId={orderId}
-                    token={token}
+                    token={token || ""}
                     amount={pendingPayment.amount}
                     currencyCode={currencyCode}
                 />

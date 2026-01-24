@@ -40,7 +40,7 @@ interface LoaderData {
 export async function loader({
   request,
   context,
-}: LoaderFunctionArgs): Promise<LoaderData> {
+}: LoaderFunctionArgs): Promise<LoaderData | Response> {
   // Support both Cloudflare (context.env) and Node/Vite (process.env)
   const cloudflareEnv = context?.cloudflare?.env as { STRIPE_PUBLISHABLE_KEY?: string; VITE_STRIPE_PUBLISHABLE_KEY?: string } | undefined;
   const nodeEnv = (typeof process !== 'undefined'
@@ -71,20 +71,33 @@ export async function loader({
   
   // Build auth headers (customer session or guest token)
   const authHeaders: HeadersInit = {};
-  
+
   // Check for customer session (Authorization header from cookie)
   const authHeader = request.headers.get("Authorization");
-  const customerToken = authHeader?.startsWith("Bearer ") 
-      ? authHeader.slice(7) 
+  const customerToken = authHeader?.startsWith("Bearer ")
+      ? authHeader.slice(7)
       : null;
 
-  // Check for guest token
+  // Check for guest token - try multiple sources
+  // 1. First try the order-scoped cookie (guest_order_{orderId})
   const { token: guestToken } = await getGuestToken(request, orderId);
+
+  // 2. Fall back to checkout_mod_token cookie (set by api.set-guest-token for /checkout path)
+  let checkoutModToken: string | null = null;
+  if (!guestToken) {
+      const cookieHeader = request.headers.get("Cookie");
+      const modTokenCookie = cookieHeader?.split(";").find(c => c.trim().startsWith("checkout_mod_token="));
+      if (modTokenCookie) {
+          checkoutModToken = decodeURIComponent(modTokenCookie.split("=", 2)[1] || "");
+      }
+  }
+
+  const effectiveGuestToken = guestToken || checkoutModToken;
 
   if (customerToken) {
       authHeaders["Authorization"] = `Bearer ${customerToken}`;
-  } else if (guestToken) {
-      authHeaders["x-modification-token"] = guestToken;
+  } else if (effectiveGuestToken) {
+      authHeaders["x-modification-token"] = effectiveGuestToken;
   } else {
       // No auth - redirect to order status
       return redirect(`/order/status/${orderId}?error=UNAUTHORIZED`);
@@ -175,9 +188,9 @@ export default function Checkout() {
   }, [stripePublishableKey, editMode]);
 
   return (
-    <CheckoutProvider>
-      <CheckoutContent 
-        orderPrefillData={orderPrefillData} 
+    <CheckoutProvider editMode={editMode}>
+      <CheckoutContent
+        orderPrefillData={orderPrefillData}
         editMode={editMode}
         orderId={orderId}
       />

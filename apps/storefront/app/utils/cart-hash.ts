@@ -19,7 +19,7 @@ export function generateCartHash(
       (item) =>
         `${item.id}-${item.variantId}-${item.quantity}`
     )
-    .toSorted()
+    .sort()
     .join("|");
 
   const addressString = address

@@ -62,7 +62,7 @@ interface CartContextType {
     items: CartItem[];
     isOpen: boolean;
     isLoaded: boolean;
-    addToCart: (item: Omit<CartItem, 'quantity'> & { quantity?: number }) => void;
+    addToCart: (item: Omit<CartItem, 'quantity'> & { quantity?: number }, options?: { silent?: boolean }) => void;
     removeFromCart: (id: ProductId, color?: string, variantId?: string) => void;
     updateQuantity: (id: ProductId, quantity: number, color?: string, variantId?: string) => void;
     toggleCart: () => void;
@@ -134,13 +134,53 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
                     setPostCheckoutData(data);
                 } else {
                     // Expired - clear cart and post-checkout state
+                    const logger = createLogger({ context: "CartContext" });
+                    logger.info("Post-checkout mode expired, clearing cart", {
+                        age: Math.round(age / (1000 * 60 * 60)), // hours
+                        expiryHours: POST_CHECKOUT_EXPIRY_MS / (1000 * 60 * 60),
+                    });
                     removeCachedSessionStorage("postCheckoutMode");
                     removeCachedSessionStorage("cart");
+                    setItems([]); // Clear items in state too
                 }
             } catch {
                 removeCachedSessionStorage("postCheckoutMode");
             }
         }
+    }, []);
+
+    // Periodic check for post-checkout expiry (every hour while tab is open)
+    // This ensures cart is cleared even if user keeps tab open for > 24 hours
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+
+        const checkExpiry = () => {
+            const stored = getCachedSessionStorage("postCheckoutMode");
+            if (stored) {
+                try {
+                    const data: PostCheckoutData = JSON.parse(stored);
+                    const age = Date.now() - data.timestamp;
+
+                    if (age >= POST_CHECKOUT_EXPIRY_MS) {
+                        const logger = createLogger({ context: "CartContext" });
+                        logger.info("Post-checkout mode expired (periodic check), clearing cart", {
+                            age: Math.round(age / (1000 * 60 * 60)), // hours
+                        });
+                        removeCachedSessionStorage("postCheckoutMode");
+                        removeCachedSessionStorage("cart");
+                        setItems([]);
+                        setPostCheckoutData(null);
+                    }
+                } catch {
+                    // Ignore parse errors in periodic check
+                }
+            }
+        };
+
+        // Check every hour (3600000ms)
+        const intervalId = setInterval(checkExpiry, 60 * 60 * 1000);
+
+        return () => clearInterval(intervalId);
     }, []);
 
     // Validate cart item integrity
@@ -252,7 +292,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     }, [items, cartId, isLoaded, refreshCart]);
 
     // ✅ Memoize addToCart function (Issue #5 fix)
-    const addToCart = useCallback((newItem: Omit<CartItem, 'quantity'> & { quantity?: number }) => {
+    const addToCart = useCallback((newItem: Omit<CartItem, 'quantity'> & { quantity?: number }, options?: { silent?: boolean }) => {
+        const { silent = false } = options || {};
         const quantityToAdd = newItem.quantity ?? 1;
         let image = newItem.image;
         if (typeof image === 'string' && image.startsWith('/uploads/')) {
@@ -289,7 +330,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
             }
             return [...prevItems, itemToAdd];
         });
-        setIsOpen(true);
+
+        // Only open cart drawer if not in silent mode
+        if (!silent) {
+            setIsOpen(true);
+        }
 
         // Fire-and-forget: ensure a Medusa cart exists on first cart interaction
         if (typeof window !== 'undefined' && !cartId && !cartCreateInFlight.current) {

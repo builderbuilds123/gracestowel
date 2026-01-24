@@ -52,7 +52,7 @@ export async function loader({ context }: Route.LoaderArgs) {
         const transformedProducts = transformToListItems(safeProducts, currencyCode);
 
         // Extract all unique colors (Issue #20: Use .toSorted() for immutability)
-        const allColors = [...new Set(transformedProducts.flatMap(p => p.colors))].toSorted();
+        const allColors = [...new Set(transformedProducts.flatMap(p => p.colors))].sort();
 
         // Get price range (Issue #21: Use loop instead of Math.min/max with spread)
         let minPrice = 0;
@@ -134,7 +134,7 @@ export default function Collection({ loaderData }: Route.ComponentProps) {
         }
         
         // Map colors with pre-calculated counts: O(m)
-        return allColors.map(color => ({
+        return allColors.map((color: string) => ({
             value: color,
             label: color,
             count: colorCountMap.get(color) || 0,

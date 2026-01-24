@@ -93,6 +93,18 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
       cart_id: cartId,
       shipping_method_id: option_id,
       shipping_methods: updatedCart.shipping_methods,
+      // Return full cart with updated totals for frontend display
+      cart: {
+        id: updatedCart.id,
+        subtotal: updatedCart.subtotal,
+        discount_total: updatedCart.discount_total,
+        shipping_total: updatedCart.shipping_total,
+        tax_total: updatedCart.tax_total,
+        total: updatedCart.total,
+        shipping_methods: updatedCart.shipping_methods,
+        items: updatedCart.items,
+        promotions: (updatedCart as any).promotions,
+      },
     }, { status: 200 });
 
   } catch (error: any) {

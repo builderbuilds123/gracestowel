@@ -491,7 +491,7 @@ export function CheckoutForm({
             });
 
             if (!addressResponse.ok) {
-                const errorData = await addressResponse.json().catch(() => ({}));
+                const errorData = await addressResponse.json().catch(() => ({})) as { message?: string };
                 throw new Error(errorData.message || 'Failed to update address');
             }
 
@@ -592,8 +592,9 @@ export function CheckoutForm({
                         fields: {
                             phone: 'always',
                             // In edit mode, hide name field (we show it as read-only above)
-                            name: editMode ? 'never' : 'always',
-                        },
+                            // Note: 'name' field is valid per Stripe docs but types may be outdated
+                            ...(editMode ? { name: 'never' as const } : {}),
+                        } as { phone: 'auto' | 'always' | 'never' },
                         // Remove split name to use default full name field (Stripe Standard)
                         defaultValues: customerData ? {
                             name: `${customerData.firstName || ''} ${customerData.lastName || ''}`.trim(),
