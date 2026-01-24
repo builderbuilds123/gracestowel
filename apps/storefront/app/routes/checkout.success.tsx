@@ -306,10 +306,12 @@ export default function CheckoutSuccess() {
                     if (restoredOrderId) {
                         setOrderId(restoredOrderId);
                         setModificationWindowActive(true);
+                        // Set post-checkout mode to preserve cart for 24h edit window
+                        setPostCheckoutMode(restoredOrderId);
                     }
 
-                    // Ensure cart is cleared (may have been missed on initial load)
-                    clearCart();
+                    // NOTE: Do NOT clearCart() here - cart items should be preserved for order editing
+                    // The post-checkout mode allows users to edit their order within 24 hours
 
                     logger.info('Restored verified order from sessionStorage');
                     return;
@@ -559,6 +561,30 @@ export default function CheckoutSuccess() {
                                     if (data.modification_token) {
                                         try {
                                             setCachedSessionStorage('modificationToken', data.modification_token);
+
+                                            // BUG FIX: Also set HttpOnly cookie via API for checkout edit mode
+                                            // This ensures the token is available to the checkout loader when editing orders
+                                            // IMPORTANT: Await this call to ensure cookie is set before user can click "Edit Order"
+                                            try {
+                                                const cookieResponse = await fetch('/api/set-guest-token', {
+                                                    method: 'POST',
+                                                    headers: { 'Content-Type': 'application/json' },
+                                                    body: JSON.stringify({
+                                                        token: data.modification_token,
+                                                        orderId: data.order.id,
+                                                    }),
+                                                });
+                                                if (!cookieResponse.ok) {
+                                                    logger.warn("Failed to set guest token cookie", {
+                                                        status: cookieResponse.status,
+                                                    });
+                                                }
+                                            } catch (err) {
+                                                // Non-critical: cookie setting failure doesn't prevent order display
+                                                logger.warn("Failed to set guest token cookie", {
+                                                    error: err instanceof Error ? err.message : String(err),
+                                                });
+                                            }
                                         } catch (tokenError) {
                                             // Non-critical: token storage failure doesn't prevent order display
                                             logger.warn("Failed to store modification token", {
@@ -656,12 +682,20 @@ export default function CheckoutSuccess() {
                         logger.info('checkout.success: Starting fetchOrderWithToken');
                         fetchOrderWithToken();
 
-                        // Clear cart after a delay to ensure UI updates
-                        // NOTE: Do NOT clear verifiedOrder here - it's needed for page refresh
-                        // verifiedOrder will be cleared on unmount (navigation away)
+                        // Set post-checkout mode after a delay to ensure order data is stored
+                        // NOTE: Do NOT clearCart() here - cart items should be preserved for 24h order editing
+                        // The post-checkout mode allows users to edit their order within 24 hours
                         setTimeout(() => {
-                            clearCart();
-                            // Clear checkout-related data but keep verifiedOrder for refresh
+                            // Get orderId from sessionStorage (stored by fetchOrderWithToken)
+                            const storedOrderId = getCachedSessionStorage('orderId');
+                            if (storedOrderId) {
+                                setPostCheckoutMode(storedOrderId);
+                                logger.info('Post-checkout mode enabled for order editing', {
+                                    orderIdPrefix: storedOrderId.substring(0, 10) + '...',
+                                });
+                            }
+                            // Clear Medusa cart state (but NOT local cart items)
+                            // Local cart items are preserved for order editing
                             try {
                             setMedusaCart(null);
                             setCartId(undefined);
@@ -973,6 +1007,7 @@ export default function CheckoutSuccess() {
                                 onClick={async () => {
                                     try {
                                         // Load order items into cart for editing
+                                        // Use silent mode to prevent cart drawer from opening
                                         if (orderDetails?.items && orderDetails.items.length > 0) {
                                             clearCart();
                                             for (const item of orderDetails.items) {
@@ -984,7 +1019,7 @@ export default function CheckoutSuccess() {
                                                     image: item.image,
                                                     quantity: item.quantity,
                                                     color: item.color,
-                                                });
+                                                }, { silent: true });
                                             }
                                         }
 
