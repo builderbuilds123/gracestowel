@@ -139,18 +139,6 @@ describe('CheckoutForm', () => {
     const defaultProps: CheckoutFormProps = {
         onAddressChange: vi.fn(),
         onEmailChange: vi.fn(),
-        customerData: {
-            email: 'test@example.com',
-            firstName: 'John',
-            lastName: 'Doe',
-            address: {
-                line1: '123 Test St',
-                city: 'Test City',
-                state: 'TS',
-                postal_code: '12345',
-                country: 'US'
-            }
-        }
     };
 
     beforeEach(async () => {

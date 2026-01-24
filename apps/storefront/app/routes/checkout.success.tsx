@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useState, lazy, Suspense, useRef } from "react";
-import { Link, useNavigate, useLoaderData, useFetcher, redirect, data } from "react-router";
+import { Link, useLoaderData, redirect, data } from "react-router";
 import type { LoaderFunctionArgs, ActionFunctionArgs, MetaFunction } from "react-router";
 import { CheckCircle2, Package, Truck, MapPin, XCircle, AlertTriangle } from "../lib/icons";
 import { CancelOrderDialog } from "../components/CancelOrderDialog";
@@ -235,8 +235,7 @@ export const meta: MetaFunction = () => [
 
 export default function CheckoutSuccess() {
     const { stripePublishableKey, medusaBackendUrl, medusaPublishableKey, initialParams } = useLoaderData<LoaderData>();
-    const navigate = useNavigate();
-    const { clearCart, items, addToCart, toggleCart, cartTotal, setPostCheckoutMode } = useCart();
+    const { items, cartTotal, setPostCheckoutMode } = useCart();
     const { cartId, setCartId, setCart: setMedusaCart } = useMedusaCart();
     const [paymentStatus, setPaymentStatus] = useState<'loading' | 'success' | 'error' | 'canceled'>('loading');
 
@@ -1003,47 +1002,12 @@ export default function CheckoutSuccess() {
 
                         {/* Order Modification Controls - Always shown, backend handles validation */}
                         <div className="mt-8 pt-6 border-t border-gray-100 text-center space-y-4">
-                            <button
-                                onClick={async () => {
-                                    try {
-                                        // Load order items into cart for editing
-                                        // Use silent mode to prevent cart drawer from opening
-                                        if (orderDetails?.items && orderDetails.items.length > 0) {
-                                            clearCart();
-                                            for (const item of orderDetails.items) {
-                                                addToCart({
-                                                    id: item.id || item.variant_id || String(Math.random()),
-                                                    variantId: item.variant_id || item.id,
-                                                    title: item.title,
-                                                    price: item.price,
-                                                    image: item.image,
-                                                    quantity: item.quantity,
-                                                    color: item.color,
-                                                }, { silent: true });
-                                            }
-                                        }
-
-                                        // Set post-checkout mode with 24h expiry
-                                        const currentOrderId = orderId || getCachedSessionStorage('orderId');
-                                        if (currentOrderId) {
-                                            setPostCheckoutMode(currentOrderId);
-                                        }
-
-                                        // Navigate to checkout page with orderId
-                                        navigate(`/checkout${currentOrderId ? `?orderId=${currentOrderId}` : ''}`);
-                                    } catch (error) {
-                                        logger.error(
-                                            'Failed to initiate order editing',
-                                            error instanceof Error ? error : new Error(String(error))
-                                        );
-                                        // Still try to navigate to checkout even if loading items failed
-                                        navigate('/checkout');
-                                    }
-                                }}
-                                className="px-6 py-2 bg-accent-earthy text-white rounded-lg hover:bg-accent-earthy/90 transition-colors font-medium"
+                            <Link
+                                to={`/order/${orderId || getCachedSessionStorage('orderId')}/edit`}
+                                className="inline-block px-6 py-2 bg-accent-earthy text-white rounded-lg hover:bg-accent-earthy/90 transition-colors font-medium"
                             >
                                 Edit Order
-                            </button>
+                            </Link>
                             <div>
                                 <button
                                     onClick={() => setShowCancelDialog(true)}

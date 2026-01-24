@@ -217,16 +217,16 @@ export function CartDrawer() {
                         <Link
                             to={
                                 isModifyingOrder && activeOrder
-                                    ? `/checkout?orderId=${activeOrder.orderId}`
+                                    ? `/order/${activeOrder.orderId}/edit`
                                     : isPostCheckout && postCheckoutOrderId
-                                        ? `/checkout?orderId=${postCheckoutOrderId}`
+                                        ? `/order/${postCheckoutOrderId}/edit`
                                         : "/checkout"
                             }
                             onClick={toggleCart}
                             prefetch="intent"
                             className="block w-full py-4 bg-accent-earthy text-white text-center font-semibold rounded hover:bg-accent-earthy/90 transition-colors shadow-lg"
                         >
-                            {isModifyingOrder || isPostCheckout ? "Update" : t('cart.checkout')}
+                            {isModifyingOrder || isPostCheckout ? "Edit Order" : t('cart.checkout')}
                         </Link>
                     </div>
                 ) : null}
