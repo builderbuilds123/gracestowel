@@ -26,6 +26,7 @@ import {
     getRedisConnection,
 } from "../lib/payment-capture-queue";
 import { sendAdminNotification, AdminNotificationType } from "../lib/admin-notifications";
+import { logger } from "../utils/logger";
 
 // Avoid accumulating process signal listeners during Jest runs.
 const IS_JEST = process.env.JEST_WORKER_ID !== undefined;
@@ -37,7 +38,7 @@ let containerRef: MedusaContainer | null = null;
 // NOTE: Removed promoterQueue and promoterInterval - BullMQ Worker handles delayed job promotion automatically
 // Manual promotion was causing jobs to execute ~295 seconds too early
 
-async function getOrderMetadata(orderId: string): Promise<Record<string, any>> {
+async function getOrderMetadata(orderId: string): Promise<Record<string, unknown>> {
     if (!containerRef) {
         return {};
     }
@@ -50,12 +51,15 @@ async function getOrderMetadata(orderId: string): Promise<Record<string, any>> {
             filters: { id: orderId },
         });
 
-        const metadata = (orders?.[0]?.metadata || {}) as Record<string, any>;
+        const metadata = (orders?.[0]?.metadata || {}) as Record<string, unknown>;
         if (metadata && typeof metadata === "object") {
             return metadata;
         }
         return {};
-    } catch {
+    } catch (error) {
+        logger.error("payment-capture-worker", "Failed to get order metadata", {
+            orderId,
+        }, error instanceof Error ? error : new Error(String(error)));
         return {};
     }
 }
@@ -117,10 +121,10 @@ export async function fetchOrderTotal(orderId: string): Promise<{ totalCents: nu
         
         // Story 3.2: Check metadata.updated_total first for orders modified during grace period
         // The add-item workflow stores updated totals in metadata when items are added
-        const metadata = order.metadata as Record<string, any> | undefined;
+        const metadata = order.metadata as Record<string, unknown> | undefined;
         let total: number | undefined;
 
-        console.log(`[PaymentCapture] Parsing total for order ${orderId}...`);
+        logger.debug("payment-capture-worker", "Parsing total for order", { orderId });
 
         // Story 3.2: Check metadata.updated_total first for orders modified during grace period
         const rawUpdatedTotal = metadata?.updated_total as unknown;
@@ -131,9 +135,16 @@ export async function fetchOrderTotal(orderId: string): Promise<{ totalCents: nu
             
             if (Number.isFinite(parsed)) {
                 total = parsed;
-                console.log(`[PaymentCapture]   - Using metadata.updated_total: ${total} (original: ${String(rawUpdatedTotal)})`);
+                logger.debug("payment-capture-worker", "Using metadata.updated_total", {
+                    orderId,
+                    total,
+                    original: String(rawUpdatedTotal),
+                });
             } else {
-                console.log(`[PaymentCapture]   - metadata.updated_total found but invalid: ${String(rawUpdatedTotal)}`);
+                logger.debug("payment-capture-worker", "metadata.updated_total found but invalid", {
+                    orderId,
+                    original: String(rawUpdatedTotal),
+                });
             }
         }
 
@@ -146,38 +157,61 @@ export async function fetchOrderTotal(orderId: string): Promise<{ totalCents: nu
                 
             if (Number.isFinite(parsed)) {
                 total = parsed;
-                console.log(`[PaymentCapture]   - Using summary.current_order_total: ${total} (original: ${String(summaryTotal)})`);
+                logger.debug("payment-capture-worker", "Using summary.current_order_total", {
+                    orderId,
+                    total,
+                    original: String(summaryTotal),
+                });
             } else {
-                console.log(`[PaymentCapture]   - summary.current_order_total found but invalid: ${String(summaryTotal)}`);
+                logger.debug("payment-capture-worker", "summary.current_order_total found but invalid", {
+                    orderId,
+                    original: String(summaryTotal),
+                });
             }
         }
 
         // Fallback to order.total
         if (total === undefined) {
-            const rawTotal = (order as any).total;
+            interface OrderWithTotal {
+                total?: number | { numeric_?: number } | string | unknown;
+            }
+            const rawTotal = (order as OrderWithTotal).total;
             const parsed = typeof rawTotal === "number" 
                 ? rawTotal 
                 : typeof rawTotal === "object" && rawTotal !== null && "numeric_" in rawTotal
-                    ? (rawTotal as any).numeric_
+                    ? (rawTotal as { numeric_?: number }).numeric_
                     : parseFloat(String(rawTotal));
                 
             if (Number.isFinite(parsed)) {
                 total = parsed;
-                console.log(`[PaymentCapture]   - Using order.total: ${total} (original: ${String(rawTotal)})`);
+                logger.debug("payment-capture-worker", "Using order.total", {
+                    orderId,
+                    total,
+                    original: String(rawTotal),
+                });
             } else {
-                console.log(`[PaymentCapture]   - order.total found but invalid: ${String(rawTotal)}`);
+                logger.debug("payment-capture-worker", "order.total found but invalid", {
+                    orderId,
+                    original: String(rawTotal),
+                });
             }
         }
 
         if (total === undefined || !Number.isFinite(total)) {
-            const rawTotalForLog = (order as any).total;
+            interface OrderWithTotal {
+                total?: unknown;
+            }
+            const rawTotalForLog = (order as OrderWithTotal).total;
             const debugInfo = {
                 rawTotalType: typeof rawTotalForLog,
                 rawTotalString: String(rawTotalForLog),
                 summaryExists: !!order.summary,
                 updatedTotalExists: rawUpdatedTotal !== undefined
             };
-            console.error(`[PaymentCapture] Order ${orderId} has invalid total calculation:`, debugInfo);
+            logger.error("payment-capture-worker", "Order has invalid total calculation", {
+                orderId,
+                ...debugInfo,
+            });
             throw new Error(`Order ${orderId} has invalid total: ${JSON.stringify(rawTotalForLog)} (Debug: ${JSON.stringify(debugInfo)})`);
         }
 
@@ -188,7 +222,7 @@ export async function fetchOrderTotal(orderId: string): Promise<{ totalCents: nu
 
         // M1: Fail if currency is missing instead of falling back to USD
         if (!order.currency_code) {
-            console.error(`[PaymentCapture] Order ${orderId} has no currency code`);
+            logger.error("payment-capture-worker", "Order has no currency code", { orderId });
             return null;
         }
 
@@ -233,7 +267,9 @@ async function getPaymentInfoForOrder(orderId: string): Promise<{ paymentCollect
             paymentId: paymentId ?? null,
         };
     } catch (error) {
-        console.error(`[PAY-01][ERROR] Failed to retrieve payment info for order ${orderId}:`, error);
+        logger.error("payment-capture-worker", "Failed to retrieve payment info for order", {
+            orderId,
+        }, error instanceof Error ? error : new Error(String(error)));
         return { paymentCollectionId: null, paymentId: null };
     }
 }
@@ -261,7 +297,7 @@ export async function setOrderEditStatus(
     expectCurrentStatus?: "editable" | "idle" | undefined
 ): Promise<boolean> {
     if (!containerRef) {
-        console.error("[PaymentCapture] Container not initialized - cannot set edit status");
+        logger.error("payment-capture-worker", "Container not initialized - cannot set edit status", {});
         return false;
     }
 
@@ -270,9 +306,12 @@ export async function setOrderEditStatus(
 
         // Optimistic locking: check current state if expected status specified
         if (expectCurrentStatus !== undefined) {
-            const currentStatus = (currentMetadata as any)?.edit_status;
+            const currentStatus = currentMetadata?.edit_status as string | undefined;
             if (currentStatus === "locked_for_capture") {
-                console.warn(`[PaymentCapture] Order ${orderId}: Already locked ('${currentStatus}'), skipping lock acquisition`);
+                logger.warn("payment-capture-worker", "Order already locked - skipping lock acquisition", {
+                    orderId,
+                    currentStatus,
+                });
                 return false;
             }
         }
@@ -286,10 +325,16 @@ export async function setOrderEditStatus(
                 edit_status_updated_at: new Date().toISOString(),
             },
         }]);
-        console.log(`[PaymentCapture] Order ${orderId}: edit_status set to ${editStatus}`);
+        logger.info("payment-capture-worker", "Order edit_status set", {
+            orderId,
+            editStatus,
+        });
         return true;
     } catch (error) {
-        console.error(`[PaymentCapture] Error setting edit_status for order ${orderId}:`, error);
+        logger.error("payment-capture-worker", "Error setting edit_status for order", {
+            orderId,
+            editStatus,
+        }, error instanceof Error ? error : new Error(String(error)));
         throw error; // Re-throw to trigger retry - errors should not be silently swallowed
     }
 }
@@ -309,7 +354,7 @@ export async function setOrderEditStatus(
  */
 export async function updateOrderAfterCapture(orderId: string, amountCaptured: number): Promise<void> {
     if (!containerRef) {
-        console.error("[PaymentCapture] Container not initialized - cannot update order");
+        logger.error("payment-capture-worker", "Container not initialized - cannot update order", {});
         throw new Error("Container not initialized - critical payment infrastructure unavailable");
     }
 
@@ -319,7 +364,9 @@ export async function updateOrderAfterCapture(orderId: string, amountCaptured: n
         const currentStatus = await getOrderStatus(orderId);
 
         if (currentStatus === "canceled") {
-            console.warn(`[PaymentCapture] Order ${orderId}: Order is canceled in Medusa, not updating status after capture`);
+            logger.warn("payment-capture-worker", "Order is canceled in Medusa - not updating status after capture", {
+                orderId,
+            });
             return;
         }
 
@@ -364,11 +411,16 @@ export async function updateOrderAfterCapture(orderId: string, amountCaptured: n
                 id: orderId,
                 status: "completed"
             }]);
-            console.log(`[PaymentCapture] Order ${orderId}: Status updated to completed`);
+            logger.info("payment-capture-worker", "Order status updated to completed", {
+                orderId,
+            });
         }
 
     } catch (error) {
-        console.error(`[PaymentCapture] Error updating order ${orderId} after capture:`, error);
+        logger.error("payment-capture-worker", "Error updating order after capture", {
+            orderId,
+            amountCaptured,
+        }, error instanceof Error ? error : new Error(String(error)));
         // Re-throw - payment status update is CRITICAL, not secondary
         throw error;
     }
@@ -391,16 +443,24 @@ type PaymentCollectionInfo = { paymentCollectionId: string | null; paymentId: st
 
 async function updatePaymentCollectionOnCapture(orderId: string, amountCaptured: number): Promise<PaymentCollectionInfo> {
     if (!containerRef) {
-        console.error(
-            `[PAY-01][CRITICAL] Container not initialized - cannot update PaymentCollection for order ${orderId}. ` +
-            `Payment was captured in Stripe but PaymentCollection status will not be updated.`
-        );
-        console.log(`[METRIC] payment_collection_update_blocked order=${orderId} reason=no_container`);
+        logger.critical("payment-capture-worker", "Container not initialized - cannot update PaymentCollection", {
+            orderId,
+            message: "Payment was captured in Stripe but PaymentCollection status will not be updated",
+        });
+        logger.info("payment-capture-worker", "Payment collection update blocked", {
+            orderId,
+            reason: "no_container",
+        });
         return { paymentCollectionId: null, paymentId: null };
     }
 
     // Declare paymentCollection outside try block for catch block access
-    let paymentCollection: any = null;
+    interface PaymentCollection {
+        id?: string;
+        status?: string;
+        payments?: Array<{ id?: string }>;
+    }
+    let paymentCollection: PaymentCollection | null = null;
 
     try {
         const query = containerRef.resolve("query");
@@ -419,7 +479,9 @@ async function updatePaymentCollectionOnCapture(orderId: string, amountCaptured:
 
         const order = orders?.[0];
         if (!order) {
-            console.warn(`[PAY-01] Order ${orderId} not found for PaymentCollection update`);
+            logger.warn("payment-capture-worker", "Order not found for PaymentCollection update", {
+                orderId,
+            });
             return { paymentCollectionId: null, paymentId: null };
         }
 
@@ -427,9 +489,12 @@ async function updatePaymentCollectionOnCapture(orderId: string, amountCaptured:
         // Capturable statuses are those that can transition to "completed": "authorized", "awaiting", etc.
         // Terminal statuses are: "completed", "partially_captured", "canceled"
         const capturableStatuses = ["authorized", "awaiting", "not_paid"];
-        paymentCollection = order.payment_collections?.find(pc =>
-            pc ? capturableStatuses.includes(pc.status as string) : false
-        );
+        const foundCollection = order.payment_collections?.find(pc => {
+            if (!pc || pc === null) return false;
+            const status = (pc as { status?: string }).status;
+            return status && capturableStatuses.includes(status);
+        });
+        paymentCollection = (foundCollection as PaymentCollection | null) || null;
 
         if (!paymentCollection) {
             const hasPaymentCollections = order.payment_collections && order.payment_collections.length > 0;
@@ -438,10 +503,11 @@ async function updatePaymentCollectionOnCapture(orderId: string, amountCaptured:
                     .filter((pc): pc is NonNullable<typeof pc> => pc !== null)
                     .map(pc => pc.status)
                     .join(', ');
-                console.log(
-                    `[PAY-01] Order ${orderId}: No capturable PaymentCollection found. ` +
-                    `Current statuses: ${statuses}. May already be captured or in terminal state.`
-                );
+                logger.info("payment-capture-worker", "No capturable PaymentCollection found", {
+                    orderId,
+                    currentStatuses: statuses,
+                    message: "May already be captured or in terminal state",
+                });
 
                 // Return the first one anyway for transaction recording, even if already captured
                 const existingPC = order.payment_collections[0];
@@ -455,11 +521,10 @@ async function updatePaymentCollectionOnCapture(orderId: string, amountCaptured:
                 };
             } else {
                 // NO BACKWARD COMPATIBILITY - fail loudly if no PaymentCollection
-                console.error(
-                    `[PAY-01][CRITICAL] Order ${orderId}: No PaymentCollection found! ` +
-                    `This order was created before PAY-01 deployment and is not supported. ` +
-                    `Pre-PAY-01 orders must be handled manually via admin UI.`
-                );
+                logger.critical("payment-capture-worker", "No PaymentCollection found", {
+                    orderId,
+                    message: "This order was created before PAY-01 deployment and is not supported. Pre-PAY-01 orders must be handled manually via admin UI.",
+                });
                 return { paymentCollectionId: null, paymentId: null };
             }
         }
@@ -472,35 +537,44 @@ async function updatePaymentCollectionOnCapture(orderId: string, amountCaptured:
                 orderId
             );
         } catch (error) {
-            console.error(`[PAY-01][ERROR] Invalid PaymentCollection status for order ${orderId}:`, error);
+            logger.error("payment-capture-worker", "Invalid PaymentCollection status for order", {
+                orderId,
+            }, error instanceof Error ? error : new Error(String(error)));
             // Don't throw - log error and continue (payment was captured via Stripe)
             return { paymentCollectionId: null, paymentId: null };
         }
 
         // Double-check if already in terminal state (shouldn't happen after find() above, but defensive)
         if (isTerminalStatus(currentStatus)) {
-            console.log(`[PAY-01] Order ${orderId}: PaymentCollection already in final state: ${currentStatus}`);
+            logger.info("payment-capture-worker", "PaymentCollection already in final state", {
+                orderId,
+                currentStatus,
+            });
             const paymentId = paymentCollection.payments?.[0]?.id as string | undefined;
             return { paymentCollectionId: paymentCollection.id as string, paymentId: paymentId ?? null };
         }
 
         // Update PaymentCollection status via Payment Module
         // NOTE: Medusa v2 does not export IPaymentModuleService as a public type
-        // Using 'as any' is the standard pattern for resolving module services in Medusa v2
+        // Using type assertion is the standard pattern for resolving module services in Medusa v2
         // The service provides methods like updatePaymentCollections() and capturePayment()
-        const paymentModuleService = containerRef.resolve(Modules.PAYMENT) as any;
+        interface PaymentModuleService {
+            updatePaymentCollections: (updates: Array<{ id: string; status: string }>) => Promise<void>;
+        }
+        const paymentModuleService = containerRef.resolve(Modules.PAYMENT) as unknown as PaymentModuleService;
         
         await paymentModuleService.updatePaymentCollections([
             {
-                id: paymentCollection.id,
+                id: paymentCollection.id as string,
                 status: PaymentCollectionStatus.COMPLETED,
             },
         ]);
 
-        console.log(
-            `[PAY-01] Order ${orderId}: PaymentCollection ${paymentCollection.id} status updated to "completed" ` +
-            `(amount: ${amountCaptured} cents)`
-        );
+        logger.info("payment-capture-worker", "PaymentCollection status updated to completed", {
+            orderId,
+            paymentCollectionId: paymentCollection.id,
+            amountCaptured,
+        });
 
         const paymentId = paymentCollection.payments?.[0]?.id as string | undefined;
         return { paymentCollectionId: paymentCollection.id as string, paymentId: paymentId ?? null };
@@ -509,23 +583,29 @@ async function updatePaymentCollectionOnCapture(orderId: string, amountCaptured:
         // REVIEW FIX (Issue #13): Zombie PaymentCollection detection and alerting
         // CRITICAL: Payment was captured in Stripe, but PC status update failed
         // This creates a data inconsistency that requires manual intervention
-        console.error(`[PAY-01][ERROR] Failed to update PaymentCollection for order ${orderId}:`, error);
+        const errorObj = error instanceof Error ? error : new Error(String(error));
+        logger.error("payment-capture-worker", "Failed to update PaymentCollection for order", {
+            orderId,
+            paymentCollectionId: paymentCollection?.id || 'unknown',
+            amountCaptured,
+        }, errorObj);
 
         // Emit CRITICAL alert for zombie PaymentCollection
         // Operators should investigate and manually update PaymentCollection status
-        console.error(
-            `[CRITICAL][ZOMBIE] Zombie PaymentCollection detected! ` +
-            `order=${orderId} payment_collection=${paymentCollection?.id || 'unknown'} ` +
-            `amount=${amountCaptured} ` +
-            `error=${(error as Error).name} message="${(error as Error).message}"`
-        );
+        logger.critical("payment-capture-worker", "Zombie PaymentCollection detected", {
+            orderId,
+            paymentCollectionId: paymentCollection?.id || 'unknown',
+            amountCaptured,
+            errorName: errorObj.name,
+            errorMessage: errorObj.message,
+        });
 
         // Emit metric for monitoring and alerting
-        console.log(
-            `[METRIC] zombie_payment_collection ` +
-            `order=${orderId} payment_collection=${paymentCollection?.id || 'unknown'} ` +
-            `amount=${amountCaptured}`
-        );
+        logger.info("payment-capture-worker", "Zombie payment collection metric", {
+            orderId,
+            paymentCollectionId: paymentCollection?.id || 'unknown',
+            amountCaptured,
+        });
 
         // Log but don't throw - payment was captured via Stripe, PC update is secondary
         // However, this is a CRITICAL issue that needs operator attention
@@ -572,22 +652,27 @@ async function createOrderTransactionOnCapture(
         const amountInMajorUnits = amountCaptured / 100;
 
         // Create OrderTransaction with reference to the capture
+        const referenceId = paymentId || paymentCollectionId || `stripe_capture_${orderId}`;
         await orderModuleService.addOrderTransactions({
             order_id: orderId,
             amount: amountInMajorUnits, // Major units (e.g., 45.5 for $45.50)
             currency_code: currencyCode,
             reference: "capture",
-            reference_id: paymentId || paymentCollectionId || `stripe_capture_${orderId}`,
+            reference_id: referenceId,
         });
 
-        console.log(
-            `[PAY-01] Order ${orderId}: Created OrderTransaction for capture ` +
-            `(amount: ${amountInMajorUnits} ${currencyCode.toUpperCase()}, reference_id: ${paymentId || paymentCollectionId || `stripe_capture_${orderId}`})`
-        );
+        logger.info("payment-capture-worker", "Created OrderTransaction for capture", {
+            orderId,
+            amount: amountInMajorUnits,
+            currencyCode: currencyCode.toUpperCase(),
+            referenceId,
+        });
 
     } catch (error) {
         // Log but don't throw - OrderTransaction is for downstream features, not critical
-        console.error(`[PAY-01][ERROR] Failed to create OrderTransaction for order ${orderId}:`, error);
+        logger.error("payment-capture-worker", "Failed to create OrderTransaction for order", {
+            orderId,
+        }, error instanceof Error ? error : new Error(String(error)));
     }
 }
 
@@ -606,14 +691,17 @@ async function createOrderTransactionOnCapture(
  */
 async function capturePaymentViaPaymentModule(paymentId: string | null, amountCents: number, currencyCode: string): Promise<void> {
     if (!containerRef || !paymentId) {
-        console.warn("[PAY-01] No paymentId available for Payment Module capture; skipping PaymentModule capture.");
+        logger.warn("payment-capture-worker", "No paymentId available for Payment Module capture - skipping", {});
         return;
     }
 
     try {
         // NOTE: Medusa v2 does not export IPaymentModuleService as a public type
-        // Using 'as any' is the standard pattern for resolving module services in Medusa v2
-        const paymentModuleService = containerRef.resolve(Modules.PAYMENT) as any;
+        // Using type assertion is the standard pattern for resolving module services in Medusa v2
+        interface PaymentModuleService {
+            capturePayment: (params: { payment_id: string; amount: number }) => Promise<void>;
+        }
+        const paymentModuleService = containerRef.resolve(Modules.PAYMENT) as unknown as PaymentModuleService;
 
         // Medusa v2 Payment Module uses MAJOR UNITS (confirmed via official docs)
         // Convert Stripe cents → Medusa major units
@@ -625,12 +713,15 @@ async function capturePaymentViaPaymentModule(paymentId: string | null, amountCe
             amount: amountInMajorUnits, // Major units (e.g., 45.5 for $45.50)
         });
 
-        console.log(
-            `[PAY-01] Captured payment via Payment Module: ` +
-            `paymentId=${paymentId}, amount=${amountInMajorUnits} ${currencyCode.toUpperCase()}`
-        );
+        logger.info("payment-capture-worker", "Captured payment via Payment Module", {
+            paymentId,
+            amount: amountInMajorUnits,
+            currencyCode: currencyCode.toUpperCase(),
+        });
     } catch (error) {
-        console.error(`[PAY-01][ERROR] Payment Module capture failed for payment ${paymentId}:`, error);
+        logger.error("payment-capture-worker", "Payment Module capture failed", {
+            paymentId,
+        }, error instanceof Error ? error : new Error(String(error)));
         throw error;
     }
 }
@@ -647,28 +738,38 @@ export async function processPaymentCapture(job: Job<PaymentCaptureJobData>): Pr
     // DEBUG: Log detailed job information
     const now = Date.now();
     const scheduledDelay = now - scheduledAt;
-    console.log(`[PaymentCapture][DEBUG] ====== CAPTURE JOB PROCESSING ======`);
-    console.log(`[PaymentCapture][DEBUG] Order ID: ${orderId}`);
-    console.log(`[PaymentCapture][DEBUG] Payment Intent: ${paymentIntentId}`);
-    console.log(`[PaymentCapture][DEBUG] Job ID: ${job.id}`);
-    console.log(`[PaymentCapture][DEBUG] Job Name: ${job.name}`);
-    console.log(`[PaymentCapture][DEBUG] Source: ${source || "normal"}`);
-    console.log(`[PaymentCapture][DEBUG] Scheduled At: ${new Date(scheduledAt).toISOString()}`);
-    console.log(`[PaymentCapture][DEBUG] Processing At: ${new Date(now).toISOString()}`);
-    console.log(`[PaymentCapture][DEBUG] Actual Delay: ${scheduledDelay}ms (${Math.round(scheduledDelay / 1000)}s = ${Math.round(scheduledDelay / 60000)} minutes)`);
-    console.log(`[PaymentCapture][DEBUG] Job Delay Option: ${job.opts?.delay}ms`);
-    console.log(`[PaymentCapture][DEBUG] Job Attempts: ${job.attemptsMade}/${job.opts?.attempts || 3}`);
-    console.log(`[PaymentCapture][DEBUG] ====================================`);
+    logger.debug("payment-capture-worker", "Capture job processing", {
+        orderId,
+        paymentIntentId,
+        jobId: job.id,
+        jobName: job.name,
+        source: source || "normal",
+        scheduledAt: new Date(scheduledAt).toISOString(),
+        processingAt: new Date(now).toISOString(),
+        actualDelayMs: scheduledDelay,
+        actualDelaySeconds: Math.round(scheduledDelay / 1000),
+        actualDelayMinutes: Math.round(scheduledDelay / 60000),
+        jobDelayOption: job.opts?.delay,
+        attemptsMade: job.attemptsMade,
+        maxAttempts: job.opts?.attempts || 3,
+    });
 
-    console.log(`[PaymentCapture] Processing capture for order ${orderId}`);
+    logger.info("payment-capture-worker", "Processing capture for order", { orderId });
 
     if (!orderId || typeof orderId !== "string" || !orderId.startsWith("order_")) {
-        console.error(`[PaymentCapture][CRITICAL] Invalid orderId in job ${job.id}:`, orderId);
+        logger.critical("payment-capture-worker", "Invalid orderId in job", {
+            jobId: job.id,
+            orderId,
+        });
         return;
     }
 
     if (!paymentIntentId || typeof paymentIntentId !== "string" || !paymentIntentId.startsWith("pi_")) {
-        console.error(`[PaymentCapture][CRITICAL] Invalid paymentIntentId for order ${orderId} in job ${job.id}:`, paymentIntentId);
+        logger.critical("payment-capture-worker", "Invalid paymentIntentId for order", {
+            orderId,
+            jobId: job.id,
+            paymentIntentId,
+        });
         return;
     }
     
@@ -685,12 +786,18 @@ export async function processPaymentCapture(job: Job<PaymentCaptureJobData>): Pr
         const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
         
         if (paymentIntent.status === "canceled") {
-            console.log(`[PaymentCapture] Order ${orderId}: Payment was already canceled`);
+            logger.info("payment-capture-worker", "Payment was already canceled", {
+                orderId,
+                paymentIntentId,
+            });
             return;
         }
         
         if (paymentIntent.status === "succeeded") {
-            console.log(`[PaymentCapture] Order ${orderId}: Payment was already captured`);
+            logger.info("payment-capture-worker", "Payment was already captured", {
+                orderId,
+                paymentIntentId,
+            });
             const alreadyCapturedAmount =
                 typeof paymentIntent.amount_received === "number" && paymentIntent.amount_received > 0
                     ? paymentIntent.amount_received
@@ -700,7 +807,11 @@ export async function processPaymentCapture(job: Job<PaymentCaptureJobData>): Pr
         }
         
         if (paymentIntent.status !== "requires_capture") {
-            console.log(`[PaymentCapture] Order ${orderId}: Unexpected status: ${paymentIntent.status}`);
+            logger.info("payment-capture-worker", "Unexpected payment intent status", {
+                orderId,
+                paymentIntentId,
+                status: paymentIntent.status,
+            });
             return;
         }
 
@@ -709,17 +820,21 @@ export async function processPaymentCapture(job: Job<PaymentCaptureJobData>): Pr
         
         if (!orderData) {
             // Do NOT capture if order data is unavailable; fail for manual review to avoid charging canceled/missing orders
-            console.error(`[PaymentCapture][CRITICAL] Order ${orderId}: Could not fetch order details. Aborting capture.`);
+            logger.critical("payment-capture-worker", "Could not fetch order details - aborting capture", {
+                orderId,
+            });
             throw new Error(`Could not fetch order details for order ${orderId}`);
         }
 
         // Guard: Skip capture if order is canceled in Medusa
         if (orderData.status === "canceled") {
-            console.error(
-                `[PaymentCapture][CRITICAL] Order ${orderId} is canceled in Medusa ` +
-                `but PI ${paymentIntentId} still requires capture. Skipping capture.`
-            );
-            console.log(`[METRIC] capture_blocked_canceled_order order=${orderId}`);
+            logger.critical("payment-capture-worker", "Order is canceled in Medusa but PI still requires capture - skipping", {
+                orderId,
+                paymentIntentId,
+            });
+            logger.info("payment-capture-worker", "Capture blocked for canceled order", {
+                orderId,
+            });
             return;
         }
 
@@ -728,15 +843,19 @@ export async function processPaymentCapture(job: Job<PaymentCaptureJobData>): Pr
 
         // M2: Validate currency match
         if (currencyCode.toLowerCase() !== paymentIntent.currency.toLowerCase()) {
-            console.error(
-                `[PaymentCapture][CRITICAL] Order ${orderId}: Currency mismatch! ` +
-                `Order: ${currencyCode}, PaymentIntent: ${paymentIntent.currency}. ` +
-                `Cannot capture.`
-            );
+            logger.critical("payment-capture-worker", "Currency mismatch - cannot capture", {
+                orderId,
+                orderCurrency: currencyCode,
+                paymentIntentCurrency: paymentIntent.currency,
+            });
             throw new Error(`Currency mismatch: Order ${currencyCode} vs PaymentIntent ${paymentIntent.currency}`);
         }
 
-        console.log(`[PaymentCapture] Order ${orderId}: Authorized=${authorizedAmount} cents, Order Total=${totalCents} cents`);
+        logger.info("payment-capture-worker", "Payment capture amounts", {
+            orderId,
+            authorizedAmount,
+            orderTotal: totalCents,
+        });
 
         // Step 3: Try Payment Module capture first (AC3)
         const { paymentId } = await getPaymentInfoForOrder(orderId);
@@ -748,36 +867,46 @@ export async function processPaymentCapture(job: Job<PaymentCaptureJobData>): Pr
                 capturedViaPaymentModule = true;
 
                 // REVIEW FIX (Issue #12): Emit success metric for Payment Module capture
-                console.log(
-                    `[METRIC] payment_module_capture_success ` +
-                    `order=${orderId} payment=${paymentId} amount=${totalCents}`
-                );
+                logger.info("payment-capture-worker", "Payment module capture success", {
+                    orderId,
+                    paymentId,
+                    amount: totalCents,
+                });
             } catch (pmError) {
                 // REVIEW FIX (Issue #12): Enhanced fallback logging with error classification
-                const errorName = (pmError as Error).name || 'UnknownError';
-                const errorCode = (pmError as any).code || 'UNKNOWN';
-                const errorMessage = (pmError as Error).message || 'No message';
+                const errorObj = pmError instanceof Error ? pmError : new Error(String(pmError));
+                interface ErrorWithCode extends Error {
+                    code?: string;
+                }
+                const errorWithCode = errorObj as ErrorWithCode;
+                const errorCode = errorWithCode.code || 'UNKNOWN';
 
-                console.error(
-                    `[PaymentCapture][WARN] Payment Module capture failed for order ${orderId}, falling back to Stripe:`,
-                    pmError
-                );
+                logger.warn("payment-capture-worker", "Payment Module capture failed - falling back to Stripe", {
+                    orderId,
+                    paymentId,
+                    errorName: errorObj.name,
+                    errorCode,
+                    errorMessage: errorObj.message.substring(0, 100),
+                });
 
                 // Emit metric for monitoring - track fallback frequency and error types
-                console.log(
-                    `[METRIC] payment_module_capture_fallback ` +
-                    `order=${orderId} payment=${paymentId} error_name=${errorName} error_code=${errorCode} ` +
-                    `message="${errorMessage.substring(0, 100)}"`
-                );
+                logger.info("payment-capture-worker", "Payment module capture fallback metric", {
+                    orderId,
+                    paymentId,
+                    errorName: errorObj.name,
+                    errorCode,
+                });
             }
         } else {
-            console.warn(`[PAY-01] No paymentId on order ${orderId}; falling back to Stripe capture.`);
+            logger.warn("payment-capture-worker", "No paymentId on order - falling back to Stripe capture", {
+                orderId,
+            });
 
             // REVIEW FIX (Issue #12): Track cases where Payment Module path isn't available
-            console.log(
-                `[METRIC] payment_module_capture_unavailable ` +
-                `order=${orderId} reason=no_payment_id`
-            );
+            logger.info("payment-capture-worker", "Payment module capture unavailable", {
+                orderId,
+                reason: "no_payment_id",
+            });
         }
 
         if (!capturedViaPaymentModule) {
@@ -785,10 +914,11 @@ export async function processPaymentCapture(job: Job<PaymentCaptureJobData>): Pr
             if (totalCents > authorizedAmount) {
                 // EXCESS: Order total increased beyond authorized amount
                 // This should not happen normally - would require increment_authorization
-                console.error(
-                    `[PaymentCapture][CRITICAL] Order ${orderId}: Total (${totalCents}) exceeds authorized amount (${authorizedAmount}). ` +
-                    `Manual intervention required!`
-                );
+                logger.critical("payment-capture-worker", "Order total exceeds authorized amount - manual intervention required", {
+                    orderId,
+                    totalCents,
+                    authorizedAmount,
+                });
                 throw new Error(`Amount to capture (${totalCents}) exceeds authorized amount (${authorizedAmount})`);
             }
 
@@ -808,14 +938,24 @@ export async function processPaymentCapture(job: Job<PaymentCaptureJobData>): Pr
                 // PARTIAL: Order total decreased (items removed during grace period)
                 // Stripe automatically releases the uncaptured portion
                 const released = authorizedAmount - totalCents;
-                console.log(
-                    `[PaymentCapture] Order ${orderId}: Captured ${totalCents} cents, released ${released} cents (${captured.status})`
-                );
+                logger.info("payment-capture-worker", "Partial capture - released uncaptured portion", {
+                    orderId,
+                    capturedAmount: totalCents,
+                    releasedAmount: released,
+                    status: captured.status,
+                });
             } else {
-                console.log(`[PaymentCapture] Order ${orderId}: Captured ${totalCents} cents (${captured.status})`);
+                logger.info("payment-capture-worker", "Payment captured via Stripe", {
+                    orderId,
+                    amount: totalCents,
+                    status: captured.status,
+                });
             }
         } else {
-            console.log(`[PAY-01] Order ${orderId}: Captured ${totalCents} cents via Payment Module`);
+            logger.info("payment-capture-worker", "Payment captured via Payment Module", {
+                orderId,
+                amount: totalCents,
+            });
         }
 
         // Step 5: Update Medusa order with capture metadata and release lock
@@ -825,16 +965,22 @@ export async function processPaymentCapture(job: Job<PaymentCaptureJobData>): Pr
         await setOrderEditStatus(orderId, "idle");
         lockAcquired = false; // Mark as released so finally doesn't double-release
 
-    } catch (error: any) {
+    } catch (error: unknown) {
         // Handle specific Stripe errors using property checks (more robust than instanceof)
-        if (error?.type === "invalid_request_error" && error?.code === "amount_too_large") {
-            console.error(
-                `[PaymentCapture][CRITICAL] Order ${orderId}: Amount too large error. ` +
-                `The order total exceeds authorized amount. Manual intervention required!`,
-                error
-            );
+        interface StripeError extends Error {
+            type?: string;
+            code?: string;
+        }
+        const stripeError = error as StripeError;
+        if (stripeError?.type === "invalid_request_error" && stripeError?.code === "amount_too_large") {
+            logger.critical("payment-capture-worker", "Amount too large error - manual intervention required", {
+                orderId,
+                message: "The order total exceeds authorized amount",
+            }, error instanceof Error ? error : new Error(String(error)));
         } else {
-            console.error(`[PaymentCapture] Error capturing payment for order ${orderId}:`, error);
+            logger.error("payment-capture-worker", "Error capturing payment for order", {
+                orderId,
+            }, error instanceof Error ? error : new Error(String(error)));
         }
         
         throw error; // Re-throw to trigger retry
@@ -844,7 +990,9 @@ export async function processPaymentCapture(job: Job<PaymentCaptureJobData>): Pr
             try {
                 await setOrderEditStatus(orderId, "idle");
             } catch (releaseError) {
-                console.error(`[PaymentCapture][CRITICAL] Failed to release lock for order ${orderId}:`, releaseError);
+                logger.critical("payment-capture-worker", "Failed to release lock for order", {
+                    orderId,
+                }, releaseError instanceof Error ? releaseError : new Error(String(releaseError)));
             }
         }
     }
@@ -883,21 +1031,26 @@ export function startPaymentCaptureWorker(container?: MedusaContainer): Worker<P
     // and should check job timestamps before promoting to avoid premature execution
 
     worker.on("completed", (job) => {
-        console.log(`[PaymentCapture] Job ${job.id} completed`);
+        logger.info("payment-capture-worker", "Job completed", {
+            jobId: job.id,
+            orderId: job.data?.orderId,
+        });
     });
 
     worker.on("failed", async (job, err) => {
         const attemptsMade = job?.attemptsMade || 0;
         const maxAttempts = job?.opts?.attempts || 3;
+        const orderId = job?.data?.orderId;
+        const paymentIntentId = job?.data?.paymentIntentId;
 
         if (attemptsMade >= maxAttempts) {
             // CRITICAL: Job has exhausted all retries - revenue at risk
-            console.error(
-                `[CRITICAL][DLQ] Payment capture PERMANENTLY FAILED for order ${job?.data?.orderId}. ` +
-                `PaymentIntent: ${job?.data?.paymentIntentId}. Attempts: ${attemptsMade}/${maxAttempts}. ` +
-                `Manual intervention required!`,
-                err
-            );
+            logger.critical("payment-capture-worker", "Payment capture permanently failed - manual intervention required", {
+                orderId,
+                paymentIntentId,
+                attemptsMade,
+                maxAttempts,
+            }, err instanceof Error ? err : new Error(String(err)));
 
             // Send admin notification for payment capture failure
             if (containerRef) {
@@ -905,32 +1058,34 @@ export function startPaymentCaptureWorker(container?: MedusaContainer): Worker<P
                     await sendAdminNotification(containerRef, {
                         type: AdminNotificationType.PAYMENT_FAILED,
                         title: "Payment Capture Failed",
-                        description: `Payment capture failed for order ${job?.data?.orderId} after ${attemptsMade} attempts. Manual intervention required.`,
+                        description: `Payment capture failed for order ${orderId} after ${attemptsMade} attempts. Manual intervention required.`,
                         metadata: {
-                            order_id: job?.data?.orderId,
-                            payment_intent_id: job?.data?.paymentIntentId,
+                            order_id: orderId,
+                            payment_intent_id: paymentIntentId,
                             attempts: attemptsMade,
-                            error: err?.message,
+                            error: err instanceof Error ? err.message : String(err),
                         },
                     });
                 } catch (notifError) {
-                    console.error("[PaymentCapture] Failed to send admin notification:", notifError);
+                    logger.error("payment-capture-worker", "Failed to send admin notification", {}, notifError instanceof Error ? notifError : new Error(String(notifError)));
                 }
             }
         } else {
-            console.error(
-                `[PaymentCapture] Job ${job?.id} failed (attempt ${attemptsMade}/${maxAttempts}):`,
-                err
-            );
+            logger.error("payment-capture-worker", "Job failed", {
+                jobId: job?.id,
+                orderId,
+                attemptsMade,
+                maxAttempts,
+            }, err instanceof Error ? err : new Error(String(err)));
         }
     });
 
-    console.log("[PaymentCapture] Worker started");
+    logger.info("payment-capture-worker", "Worker started", {});
 
     // Graceful shutdown (register once). Skip in Jest to avoid listener accumulation.
     if (!shutdownHandler && !IS_JEST) {
         shutdownHandler = async () => {
-            console.log("[PaymentCapture] Shutting down worker...");
+            logger.info("payment-capture-worker", "Shutting down worker");
             await worker?.close();
         };
         process.on("SIGTERM", shutdownHandler);

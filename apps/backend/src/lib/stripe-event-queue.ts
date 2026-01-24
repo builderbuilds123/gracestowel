@@ -13,6 +13,7 @@ import { Queue, Job } from "bullmq";
 import Stripe from "stripe";
 import Redis from "ioredis";
 import { StripeEventJobData } from "../types/queue-types";
+import { logger } from "../utils/logger";
 
 // Re-export type for backwards compatibility
 export { StripeEventJobData } from "../types/queue-types";
@@ -36,14 +37,22 @@ export function getRedisConnection() {
         throw new Error("REDIS_URL is not configured");
     }
     
-    const url = new URL(redisUrl);
-    return {
-        host: url.hostname,
-        port: parseInt(url.port || "6379"),
-        password: url.password || undefined,
-        username: url.username || undefined,
-        tls: url.protocol === "rediss:" ? {} : undefined,
-    };
+    try {
+        const url = new URL(redisUrl);
+        return {
+            host: url.hostname,
+            port: parseInt(url.port || "6379"),
+            password: url.password || undefined,
+            username: url.username || undefined,
+            tls: url.protocol === "rediss:" ? {} : undefined,
+        };
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logger.error("stripe-event-queue", "Invalid REDIS_URL format", {
+            error: errorMessage,
+        });
+        throw new Error(`Invalid REDIS_URL format: ${errorMessage}`);
+    }
 }
 
 function getRedisClient(): Redis {
@@ -55,6 +64,29 @@ function getRedisClient(): Redis {
             password: config.password,
             username: config.username,
             tls: config.tls,
+            retryStrategy: (times: number) => {
+                // Exponential backoff: 50ms, 100ms, 200ms, 400ms, 800ms, max 3s
+                const delay = Math.min(times * 50, 3000);
+                if (times > 10) {
+                    logger.error("stripe-event-queue", "Redis connection retry limit exceeded", {
+                        retryAttempts: times,
+                    });
+                    return null; // Stop retrying after 10 attempts
+                }
+                return delay;
+            },
+            maxRetriesPerRequest: 3,
+            enableReadyCheck: true,
+            lazyConnect: false,
+        });
+
+        // Handle connection errors
+        redisClient.on("error", (error: Error) => {
+            logger.error("stripe-event-queue", "Redis client error", {}, error);
+        });
+
+        redisClient.on("connect", () => {
+            logger.info("stripe-event-queue", "Redis client connected");
         });
     }
     return redisClient;
@@ -78,8 +110,13 @@ export async function isEventProcessed(eventId: string): Promise<boolean> {
         const value = await redis.get(key);
         return value === "processed";
     } catch (error) {
-        console.error(`[StripeEventQueue] Redis idempotency check failed for ${eventId}:`, error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logger.error("stripe-event-queue", "Redis idempotency check failed", {
+            eventId,
+            error: errorMessage,
+        }, error instanceof Error ? error : new Error(errorMessage));
         // Fail-open: assume not processed to ensure at-least-once delivery
+        // This is acceptable for idempotency checks as duplicate processing is handled downstream
         return false;
     }
 }
@@ -108,8 +145,13 @@ export async function acquireProcessingLock(eventId: string): Promise<boolean> {
         const result = await redis.set(key, "processing", "EX", PROCESSING_LOCK_TTL_SECONDS, "NX");
         return result === "OK";
     } catch (error) {
-        console.error(`[StripeEventQueue] Failed to acquire lock for ${eventId}:`, error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logger.error("stripe-event-queue", "Failed to acquire processing lock", {
+            eventId,
+            error: errorMessage,
+        }, error instanceof Error ? error : new Error(errorMessage));
         // Fail-open: allow processing to ensure at-least-once delivery
+        // This is acceptable as downstream processing has its own idempotency checks
         return true;
     }
 }
@@ -127,10 +169,14 @@ export async function releaseProcessingLock(eventId: string): Promise<void> {
         const currentValue = await redis.get(key);
         if (currentValue === "processing") {
             await redis.del(key);
-            console.log(`[StripeEventQueue] Released lock for failed event ${eventId}`);
+            logger.info("stripe-event-queue", "Released lock for failed event", { eventId });
         }
     } catch (error) {
-        console.error(`[StripeEventQueue] Failed to release lock for ${eventId}:`, error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logger.error("stripe-event-queue", "Failed to release processing lock", {
+            eventId,
+            error: errorMessage,
+        }, error instanceof Error ? error : new Error(errorMessage));
     }
 }
 
@@ -145,8 +191,13 @@ export async function markEventProcessed(eventId: string): Promise<void> {
         // Update value to "processed" (extends TTL)
         await redis.set(key, "processed", "EX", PROCESSED_EVENT_TTL_SECONDS);
     } catch (error) {
-        console.error(`[StripeEventQueue] Failed to mark event ${eventId} as processed:`, error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logger.error("stripe-event-queue", "Failed to mark event as processed", {
+            eventId,
+            error: errorMessage,
+        }, error instanceof Error ? error : new Error(errorMessage));
         // Graceful degradation: log error but don't crash
+        // Event may be reprocessed, but downstream has idempotency checks
     }
 }
 
@@ -190,7 +241,10 @@ export async function queueStripeEvent(
     // Try to acquire lock - if fail, it's duplicate
     const locked = await acquireProcessingLock(event.id);
     if (!locked) {
-        console.log(`[StripeEventQueue] Skipping duplicate event ${event.id}`);
+        logger.info("stripe-event-queue", "Skipping duplicate event", {
+            eventId: event.id,
+            eventType: event.type,
+        });
         return null;
     }
 
@@ -212,12 +266,22 @@ export async function queueStripeEvent(
             }
         );
 
-        console.log(`[StripeEventQueue] Queued event ${event.id} (${event.type})`);
+        logger.info("stripe-event-queue", "Queued event for processing", {
+            eventId: event.id,
+            eventType: event.type,
+            jobId: job.id,
+        });
         return job;
     } catch (error) {
         // If enqueue fails, release the short-lived processing lock so Stripe can retry
         // without being suppressed by a stale lock.
         await releaseProcessingLock(event.id);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logger.error("stripe-event-queue", "Failed to queue event", {
+            eventId: event.id,
+            eventType: event.type,
+            error: errorMessage,
+        }, error instanceof Error ? error : new Error(errorMessage));
         throw error;
     }
 }

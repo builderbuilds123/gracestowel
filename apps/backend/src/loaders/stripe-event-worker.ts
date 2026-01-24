@@ -705,12 +705,12 @@ export function ensureStripeWorkerStarted(container: MedusaContainer): void {
     }
 
     try {
-        console.log("[stripe-worker] Starting Stripe event worker...");
+        logger.info("stripe-worker-loader", "Starting Stripe event worker");
         startStripeEventWorker(container, handleStripeEvent);
         workerStarted = true;
-        console.log("[stripe-worker] Worker started successfully");
+        logger.info("stripe-worker-loader", "Stripe event worker started successfully");
     } catch (error) {
-        logger.critical("stripe-worker", "Failed to start worker", {}, error as Error);
+        logger.critical("stripe-worker-loader", "Failed to start Stripe event worker", {}, error instanceof Error ? error : new Error(String(error)));
     }
 }
 

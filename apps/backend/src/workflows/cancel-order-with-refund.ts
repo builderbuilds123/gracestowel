@@ -353,7 +353,10 @@ export const lockOrderHandler = async (
                 if (paymentIntent.status === "succeeded") {
                     if (input.isWithinGracePeriod) {
                         // Within grace period but Stripe shows succeeded = race condition
-                        console.log(`[CancelOrder] Stripe PaymentIntent ${input.paymentIntentId} is succeeded - too late to cancel via void`);
+                        logger.warn("cancel-order", "PaymentIntent already succeeded during grace period", {
+                            paymentIntentId: input.paymentIntentId,
+                            orderId: input.orderId,
+                        });
                         throw new LateCancelError();
                     } else {
                         // Post-grace period: succeeded is expected for refund path

@@ -171,7 +171,7 @@ const prepareOrderDataStep = createStep(
                     country_code: cart.shipping_address.country_code,
                     phone: cart.shipping_address.phone,
                 } : undefined,
-                shipping_methods: validateShippingMethods(cart.shipping_methods as any),
+                shipping_methods: validateShippingMethods(cart.shipping_methods as ShippingMethodInput[] | null | undefined),
                 status: "pending" as const,
                 sales_channel_id: cart.sales_channel_id ?? undefined, // Convert null to undefined
                 currency_code: cart.region?.currency_code || currency,
@@ -271,9 +271,22 @@ const createPaymentCollectionStep = createStep(
         }
 
         // NOTE: Medusa v2 does not export IPaymentModuleService as a public type
-        // Using 'as any' is the standard pattern for resolving module services in Medusa v2
+        // Using type assertion is the standard pattern for resolving module services in Medusa v2
         // The service provides methods like createPaymentCollections() and createPaymentSession()
-        const paymentModuleService = container.resolve(Modules.PAYMENT) as any;
+        interface PaymentModuleService {
+            createPaymentCollections: (collections: Array<{
+                amount: number;
+                currency_code: string;
+                region_id?: string;
+                payments?: Array<{
+                    amount: number;
+                    currency_code: string;
+                    provider_id: string;
+                    data: Record<string, unknown>;
+                }>;
+            }>) => Promise<Array<{ id: string }>>;
+        }
+        const paymentModuleService = container.resolve(Modules.PAYMENT) as PaymentModuleService;
 
         try {
             // Create payment collection with payment record
@@ -367,9 +380,16 @@ const linkPaymentCollectionStep = createStep(
         try {
             // Use remote link to establish relationship between order and payment collection
             // NOTE: Medusa v2 does not export IRemoteLink as a public type
-            // Using 'as any' is the standard pattern for resolving remoteLink service in Medusa v2
+            // Using type assertion is the standard pattern for resolving remoteLink service in Medusa v2
             // The service provides the create() method to establish cross-module relationships
-            const remoteLink = container.resolve("remoteLink") as any;
+            interface RemoteLinkService {
+                create: (links: {
+                    [key: string]: {
+                        [idKey: string]: string;
+                    };
+                }) => Promise<void>;
+            }
+            const remoteLink = container.resolve("remoteLink") as RemoteLinkService;
             
             await remoteLink.create({
                 [Modules.ORDER]: {
@@ -397,20 +417,23 @@ const linkPaymentCollectionStep = createStep(
  */
 const emitStripeOrderEventStep = createStep(
     "emit-event",
-    async (input: { eventName: string; data: any }, { container }) => {
+    async (input: { eventName: string; data: Record<string, unknown> }, { container }) => {
         const logger = container.resolve("logger");
-        let eventBusModuleService: any;
+        interface EventBusService {
+            emit: (eventName: string, data: Record<string, unknown>) => Promise<void>;
+        }
+        let eventBusModuleService: EventBusService | null = null;
         try {
             // Try multiple resolution strategies for event bus (Medusa v2 compatibility)
             try {
-                eventBusModuleService = container.resolve("eventBusModuleService") as any;
+                eventBusModuleService = container.resolve("eventBusModuleService") as EventBusService;
             } catch {
                 try {
-                    eventBusModuleService = container.resolve("eventBus") as any;
+                    eventBusModuleService = container.resolve("eventBus") as EventBusService;
                 } catch {
                     // Try using Modules constant
                     const { Modules } = await import("@medusajs/framework/utils");
-                    eventBusModuleService = container.resolve(Modules.EVENT_BUS) as any;
+                    eventBusModuleService = container.resolve(Modules.EVENT_BUS) as EventBusService;
                 }
             }
         } catch (err) {
@@ -418,19 +441,29 @@ const emitStripeOrderEventStep = createStep(
             return new StepResponse({ success: false, skipped: true });
         }
 
+        if (!eventBusModuleService) {
+            logger.warn(`[create-order-from-stripe] eventBus not available, skipping emit. Event: ${input.eventName}`);
+            return new StepResponse({ success: false, skipped: true });
+        }
+
         try {
+            // Try Medusa v2 event bus API (object format)
             try {
-                await eventBusModuleService.emit({ name: input.eventName, data: input.data });
-            } catch (err) {
-                // Secondary check for Medusa specific overload
+                interface EventBusServiceWithObject {
+                    emit: (event: { name: string; data: Record<string, unknown> }) => Promise<void>;
+                }
+                await (eventBusModuleService as unknown as EventBusServiceWithObject).emit({ name: input.eventName, data: input.data });
+            } catch {
+                // Fallback to string-based API
                 await eventBusModuleService.emit(input.eventName, input.data);
             }
-            logger.info(`Event ${input.eventName} emitted successfully with data: ${JSON.stringify(input.data)}`);
+            logger.info(`Event ${input.eventName} emitted successfully`);
             return new StepResponse({ success: true });
         } catch (err) {
             // P1 FIX: Wrap in outer try-catch to ensure event bus failure doesn't block order creation
-            logger.error(`[create-order-from-stripe] CRITICAL: Failed to emit event ${input.eventName}. Error: ${err instanceof Error ? err.message : err}. Proceeding with order creation as best-effort.`);
-            return new StepResponse({ success: false, error: err instanceof Error ? err.message : String(err) });
+            const error = err instanceof Error ? err : new Error(String(err));
+            logger.error(`[create-order-from-stripe] CRITICAL: Failed to emit event ${input.eventName}. Error: ${error.message}. Proceeding with order creation as best-effort.`);
+            return new StepResponse({ success: false, error: error.message });
         }
     }
 );
@@ -516,7 +549,10 @@ export const createOrderFromStripeWorkflow = createWorkflow(
         const inventoryInput = transform({ order, orderData }, (data) => ({
             orderItems: data.order.items || [],
             preferredLocationIds: (data.orderData.shipping_methods || [])
-                .map((method: any) => method?.data && (method.data as any).stock_location_id)
+                .map((method: ShippingMethodOutput) => {
+                    const data = method?.data as { stock_location_id?: string } | undefined;
+                    return data?.stock_location_id;
+                })
                 .filter((id: string | undefined): id is string => Boolean(id)),
             salesChannelId: data.orderData.sales_channel_id || null,
         }));

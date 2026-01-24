@@ -10,21 +10,34 @@ import { trackEvent } from "../utils/analytics";
 import { logger } from "../utils/logger";
 import { orderEditRateLimiter } from "../utils/rate-limiter";
 
+interface Address {
+    country_code?: string;
+    [key: string]: unknown;
+}
+
+interface RequestBody {
+    shipping_address?: Address;
+    billing_address?: Address;
+    [key: string]: unknown;
+}
+
 function normalizeCartCountryCodesMiddleware(
     req: MedusaRequest,
     res: MedusaResponse,
     next: MedusaNextFunction
 ) {
-    const body = (req as any).body as any;
+    const body = req.body as RequestBody | undefined;
 
-    const normalizeAddress = (address: any) => {
+    const normalizeAddress = (address: Address | undefined): void => {
         if (address?.country_code && typeof address.country_code === "string") {
             address.country_code = address.country_code.toLowerCase();
         }
     };
 
-    normalizeAddress(body?.shipping_address);
-    normalizeAddress(body?.billing_address);
+    if (body) {
+        normalizeAddress(body.shipping_address);
+        normalizeAddress(body.billing_address);
+    }
 
     next();
 }
@@ -78,10 +91,20 @@ export function errorHandlerMiddleware(
     });
 
     // Return JSON error response for debugging
-    const status = (error as any).status || (error as any).statusCode || 500;
+    // MedusaError has status and code properties, but Error doesn't
+    interface ErrorWithStatus extends Error {
+        status?: number;
+        statusCode?: number;
+        code?: string;
+    }
+    
+    const errorWithStatus = error as ErrorWithStatus;
+    const status = errorWithStatus.status || errorWithStatus.statusCode || 500;
+    const code = errorWithStatus.code || (error instanceof MedusaError ? error.type : 'INTERNAL_ERROR');
+    
     res.status(status).json({
         message: error.message,
-        code: (error as any).code || 'INTERNAL_ERROR',
+        code,
         stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
 }
