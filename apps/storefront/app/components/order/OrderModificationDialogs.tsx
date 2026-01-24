@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react";
-import { useFetcher } from "react-router";
+import { useFetcher, Link } from "react-router";
 import { CancelOrderDialog } from "../CancelOrderDialog";
 import { CancelRejectedModal } from "./CancelRejectedModal";
 import { EditAddressDialog } from "../EditAddressDialog";
 import { AddItemsDialog } from "../AddItemsDialog";
 import { EditItemsDialog } from "./EditItemsDialog";
 import { OrderEditPaymentDialog } from "./OrderEditPaymentDialog";
-import { Pencil, Plus, ShoppingBag } from "../../lib/icons";
+import { Pencil, Plus, ShoppingBag, MapPin, Truck } from "../../lib/icons";
 
 interface Address {
     first_name: string;
@@ -216,6 +216,15 @@ export function OrderModificationDialogs({
                     </button>
                     {/* Shadowy dropdown or grouped items revealed on hover/click */}
                     <div className="absolute left-0 mt-2 w-48 bg-white border border-gray-100 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10 p-1">
+                        {/* New dedicated edit page link - for address & shipping */}
+                        <Link
+                            to={`/order/${orderId}/edit`}
+                            className="w-full text-left px-3 py-2 text-sm text-text-earthy hover:bg-gray-50 rounded flex items-center gap-2 block"
+                        >
+                            <MapPin className="w-4 h-4" />
+                            Edit Address & Shipping
+                        </Link>
+                        <div className="border-t border-gray-100 my-1" />
                         <button
                             onClick={() => setShowAddItemsDialog(true)}
                             disabled={isSubmitting}
@@ -238,7 +247,7 @@ export function OrderModificationDialogs({
                             className="w-full text-left px-3 py-2 text-sm text-text-earthy hover:bg-gray-50 rounded flex items-center gap-2 disabled:opacity-50"
                         >
                             <Pencil className="w-4 h-4" />
-                            Edit Address
+                            Edit Address (Quick)
                         </button>
                     </div>
                 </div>

@@ -51,7 +51,11 @@ function calculateMaxAge(token: string): number {
 
 /**
  * Create a cookie instance for a specific order.
- * Cookie is scoped to the order's status route.
+ * Cookie is scoped to all order-related routes (status, edit).
+ *
+ * Path changed from `/order/status/${orderId}` to `/order` to support:
+ * - /order/status/{id} - Order status page
+ * - /order/{id}/edit - Order edit page (new dedicated route)
  */
 function createGuestCookie(orderId: string, maxAge: number) {
     return createCookie(`guest_order_${orderId}`, {
@@ -59,7 +63,7 @@ function createGuestCookie(orderId: string, maxAge: number) {
         secure: import.meta.env.PROD,
         sameSite: "strict",
         maxAge,
-        path: `/order/status/${orderId}`,
+        path: `/order`,
     });
 }
 
