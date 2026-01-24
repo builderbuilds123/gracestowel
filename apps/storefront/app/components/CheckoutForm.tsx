@@ -14,6 +14,7 @@ import type {
     StripeLinkAuthenticationElementChangeEvent,
 } from '@stripe/stripe-js';
 import { useCheckout } from './checkout/CheckoutProvider';
+import { useCart } from '../context/CartContext';
 import type { CartItem } from '../context/CartContext';
 import { createLogger } from '../lib/logger';
 import { monitoredFetch } from '../utils/monitored-fetch';
@@ -68,6 +69,9 @@ export function CheckoutForm({
         persistShippingOption,
         appliedPromoCodes
     } = useCheckout();
+
+    // Get post-checkout state from cart context
+    const { isPostCheckout } = useCart();
 
     const { 
         shippingOptions, 
@@ -562,16 +566,34 @@ export function CheckoutForm({
             </div>
 
             {/* Delivery Section */}
-            <div 
+            <div
                 ref={addressRef}
                 className={`p-4 rounded-lg transition-all ${validationErrors.address ? 'border-2 border-red-500 bg-red-50' : 'border border-transparent'}`}
             >
                 <h2 className="text-lg font-medium mb-4">Delivery</h2>
+
+                {/* Show name as locked in edit mode */}
+                {editMode && customerData?.firstName ? (
+                    <div className="mb-4 bg-gray-50 p-4 rounded-lg">
+                        <p className="text-sm text-gray-500 mb-1">Name</p>
+                        <p className="text-gray-700">
+                            {customerData.firstName} {customerData.lastName}
+                        </p>
+                        <p className="text-xs text-gray-400 mt-1">
+                            Name cannot be changed for existing orders.
+                        </p>
+                    </div>
+                ) : null}
+
                 <AddressElement
                     id="address-element"
                     options={{
                         mode: 'shipping',
-                        fields: { phone: 'always' },
+                        fields: {
+                            phone: 'always',
+                            // In edit mode, hide name field (we show it as read-only above)
+                            name: editMode ? 'never' : 'always',
+                        },
                         // Remove split name to use default full name field (Stripe Standard)
                         defaultValues: customerData ? {
                             name: `${customerData.firstName || ''} ${customerData.lastName || ''}`.trim(),
@@ -606,8 +628,15 @@ export function CheckoutForm({
                 forwardedRef={shippingRef}
             />
 
-            {/* Payment Section - Hidden in edit mode */}
-            {!editMode && (
+            {/* Payment Section - Hidden in edit mode, show notice instead */}
+            {editMode ? (
+                <div className="p-4 rounded-lg border border-gray-200 bg-gray-50">
+                    <h2 className="text-lg font-medium mb-2">Payment</h2>
+                    <p className="text-gray-600 text-sm">
+                        Payment method cannot be changed for existing orders.
+                    </p>
+                </div>
+            ) : (
                 <PaymentSection
                     error={validationErrors.payment}
                     forwardedRef={paymentRef}
@@ -621,9 +650,9 @@ export function CheckoutForm({
                 className="w-full bg-accent-earthy hover:bg-accent-earthy/90 text-white font-medium py-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-md active:scale-[0.98] transform"
             >
                 <span id="button-text">
-                    {isLoading 
-                        ? (editMode ? 'Saving changes...' : 'Processing...') 
-                        : (editMode ? 'Save Changes' : 'Pay now')
+                    {isLoading
+                        ? (editMode ? 'Saving changes...' : isPostCheckout ? 'Updating...' : 'Processing...')
+                        : (editMode ? 'Save Changes' : isPostCheckout ? 'Update Now' : 'Pay now')
                     }
                 </span>
             </button>

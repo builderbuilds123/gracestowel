@@ -158,13 +158,26 @@ export async function action({ request, context }: ActionFunctionArgs) {
     const cookieHeader = request.headers.get("Cookie");
     const orderIdCookie = cookieHeader?.split(";").find(c => c.trim().startsWith("checkout_order_id="));
     const orderId = orderIdCookie ? decodeURIComponent(orderIdCookie.split("=", 2)[1] || "") : null;
-    
+
     if (!orderId) {
         return data({ success: false, error: "Order ID is required" }, { status: 400 });
     }
 
-    // Get token from cookie (set when order is fetched)
-    const { token } = await getGuestToken(request, orderId);
+    // Get token from cookie - try checkout-specific cookie first, then fall back to guest token
+    let token: string | null = null;
+
+    // Try checkout_mod_token cookie (set by set-guest-token API for checkout success page)
+    const modTokenCookie = cookieHeader?.split(";").find(c => c.trim().startsWith("checkout_mod_token="));
+    if (modTokenCookie) {
+        token = decodeURIComponent(modTokenCookie.split("=", 2)[1] || "");
+    }
+
+    // Fall back to guest_order cookie if checkout_mod_token not found
+    if (!token) {
+        const guestResult = await getGuestToken(request, orderId);
+        token = guestResult.token;
+    }
+
     if (!token) {
         return data({ success: false, error: "Session expired" }, { status: 401 });
     }
@@ -223,7 +236,7 @@ export const meta: MetaFunction = () => [
 export default function CheckoutSuccess() {
     const { stripePublishableKey, medusaBackendUrl, medusaPublishableKey, initialParams } = useLoaderData<LoaderData>();
     const navigate = useNavigate();
-    const { clearCart, items, addToCart, toggleCart } = useCart();
+    const { clearCart, items, addToCart, toggleCart, cartTotal, setPostCheckoutMode } = useCart();
     const { cartId, setCartId, setCart: setMedusaCart } = useMedusaCart();
     const [paymentStatus, setPaymentStatus] = useState<'loading' | 'success' | 'error' | 'canceled'>('loading');
 
@@ -287,15 +300,17 @@ export default function CheckoutSuccess() {
                     setOrderDetails(parsed.orderDetails);
                     setShippingAddress(parsed.shippingAddress);
                     setPaymentStatus('success');
-                    
-                    // Restore orderId if available
-                    // Issue #42: Use cached sessionStorage
-                    const storedOrderId = getCachedSessionStorage('orderId');
-                    if (storedOrderId) setOrderId(storedOrderId);
-                    
+
+                    // Restore orderId - first check verifiedOrder, then fallback to separate key
+                    const restoredOrderId = parsed.orderId || getCachedSessionStorage('orderId');
+                    if (restoredOrderId) {
+                        setOrderId(restoredOrderId);
+                        setModificationWindowActive(true);
+                    }
+
                     // Ensure cart is cleared (may have been missed on initial load)
                     clearCart();
-                    
+
                     logger.info('Restored verified order from sessionStorage');
                     return;
                 }
@@ -403,6 +418,7 @@ export default function CheckoutSuccess() {
                             };
                         } else if (items.length > 0) {
                             // Fallback to context items if available (rare on redirect)
+                            // Use cart total from context - more accurate than Stripe amount
                             orderData = {
                                 orderNumber: currentParams.paymentIntentId!.substring(3, 11).toUpperCase(),
                                 date: new Date().toLocaleDateString('en-US', {
@@ -411,15 +427,15 @@ export default function CheckoutSuccess() {
                                     day: 'numeric'
                                 }),
                                 items: [...items],
-                                total: paymentIntent.amount / 100
+                                total: cartTotal > 0 ? cartTotal : paymentIntent.amount / 100
                             };
                         } else {
-                            // Final fallback: just show total from Stripe
+                            // Final fallback: use Stripe amount only when no cart data available
                             orderData = {
                                 orderNumber: currentParams.paymentIntentId!.substring(3, 11).toUpperCase(),
                                 date: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
                                 items: [],
-                                total: paymentIntent.amount / 100
+                                total: cartTotal > 0 ? cartTotal : paymentIntent.amount / 100
                             };
                         }
 
@@ -489,6 +505,12 @@ export default function CheckoutSuccess() {
 
                         const fetchOrderWithToken = async (): Promise<void> => {
                             try {
+                                // DEBUG: Log the fetch attempt
+                                logger.info('fetchOrderWithToken: Attempting to fetch order', {
+                                    paymentIntentId: currentParams.paymentIntentId?.substring(0, 10) + '...',
+                                    retry: retries,
+                                });
+
                                 // Use medusaFetch for Medusa Store API
                                 const response = await medusaFetch(
                                     `/store/orders/by-payment-intent?payment_intent_id=${encodeURIComponent(currentParams.paymentIntentId!)}`,
@@ -501,9 +523,21 @@ export default function CheckoutSuccess() {
                                     }
                                 );
 
+                                // DEBUG: Log response status
+                                logger.info('fetchOrderWithToken: Response received', {
+                                    status: response.status,
+                                    ok: response.ok,
+                                });
+
                                 if (response.ok) {
                                     const data = await response.json() as OrderApiResponse;
-                                    
+
+                                    // DEBUG: Log order data
+                                    logger.info('fetchOrderWithToken: Order found', {
+                                        orderId: data.order?.id,
+                                        hasToken: !!data.modification_token,
+                                    });
+
                                     // Check if this is an order update (same orderId as before)
                                     const previousOrderId = getCachedSessionStorage('orderId');
                                     if (previousOrderId && previousOrderId === data.order.id) {
@@ -517,13 +551,36 @@ export default function CheckoutSuccess() {
                                             setModificationWindowActive(true);
                                         }
                                     }
-                                    
+
                                     setOrderId(data.order.id);
+
+                                    // Store modification token in sessionStorage for cancel/edit operations
+                                    // sessionStorage is ephemeral (clears on tab close) which is appropriate for this use case
+                                    if (data.modification_token) {
+                                        try {
+                                            setCachedSessionStorage('modificationToken', data.modification_token);
+                                        } catch (tokenError) {
+                                            // Non-critical: token storage failure doesn't prevent order display
+                                            logger.warn("Failed to store modification token", {
+                                                error: tokenError instanceof Error ? tokenError.message : String(tokenError),
+                                            });
+                                        }
+                                    }
 
                                     // SEC-05: Store in sessionStorage for ephemeral access (clears on tab close)
                                     try {
                                         // Issue #42: Use cached sessionStorage for consistency
                                         setCachedSessionStorage('orderId', data.order.id);
+
+                                        // Also update verifiedOrder with orderId for page refresh support
+                                        const currentVerified = getCachedSessionStorage('verifiedOrder');
+                                        if (currentVerified) {
+                                            const parsed = JSON.parse(currentVerified);
+                                            setCachedSessionStorage('verifiedOrder', JSON.stringify({
+                                                ...parsed,
+                                                orderId: data.order.id,
+                                            }));
+                                        }
                                     } catch (error) {
                                         // Non-critical: storage failures don't affect order processing
                                         // Errors can occur in private browsing mode or when storage is disabled
@@ -536,12 +593,24 @@ export default function CheckoutSuccess() {
                                 } else if (response.status === 404 && retries < maxRetries) {
                                     // Order not yet created, retry
                                     retries++;
-                                    // SECURITY: Don't log retry attempts (may expose order/payment context)
+                                    logger.info('fetchOrderWithToken: Order not found, retrying...', {
+                                        retry: retries,
+                                        maxRetries,
+                                    });
                                     setTimeout(fetchOrderWithToken, retryDelay);
                                 } else {
+                                    // DEBUG: Log when giving up
+                                    logger.warn('fetchOrderWithToken: Gave up fetching order', {
+                                        status: response.status,
+                                        retries,
+                                        maxRetries,
+                                    });
                                     logger.error("Failed to fetch order", new Error(`HTTP ${response.status}`));
                                 }
                             } catch (err) {
+                                logger.error('fetchOrderWithToken: Fetch error', err instanceof Error ? err : new Error(String(err)), {
+                                    retry: retries,
+                                });
                                 logger.error("Error fetching order", err instanceof Error ? err : new Error(String(err)));
                                 if (retries < maxRetries) {
                                     retries++;
@@ -552,6 +621,9 @@ export default function CheckoutSuccess() {
 
                         // CHK-01: Call Medusa cart completion API
                         if (cartId) {
+                            logger.info('checkout.success: Calling cart completion API', {
+                                cartIdPrefix: cartId.substring(0, 10) + '...',
+                            });
                             try {
                                 // SECURITY: Don't log cart IDs or completion data
                                 const completeResponse = await monitoredFetch(`/api/carts/${cartId}/complete`, {
@@ -560,6 +632,10 @@ export default function CheckoutSuccess() {
                                         "Content-Type": "application/json",
                                     },
                                     label: "complete-medusa-cart",
+                                });
+                                logger.info('checkout.success: Cart completion response', {
+                                    status: completeResponse.status,
+                                    ok: completeResponse.ok,
                                 });
 
                                 if (!completeResponse.ok) {
@@ -572,9 +648,12 @@ export default function CheckoutSuccess() {
                                 logger.error("Error calling cart completion API", err instanceof Error ? err : new Error(String(err)));
                                 // Non-critical failure: log and proceed
                             }
+                        } else {
+                            logger.info('checkout.success: No cartId available, skipping cart completion');
                         }
 
                         // Start fetching order
+                        logger.info('checkout.success: Starting fetchOrderWithToken');
                         fetchOrderWithToken();
 
                         // Clear cart after a delay to ensure UI updates
@@ -646,16 +725,26 @@ export default function CheckoutSuccess() {
     };
 
     const handleCancelOrder = async () => {
-        if (!orderId) return;
-        
+        // Check for orderId - it may still be loading from the by-payment-intent lookup
+        const currentOrderId = orderId || getCachedSessionStorage('orderId');
+        if (!currentOrderId) {
+            throw new Error("Order is still being processed. Please wait a moment and try again.");
+        }
+
         setIsCanceling(true);
         try {
-            // Use medusaFetch for Medusa Store API
-            // Note: Cancel doesn't require modification token - it's handled server-side via order status
-            const response = await medusaFetch(`/store/orders/${orderId}/cancel`, {
+            // Get modification token from sessionStorage
+            const token = getCachedSessionStorage('modificationToken');
+            if (!token) {
+                throw new Error("Session expired. Please refresh the page and try again.");
+            }
+
+            // Call Medusa cancel endpoint directly with the modification token
+            const response = await medusaFetch(`/store/orders/${currentOrderId}/cancel`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
+                    "x-modification-token": token,
                 },
                 body: JSON.stringify({ reason: "Customer cancelled from success page" }),
                 label: "cancel-order-from-success",
@@ -664,7 +753,7 @@ export default function CheckoutSuccess() {
             if (response.ok) {
                 setPaymentStatus('canceled');
                 setShowCancelDialog(false);
-                
+
                 // Clear session data but keep verifiedOrder (updated) for the UI
                 clearSessionData({ clearVerified: false, keepCart: false });
 
@@ -678,17 +767,19 @@ export default function CheckoutSuccess() {
                     } else {
                         setCachedSessionStorage('verifiedOrder', JSON.stringify({ isCanceled: true }));
                     }
+                    // Clear the modification token after successful cancellation
+                    removeCachedSessionStorage('modificationToken');
                 } catch (e) {
                     logger.warn("Failed to persist canceled state", { error: e });
                 }
             } else {
-                const errorData = await response.json() as { message?: string };
+                const errorData = await response.json() as { message?: string; code?: string };
                 logger.error("Failed to cancel order", new Error(errorData.message || "Cancellation failed"));
-                alert(errorData.message || "Failed to cancel order. Please contact support.");
+                throw new Error(errorData.message || "Failed to cancel order. Please contact support.");
             }
         } catch (err) {
             logger.error("Error canceling order", err instanceof Error ? err : new Error(String(err)));
-            alert("An error occurred. Please try again or contact support.");
+            throw err; // Re-throw so CancelOrderDialog can display the error
         } finally {
             setIsCanceling(false);
         }
@@ -876,52 +967,57 @@ export default function CheckoutSuccess() {
                             </div>
                         </div>
 
-                        {/* Order Modification Controls */}
-                        {orderId ? (
-                            <div className="mt-8 pt-6 border-t border-gray-100 text-center space-y-4">
-                                <button
-                                    onClick={async () => {
-                                        try {
-                                            // Load order items into cart for editing
-                                            if (orderDetails?.items && orderDetails.items.length > 0) {
-                                                clearCart();
-                                                for (const item of orderDetails.items) {
-                                                    addToCart({
-                                                        id: item.id || item.variant_id || String(Math.random()),
-                                                        variantId: item.variant_id || item.id,
-                                                        title: item.title,
-                                                        price: item.price,
-                                                        image: item.image,
-                                                        quantity: item.quantity,
-                                                        color: item.color,
-                                                    });
-                                                }
+                        {/* Order Modification Controls - Always shown, backend handles validation */}
+                        <div className="mt-8 pt-6 border-t border-gray-100 text-center space-y-4">
+                            <button
+                                onClick={async () => {
+                                    try {
+                                        // Load order items into cart for editing
+                                        if (orderDetails?.items && orderDetails.items.length > 0) {
+                                            clearCart();
+                                            for (const item of orderDetails.items) {
+                                                addToCart({
+                                                    id: item.id || item.variant_id || String(Math.random()),
+                                                    variantId: item.variant_id || item.id,
+                                                    title: item.title,
+                                                    price: item.price,
+                                                    image: item.image,
+                                                    quantity: item.quantity,
+                                                    color: item.color,
+                                                });
                                             }
-                                            // Always open the cart drawer
-                                            toggleCart();
-                                        } catch (error) {
-                                            logger.error(
-                                                'Failed to open cart for editing',
-                                                error instanceof Error ? error : new Error(String(error))
-                                            );
-                                            // Still try to open cart even if loading items failed
-                                            toggleCart();
                                         }
-                                    }}
-                                    className="px-6 py-2 bg-accent-earthy text-white rounded-lg hover:bg-accent-earthy/90 transition-colors font-medium"
+
+                                        // Set post-checkout mode with 24h expiry
+                                        const currentOrderId = orderId || getCachedSessionStorage('orderId');
+                                        if (currentOrderId) {
+                                            setPostCheckoutMode(currentOrderId);
+                                        }
+
+                                        // Navigate to checkout page with orderId
+                                        navigate(`/checkout${currentOrderId ? `?orderId=${currentOrderId}` : ''}`);
+                                    } catch (error) {
+                                        logger.error(
+                                            'Failed to initiate order editing',
+                                            error instanceof Error ? error : new Error(String(error))
+                                        );
+                                        // Still try to navigate to checkout even if loading items failed
+                                        navigate('/checkout');
+                                    }
+                                }}
+                                className="px-6 py-2 bg-accent-earthy text-white rounded-lg hover:bg-accent-earthy/90 transition-colors font-medium"
+                            >
+                                Edit Order
+                            </button>
+                            <div>
+                                <button
+                                    onClick={() => setShowCancelDialog(true)}
+                                    className="text-sm text-red-600 hover:text-red-800 underline transition-colors font-medium cursor-pointer"
                                 >
-                                    Edit Order
+                                    Made a mistake? Cancel your order within 60 minutes
                                 </button>
-                                <div>
-                                    <button
-                                        onClick={() => setShowCancelDialog(true)}
-                                        className="text-sm text-red-600 hover:text-red-800 underline transition-colors font-medium cursor-pointer"
-                                    >
-                                        Made a mistake? Cancel your order within 60 minutes
-                                    </button>
-                                </div>
                             </div>
-                        ) : null}
+                        </div>
                     </div>
 
                     {/* Shipping & Map Card */}

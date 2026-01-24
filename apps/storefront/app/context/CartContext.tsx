@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { calculateTotal, fromCents } from '../lib/price';
 import type { ProductId, CartItem, EmbroideryData } from '../types/product';
 import { productIdsEqual } from '../types/product';
@@ -8,7 +8,7 @@ import { useLocale } from './LocaleContext';
 import type { CartWithPromotions } from '../types/promotion';
 import { getBackendUrl } from '../lib/medusa';
 import { createLogger } from '../lib/logger';
-import { getCachedStorage, setCachedStorage } from '../lib/storage-cache';
+import { getCachedSessionStorage, setCachedSessionStorage, removeCachedSessionStorage } from '../lib/storage-cache';
 
 // Re-export CartItem for backwards compatibility
 export type { CartItem, EmbroideryData } from '../types/product';
@@ -18,6 +18,9 @@ const ACTIVE_ORDER_EXPIRY_MS = parseInt(
   import.meta.env.ACTIVE_ORDER_EXPIRY_HOURS || "24",
   10
 ) * 60 * 60 * 1000;
+
+// Post-checkout mode expiry (24 hours)
+const POST_CHECKOUT_EXPIRY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Story 3.1: Active Order Data Structure
@@ -46,6 +49,15 @@ export interface ActiveOrderData {
   createdAt: string;
 }
 
+/**
+ * Post-checkout state data structure
+ * Tracks order ID and timestamp for the 24-hour edit window
+ */
+interface PostCheckoutData {
+    orderId: string;
+    timestamp: number; // Unix timestamp for 24h expiry check
+}
+
 interface CartContextType {
     items: CartItem[];
     isOpen: boolean;
@@ -64,6 +76,11 @@ interface CartContextType {
     isModifyingOrder: boolean;
     setActiveOrder: (data: ActiveOrderData) => void;
     clearActiveOrder: () => void;
+    // Post-checkout state for UX improvements
+    isPostCheckout: boolean;
+    postCheckoutOrderId: string | null;
+    setPostCheckoutMode: (orderId: string) => void;
+    clearPostCheckoutMode: () => void;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -75,6 +92,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     const [isSyncing, setIsSyncing] = useState(false);
     // Story 3.1: Active order state
     const [activeOrder, setActiveOrderState] = useState<ActiveOrderData | null>(null);
+    // Post-checkout state for UX improvements
+    const [postCheckoutData, setPostCheckoutData] = useState<PostCheckoutData | null>(null);
     const cartCreateInFlight = React.useRef(false);
     const lastSyncRequestId = React.useRef(0);
     const { cartId, cart: medusaCart, setCartId, isLoading, refreshCart } = useMedusaCart();
@@ -83,7 +102,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     // Story 3.1: Load active order from sessionStorage on mount
     useEffect(() => {
         if (typeof window === 'undefined') return;
-        
+
         const stored = sessionStorage.getItem("activeOrder");
         if (stored) {
             try {
@@ -101,6 +120,29 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         }
     }, []);
 
+    // Load post-checkout state from sessionStorage on mount with 24h expiry check
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+
+        const stored = getCachedSessionStorage("postCheckoutMode");
+        if (stored) {
+            try {
+                const data: PostCheckoutData = JSON.parse(stored);
+                const age = Date.now() - data.timestamp;
+
+                if (age < POST_CHECKOUT_EXPIRY_MS) {
+                    setPostCheckoutData(data);
+                } else {
+                    // Expired - clear cart and post-checkout state
+                    removeCachedSessionStorage("postCheckoutMode");
+                    removeCachedSessionStorage("cart");
+                }
+            } catch {
+                removeCachedSessionStorage("postCheckoutMode");
+            }
+        }
+    }, []);
+
     // Validate cart item integrity
     const validateCartItem = (item: any): boolean => {
         if (!item.id) return false;
@@ -110,9 +152,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         return true;
     };
 
-    // Load cart from local storage on mount (Issue #17: Use cached storage)
+    // Load cart from sessionStorage on mount (clears on tab close)
     useEffect(() => {
-        const savedCart = getCachedStorage('cart');
+        const savedCart = getCachedSessionStorage('cart');
         if (savedCart) {
             try {
                 const parsed = JSON.parse(savedCart);
@@ -120,7 +162,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
                     const validItems = parsed.filter(validateCartItem);
                     if (validItems.length !== parsed.length) {
                         const logger = createLogger({ context: "CartContext" });
-                        logger.warn("Purged invalid items from local storage", {
+                        logger.warn("Purged invalid items from session storage", {
                             removedCount: parsed.length - validItems.length,
                             totalItems: parsed.length,
                             validItems: validItems.length
@@ -130,40 +172,50 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
                 }
             } catch (e) {
                 const logger = createLogger({ context: "CartContext" });
-                logger.error("Failed to parse cart from local storage", e instanceof Error ? e : new Error(String(e)));
+                logger.error("Failed to parse cart from session storage", e instanceof Error ? e : new Error(String(e)));
                 // If corrupted, clear it to self-heal
-                localStorage.removeItem('cart');
+                removeCachedSessionStorage('cart');
             }
         }
         setIsLoaded(true);
     }, []);
 
-    // ✅ Debounced localStorage writes with caching (Issues #9 & #17 fix)
+    // ✅ Debounced sessionStorage writes with caching (clears on tab close)
     useEffect(() => {
         const timeoutId = setTimeout(() => {
             try {
-                setCachedStorage('cart', JSON.stringify(items));
+                setCachedSessionStorage('cart', JSON.stringify(items));
             } catch (e) {
                 // Handle quota exceeded or other errors
                 const logger = createLogger({ context: "CartContext" });
-                logger.error("Failed to save to localStorage", e instanceof Error ? e : new Error(String(e)), { itemsCount: items.length });
+                logger.error("Failed to save to sessionStorage", e instanceof Error ? e : new Error(String(e)), { itemsCount: items.length });
             }
         }, 300); // Debounce by 300ms
-        
+
         return () => clearTimeout(timeoutId);
     }, [items]);
 
     // Debounced sync with Medusa backend
+    // Key fix: Set isSyncing=true IMMEDIATELY when items change, not after debounce
+    // This prevents flicker by signaling to UI components to use local values right away
+    const prevItemsRef = useRef<string>('');
+
     useEffect(() => {
         if (!cartId || !isLoaded) return;
 
-        // Functional comparison to check if sync is actually needed
-        // but since items is an object array, simple deep check or just relying on items ref is fine
+        const currentItemsKey = JSON.stringify(items.map(i => ({ id: i.id, q: i.quantity, v: i.variantId })));
+
+        // If items actually changed, set syncing immediately (before debounce)
+        if (prevItemsRef.current !== '' && prevItemsRef.current !== currentItemsKey) {
+            setIsSyncing(true);
+        }
+        prevItemsRef.current = currentItemsKey;
+
         const requestId = ++lastSyncRequestId.current;
 
         const timeoutId = setTimeout(async () => {
             try {
-                setIsSyncing(true);
+                // isSyncing is already true from above, no need to set again
                 const response = await monitoredFetch(`/api/carts/${cartId}`, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
@@ -192,7 +244,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
                     setIsSyncing(false);
                 }
             }
-        }, 800); // Slightly faster debounce (800ms)
+        }, 800); // Debounce to prevent excessive API calls
 
         return () => {
             clearTimeout(timeoutId);
@@ -325,8 +377,28 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         setActiveOrderState(null);
     }, []);
 
+    // Set post-checkout mode (stores orderId and timestamp in sessionStorage)
+    const setPostCheckoutMode = useCallback((orderId: string) => {
+        const data: PostCheckoutData = {
+            orderId,
+            timestamp: Date.now(),
+        };
+        setCachedSessionStorage("postCheckoutMode", JSON.stringify(data));
+        setPostCheckoutData(data);
+    }, []);
+
+    // Clear post-checkout mode (removes from sessionStorage)
+    const clearPostCheckoutMode = useCallback(() => {
+        removeCachedSessionStorage("postCheckoutMode");
+        setPostCheckoutData(null);
+    }, []);
+
     // Story 3.1: Computed flag for order modification mode
     const isModifyingOrder = activeOrder !== null;
+
+    // Computed post-checkout state values
+    const isPostCheckout = postCheckoutData !== null;
+    const postCheckoutOrderId = postCheckoutData?.orderId ?? null;
 
     // ✅ Optimized: Memoize the expensive calculation separately (Issue #8 fix)
     // Only recalculate when items actually change
@@ -335,49 +407,18 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         [items] // Only recalculate when items array reference changes
     );
 
-    // Use the centralized price calculation utility
-    // Optimistic calculation: Apply previous discount ratio to current local items
-    // to prevent the "jump up" UI flicker while syncing (Story 5.4 optimization)
-    const displayCartTotal = React.useMemo(() => {
-        // Use pre-calculated localSubtotal
-        if (medusaCart && items.length > 0) {
-            // Calculate a temporary total based on Medusa's last known discount ratio
-            // medusaCart.total is the final amount (inc. tax/shipping/discounts)
-            // medusaCart.subtotal is the amount before tax/shipping but after discounts (in Medusa v2 terminology often)
-            // But let's look at discount_total specifically
-            const medusaDiscountTotal = medusaCart.discount_total || 0;
-            const medusaOriginalSubtotal = medusaCart.item_total || medusaCart.subtotal || 1; // item_total is best
-            
-            if (medusaDiscountTotal > 0 && medusaOriginalSubtotal > 0) {
-                const discountRatio = medusaDiscountTotal / medusaOriginalSubtotal;
-                const estimatedTotal = localSubtotal * (1 - discountRatio);
-                
-                // If we're syncing, always show the estimate to stay consistent
-                if (isSyncing) return estimatedTotal;
-                
-                // If not syncing, prefer the backend's precise total if available
-                if (typeof medusaCart.subtotal === 'number') {
-                    return medusaCart.subtotal;
-                }
-                
-                return estimatedTotal;
-            }
-        }
-
-        // If not syncing and we have a backend total, use it
-        if (!isSyncing && typeof medusaCart?.subtotal === 'number') {
-           return medusaCart.subtotal;
-        }
-
-        return localSubtotal;
-    }, [localSubtotal, medusaCart, isSyncing, items.length]);
+    // Simple approach: Always use local subtotal for cart total display
+    // This ensures consistency - the subtotal always reflects current items
+    // Backend values (discounts, shipping, final total) are shown in checkout
+    // with loading indicators when isSyncing is true
+    const displayCartTotal = localSubtotal;
 
     // ✅ Memoize the provider value object (Issue #5 fix)
     // This prevents all consumers from re-rendering when the object reference changes
     const contextValue = React.useMemo(() => ({
-        items, 
-        isOpen, 
-        isLoaded, 
+        items,
+        isOpen,
+        isLoaded,
         addToCart,      // Already stable (useCallback)
         removeFromCart,  // Already stable (useCallback)
         updateQuantity,  // Already stable (useCallback)
@@ -392,6 +433,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         isModifyingOrder,
         setActiveOrder,  // Stable function reference (useCallback)
         clearActiveOrder, // Stable function reference (useCallback)
+        // Post-checkout state
+        isPostCheckout,
+        postCheckoutOrderId,
+        setPostCheckoutMode,  // Stable function reference (useCallback)
+        clearPostCheckoutMode, // Stable function reference (useCallback)
     }), [
         items,           // Primitive array - reference changes when items change
         isOpen,          // Primitive boolean
@@ -409,6 +455,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         isModifyingOrder, // Computed boolean
         setActiveOrder,  // Stable function reference (useCallback)
         clearActiveOrder, // Stable function reference (useCallback)
+        isPostCheckout,  // Computed boolean
+        postCheckoutOrderId, // Primitive string | null
+        setPostCheckoutMode, // Stable function reference (useCallback)
+        clearPostCheckoutMode, // Stable function reference (useCallback)
     ]);
 
     return (

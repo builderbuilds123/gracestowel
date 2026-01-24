@@ -8,17 +8,19 @@ import { useAutomaticPromotions } from '../hooks/useAutomaticPromotions';
 import { Image } from './ui/Image';
 
 export function CartDrawer() {
-    const { 
-        items, 
-        isOpen, 
-        toggleCart, 
-        removeFromCart, 
-        updateQuantity, 
-        cartTotal, 
+    const {
+        items,
+        isOpen,
+        toggleCart,
+        removeFromCart,
+        updateQuantity,
+        cartTotal,
         isSyncing,
         activeOrder,
         isModifyingOrder,
         clearActiveOrder,
+        isPostCheckout,
+        postCheckoutOrderId,
     } = useCart();
     const { formatPrice, t } = useLocale();
     
@@ -47,25 +49,25 @@ export function CartDrawer() {
                 <div className="p-6 border-b border-gray-100 flex justify-between items-center">
                     <h2 className="text-2xl font-serif text-text-earthy flex items-center gap-2">
                         <Towel size={24} weight="regular" />
-                        {isModifyingOrder ? "Modify Order" : t('cart.title')}
+                        {isModifyingOrder || isPostCheckout ? "Modify Order" : t('cart.title')}
                     </h2>
                     <button onClick={toggleCart} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
                         <X className="w-6 h-6 text-text-earthy" />
                     </button>
                 </div>
 
-                {/* Story 3.2: Order Confirmed Banner */}
-                {isModifyingOrder && activeOrder && (
+                {/* Story 3.2: Order Confirmed Banner - show in modification or post-checkout mode */}
+                {(isModifyingOrder || isPostCheckout) ? (
                     <div className="mx-6 mt-4 bg-green-50 border border-green-200 p-4 rounded-lg">
                         <div className="flex items-center gap-2 text-green-800">
                             <CheckCircle className="w-5 h-5" />
-                            <span className="font-medium">Order Confirmed</span>
+                            <span className="font-medium">Checkout Confirmed</span>
                         </div>
                         <p className="text-sm text-green-700 mt-1">
                             You can modify your order until it ships.
                         </p>
                     </div>
-                )}
+                ) : null}
 
                 <div className="flex-1 overflow-y-auto p-6">
                     {!isModifyingOrder && items.length > 0 && freeShippingThreshold !== null ? (
@@ -197,42 +199,34 @@ export function CartDrawer() {
                     )}
                 </div>
 
-                {(items.length > 0 || isModifyingOrder) ? (
+                {(items.length > 0 || isModifyingOrder || isPostCheckout) ? (
                     <div className="p-6 border-t border-gray-100 bg-gray-50">
-                        {!isModifyingOrder && (
+                        {!isModifyingOrder && !isPostCheckout ? (
                             <>
                                 <div className="flex justify-between items-center mb-4">
-                                    <div className="flex flex-col">
-                                        <span className="text-text-earthy/60">{t('cart.subtotal')}</span>
-                                        {isSyncing ? (
-                                            <span className="text-[10px] text-accent-earthy animate-pulse">Syncing...</span>
-                                        ) : null}
-                                    </div>
-                                    <span className="text-xl font-bold text-text-earthy">{formatPrice(cartTotal)}</span>
+                                    <span className="text-text-earthy/60">{t('cart.subtotal')}</span>
+                                    {isSyncing ? (
+                                        <span className="inline-block w-20 h-7 bg-gray-200 rounded animate-pulse" />
+                                    ) : (
+                                        <span className="text-xl font-bold text-text-earthy">{formatPrice(cartTotal)}</span>
+                                    )}
                                 </div>
                                 <p className="text-xs text-text-earthy/40 mb-4 text-center">Shipping and taxes calculated at checkout.</p>
-                                <div className="flex gap-2 mb-4">
-                                    <Link
-                                        to="/towels"
-                                        onClick={toggleCart}
-                                        className="flex-1 py-3 bg-white border-2 border-accent-earthy text-accent-earthy text-center font-semibold rounded hover:bg-accent-earthy/10 transition-colors flex items-center justify-center gap-2"
-                                    >
-                                        <Plus className="w-5 h-5" />
-                                        Add More Items
-                                    </Link>
-                                </div>
                             </>
-                        )}
+                        ) : null}
                         <Link
-                            to={isModifyingOrder && activeOrder
-                                ? `/checkout?orderId=${activeOrder.orderId}`
-                                : "/checkout"
+                            to={
+                                isModifyingOrder && activeOrder
+                                    ? `/checkout?orderId=${activeOrder.orderId}`
+                                    : isPostCheckout && postCheckoutOrderId
+                                        ? `/checkout?orderId=${postCheckoutOrderId}`
+                                        : "/checkout"
                             }
                             onClick={toggleCart}
                             prefetch="intent"
                             className="block w-full py-4 bg-accent-earthy text-white text-center font-semibold rounded hover:bg-accent-earthy/90 transition-colors shadow-lg"
                         >
-                            {isModifyingOrder ? "Update Order" : t('cart.checkout')}
+                            {isModifyingOrder || isPostCheckout ? "Update" : t('cart.checkout')}
                         </Link>
                     </div>
                 ) : null}
