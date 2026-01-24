@@ -20,6 +20,7 @@
 export { default as ArrowRight } from 'lucide-react/dist/esm/icons/arrow-right';
 export { default as ArrowLeft } from 'lucide-react/dist/esm/icons/arrow-left';
 export { default as ChevronDown } from 'lucide-react/dist/esm/icons/chevron-down';
+export { default as ChevronUp } from 'lucide-react/dist/esm/icons/chevron-up';
 export { default as ChevronLeft } from 'lucide-react/dist/esm/icons/chevron-left';
 export { default as ChevronRight } from 'lucide-react/dist/esm/icons/chevron-right';
 export { default as Menu } from 'lucide-react/dist/esm/icons/menu';

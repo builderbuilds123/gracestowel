@@ -1,15 +1,25 @@
 import { useState, useEffect, useCallback } from "react";
-import { X, Loader2, Plus, Minus, ShoppingBag } from "../lib/icons";
+import { Plus, Minus, Loader2, ChevronUp, ShoppingBag } from "../lib/icons";
 import { useCart } from "../context/CartContext";
 import { useLocale } from "../context/LocaleContext";
 import { medusaFetch } from "../lib/medusa-fetch";
 import { createLogger } from "../lib/logger";
 import { Image } from "./ui/Image";
 
+interface CalculatedPrice {
+    calculated_amount: number;
+    original_amount: number;
+    currency_code: string;
+    price_list_type?: string | null;
+}
+
 interface ProductVariant {
     id: string;
     title: string;
-    prices: Array<{
+    // Medusa v2 uses calculated_price for region-aware pricing
+    calculated_price?: CalculatedPrice;
+    // Legacy fallback
+    prices?: Array<{
         amount: number;
         currency_code: string;
     }>;
@@ -36,36 +46,40 @@ interface Product {
 
 interface QuickAddProductDialogProps {
     isOpen: boolean;
-    onClose: () => void;
+    onToggle: () => void;
     regionId?: string | null;
 }
 
 /**
- * Minimal product selection dialog for quick adding items to cart.
- * Shows product image, name, color selector, quantity, and price.
+ * Inline expandable product section for upselling.
+ * Shows as a collapsed button, expands to show products when clicked.
  */
-export function QuickAddProductDialog({ isOpen, onClose, regionId }: QuickAddProductDialogProps) {
+export function QuickAddProductDialog({ isOpen, onToggle, regionId }: QuickAddProductDialogProps) {
     const { addToCart } = useCart();
     const { currencyCode } = useLocale();
-    const [isLoadingProducts, setIsLoadingProducts] = useState(true);
+    const [isLoadingProducts, setIsLoadingProducts] = useState(false);
     const [products, setProducts] = useState<Product[]>([]);
     const [selectedVariants, setSelectedVariants] = useState<Record<string, string>>({});
     const [quantities, setQuantities] = useState<Record<string, number>>({});
+    const [addingProductId, setAddingProductId] = useState<string | null>(null);
 
     const logger = createLogger({ context: "QuickAddProductDialog" });
 
-    // Fetch products when dialog opens
+    // Fetch products when section opens
     useEffect(() => {
-        if (isOpen) {
+        if (isOpen && products.length === 0) {
             fetchProducts();
         }
-    }, [isOpen]);
+    }, [isOpen, products.length]);
 
     const fetchProducts = async () => {
         setIsLoadingProducts(true);
         try {
             const params = new URLSearchParams();
-            params.append('limit', '10');
+            params.append('limit', '6');
+            // Use Medusa v2 field patterns for pricing
+            // +field adds to defaults, *relation expands nested data
+            params.append('fields', '+variants.calculated_price,*variants.options,*options');
             if (regionId) {
                 params.append('region_id', regionId);
             }
@@ -109,19 +123,41 @@ export function QuickAddProductDialog({ isOpen, onClose, regionId }: QuickAddPro
         });
     }, []);
 
+    const formatPrice = (amount: number) => {
+        return new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: currencyCode,
+        }).format(amount);
+    };
+
+    // Get price from variant - supports both v2 calculated_price and legacy prices array
+    const getVariantPrice = useCallback((variant: ProductVariant): number | null => {
+        // Medusa v2 format
+        if (variant.calculated_price?.calculated_amount !== undefined) {
+            return variant.calculated_price.calculated_amount;
+        }
+        // Legacy format fallback
+        const legacyPrice = variant.prices?.find(p =>
+            p.currency_code.toLowerCase() === currencyCode.toLowerCase()
+        );
+        return legacyPrice?.amount ?? null;
+    }, [currencyCode]);
+
     const handleAddToCart = useCallback((product: Product) => {
         const variantId = selectedVariants[product.id];
         const variant = product.variants.find(v => v.id === variantId);
         if (!variant) return;
 
-        const price = variant.prices.find(p => p.currency_code.toLowerCase() === currencyCode.toLowerCase());
-        if (!price) return;
+        const priceAmount = getVariantPrice(variant);
+        if (priceAmount === null) return;
+
+        setAddingProductId(product.id);
 
         const quantity = quantities[product.id] || 1;
         const formattedPrice = new Intl.NumberFormat('en-US', {
             style: 'currency',
             currency: currencyCode,
-        }).format(price.amount);
+        }).format(priceAmount);
 
         // Get color from variant options
         const colorOption = variant.options?.find(opt =>
@@ -138,16 +174,10 @@ export function QuickAddProductDialog({ isOpen, onClose, regionId }: QuickAddPro
             color: colorOption?.value,
         });
 
-        // Reset quantity after adding
+        // Reset quantity and show brief feedback
         setQuantities(prev => ({ ...prev, [product.id]: 1 }));
-    }, [selectedVariants, quantities, currencyCode, addToCart]);
-
-    const formatPrice = (amount: number) => {
-        return new Intl.NumberFormat('en-US', {
-            style: 'currency',
-            currency: currencyCode,
-        }).format(amount);
-    };
+        setTimeout(() => setAddingProductId(null), 800);
+    }, [selectedVariants, quantities, currencyCode, addToCart, getVariantPrice]);
 
     const getColorOptions = (product: Product): Array<{ variantId: string; color: string }> => {
         const colorOptionDef = product.options?.find(o => o.title.toLowerCase() === 'color');
@@ -161,122 +191,136 @@ export function QuickAddProductDialog({ isOpen, onClose, regionId }: QuickAddPro
             .filter((item): item is { variantId: string; color: string } => item !== null);
     };
 
-    if (!isOpen) return null;
-
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-            {/* Backdrop */}
-            <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+        <div className="mb-6">
+            {/* Toggle Button - Shows + icon when collapsed */}
+            <button
+                onClick={onToggle}
+                className="w-full flex items-center justify-center gap-2 py-3 px-4 border border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-accent-earthy hover:text-accent-earthy transition-colors"
+            >
+                {isOpen ? (
+                    <>
+                        <ChevronUp className="w-4 h-4" />
+                        <span className="text-sm">Hide products</span>
+                    </>
+                ) : (
+                    <>
+                        <Plus className="w-4 h-4" />
+                        <span className="text-sm">Add more items</span>
+                    </>
+                )}
+            </button>
 
-            {/* Dialog */}
-            <div className="relative bg-white rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[85vh] flex flex-col">
-                {/* Header */}
-                <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-                    <h2 className="text-lg font-serif text-text-earthy">Add Products</h2>
-                    <button
-                        onClick={onClose}
-                        className="text-gray-400 hover:text-gray-600"
-                        aria-label="Close dialog"
-                    >
-                        <X className="w-5 h-5" />
-                    </button>
-                </div>
-
-                {/* Products List */}
-                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {/* Expandable Products Section */}
+            {isOpen && (
+                <div className="mt-4 space-y-3">
                     {isLoadingProducts ? (
-                        <div className="flex items-center justify-center py-12">
-                            <Loader2 className="w-8 h-8 animate-spin text-accent-earthy" />
+                        <div className="flex items-center justify-center py-6">
+                            <Loader2 className="w-5 h-5 animate-spin text-accent-earthy" />
                         </div>
                     ) : products.length === 0 ? (
-                        <p className="text-center text-gray-500 py-12">No products available</p>
+                        <p className="text-center text-gray-400 py-4 text-sm">No additional products available</p>
                     ) : (
                         products.map(product => {
                             const selectedVariantId = selectedVariants[product.id];
                             const selectedVariant = product.variants.find(v => v.id === selectedVariantId);
-                            const price = selectedVariant?.prices.find(p =>
-                                p.currency_code.toLowerCase() === currencyCode.toLowerCase()
-                            );
+                            const priceAmount = selectedVariant ? getVariantPrice(selectedVariant) : null;
                             const colorOptions = getColorOptions(product);
                             const quantity = quantities[product.id] || 1;
+                            const isAdding = addingProductId === product.id;
 
-                            if (!price) return null;
+                            if (priceAmount === null) return null;
 
                             return (
-                                <div key={product.id} className="flex gap-4 p-3 border border-gray-200 rounded-lg">
+                                <div
+                                    key={product.id}
+                                    className="flex gap-3 p-3 bg-gray-50 rounded-lg border border-gray-100"
+                                >
                                     {/* Product Image */}
-                                    <div className="w-20 h-20 flex-shrink-0 bg-gray-100 rounded-lg overflow-hidden">
+                                    <div className="w-14 h-14 flex-shrink-0 bg-white rounded overflow-hidden">
                                         {product.thumbnail ? (
                                             <Image
                                                 src={product.thumbnail}
                                                 alt={product.title}
-                                                width={80}
-                                                height={80}
+                                                width={56}
+                                                height={56}
                                                 className="w-full h-full object-cover"
                                             />
                                         ) : (
-                                            <div className="w-full h-full flex items-center justify-center">
-                                                <ShoppingBag className="w-8 h-8 text-gray-300" />
+                                            <div className="w-full h-full flex items-center justify-center bg-gray-100">
+                                                <ShoppingBag className="w-5 h-5 text-gray-300" />
                                             </div>
                                         )}
                                     </div>
 
                                     {/* Product Details */}
                                     <div className="flex-1 min-w-0">
-                                        <h3 className="font-medium text-text-earthy text-sm truncate">
-                                            {product.title}
-                                        </h3>
-                                        <p className="text-accent-earthy font-medium text-sm mt-0.5">
-                                            {formatPrice(price.amount)}
-                                        </p>
+                                        <div className="flex items-start justify-between gap-2">
+                                            <h4 className="font-medium text-text-earthy text-sm truncate">
+                                                {product.title}
+                                            </h4>
+                                            <span className="text-accent-earthy font-medium text-sm whitespace-nowrap">
+                                                {formatPrice(priceAmount)}
+                                            </span>
+                                        </div>
 
-                                        {/* Color Selector */}
-                                        {colorOptions.length > 1 ? (
-                                            <div className="flex gap-1.5 mt-2">
-                                                {colorOptions.map(({ variantId, color }) => (
+                                        {/* Color Selector & Controls */}
+                                        <div className="flex items-center justify-between mt-2">
+                                            {/* Color Options */}
+                                            {colorOptions.length > 1 ? (
+                                                <div className="flex gap-1">
+                                                    {colorOptions.map(({ variantId, color }) => (
+                                                        <button
+                                                            key={variantId}
+                                                            onClick={() => handleVariantChange(product.id, variantId)}
+                                                            className={`w-5 h-5 rounded-full border transition-all ${
+                                                                selectedVariantId === variantId
+                                                                    ? 'border-accent-earthy ring-1 ring-accent-earthy/30'
+                                                                    : 'border-gray-300 hover:border-gray-400'
+                                                            }`}
+                                                            style={{ backgroundColor: color.toLowerCase() }}
+                                                            title={color}
+                                                            aria-label={`Select ${color}`}
+                                                        />
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <div />
+                                            )}
+
+                                            {/* Quantity & Add */}
+                                            <div className="flex items-center gap-2">
+                                                <div className="flex items-center border border-gray-200 rounded bg-white">
                                                     <button
-                                                        key={variantId}
-                                                        onClick={() => handleVariantChange(product.id, variantId)}
-                                                        className={`w-6 h-6 rounded-full border-2 transition-all ${
-                                                            selectedVariantId === variantId
-                                                                ? 'border-accent-earthy ring-2 ring-accent-earthy/30'
-                                                                : 'border-gray-300 hover:border-gray-400'
-                                                        }`}
-                                                        style={{ backgroundColor: color.toLowerCase() }}
-                                                        title={color}
-                                                        aria-label={`Select ${color}`}
-                                                    />
-                                                ))}
-                                            </div>
-                                        ) : null}
-
-                                        {/* Quantity & Add Button */}
-                                        <div className="flex items-center gap-3 mt-2">
-                                            <div className="flex items-center border border-gray-200 rounded">
+                                                        onClick={() => handleQuantityChange(product.id, -1)}
+                                                        className="p-1 hover:bg-gray-50"
+                                                        aria-label="Decrease quantity"
+                                                    >
+                                                        <Minus className="w-3 h-3" />
+                                                    </button>
+                                                    <span className="px-2 text-xs font-medium min-w-[20px] text-center">
+                                                        {quantity}
+                                                    </span>
+                                                    <button
+                                                        onClick={() => handleQuantityChange(product.id, 1)}
+                                                        className="p-1 hover:bg-gray-50"
+                                                        aria-label="Increase quantity"
+                                                    >
+                                                        <Plus className="w-3 h-3" />
+                                                    </button>
+                                                </div>
                                                 <button
-                                                    onClick={() => handleQuantityChange(product.id, -1)}
-                                                    className="p-1 hover:bg-gray-100"
-                                                    aria-label="Decrease quantity"
+                                                    onClick={() => handleAddToCart(product)}
+                                                    disabled={isAdding}
+                                                    className={`px-2 py-1 text-xs rounded transition-colors ${
+                                                        isAdding
+                                                            ? 'bg-green-500 text-white'
+                                                            : 'bg-accent-earthy text-white hover:bg-accent-earthy/90'
+                                                    }`}
                                                 >
-                                                    <Minus className="w-3 h-3" />
-                                                </button>
-                                                <span className="px-2 text-sm font-medium min-w-[24px] text-center">
-                                                    {quantity}
-                                                </span>
-                                                <button
-                                                    onClick={() => handleQuantityChange(product.id, 1)}
-                                                    className="p-1 hover:bg-gray-100"
-                                                    aria-label="Increase quantity"
-                                                >
-                                                    <Plus className="w-3 h-3" />
+                                                    {isAdding ? '✓ Added' : 'Add'}
                                                 </button>
                                             </div>
-                                            <button
-                                                onClick={() => handleAddToCart(product)}
-                                                className="px-3 py-1 text-xs bg-accent-earthy text-white rounded hover:bg-accent-earthy/90 transition-colors"
-                                            >
-                                                Add to Cart
-                                            </button>
                                         </div>
                                     </div>
                                 </div>
@@ -284,7 +328,7 @@ export function QuickAddProductDialog({ isOpen, onClose, regionId }: QuickAddPro
                         })
                     )}
                 </div>
-            </div>
+            )}
         </div>
     );
 }

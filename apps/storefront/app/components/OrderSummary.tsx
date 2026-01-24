@@ -59,21 +59,11 @@ export function OrderSummary() {
 
     return (
         <div className="lg:col-span-5 bg-white p-6 lg:p-8 rounded-lg shadow-sm border border-card-earthy/20 sticky top-8">
-            {/* Header with Add Product Button */}
-            <div className="flex items-center justify-between mb-4">
-                <h3 className="font-serif text-lg text-text-earthy">Your Order</h3>
-                <button
-                    onClick={() => setShowAddProductDialog(true)}
-                    className="p-2 rounded-full bg-accent-earthy/10 hover:bg-accent-earthy/20 text-accent-earthy transition-colors"
-                    aria-label="Add products"
-                    title="Add products"
-                >
-                    <Plus className="w-5 h-5" />
-                </button>
-            </div>
+            {/* Header */}
+            <h3 className="font-serif text-lg text-text-earthy mb-4">Your Order</h3>
 
             {/* Cart Items */}
-            <div className="space-y-6 mb-6">
+            <div className="space-y-6 mb-4">
                 {items.map((item) => (
                     <OrderItem
                         key={`${item.id}-${item.color || 'default'}`}
@@ -83,6 +73,13 @@ export function OrderSummary() {
                     />
                 ))}
             </div>
+
+            {/* Add More Products - Inline expandable for upselling */}
+            <QuickAddProductDialog
+                isOpen={showAddProductDialog}
+                onToggle={() => setShowAddProductDialog(!showAddProductDialog)}
+                regionId={regionId}
+            />
 
             {/* Automatic Promotion Banners (Phase 2) */}
             {automaticPromotions.length > 0 && (
@@ -175,12 +172,6 @@ export function OrderSummary() {
                 </div>
             </div>
 
-            {/* Quick Add Product Dialog */}
-            <QuickAddProductDialog
-                isOpen={showAddProductDialog}
-                onClose={() => setShowAddProductDialog(false)}
-                regionId={regionId}
-            />
         </div>
     );
 }
