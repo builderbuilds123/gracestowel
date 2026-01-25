@@ -613,15 +613,15 @@ export default function OrderEdit() {
     };
 
     return (
-        <div className="min-h-screen bg-background-earthy py-8 px-4">
-            <div className="max-w-4xl mx-auto">
+        <div className="bg-background-earthy min-h-screen pt-20 pb-12">
+            <div className="container mx-auto px-4">
                 {/* Header with back link */}
                 <div className="mb-8">
                     <Link
                         to={`/order/status/${order.id}`}
-                        className="inline-flex items-center gap-2 text-accent-earthy hover:text-accent-earthy/80 transition-colors"
+                        className="inline-flex items-center text-text-earthy hover:text-accent-earthy transition-colors"
                     >
-                        <ArrowLeft className="w-4 h-4" />
+                        <ArrowLeft className="w-4 h-4 mr-2" />
                         Back to Order Status
                     </Link>
                     <h1 className="text-3xl font-serif text-text-earthy mt-4">Edit Order #{order.display_id}</h1>
@@ -641,9 +641,9 @@ export default function OrderEdit() {
                     </div>
                 )}
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    {/* Main Form - 2 columns */}
-                    <div className="lg:col-span-2">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start">
+                    {/* Main Form - 7 columns */}
+                    <div className="lg:col-span-7">
                         <form
                             method="post"
                             onSubmit={(e) => {
@@ -977,18 +977,9 @@ export default function OrderEdit() {
 
                                 {/* Pending Items Total */}
                                 {hasPendingChanges && (
-                                    <div className="bg-amber-50 p-2 rounded border border-amber-200">
-                                        <div className="flex justify-between text-sm">
-                                            <span className="text-amber-700">+ Pending Items ({pendingItems.length})</span>
-                                            <span className="text-amber-700 font-medium">+{formatPrice(pendingTotal)}</span>
-                                        </div>
-                                        <button
-                                            type="button"
-                                            onClick={handleDiscardChanges}
-                                            className="text-xs text-amber-600 hover:text-amber-800 mt-1 underline"
-                                        >
-                                            Clear pending items
-                                        </button>
+                                    <div className="flex justify-between text-sm bg-amber-50 p-2 rounded border border-amber-200">
+                                        <span className="text-amber-700">+ Pending Items ({pendingItems.length})</span>
+                                        <span className="text-amber-700 font-medium">+{formatPrice(pendingTotal)}</span>
                                     </div>
                                 )}
 

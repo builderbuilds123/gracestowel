@@ -238,7 +238,14 @@ export async function executePaymentCapture(
         return;
     }
 
-    const { totalCents, currencyCode } = orderData;
+    const { totalCents, currencyCode, status } = orderData;
+    
+    // Guard: Do not capture if order is canceled in Medusa
+    if (status === "canceled") {
+        logger.warn("payment-capture-core", "Skipping capture: Order is canceled", { orderId });
+        return;
+    }
+
     const amountToCapture = paymentIntent.amount_capturable ?? totalCents;
 
     // Validation: Ensure we don't capture more than authorized
