@@ -79,7 +79,8 @@ export function MedusaCartProvider({ children }: { children: React.ReactNode }) 
         label: "medusa-cart-retrieve",
       });
 
-      if (response.status === 404) {
+      // 404 = cart not found, 410 = cart already completed
+      if (response.status === 404 || response.status === 410) {
         setCart(null);
         setCartId(undefined);
         return;
