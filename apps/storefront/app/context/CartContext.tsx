@@ -53,9 +53,23 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     const prevCartIdRef = useRef<string | undefined>(undefined);
 
     // Load cart from sessionStorage on mount (clears on tab close)
+    // First check if the Medusa cart cookie exists - if not, the cart was cleared after checkout
     useEffect(() => {
+        // Check for medusa_cart_id cookie - if missing, cart was cleared by server
+        const hasMedusaCartCookie = document.cookie.includes('medusa_cart_id=') &&
+            !document.cookie.includes('medusa_cart_id=;'); // Exclude cleared cookie pattern
+
         const savedCart = getCachedSessionStorage('cart');
         if (savedCart) {
+            // If no Medusa cart cookie exists, the cart was cleared - don't restore items
+            if (!hasMedusaCartCookie) {
+                const logger = createLogger({ context: "CartContext" });
+                logger.info("No Medusa cart cookie found, clearing orphaned local cart items");
+                removeCachedSessionStorage('cart');
+                setIsLoaded(true);
+                return;
+            }
+
             try {
                 const parsed = JSON.parse(savedCart);
                 if (Array.isArray(parsed)) {
