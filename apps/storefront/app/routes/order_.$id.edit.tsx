@@ -499,43 +499,80 @@ export default function OrderEdit() {
         setSaveError(null);
     }, []);
 
-    // Handler for saving all pending items to server
-    const handleSaveItems = useCallback(async () => {
-        if (pendingItems.length === 0) return;
+    // Form state (must be defined before handleSaveChanges which uses validateForm)
+    const [formData, setFormData] = useState({
+        firstName: order.shipping_address?.first_name || "",
+        lastName: order.shipping_address?.last_name || "",
+        address1: order.shipping_address?.address_1 || "",
+        address2: order.shipping_address?.address_2 || "",
+        city: order.shipping_address?.city || "",
+        province: order.shipping_address?.province || "",
+        postalCode: order.shipping_address?.postal_code || "",
+        country: order.shipping_address?.country_code || "us",
+        phone: order.shipping_address?.phone || "",
+        shippingOptionId: currentShippingOptionId || "",
+    });
+
+    const [errors, setErrors] = useState<Record<string, string>>({});
+
+    // Validate form (memoized for stable reference in handleSaveChanges)
+    const validateForm = useCallback((): boolean => {
+        const newErrors: Record<string, string> = {};
+
+        if (!formData.address1.trim()) newErrors.address1 = "Address is required";
+        if (!formData.city.trim()) newErrors.city = "City is required";
+        if (!formData.postalCode.trim()) newErrors.postalCode = "Postal code is required";
+        if (!formData.country.trim()) newErrors.country = "Country is required";
+
+        setErrors(newErrors);
+        return Object.keys(newErrors).length === 0;
+    }, [formData.address1, formData.city, formData.postalCode, formData.country]);
+
+    // Unified handler for saving ALL changes (pending items + address/shipping)
+    const handleSaveChanges = useCallback(async (formElement: HTMLFormElement) => {
+        // Validate form first
+        if (!validateForm()) {
+            return;
+        }
 
         setIsSavingItems(true);
         setSaveError(null);
 
         try {
-            const response = await fetch(`/api/orders/${order.id}/batch-modify`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-modification-token': modificationToken,
-                },
-                body: JSON.stringify({
-                    items: pendingItems.map(item => ({
-                        action: 'add',
-                        variant_id: item.variantId,
-                        quantity: item.quantity,
-                    })),
-                }),
-            });
+            // Step 1: If there are pending items, save them via batch API
+            if (pendingItems.length > 0) {
+                const batchResponse = await fetch(`/api/orders/${order.id}/batch-modify`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-modification-token': modificationToken,
+                    },
+                    body: JSON.stringify({
+                        items: pendingItems.map(item => ({
+                            action: 'add',
+                            variant_id: item.variantId,
+                            quantity: item.quantity,
+                        })),
+                    }),
+                });
 
-            if (!response.ok) {
-                const errorData = await response.json() as { message?: string; code?: string; failed_items?: Array<{ variant_id: string; reason: string }> };
-                throw new Error(errorData.message || 'Failed to save items');
+                if (!batchResponse.ok) {
+                    const errorData = await batchResponse.json() as { message?: string; code?: string; failed_items?: Array<{ variant_id: string; reason: string }> };
+                    throw new Error(errorData.message || 'Failed to save items');
+                }
+
+                // Clear pending items after successful batch save
+                setPendingItems([]);
             }
 
-            // Success - clear pending items and redirect to order status
-            setPendingItems([]);
-            navigate(`/order/status/${order.id}`);
+            // Step 2: Submit the form for address/shipping changes via React Router action
+            formElement.submit();
         } catch (err) {
-            setSaveError(err instanceof Error ? err.message : 'Failed to save items');
-        } finally {
+            setSaveError(err instanceof Error ? err.message : 'Failed to save changes');
             setIsSavingItems(false);
         }
-    }, [pendingItems, order.id, modificationToken, navigate]);
+        // Note: Don't set isSavingItems=false on success - the form submission will cause a page transition
+    }, [pendingItems, order.id, modificationToken, validateForm]);
 
     // Navigation warning when there are unsaved changes
     useEffect(() => {
@@ -557,35 +594,6 @@ export default function OrderEdit() {
         // With batch modification, we no longer refresh on each add
         // Items are accumulated locally until user clicks "Save Changes"
         revalidator.revalidate();
-    };
-
-    // Form state
-    const [formData, setFormData] = useState({
-        firstName: order.shipping_address?.first_name || "",
-        lastName: order.shipping_address?.last_name || "",
-        address1: order.shipping_address?.address_1 || "",
-        address2: order.shipping_address?.address_2 || "",
-        city: order.shipping_address?.city || "",
-        province: order.shipping_address?.province || "",
-        postalCode: order.shipping_address?.postal_code || "",
-        country: order.shipping_address?.country_code || "us",
-        phone: order.shipping_address?.phone || "",
-        shippingOptionId: currentShippingOptionId || "",
-    });
-
-    const [errors, setErrors] = useState<Record<string, string>>({});
-
-    // Validate form (firstName/lastName are read-only, so no need to validate)
-    const validateForm = (): boolean => {
-        const newErrors: Record<string, string> = {};
-
-        if (!formData.address1.trim()) newErrors.address1 = "Address is required";
-        if (!formData.city.trim()) newErrors.city = "City is required";
-        if (!formData.postalCode.trim()) newErrors.postalCode = "Postal code is required";
-        if (!formData.country.trim()) newErrors.country = "Country is required";
-
-        setErrors(newErrors);
-        return Object.keys(newErrors).length === 0;
     };
 
     // Calculate new shipping cost based on selection
@@ -639,9 +647,8 @@ export default function OrderEdit() {
                         <form
                             method="post"
                             onSubmit={(e) => {
-                                if (!validateForm()) {
-                                    e.preventDefault();
-                                }
+                                e.preventDefault();
+                                handleSaveChanges(e.currentTarget);
                             }}
                             className="space-y-6"
                         >
@@ -870,6 +877,13 @@ export default function OrderEdit() {
                                 </div>
                             )}
 
+                            {/* Save Error Display */}
+                            {saveError && (
+                                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                                    {saveError}
+                                </div>
+                            )}
+
                             {/* Submit Button */}
                             <div className="flex gap-4">
                                 <Link
@@ -880,10 +894,15 @@ export default function OrderEdit() {
                                 </Link>
                                 <button
                                     type="submit"
-                                    disabled={isSubmitting}
+                                    disabled={isSubmitting || isSavingItems}
                                     className="flex-1 py-3 px-4 bg-accent-earthy text-white rounded-lg hover:bg-accent-earthy/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                    {isSubmitting ? "Saving..." : "Save Changes"}
+                                    {isSubmitting || isSavingItems
+                                        ? "Saving..."
+                                        : hasPendingChanges
+                                            ? `Save Changes (+${formatPrice(pendingTotal)})`
+                                            : "Save Changes"
+                                    }
                                 </button>
                             </div>
                         </form>
@@ -958,9 +977,18 @@ export default function OrderEdit() {
 
                                 {/* Pending Items Total */}
                                 {hasPendingChanges && (
-                                    <div className="flex justify-between text-sm bg-amber-50 p-2 rounded border border-amber-200">
-                                        <span className="text-amber-700">+ Pending Items ({pendingItems.length})</span>
-                                        <span className="text-amber-700 font-medium">+{formatPrice(pendingTotal)}</span>
+                                    <div className="bg-amber-50 p-2 rounded border border-amber-200">
+                                        <div className="flex justify-between text-sm">
+                                            <span className="text-amber-700">+ Pending Items ({pendingItems.length})</span>
+                                            <span className="text-amber-700 font-medium">+{formatPrice(pendingTotal)}</span>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={handleDiscardChanges}
+                                            className="text-xs text-amber-600 hover:text-amber-800 mt-1 underline"
+                                        >
+                                            Clear pending items
+                                        </button>
                                     </div>
                                 )}
 
@@ -1015,35 +1043,6 @@ export default function OrderEdit() {
                                 </div>
                             )}
 
-                            {/* Save/Discard Pending Items Buttons */}
-                            {hasPendingChanges && (
-                                <div className="mt-4 space-y-2">
-                                    {/* Save Error Display */}
-                                    {saveError && (
-                                        <div className="p-2 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
-                                            {saveError}
-                                        </div>
-                                    )}
-
-                                    <button
-                                        onClick={handleSaveItems}
-                                        disabled={isSavingItems}
-                                        className="w-full py-2.5 px-4 bg-accent-earthy text-white rounded-lg hover:bg-accent-earthy/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-                                    >
-                                        {isSavingItems
-                                            ? "Saving Items..."
-                                            : `Save Items (+${formatPrice(pendingTotal)})`
-                                        }
-                                    </button>
-                                    <button
-                                        onClick={handleDiscardChanges}
-                                        disabled={isSavingItems}
-                                        className="w-full py-2 px-4 text-text-earthy/70 hover:text-text-earthy transition-colors text-sm"
-                                    >
-                                        Discard Pending Items
-                                    </button>
-                                </div>
-                            )}
                         </div>
                     </div>
                 </div>
