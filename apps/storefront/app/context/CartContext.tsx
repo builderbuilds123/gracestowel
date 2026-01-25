@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { calculateTotal, fromCents } from '../lib/price';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { calculateTotal } from '../lib/price';
 import type { ProductId, CartItem, EmbroideryData } from '../types/product';
 import { productIdsEqual } from '../types/product';
 import { monitoredFetch } from '../utils/monitored-fetch';
@@ -12,51 +12,6 @@ import { getCachedSessionStorage, setCachedSessionStorage, removeCachedSessionSt
 
 // Re-export CartItem for backwards compatibility
 export type { CartItem, EmbroideryData } from '../types/product';
-
-// Story 3.1: Active order expiry (24 hours default)
-const ACTIVE_ORDER_EXPIRY_MS = parseInt(
-  import.meta.env.ACTIVE_ORDER_EXPIRY_HOURS || "24",
-  10
-) * 60 * 60 * 1000;
-
-// Post-checkout mode expiry (24 hours)
-const POST_CHECKOUT_EXPIRY_MS = 24 * 60 * 60 * 1000;
-
-/**
- * Story 3.1: Active Order Data Structure
- * Represents a recently placed order that can be modified
- */
-export interface ActiveOrderData {
-  orderId: string;
-  items: Array<{
-    id: string;
-    title: string;
-    quantity: number;
-    thumbnail?: string;
-    unit_price: number;
-  }>;
-  shippingAddress: {
-    first_name: string;
-    last_name: string;
-    address_1: string;
-    city: string;
-    postal_code: string;
-    country_code: string;
-  };
-  shippingMethodId: string;
-  email: string;
-  customerName: string;
-  createdAt: string;
-}
-
-/**
- * Post-checkout state data structure
- * Tracks order ID and timestamp for the 24-hour edit window
- */
-interface PostCheckoutData {
-    orderId: string;
-    timestamp: number; // Unix timestamp for 24h expiry check
-}
 
 interface CartContextType {
     items: CartItem[];
@@ -71,16 +26,6 @@ interface CartContextType {
     medusaCart?: CartWithPromotions | null;
     isLoading: boolean;
     isSyncing: boolean;
-    // Story 3.1: Active order state for modification
-    activeOrder: ActiveOrderData | null;
-    isModifyingOrder: boolean;
-    setActiveOrder: (data: ActiveOrderData) => void;
-    clearActiveOrder: () => void;
-    // Post-checkout state for UX improvements
-    isPostCheckout: boolean;
-    postCheckoutOrderId: string | null;
-    setPostCheckoutMode: (orderId: string) => void;
-    clearPostCheckoutMode: () => void;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -90,98 +35,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     const [isOpen, setIsOpen] = useState(false);
     const [isLoaded, setIsLoaded] = useState(false);
     const [isSyncing, setIsSyncing] = useState(false);
-    // Story 3.1: Active order state
-    const [activeOrder, setActiveOrderState] = useState<ActiveOrderData | null>(null);
-    // Post-checkout state for UX improvements
-    const [postCheckoutData, setPostCheckoutData] = useState<PostCheckoutData | null>(null);
     const cartCreateInFlight = React.useRef(false);
     const lastSyncRequestId = React.useRef(0);
     const { cartId, cart: medusaCart, setCartId, isLoading, refreshCart } = useMedusaCart();
     const { regionId } = useLocale();
-
-    // Story 3.1: Load active order from sessionStorage on mount
-    useEffect(() => {
-        if (typeof window === 'undefined') return;
-
-        const stored = sessionStorage.getItem("activeOrder");
-        if (stored) {
-            try {
-                const data: ActiveOrderData = JSON.parse(stored);
-                const age = Date.now() - new Date(data.createdAt).getTime();
-
-                if (age < ACTIVE_ORDER_EXPIRY_MS) {
-                    setActiveOrderState(data);
-                } else {
-                    sessionStorage.removeItem("activeOrder");
-                }
-            } catch {
-                sessionStorage.removeItem("activeOrder");
-            }
-        }
-    }, []);
-
-    // Load post-checkout state from sessionStorage on mount with 24h expiry check
-    useEffect(() => {
-        if (typeof window === 'undefined') return;
-
-        const stored = getCachedSessionStorage("postCheckoutMode");
-        if (stored) {
-            try {
-                const data: PostCheckoutData = JSON.parse(stored);
-                const age = Date.now() - data.timestamp;
-
-                if (age < POST_CHECKOUT_EXPIRY_MS) {
-                    setPostCheckoutData(data);
-                } else {
-                    // Expired - clear cart and post-checkout state
-                    const logger = createLogger({ context: "CartContext" });
-                    logger.info("Post-checkout mode expired, clearing cart", {
-                        age: Math.round(age / (1000 * 60 * 60)), // hours
-                        expiryHours: POST_CHECKOUT_EXPIRY_MS / (1000 * 60 * 60),
-                    });
-                    removeCachedSessionStorage("postCheckoutMode");
-                    removeCachedSessionStorage("cart");
-                    setItems([]); // Clear items in state too
-                }
-            } catch {
-                removeCachedSessionStorage("postCheckoutMode");
-            }
-        }
-    }, []);
-
-    // Periodic check for post-checkout expiry (every hour while tab is open)
-    // This ensures cart is cleared even if user keeps tab open for > 24 hours
-    useEffect(() => {
-        if (typeof window === 'undefined') return;
-
-        const checkExpiry = () => {
-            const stored = getCachedSessionStorage("postCheckoutMode");
-            if (stored) {
-                try {
-                    const data: PostCheckoutData = JSON.parse(stored);
-                    const age = Date.now() - data.timestamp;
-
-                    if (age >= POST_CHECKOUT_EXPIRY_MS) {
-                        const logger = createLogger({ context: "CartContext" });
-                        logger.info("Post-checkout mode expired (periodic check), clearing cart", {
-                            age: Math.round(age / (1000 * 60 * 60)), // hours
-                        });
-                        removeCachedSessionStorage("postCheckoutMode");
-                        removeCachedSessionStorage("cart");
-                        setItems([]);
-                        setPostCheckoutData(null);
-                    }
-                } catch {
-                    // Ignore parse errors in periodic check
-                }
-            }
-        };
-
-        // Check every hour (3600000ms)
-        const intervalId = setInterval(checkExpiry, 60 * 60 * 1000);
-
-        return () => clearInterval(intervalId);
-    }, []);
 
     // Validate cart item integrity
     const validateCartItem = (item: any): boolean => {
@@ -191,6 +48,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         if (typeof item.quantity !== 'number' || item.quantity <= 0) return false;
         return true;
     };
+
+    // Track previous cartId to detect when Medusa cart is cleared
+    const prevCartIdRef = useRef<string | undefined>(undefined);
 
     // Load cart from sessionStorage on mount (clears on tab close)
     useEffect(() => {
@@ -219,6 +79,19 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         }
         setIsLoaded(true);
     }, []);
+
+    // Clear local cart when Medusa cart is cleared (e.g., after checkout success)
+    // This ensures both cart systems stay in sync
+    useEffect(() => {
+        // If we had a cartId and now it's undefined, the cart was cleared
+        if (prevCartIdRef.current !== undefined && cartId === undefined) {
+            const logger = createLogger({ context: "CartContext" });
+            logger.info("Medusa cart cleared, clearing local cart items");
+            setItems([]);
+            removeCachedSessionStorage('cart');
+        }
+        prevCartIdRef.current = cartId;
+    }, [cartId]);
 
     // ✅ Debounced sessionStorage writes with caching (clears on tab close)
     useEffect(() => {
@@ -379,7 +252,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     // ✅ Memoize updateQuantity function (Issue #5 fix)
     const updateQuantity = useCallback((id: ProductId, quantity: number, color?: string, variantId?: string) => {
         if (quantity <= 0) {
-            removeFromCart(id, color);
+            removeFromCart(id, color, variantId);
             return;
         }
 
@@ -391,7 +264,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
                 } else {
                     isMatch = productIdsEqual(item.id, id) && (color === undefined || item.color === color);
                 }
-                
+
                 return isMatch ? { ...item, quantity } : item;
             })
         );
@@ -405,45 +278,6 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         setItems([]);
         setIsOpen(false);
     }, []);
-
-    // Story 3.1: Set active order (stores in sessionStorage)
-    const setActiveOrder = useCallback((data: ActiveOrderData) => {
-        if (typeof window !== 'undefined') {
-            sessionStorage.setItem("activeOrder", JSON.stringify(data));
-        }
-        setActiveOrderState(data);
-    }, []);
-
-    // Story 3.1: Clear active order (removes from sessionStorage)
-    const clearActiveOrder = useCallback(() => {
-        if (typeof window !== 'undefined') {
-            sessionStorage.removeItem("activeOrder");
-        }
-        setActiveOrderState(null);
-    }, []);
-
-    // Set post-checkout mode (stores orderId and timestamp in sessionStorage)
-    const setPostCheckoutMode = useCallback((orderId: string) => {
-        const data: PostCheckoutData = {
-            orderId,
-            timestamp: Date.now(),
-        };
-        setCachedSessionStorage("postCheckoutMode", JSON.stringify(data));
-        setPostCheckoutData(data);
-    }, []);
-
-    // Clear post-checkout mode (removes from sessionStorage)
-    const clearPostCheckoutMode = useCallback(() => {
-        removeCachedSessionStorage("postCheckoutMode");
-        setPostCheckoutData(null);
-    }, []);
-
-    // Story 3.1: Computed flag for order modification mode
-    const isModifyingOrder = activeOrder !== null;
-
-    // Computed post-checkout state values
-    const isPostCheckout = postCheckoutData !== null;
-    const postCheckoutOrderId = postCheckoutData?.orderId ?? null;
 
     // ✅ Optimized: Memoize the expensive calculation separately (Issue #8 fix)
     // Only recalculate when items actually change
@@ -473,16 +307,6 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         medusaCart,
         isLoading,
         isSyncing,
-        // Story 3.1: Active order state
-        activeOrder,
-        isModifyingOrder,
-        setActiveOrder,  // Stable function reference (useCallback)
-        clearActiveOrder, // Stable function reference (useCallback)
-        // Post-checkout state
-        isPostCheckout,
-        postCheckoutOrderId,
-        setPostCheckoutMode,  // Stable function reference (useCallback)
-        clearPostCheckoutMode, // Stable function reference (useCallback)
     }), [
         items,           // Primitive array - reference changes when items change
         isOpen,          // Primitive boolean
@@ -496,14 +320,6 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         medusaCart,      // Object - reference changes when cart updates
         isLoading,       // Primitive boolean
         isSyncing,       // Primitive boolean
-        activeOrder,     // Object - reference changes when order changes
-        isModifyingOrder, // Computed boolean
-        setActiveOrder,  // Stable function reference (useCallback)
-        clearActiveOrder, // Stable function reference (useCallback)
-        isPostCheckout,  // Computed boolean
-        postCheckoutOrderId, // Primitive string | null
-        setPostCheckoutMode, // Stable function reference (useCallback)
-        clearPostCheckoutMode, // Stable function reference (useCallback)
     ]);
 
     return (
