@@ -63,20 +63,43 @@ export async function validateCSRFToken(request: Request, secret?: string, env?:
     const cookieHeader = request.headers.get("Cookie");
     const session = (await cookie.parse(cookieHeader)) || {};
     const storedToken = typeof session.token === 'string' ? session.token : undefined;
-    const headerToken = request.headers.get("X-CSRF-Token");
-    
+
+    // Check header first (for API requests)
+    let submittedToken = request.headers.get("X-CSRF-Token");
+
+    // If not in header, check form data (for HTML form submissions)
+    // Clone request to avoid consuming the body for the actual handler
+    if (!submittedToken) {
+        try {
+            const clonedRequest = request.clone();
+            const contentType = clonedRequest.headers.get("Content-Type") || "";
+
+            if (contentType.includes("application/x-www-form-urlencoded") || contentType.includes("multipart/form-data")) {
+                const formData = await clonedRequest.formData();
+                const formToken = formData.get("csrf_token");
+                if (typeof formToken === "string") {
+                    submittedToken = formToken;
+                }
+            }
+        } catch (e) {
+            // If parsing fails, continue with header-only check
+            logger.warn("Failed to parse form data for CSRF token", { error: String(e) });
+        }
+    }
+
     if (!isProd || isCI) {
         const storedDisplay = typeof storedToken === 'string' ? `${storedToken.substring(0, 8)}...` : 'undefined';
-        const headerDisplay = typeof headerToken === 'string' ? `${headerToken.substring(0, 8)}...` : 'undefined';
+        const submittedDisplay = typeof submittedToken === 'string' ? `${submittedToken.substring(0, 8)}...` : 'undefined';
         logger.info("CSRF validation", {
             storedTokenPreview: storedDisplay,
-            headerTokenPreview: headerDisplay,
-            match: storedToken === headerToken,
+            submittedTokenPreview: submittedDisplay,
+            match: storedToken === submittedToken,
             hasCookie: !!storedToken,
+            source: request.headers.get("X-CSRF-Token") ? "header" : "form",
         });
     }
 
-    if (!storedToken || !headerToken) return false;
+    if (!storedToken || !submittedToken) return false;
 
-    return storedToken === headerToken;
+    return storedToken === submittedToken;
 }
