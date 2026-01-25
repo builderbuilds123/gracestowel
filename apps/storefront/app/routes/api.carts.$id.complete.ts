@@ -1,5 +1,6 @@
 import { type ActionFunctionArgs, data } from "react-router";
 import { monitoredFetch, type CloudflareEnv } from "../utils/monitored-fetch";
+import { createLogger, getTraceIdFromRequest } from "../lib/logger";
 
 /**
  * POST /api/carts/:id/complete
@@ -7,9 +8,10 @@ import { monitoredFetch, type CloudflareEnv } from "../utils/monitored-fetch";
  */
 import { resolveCSRFSecret, validateCSRFToken } from "../utils/csrf.server";
 
-// ...
-
 export async function action({ request, params, context }: ActionFunctionArgs) {
+    const traceId = getTraceIdFromRequest(request);
+    const logger = createLogger({ traceId, context: "api.carts.complete" });
+
     if (request.method !== "POST") {
         return data({ error: "Method not allowed" }, { status: 405 });
     }
@@ -53,7 +55,11 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
 
         if (!response.ok) {
             const errorData = await response.json() as { message?: string; type?: string };
-            console.error(`Failed to complete cart ${cartId}:`, errorData);
+            logger.error("Failed to complete cart", new Error(errorData.message || "Unknown error"), {
+                cartId,
+                errorType: errorData.type,
+                status: response.status,
+            });
             return data({
                 error: errorData.message || "Failed to complete cart",
                 details: errorData.type || undefined,
@@ -72,11 +78,11 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
         const displayId = completedOrder?.display_id || completedCart?.display_id;
 
         if (!resourceId) {
-             console.error(`Failed to extract ID from completion response for cart ${cartId}`);
+             logger.error("Failed to extract ID from completion response", new Error("Invalid completion response"), { cartId });
              throw new Error("Invalid completion response from Medusa");
         }
 
-        console.log(`Cart ${cartId} completed successfully. Resource ID: ${resourceId}`);
+        logger.info("Cart completed successfully", { cartId, resourceId, displayId });
 
         return data({
             success: true,
@@ -85,7 +91,7 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
         }, { status: 200 });
 
     } catch (error: any) {
-        console.error(`Error completing cart ${cartId}:`, error);
+        logger.error("Error completing cart", error instanceof Error ? error : new Error(String(error)), { cartId });
         return data({
             error: "An unexpected error occurred during cart completion",
             details: import.meta.env.DEV ? error.message : undefined,

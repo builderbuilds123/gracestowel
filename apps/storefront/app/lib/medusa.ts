@@ -7,7 +7,7 @@ const logger = createLogger({ context: "medusa-lib" })
 export const createMedusaClient = (backendUrl: string, publishableKey: string) => {
   return new Medusa({
     baseUrl: backendUrl,
-    debug: import.meta.env.DEV,
+    debug: false, // Disable SDK debug logging - use structured logger instead
     publishableKey
   })
 }

@@ -1,4 +1,7 @@
 import { createCookie } from "react-router";
+import { createLogger } from "../lib/logger";
+
+const logger = createLogger({ context: "csrf" });
 
 export function resolveCSRFSecret(secret?: string): string | null {
   const isProd =
@@ -9,7 +12,7 @@ export function resolveCSRFSecret(secret?: string): string | null {
     if (isProd) {
       return null;
     }
-    console.warn("JWT_SECRET not set; using development CSRF fallback");
+    logger.warn("JWT_SECRET not set; using development CSRF fallback");
     return "dev-secret-key";
   }
 
@@ -65,10 +68,12 @@ export async function validateCSRFToken(request: Request, secret?: string, env?:
     if (!isProd || isCI) {
         const storedDisplay = typeof storedToken === 'string' ? `${storedToken.substring(0, 8)}...` : 'undefined';
         const headerDisplay = typeof headerToken === 'string' ? `${headerToken.substring(0, 8)}...` : 'undefined';
-        console.log(`[CSRF Debug] Stored: ${storedDisplay}, Header: ${headerDisplay}, Match: ${storedToken === headerToken}`);
-        if (!storedToken) {
-            console.log(`[CSRF Debug] Cookie Header: ${request.headers.get("Cookie")}`);
-        }
+        logger.info("CSRF validation", {
+            storedTokenPreview: storedDisplay,
+            headerTokenPreview: headerDisplay,
+            match: storedToken === headerToken,
+            hasCookie: !!storedToken,
+        });
     }
 
     if (!storedToken || !headerToken) return false;

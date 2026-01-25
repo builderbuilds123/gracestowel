@@ -132,6 +132,8 @@ import type { CloudflareEnv } from "./utils/monitored-fetch";
 // ... (existing imports)
 
 export async function loader({ request, context }: Route.LoaderArgs) {
+  const logger = createLogger({ context: "root-loader" });
+
   // Ensure we have access to Cloudflare env
   // Cast to CloudflareEnv which includes secrets not in wrangler.json (set via dashboard)
   const env = context.cloudflare?.env as unknown as CloudflareEnv | undefined;
@@ -158,16 +160,11 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   try {
       const client = getMedusaClient({ cloudflare: { env } });
       await client.store.product.list({ limit: 1 });
-      // Note: Server-side logging - structured logger not available in loader
-      // This is acceptable as it's only in development
       if (import.meta.env.MODE !== 'production') {
-        // eslint-disable-next-line no-console
-        console.log("✅ Medusa connection verified via loader");
+        logger.info("Medusa connection verified");
       }
   } catch (err) {
-      // Server-side error - structured logger not available in loader
-      // eslint-disable-next-line no-console
-      console.error("❌ Failed to verify Medusa connection:", err);
+      logger.error("Failed to verify Medusa connection", err instanceof Error ? err : new Error(String(err)));
   }
   
   // Extract PostHog config

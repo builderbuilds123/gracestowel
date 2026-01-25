@@ -212,6 +212,11 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
     }
 
     // Step 3: Validate payment with Stripe
+    if (!env.STRIPE_SECRET_KEY) {
+        logger.error("STRIPE_SECRET_KEY not configured", new Error("Missing config"));
+        return redirect("/checkout?error=PAYMENT_FAILED");
+    }
+
     try {
         const stripe = getStripeServerSide(env.STRIPE_SECRET_KEY);
         const paymentIntent = await stripe.paymentIntents.retrieve(params.paymentIntentId);
@@ -260,11 +265,13 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
         }
 
         // Step 6: Build response headers
-        const cookies: string[] = [clearParamsCookie()];
+        // Note: Multiple Set-Cookie headers must be set individually, not comma-separated
+        const headers = new Headers();
+        headers.append("Set-Cookie", clearParamsCookie());
 
         // Clear cart cookie
         if (cartId) {
-            cookies.push(clearCartCookie());
+            headers.append("Set-Cookie", clearCartCookie());
         }
 
         // Set guest token cookie for order access
@@ -273,14 +280,18 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
                 orderResult.modificationToken,
                 orderResult.orderId
             );
-            cookies.push(guestTokenCookie);
+            headers.append("Set-Cookie", guestTokenCookie);
+            logger.info("Guest token cookie set", {
+                orderId: orderResult.orderId,
+                cookieLength: guestTokenCookie.length,
+            });
+        } else {
+            logger.warn("No modification token received", { orderId: orderResult.orderId });
         }
 
         // Step 7: Redirect to order status page
         logger.info("Redirecting to order status", { orderId: orderResult.orderId });
-        return redirect(`/order/status/${orderResult.orderId}`, {
-            headers: { "Set-Cookie": cookies.join(", ") },
-        });
+        return redirect(`/order/status/${orderResult.orderId}`, { headers });
     } catch (error) {
         logger.error("Checkout success error", error instanceof Error ? error : new Error(String(error)));
         return redirect("/checkout?error=PAYMENT_FAILED", {

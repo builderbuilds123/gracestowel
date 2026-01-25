@@ -23,6 +23,7 @@ import { medusaFetch } from "../lib/medusa-fetch";
 import { getErrorDisplay } from "../utils/error-messages";
 import { resolveCSRFSecret, validateCSRFToken, createCSRFToken } from "../utils/csrf.server";
 import type { CloudflareEnv } from "../utils/monitored-fetch";
+import { createLogger } from "../lib/logger";
 
 // Types
 interface Address {
@@ -98,22 +99,51 @@ interface ActionData {
  * Loader: Fetch order data and available shipping options
  */
 export async function loader({ params, request, context }: LoaderFunctionArgs) {
+    const logger = createLogger({ context: "order-edit-loader" });
     const { id } = params;
     const env = context.cloudflare.env as unknown as CloudflareEnv;
+
+    // Log all cookies received
+    const cookieHeader = request.headers.get("Cookie");
+    logger.info("[ORDER-EDIT] Loader called", {
+        orderId: id,
+        hasCookieHeader: !!cookieHeader,
+        cookieHeaderLength: cookieHeader?.length,
+        // Log cookie names only (not values for security)
+        cookieNames: cookieHeader?.split(";").map(c => c.trim().split("=")[0]).join(", "),
+    });
 
     // Check URL for token (from email link)
     const url = new URL(request.url);
     const urlToken = url.searchParams.get("token");
 
     // Get token from cookie or URL
-    // guest_order_{orderId} cookie (path=/order, SameSite=Lax) is set by /api/set-guest-token
+    // guest_order_{orderId} cookie (path=/order, SameSite=strict) is set by /api/set-guest-token
     const { token: cookieToken, source } = await getGuestToken(request, id!);
+
+    logger.info("[ORDER-EDIT] Token sources", {
+        orderId: id,
+        hasUrlToken: !!urlToken,
+        hasCookieToken: !!cookieToken,
+        source,
+        expectedCookieName: `guest_order_${id}`,
+    });
+
     const token = urlToken || cookieToken;
 
     if (!token) {
         // No auth - redirect to order status with error
+        logger.warn("[ORDER-EDIT] No token found, redirecting", { orderId: id });
         return redirect(`/order/status/${id}?error=TOKEN_REQUIRED`);
     }
+
+    logger.info("[ORDER-EDIT] Token found, proceeding", {
+        orderId: id,
+        tokenSource: urlToken ? "url" : "cookie",
+        tokenLength: token.length,
+        tokenPrefix: token.substring(0, 50),
+        tokenSuffix: token.substring(token.length - 20),
+    });
 
     const headers: HeadersInit = {
         "x-modification-token": token,
@@ -127,8 +157,27 @@ export async function loader({ params, request, context }: LoaderFunctionArgs) {
         context,
     });
 
+    logger.info("[ORDER-EDIT] Backend response", {
+        orderId: id,
+        status: orderResponse.status,
+        ok: orderResponse.ok,
+    });
+
     if (!orderResponse.ok) {
         const status = orderResponse.status;
+        // Try to get error body for debugging
+        let errorBody: unknown;
+        try {
+            errorBody = await orderResponse.clone().json();
+        } catch {
+            errorBody = await orderResponse.clone().text();
+        }
+        logger.error("[ORDER-EDIT] Backend error", new Error(`Status ${status}`), {
+            orderId: id,
+            status,
+            errorBody,
+        });
+
         if (status === 401 || status === 403) {
             // Auth failed - clear cookie and redirect
             const clearCookieHeader = await clearGuestToken(id!);
@@ -217,6 +266,7 @@ export async function loader({ params, request, context }: LoaderFunctionArgs) {
 export async function action({ params, request, context }: ActionFunctionArgs) {
     const { id } = params;
     const env = context.cloudflare.env as unknown as CloudflareEnv;
+    const logger = createLogger({ context: "order-edit-action" });
 
     // CSRF Check
     const jwtSecret = resolveCSRFSecret(env.JWT_SECRET);
@@ -314,7 +364,7 @@ export async function action({ params, request, context }: ActionFunctionArgs) {
 
         return data({ success: false, error: "Unknown intent" } as ActionData, { status: 400 });
     } catch (error) {
-        console.error("Order edit action error:", error);
+        logger.error("Order edit action error", error instanceof Error ? error : new Error(String(error)), { orderId: id });
         return data({ success: false, error: "An unexpected error occurred" } as ActionData, { status: 500 });
     }
 }
@@ -344,12 +394,10 @@ export default function OrderEdit() {
 
     const [errors, setErrors] = useState<Record<string, string>>({});
 
-    // Validate form
+    // Validate form (firstName/lastName are read-only, so no need to validate)
     const validateForm = (): boolean => {
         const newErrors: Record<string, string> = {};
 
-        if (!formData.firstName.trim()) newErrors.firstName = "First name is required";
-        if (!formData.lastName.trim()) newErrors.lastName = "Last name is required";
         if (!formData.address1.trim()) newErrors.address1 = "Address is required";
         if (!formData.city.trim()) newErrors.city = "City is required";
         if (!formData.postalCode.trim()) newErrors.postalCode = "Postal code is required";
@@ -366,12 +414,12 @@ export default function OrderEdit() {
     const shippingDifference = newShippingCost - currentShippingCost;
     const newTotal = order.total + shippingDifference;
 
-    // Format currency
+    // Format currency (Medusa uses major units - dollars, not cents)
     const formatPrice = (amount: number) => {
         return new Intl.NumberFormat("en-US", {
             style: "currency",
             currency: order.currency_code.toUpperCase(),
-        }).format(amount / 100);
+        }).format(amount);
     };
 
     return (
@@ -419,47 +467,41 @@ export default function OrderEdit() {
                             <input type="hidden" name="intent" value="UPDATE_ALL" />
                             <input type="hidden" name="currentShippingOptionId" value={currentShippingOptionId || ""} />
 
-                            {/* Shipping Address */}
+                            {/* Contact Information (Read-only) */}
                             <div className="bg-white rounded-lg shadow p-6">
                                 <h2 className="text-xl font-serif text-text-earthy mb-4 flex items-center gap-2">
                                     <Package className="w-5 h-5 text-accent-earthy" />
-                                    Shipping Address
+                                    Contact Information
                                 </h2>
 
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
                                     <div>
-                                        <label htmlFor="firstName" className="block text-sm font-medium text-text-earthy mb-1">
-                                            First Name *
+                                        <label className="block text-sm font-medium text-text-earthy mb-1">
+                                            Name
                                         </label>
-                                        <input
-                                            type="text"
-                                            id="firstName"
-                                            name="firstName"
-                                            value={formData.firstName}
-                                            onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                                            className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-earthy ${
-                                                errors.firstName ? "border-red-500" : "border-gray-300"
-                                            }`}
-                                        />
-                                        {errors.firstName && <p className="text-red-500 text-sm mt-1">{errors.firstName}</p>}
+                                        <p className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-text-earthy">
+                                            {formData.firstName} {formData.lastName}
+                                        </p>
+                                        <p className="text-xs text-text-earthy/50 mt-1">Contact name cannot be changed</p>
+                                        {/* Hidden inputs to preserve values for form submission */}
+                                        <input type="hidden" name="firstName" value={formData.firstName} />
+                                        <input type="hidden" name="lastName" value={formData.lastName} />
                                     </div>
 
                                     <div>
-                                        <label htmlFor="lastName" className="block text-sm font-medium text-text-earthy mb-1">
-                                            Last Name *
+                                        <label className="block text-sm font-medium text-text-earthy mb-1">
+                                            Email
                                         </label>
-                                        <input
-                                            type="text"
-                                            id="lastName"
-                                            name="lastName"
-                                            value={formData.lastName}
-                                            onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                                            className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-earthy ${
-                                                errors.lastName ? "border-red-500" : "border-gray-300"
-                                            }`}
-                                        />
-                                        {errors.lastName && <p className="text-red-500 text-sm mt-1">{errors.lastName}</p>}
+                                        <p className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-text-earthy">
+                                            {order.email}
+                                        </p>
+                                        <p className="text-xs text-text-earthy/50 mt-1">Email cannot be changed</p>
                                     </div>
+                                </div>
+
+                                <h3 className="text-lg font-medium text-text-earthy mb-4">Shipping Address</h3>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
                                     <div className="sm:col-span-2">
                                         <label htmlFor="address1" className="block text-sm font-medium text-text-earthy mb-1">

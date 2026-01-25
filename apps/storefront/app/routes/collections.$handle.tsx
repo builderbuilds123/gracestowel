@@ -7,6 +7,8 @@ import type { Route } from "./+types/collections.$handle";
 
 export async function loader({ params, context }: Route.LoaderArgs) {
     const { handle } = params;
+    const logger = createLogger({ context: "collections-loader" });
+
     if (!handle) throw new Response("Not Found", { status: 404 });
 
     const medusa = getMedusaClient(context);
@@ -51,7 +53,7 @@ export async function loader({ params, context }: Route.LoaderArgs) {
             handle 
         };
     } catch (error) {
-        console.error("Failed to fetch collection products:", error);
+        logger.error("Failed to fetch collection products", error instanceof Error ? error : new Error(String(error)), { handle });
         return { products: [], handle };
     }
 }

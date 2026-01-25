@@ -1,8 +1,12 @@
 import { type ActionFunctionArgs, data } from "react-router";
 import type { CloudflareEnv } from "../utils/monitored-fetch";
 import { resolveCSRFSecret, validateCSRFToken } from "../utils/csrf.server";
+import { createLogger, getTraceIdFromRequest } from "../lib/logger";
 
 export async function action({ request, context }: ActionFunctionArgs) {
+    const traceId = getTraceIdFromRequest(request);
+    const logger = createLogger({ traceId, context: "api.checkout-session" });
+
     if (request.method !== "POST") {
         return data({ message: "Method not allowed" }, { status: 405 });
     }
@@ -31,7 +35,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
         const body = new URLSearchParams();
         body.append("ui_mode", "embedded");
         body.append("mode", "payment");
-        
+
         const origin = new URL(request.url).origin;
         body.append("return_url", `${origin}/checkout/return?session_id={CHECKOUT_SESSION_ID}`);
 
@@ -45,7 +49,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
             body.append(`line_items[${index}][quantity]`, item.quantity.toString());
         });
 
-        console.log("Creating checkout session via fetch...");
+        logger.info("Creating checkout session", { itemCount: items.length, currency });
 
         // Use native fetch for Stripe API (third-party, no Medusa headers needed)
         const response = await fetch("https://api.stripe.com/v1/checkout/sessions", {
@@ -59,15 +63,15 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
         if (!response.ok) {
             const errorText = await response.text();
-            console.error("Stripe API error:", errorText);
+            logger.error("Stripe API error", new Error(errorText), { status: response.status });
             throw new Error(`Stripe API error: ${response.status} ${response.statusText}`);
         }
 
         const session = await response.json() as { id: string; client_secret: string };
-        console.log("Checkout session created:", session.id);
+        logger.info("Checkout session created", { sessionId: session.id });
         return { clientSecret: session.client_secret };
     } catch (error) {
-        console.error("Error creating checkout session:", error);
+        logger.error("Error creating checkout session", error instanceof Error ? error : new Error(String(error)));
         return data({ message: "Error creating checkout session" }, { status: 500 });
     }
 }
