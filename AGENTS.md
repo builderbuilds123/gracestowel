@@ -135,7 +135,7 @@ tail -100 /tmp/gracestowel-storefront.log
 
 ## Structured Logging
 
-**NEVER use `console.log/warn/error` directly.** Use structured logger:
+**NEVER use `console.log/warn/error` directly unless specifically instructed.** Always use structured logger:
 
 ```typescript
 import { createLogger, getTraceIdFromRequest } from "../lib/logger";
@@ -252,7 +252,7 @@ CI runs: Lint → Type Check → Security Scan → Unit Tests → E2E → Deploy
 | Ignore catch errors | Log and handle properly |
 | Send email synchronously | Use BullMQ queue |
 | Log raw PII | Mask: `****@domain.com` |
-| Use `console.log/warn/error` | Use `createLogger()` from `lib/logger.ts` |
+| Use `console.log/warn/error` | Use `createLogger()` from `lib/logger.ts` (unless specifically instructed) |
 | Start servers without cleanup | Kill existing port processes first |
 | Test checkout without Stripe CLI | Run `stripe listen --forward-to localhost:9000/webhooks/stripe` |
 

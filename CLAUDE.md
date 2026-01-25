@@ -192,9 +192,9 @@ tail -f /tmp/gracestowel-api.log
 
 ## Logging Guidelines
 
-**NEVER use `console.log`, `console.warn`, or `console.error` directly.**
+**NEVER use `console.log`, `console.warn`, or `console.error` directly unless specifically instructed.**
 
-Use the structured logger from `apps/storefront/app/lib/logger.ts`:
+Always use the structured logger from `apps/storefront/app/lib/logger.ts`:
 
 ```typescript
 import { createLogger, getTraceIdFromRequest } from "../lib/logger";
