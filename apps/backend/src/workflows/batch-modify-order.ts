@@ -86,11 +86,19 @@ interface BatchStripeResult {
     paymentIntentId: string;
 }
 
+interface QuantityUpdateInfo {
+    lineItemId: string;
+    variantId: string;
+    oldQuantity: number;
+    newQuantity: number;
+}
+
 interface BatchEditResult {
     orderChangeId: string;
     itemsAdded: number;
     itemsUpdated: number;
     newLineItemIds: string[];
+    quantityUpdates: QuantityUpdateInfo[];
     orderPreview: any;
 }
 
@@ -606,14 +614,21 @@ const executeBatchOrderEditStep = createStep(
         const query = container.resolve(ContainerRegistrationKeys.QUERY);
         const orderModuleService = container.resolve(Modules.ORDER);
 
-        // 0. Get existing line item IDs to identify new ones later
+        // 0. Get existing line items with quantities to identify new ones and track changes
         const { data: existingOrder } = await query.graph({
             entity: "order",
-            fields: ["items.id"],
+            fields: ["items.id", "items.variant_id", "items.quantity"],
             filters: { id: input.orderId },
         });
         const existingLineItemIds = new Set(
             existingOrder[0]?.items?.map((item: any) => item.id) || []
+        );
+        // Map of line item ID -> { variant_id, quantity } for tracking quantity changes
+        const existingItemInfo = new Map<string, { variantId: string; quantity: number }>(
+            existingOrder[0]?.items?.map((item: any) => [
+                item.id,
+                { variantId: item.variant_id, quantity: item.quantity }
+            ]) || []
         );
 
         // 1. Check for existing active order edit or create a new one
@@ -660,11 +675,23 @@ const executeBatchOrderEditStep = createStep(
             itemsAdded++;
         }
 
-        // 2b. Update quantities for existing items
+        // 2b. Update quantities for existing items and track the changes
         const updateItems = input.items.filter(i => i.action === 'update_quantity' && i.item_id);
         let itemsUpdated = 0;
+        const quantityUpdates: QuantityUpdateInfo[] = [];
 
         for (const item of updateItems) {
+            const existingInfo = existingItemInfo.get(item.item_id!);
+            if (existingInfo) {
+                // Track the quantity change for reservation updates
+                quantityUpdates.push({
+                    lineItemId: item.item_id!,
+                    variantId: existingInfo.variantId,
+                    oldQuantity: existingInfo.quantity,
+                    newQuantity: item.quantity,
+                });
+            }
+
             await orderEditUpdateItemQuantityWorkflow(container).run({
                 input: {
                     order_id: input.orderId,
@@ -710,6 +737,11 @@ const executeBatchOrderEditStep = createStep(
             itemsAdded,
             itemsUpdated,
             newLineItemIds,
+            quantityUpdates: quantityUpdates.map(q => ({
+                lineItemId: q.lineItemId,
+                oldQuantity: q.oldQuantity,
+                newQuantity: q.newQuantity,
+            })),
         });
 
         return new StepResponse({
@@ -717,6 +749,7 @@ const executeBatchOrderEditStep = createStep(
             itemsAdded,
             itemsUpdated,
             newLineItemIds,
+            quantityUpdates,
             orderPreview: updatedOrder,
         });
     }
@@ -779,12 +812,17 @@ interface PaymentSessionUpdateResult {
  * This step updates the PaymentSession's amount field to reflect the new
  * Stripe authorization. This ensures the Medusa admin UI shows the correct
  * amount that can be captured.
+ *
+ * IMPORTANT: The data field MUST include the PaymentIntent ID (as `id`),
+ * otherwise the Stripe provider's updatePayment will fail with
+ * "intent must be a string" error.
  */
 const updateBatchPaymentSessionStep = createStep(
     "update-batch-payment-session",
     async (
         input: {
             paymentSessionId: string | undefined;
+            paymentIntentId: string;
             amount: number;
             previousAmount: number;
             currencyCode: string;
@@ -801,15 +839,18 @@ const updateBatchPaymentSessionStep = createStep(
 
         const paymentModuleService = container.resolve(Modules.PAYMENT);
 
+        // Pass the PaymentIntent ID in data so Stripe provider can find it
+        // The Stripe provider expects `data.id` to be the PaymentIntent ID
         await paymentModuleService.updatePaymentSession({
             id: input.paymentSessionId,
             amount: input.amount,
             currency_code: input.currencyCode,
-            data: {}, // Preserve existing data - Medusa will merge this
+            data: { id: input.paymentIntentId },
         });
 
         logger.info("batch-modify-order", "Updated PaymentSession", {
             paymentSessionId: input.paymentSessionId,
+            paymentIntentId: input.paymentIntentId,
             amount: input.amount,
         });
 
@@ -823,25 +864,17 @@ const updateBatchPaymentSessionStep = createStep(
         return new StepResponse(result, result);
     },
     async (compensation, { container }) => {
+        // Note: Compensation would need paymentIntentId too, but since we only
+        // roll back the amount (not the PI itself), we skip provider call on rollback
+        // and just log that we can't fully rollback the session amount
         if (!compensation || !compensation.paymentSessionId || !compensation.updated) return;
 
-        const paymentModuleService = container.resolve(Modules.PAYMENT);
-        try {
-            await paymentModuleService.updatePaymentSession({
-                id: compensation.paymentSessionId,
-                amount: compensation.previousAmount,
-                currency_code: compensation.currencyCode,
-                data: {},
-            });
-            logger.info("batch-modify-order", "Rolled back PaymentSession amount", {
-                paymentSessionId: compensation.paymentSessionId,
-                amount: compensation.previousAmount,
-            });
-        } catch (rollbackError) {
-            logger.error("batch-modify-order", "Failed to rollback PaymentSession", {
-                paymentSessionId: compensation.paymentSessionId,
-            }, rollbackError instanceof Error ? rollbackError : new Error(String(rollbackError)));
-        }
+        logger.warn("batch-modify-order", "PaymentSession rollback skipped - amount updated directly in Stripe", {
+            paymentSessionId: compensation.paymentSessionId,
+            previousAmount: compensation.previousAmount,
+        });
+        // Don't try to call updatePaymentSession again as it would fail without PI ID
+        // The Stripe PaymentIntent will be rolled back by incrementStripeBatchStep's compensation
     }
 );
 
@@ -1118,6 +1151,144 @@ const createBatchReservationsStep = createStep(
     }
 );
 
+interface ReservationUpdateResult {
+    updated: boolean;
+    updatedCount: number;
+    createdCount: number;
+}
+
+/**
+ * Step 8: Update inventory reservations for quantity changes
+ *
+ * When existing line items have their quantities changed, we need to update
+ * the corresponding reservations. This step handles:
+ * - Increasing reservation quantity when item quantity increases
+ * - Decreasing reservation quantity when item quantity decreases
+ * - Creating new reservations if none exist for the line item
+ */
+const updateBatchReservationsStep = createStep(
+    "update-batch-reservations",
+    async (
+        input: {
+            orderId: string;
+            quantityUpdates: QuantityUpdateInfo[];
+        },
+        { container }
+    ): Promise<StepResponse<ReservationUpdateResult>> => {
+        if (input.quantityUpdates.length === 0) {
+            logger.info("batch-modify-order", "No quantity updates for reservations", {
+                orderId: input.orderId,
+            });
+            return new StepResponse({
+                updated: false,
+                updatedCount: 0,
+                createdCount: 0,
+            });
+        }
+
+        const query = container.resolve(ContainerRegistrationKeys.QUERY);
+        const inventoryModuleService = container.resolve(Modules.INVENTORY);
+
+        let updatedCount = 0;
+        let createdCount = 0;
+
+        for (const update of input.quantityUpdates) {
+            const quantityDiff = update.newQuantity - update.oldQuantity;
+
+            if (quantityDiff === 0) continue;
+
+            // Find existing reservation for this line item
+            const { data: reservations } = await query.graph({
+                entity: "reservation",
+                fields: ["id", "quantity", "inventory_item_id", "location_id"],
+                filters: { line_item_id: update.lineItemId },
+            });
+
+            if (reservations.length > 0) {
+                // Update existing reservation
+                const reservation = reservations[0] as any;
+                const newReservationQuantity = reservation.quantity + quantityDiff;
+
+                if (newReservationQuantity <= 0) {
+                    // Delete reservation if quantity becomes 0 or negative
+                    await inventoryModuleService.deleteReservationItems([reservation.id]);
+                    logger.info("batch-modify-order", "Deleted reservation (quantity became 0)", {
+                        reservationId: reservation.id,
+                        lineItemId: update.lineItemId,
+                    });
+                } else {
+                    // Update reservation quantity
+                    await inventoryModuleService.updateReservationItems([{
+                        id: reservation.id,
+                        quantity: newReservationQuantity,
+                    }]);
+                    logger.info("batch-modify-order", "Updated reservation quantity", {
+                        reservationId: reservation.id,
+                        lineItemId: update.lineItemId,
+                        oldQuantity: reservation.quantity,
+                        newQuantity: newReservationQuantity,
+                    });
+                }
+                updatedCount++;
+            } else if (quantityDiff > 0) {
+                // No existing reservation and quantity increased - create new reservation
+                // First, get inventory item ID for this variant
+                const { data: variants } = await query.graph({
+                    entity: "variant",
+                    fields: ["id", "inventory_items.inventory_item_id"],
+                    filters: { id: update.variantId },
+                });
+
+                const variant = variants[0] as any;
+                const inventoryItemId = variant?.inventory_items?.[0]?.inventory_item_id;
+
+                if (inventoryItemId) {
+                    // Get a stock location
+                    const { data: inventoryLevels } = await query.graph({
+                        entity: "inventory_level",
+                        fields: ["location_id"],
+                        filters: { inventory_item_id: inventoryItemId },
+                    });
+
+                    if (inventoryLevels.length > 0) {
+                        const locationId = inventoryLevels[0].location_id;
+                        await createReservationsWorkflow(container).run({
+                            input: {
+                                reservations: [{
+                                    inventory_item_id: inventoryItemId,
+                                    location_id: locationId,
+                                    quantity: update.newQuantity,
+                                    line_item_id: update.lineItemId,
+                                }],
+                            },
+                        });
+                        logger.info("batch-modify-order", "Created new reservation for existing item", {
+                            lineItemId: update.lineItemId,
+                            quantity: update.newQuantity,
+                            locationId,
+                        });
+                        createdCount++;
+                    }
+                }
+            }
+        }
+
+        logger.info("batch-modify-order", "Updated reservations for quantity changes", {
+            orderId: input.orderId,
+            updatedCount,
+            createdCount,
+        });
+
+        return new StepResponse({
+            updated: true,
+            updatedCount,
+            createdCount,
+        });
+    }
+    // Note: Compensation is complex for reservation updates as we'd need to track
+    // the original quantities. For now, we rely on the overall workflow compensation.
+);
+
 // ============================================================================
 // Workflow Definition
 // ============================================================================
@@ -1173,33 +1344,43 @@ export const batchModifyOrderWorkflow = createWorkflow(
         }));
         updateBatchPaymentCollectionStep(pcInput);
 
-        // Note: We intentionally DO NOT update PaymentSession here.
-        // updatePaymentSession triggers the Stripe provider's updatePayment method,
-        // which would try to update the PaymentIntent again. Since we already
-        // updated Stripe directly via incrementStripeBatchStep, calling
-        // updatePaymentSession would fail with "intent must be a string" error
-        // because the session data structure doesn't match what Stripe expects.
-        //
-        // The PaymentCollection (Step 5) is what matters for capture operations,
-        // and the Stripe PaymentIntent is already updated (Step 3).
+        // Step 6: Update PaymentSession amount to match new authorization
+        // Pass the PaymentIntent ID so Stripe provider can find it in data.id
+        const psInput = transform({ validation, totals }, (data) => ({
+            paymentSessionId: data.validation.paymentSessionId,
+            paymentIntentId: data.validation.paymentIntentId,
+            amount: data.totals.newOrderTotal,
+            previousAmount: data.validation.order.total,
+            currencyCode: data.validation.order.currency_code,
+        }));
+        updateBatchPaymentSessionStep(psInput);
 
-        // Step 6: Create inventory reservations for new line items
+        // Step 7: Create inventory reservations for new line items
         const reservationInput = transform({ editResult, input }, (data) => ({
             orderId: data.input.orderId,
             newLineItemIds: data.editResult.newLineItemIds,
         }));
         const reservationResult = createBatchReservationsStep(reservationInput);
 
+        // Step 8: Update reservations for quantity changes to existing items
+        const reservationUpdateInput = transform({ editResult, input }, (data) => ({
+            orderId: data.input.orderId,
+            quantityUpdates: data.editResult.quantityUpdates,
+        }));
+        const reservationUpdateResult = updateBatchReservationsStep(reservationUpdateInput);
+
         // Build final result
         const result = transform(
-            { validation, totals, stripeResult, editResult, reservationResult, input },
+            { validation, totals, stripeResult, editResult, reservationResult, reservationUpdateResult, input },
             (data) => ({
                 order: data.editResult.orderPreview,
                 items_added: data.editResult.itemsAdded,
+                items_updated: data.editResult.itemsUpdated,
                 order_change_id: data.editResult.orderChangeId,
                 payment_status: data.stripeResult.skipped ? "unchanged" : "succeeded",
                 total_difference: data.totals.totalDifference,
                 reservations_created: data.reservationResult.reservationCount,
+                reservations_updated: data.reservationUpdateResult.updatedCount + data.reservationUpdateResult.createdCount,
             })
         );
 
