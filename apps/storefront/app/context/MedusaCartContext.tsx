@@ -40,14 +40,19 @@ export function MedusaCartProvider({ children }: { children: React.ReactNode }) 
   const { regionId } = useLocale();
 
   // Issue #32: Use cached storage for sessionStorage and localStorage
+  // Also set a cookie for server-side access during checkout success flow
   const persistCartId = useCallback((nextId?: string) => {
     if (typeof window === "undefined") return;
     if (nextId) {
       setCachedSessionStorage("medusa_cart_id", nextId);
       setCachedStorage("medusa_cart_id", nextId);
+      // Set cookie for server-side access (SameSite=Lax for cross-site redirects from Stripe)
+      document.cookie = `medusa_cart_id=${nextId}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
     } else {
       removeCachedSessionStorage("medusa_cart_id");
       removeCachedStorage("medusa_cart_id");
+      // Clear the cookie
+      document.cookie = "medusa_cart_id=; path=/; max-age=0; SameSite=Lax";
     }
   }, []);
 
@@ -92,6 +97,32 @@ export function MedusaCartProvider({ children }: { children: React.ReactNode }) 
       setError(message);
     } finally {
       setIsLoading(false);
+    }
+  }, [cartId, setCartId]);
+
+  // Sync cart ID between cookie and localStorage on initial load
+  // This handles two cases:
+  // 1. localStorage has cart ID but cookie doesn't -> sync to cookie (for server-side access)
+  // 2. Cookie was cleared (e.g., after checkout success) but localStorage still has it -> clear localStorage
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    // Check if cookie exists
+    const cartCookie = document.cookie.split(";").find(c => c.trim().startsWith("medusa_cart_id="));
+    const cookieValue = cartCookie?.split("=")[1]?.trim();
+    const hasCookieWithValue = !!cookieValue && cookieValue.length > 0;
+
+    if (cartId && !hasCookieWithValue) {
+      // Check if we're on an order status page (cart was cleared by server after checkout)
+      const isOrderStatusPage = window.location.pathname.startsWith("/order/status/");
+
+      if (isOrderStatusPage) {
+        // Server cleared the cart cookie after checkout - clear client-side storage too
+        setCartId(undefined);
+      } else {
+        // Normal case: localStorage has cart ID but cookie doesn't - sync to cookie
+        document.cookie = `medusa_cart_id=${cartId}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
+      }
     }
   }, [cartId, setCartId]);
 
