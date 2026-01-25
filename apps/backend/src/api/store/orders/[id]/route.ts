@@ -1,11 +1,12 @@
-import { 
-    MedusaRequest, 
+import {
+    MedusaRequest,
     MedusaResponse,
     AuthenticatedMedusaRequest,
 } from "@medusajs/framework/http";
 import { authenticateOrderAccess } from "../../../../utils/order-auth";
 import { logger } from "../../../../utils/logger";
 import { logOrderModificationAttempt } from "../../../../utils/audit-logger";
+import { modificationTokenService } from "../../../../services/modification-token";
 
 /**
  * GET /store/orders/:id
@@ -32,6 +33,7 @@ export async function GET(
             entity: "order",
             fields: [
                 "id",
+                "display_id",
                 "email",
                 "status",
                 "currency_code",
@@ -39,12 +41,19 @@ export async function GET(
                 "subtotal",
                 "tax_total",
                 "shipping_total",
+                "discount_total",
+                "original_total",
                 "created_at",
                 "customer_id",
                 "items.*",
+                "items.subtotal",
+                "items.total",
+                "items.adjustments.*",
                 "items.variant.*",
                 "items.variant.product.*",
                 "shipping_address.*",
+                "shipping_methods.*",
+                "shipping_methods.adjustments.*",
                 "metadata",
                 "payment_collections.*",
                 "payment_collections.payments.*",
@@ -98,7 +107,6 @@ export async function GET(
         if (authResult.method === "guest_token") {
             const token = req.headers["x-modification-token"] as string;
             if (token) {
-                const { modificationTokenService } = await import("../../../../services/modification-token");
                 remainingTime = modificationTokenService.getRemainingTime(token);
                 canModify = remainingTime > 0 && order.status !== "canceled";
             }
@@ -108,9 +116,35 @@ export async function GET(
             canModify = false; // Will be determined by eligibility check
         }
 
+        // Extract unique promo codes from all adjustments
+        const promoCodes = new Map<string, { code: string; amount: number }>();
+        order.items?.forEach((item: any) => {
+            item.adjustments?.forEach((adj: any) => {
+                if (adj.code) {
+                    const existing = promoCodes.get(adj.code);
+                    promoCodes.set(adj.code, {
+                        code: adj.code,
+                        amount: (existing?.amount || 0) + (adj.amount || 0),
+                    });
+                }
+            });
+        });
+        order.shipping_methods?.forEach((sm: any) => {
+            sm.adjustments?.forEach((adj: any) => {
+                if (adj.code) {
+                    const existing = promoCodes.get(adj.code);
+                    promoCodes.set(adj.code, {
+                        code: adj.code,
+                        amount: (existing?.amount || 0) + (adj.amount || 0),
+                    });
+                }
+            });
+        });
+
         res.status(200).json({
             order: {
                 id: order.id,
+                display_id: order.display_id,
                 email: order.email,
                 status: order.status,
                 currency_code: order.currency_code,
@@ -118,13 +152,18 @@ export async function GET(
                 subtotal: order.subtotal,
                 tax_total: order.tax_total,
                 shipping_total: order.shipping_total,
+                discount_total: order.discount_total,
+                original_total: order.original_total,
                 created_at: order.created_at,
+                promo_codes: Array.from(promoCodes.values()),
                 items: order.items?.map((item: any) => ({
                     id: item.id,
                     title: item.variant?.product?.title || item.title,
                     variant_title: item.variant?.title,
                     quantity: item.quantity,
                     unit_price: item.unit_price,
+                    subtotal: item.subtotal,
+                    total: item.total,
                     thumbnail: item.variant?.product?.thumbnail,
                     metadata: item.metadata,
                 })),

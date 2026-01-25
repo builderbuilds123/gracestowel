@@ -500,7 +500,19 @@ export default function OrderStatus() {
                                 </span>
                             </div>
 
-                            {order.discount_total > 0 && (
+                            {/* Promo Codes */}
+                            {order.promo_codes?.map((promo: { code: string; amount: number }) => (
+                                <div key={promo.code} className="flex justify-between items-center mb-2">
+                                    <span className="bg-green-100 text-green-800 px-2 py-0.5 rounded text-xs font-medium">
+                                        {promo.code}
+                                    </span>
+                                    <span className="text-green-600 font-medium">
+                                        -{formatPrice(promo.amount)}
+                                    </span>
+                                </div>
+                            ))}
+
+                            {order.discount_total > 0 && !order.promo_codes?.length && (
                                 <div className="flex justify-between items-center mb-2">
                                     <span className="text-text-earthy/80">Discount</span>
                                     <span className="text-green-600 font-medium">
@@ -509,12 +521,21 @@ export default function OrderStatus() {
                                 </div>
                             )}
 
-                            <div className="flex justify-between items-center mb-4">
+                            <div className="flex justify-between items-center mb-2">
                                 <span className="text-text-earthy/80">Shipping</span>
                                 <span className="text-text-earthy font-medium">
                                     {order.shipping_total === 0 ? 'Free' : formatPrice(order.shipping_total || 0)}
                                 </span>
                             </div>
+
+                            {order.tax_total > 0 && (
+                                <div className="flex justify-between items-center mb-2">
+                                    <span className="text-text-earthy/80">Tax</span>
+                                    <span className="text-text-earthy font-medium">
+                                        {formatPrice(order.tax_total)}
+                                    </span>
+                                </div>
+                            )}
 
                             <div className="flex justify-between items-center pt-2 border-t border-gray-100">
                                 <span className="font-serif text-lg text-text-earthy">Total</span>

@@ -15,9 +15,10 @@
  */
 import { data, redirect } from "react-router";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { useLoaderData, useActionData, useNavigation, Link } from "react-router";
+import { useLoaderData, useActionData, useNavigation, Link, useRevalidator } from "react-router";
 import { useState, useEffect } from "react";
 import { ArrowLeft, AlertCircle, Package, Truck } from "../lib/icons";
+import { OrderQuickAddDialog } from "../components/order/OrderQuickAddDialog";
 import { getGuestToken, setGuestToken, clearGuestToken } from "../utils/guest-session.server";
 import { medusaFetch } from "../lib/medusa-fetch";
 import { getErrorDisplay } from "../utils/error-messages";
@@ -66,6 +67,11 @@ interface OrderItem {
     subtotal: number;
 }
 
+interface PromoCode {
+    code: string;
+    amount: number;
+}
+
 interface Order {
     id: string;
     display_id: number;
@@ -74,11 +80,13 @@ interface Order {
     subtotal: number;
     shipping_total: number;
     tax_total: number;
+    discount_total: number;
     total: number;
     items: OrderItem[];
     shipping_address: Address;
     shipping_methods: ShippingMethod[];
     region_id: string;
+    promo_codes?: PromoCode[];
 }
 
 interface LoaderData {
@@ -86,6 +94,7 @@ interface LoaderData {
     shippingOptions: ShippingOption[];
     currentShippingOptionId: string | null;
     csrfToken: string;
+    modificationToken: string;
 }
 
 interface ActionData {
@@ -255,6 +264,7 @@ export async function loader({ params, request, context }: LoaderFunctionArgs) {
             shippingOptions,
             currentShippingOptionId,
             csrfToken,
+            modificationToken: token,
         } as LoaderData,
         { headers: responseHeaders }
     );
@@ -373,10 +383,19 @@ export async function action({ params, request, context }: ActionFunctionArgs) {
  * Order Edit Page Component
  */
 export default function OrderEdit() {
-    const { order, shippingOptions, currentShippingOptionId, csrfToken } = useLoaderData<LoaderData>();
+    const { order, shippingOptions, currentShippingOptionId, csrfToken, modificationToken } = useLoaderData<LoaderData>();
     const actionData = useActionData<ActionData>();
     const navigation = useNavigation();
+    const revalidator = useRevalidator();
     const isSubmitting = navigation.state === "submitting";
+
+    // Quick add dialog state
+    const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
+
+    const handleItemAdded = () => {
+        // Refresh the order data after an item is added
+        revalidator.revalidate();
+    };
 
     // Form state
     const [formData, setFormData] = useState({
@@ -712,6 +731,16 @@ export default function OrderEdit() {
                         <div className="bg-white rounded-lg shadow p-6 sticky top-8">
                             <h2 className="text-xl font-serif text-text-earthy mb-4">Order Summary</h2>
 
+                            {/* Add More Items Section */}
+                            <OrderQuickAddDialog
+                                isOpen={isQuickAddOpen}
+                                onToggle={() => setIsQuickAddOpen(!isQuickAddOpen)}
+                                orderId={order.id}
+                                modificationToken={modificationToken}
+                                regionId={order.region_id}
+                                onItemAdded={handleItemAdded}
+                            />
+
                             {/* Items */}
                             <div className="space-y-3 mb-4 max-h-64 overflow-y-auto">
                                 {order.items.map((item) => (
@@ -736,6 +765,25 @@ export default function OrderEdit() {
                                     <span className="text-text-earthy/70">Subtotal</span>
                                     <span className="text-text-earthy">{formatPrice(order.subtotal)}</span>
                                 </div>
+
+                                {/* Promo Codes */}
+                                {order.promo_codes?.map((promo) => (
+                                    <div key={promo.code} className="flex justify-between text-sm">
+                                        <span className="bg-green-100 text-green-800 px-2 py-0.5 rounded text-xs font-medium">
+                                            {promo.code}
+                                        </span>
+                                        <span className="text-green-600">-{formatPrice(promo.amount)}</span>
+                                    </div>
+                                ))}
+
+                                {/* Show discount if there's a discount but no promo codes parsed */}
+                                {order.discount_total > 0 && !order.promo_codes?.length && (
+                                    <div className="flex justify-between text-sm">
+                                        <span className="text-text-earthy/70">Discount</span>
+                                        <span className="text-green-600">-{formatPrice(order.discount_total)}</span>
+                                    </div>
+                                )}
+
                                 <div className="flex justify-between text-sm">
                                     <span className="text-text-earthy/70">Shipping</span>
                                     <span className="text-text-earthy">
