@@ -1173,16 +1173,17 @@ export const batchModifyOrderWorkflow = createWorkflow(
         }));
         updateBatchPaymentCollectionStep(pcInput);
 
-        // Step 6: Update PaymentSession amount to match new authorization
-        const psInput = transform({ validation, totals }, (data) => ({
-            paymentSessionId: data.validation.paymentSessionId,
-            amount: data.totals.newOrderTotal,
-            previousAmount: data.validation.order.total,
-            currencyCode: data.validation.order.currency_code,
-        }));
-        updateBatchPaymentSessionStep(psInput);
+        // Note: We intentionally DO NOT update PaymentSession here.
+        // updatePaymentSession triggers the Stripe provider's updatePayment method,
+        // which would try to update the PaymentIntent again. Since we already
+        // updated Stripe directly via incrementStripeBatchStep, calling
+        // updatePaymentSession would fail with "intent must be a string" error
+        // because the session data structure doesn't match what Stripe expects.
+        //
+        // The PaymentCollection (Step 5) is what matters for capture operations,
+        // and the Stripe PaymentIntent is already updated (Step 3).
 
-        // Step 7: Create inventory reservations for new line items
+        // Step 6: Create inventory reservations for new line items
         const reservationInput = transform({ editResult, input }, (data) => ({
             orderId: data.input.orderId,
             newLineItemIds: data.editResult.newLineItemIds,
