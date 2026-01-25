@@ -586,9 +586,10 @@ export default function OrderEdit() {
                                         <label htmlFor="country" className="block text-sm font-medium text-text-earthy mb-1">
                                             Country *
                                         </label>
+                                        {/* Hidden input to submit the disabled country value */}
+                                        <input type="hidden" name="country" value={formData.country} />
                                         <select
                                             id="country"
-                                            name="country"
                                             value={formData.country}
                                             onChange={(e) => setFormData({ ...formData, country: e.target.value })}
                                             disabled

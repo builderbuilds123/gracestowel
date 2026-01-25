@@ -12,7 +12,7 @@ import { createLogger } from "../lib/logger";
 import { getErrorDisplay } from "../utils/error-messages";
 import { posts } from "../data/blogPosts";
 import { Image } from "../components/ui/Image";
-import { resolveCSRFSecret, validateCSRFToken } from "../utils/csrf.server";
+import { resolveCSRFSecret, validateCSRFToken, createCSRFToken } from "../utils/csrf.server";
 
 // Lazy load Map component to avoid SSR issues with Leaflet
 const Map = lazy(() => import("../components/Map.client"));
@@ -35,7 +35,8 @@ interface LoaderData {
     };
     env: {
         STRIPE_PUBLISHABLE_KEY: string;
-    }
+    };
+    csrfToken?: string;
 }
 
 interface ErrorData {
@@ -156,12 +157,25 @@ export async function loader({ params, request, context }: LoaderFunctionArgs) {
 
     const errorDisplay = errorCode ? getErrorDisplay(errorCode) : null;
 
+    // Generate CSRF token for cancel action
+    const { token: csrfToken, headers: csrfHeaders } = await createCSRFToken(request, undefined, env);
+    const csrfCookie = csrfHeaders.get("Set-Cookie");
+    if (csrfCookie) {
+        // Combine with existing Set-Cookie if present
+        if (responseHeaders["Set-Cookie"]) {
+            responseHeaders["Set-Cookie"] = [responseHeaders["Set-Cookie"], csrfCookie].join(", ");
+        } else {
+            responseHeaders["Set-Cookie"] = csrfCookie;
+        }
+    }
+
     return data({
         order: responseData.order,
         authMethod: responseData.authMethod,
         canEdit: responseData.canEdit,
         modification_window,
         errorCode: errorCode || undefined,
+        csrfToken,
         env: {
             STRIPE_PUBLISHABLE_KEY: env.STRIPE_PUBLISHABLE_KEY
         }
@@ -343,7 +357,7 @@ export default function OrderStatus() {
         );
     }
 
-    const { order, modification_window, canEdit, errorCode } = loaderData as LoaderData;
+    const { order, modification_window, canEdit, errorCode, csrfToken } = loaderData as LoaderData;
     const errorDisplay = errorCode ? getErrorDisplay(errorCode) : null;
 
     if (!order) {
@@ -385,7 +399,7 @@ export default function OrderStatus() {
 
     const handleCancelOrder = async () => {
         fetcher.submit(
-            { intent: "CANCEL_ORDER", reason: "Customer requested cancellation" },
+            { intent: "CANCEL_ORDER", reason: "Customer requested cancellation", csrf_token: csrfToken || "" },
             { method: "POST" }
         );
     };
@@ -584,6 +598,36 @@ export default function OrderStatus() {
                     </div>
                 </div>
 
+                {/* Order Modification Actions */}
+                {isModificationActive && (
+                    <div className="bg-white rounded-lg shadow-lg p-4 mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 border border-accent-earthy/20">
+                        <p className="text-sm text-text-earthy">
+                            You can modify this order until it ships.
+                        </p>
+                        <div className="flex gap-3">
+                            <Link
+                                to={`/order/${order.id}/edit`}
+                                className="px-6 py-2 bg-accent-earthy text-white rounded-lg hover:bg-accent-earthy/90 transition-colors font-medium"
+                            >
+                                Edit Order
+                            </Link>
+                            <button
+                                onClick={() => setShowCancelDialog(true)}
+                                disabled={isCanceling}
+                                className="px-6 py-2 text-red-600 border border-red-300 rounded-lg hover:bg-red-50 transition-colors font-medium disabled:opacity-50"
+                            >
+                                Cancel Order
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {!isModificationActive && (
+                    <div className="bg-gray-100 rounded-lg p-4 mt-6 text-center text-text-earthy/60">
+                        Order is being processed. Modifications are no longer available.
+                    </div>
+                )}
+
                 {/* From the Journal Section */}
                 <div className="mt-12">
                     <h3 className="text-2xl font-serif text-text-earthy mb-6">From the Journal</h3>
@@ -623,36 +667,6 @@ export default function OrderStatus() {
                         </Link>
                     </div>
                 </div>
-
-                {/* Order Modification Actions */}
-                {isModificationActive && (
-                    <div className="bg-white rounded-lg shadow-lg p-4 mt-8 flex flex-col sm:flex-row items-center justify-between gap-4 border border-accent-earthy/20">
-                        <p className="text-sm text-text-earthy">
-                            You can modify this order until it ships.
-                        </p>
-                        <div className="flex gap-3">
-                            <Link
-                                to={`/order/${order.id}/edit`}
-                                className="px-6 py-2 bg-accent-earthy text-white rounded-lg hover:bg-accent-earthy/90 transition-colors font-medium"
-                            >
-                                Edit Order
-                            </Link>
-                            <button
-                                onClick={() => setShowCancelDialog(true)}
-                                disabled={isCanceling}
-                                className="px-6 py-2 text-red-600 border border-red-300 rounded-lg hover:bg-red-50 transition-colors font-medium disabled:opacity-50"
-                            >
-                                Cancel Order
-                            </button>
-                        </div>
-                    </div>
-                )}
-
-                {!isModificationActive && (
-                    <div className="bg-gray-100 rounded-lg p-4 mt-8 text-center text-text-earthy/60">
-                        Order is being processed. Modifications are no longer available.
-                    </div>
-                )}
 
                 {/* Cancel Dialog */}
                 <CancelOrderDialog
