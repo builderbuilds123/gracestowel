@@ -40,6 +40,7 @@ interface BatchValidationResult {
     orderId: string;
     paymentIntentId: string;
     paymentCollectionId?: string;
+    paymentSessionId?: string;
     order: {
         id: string;
         status: string;
@@ -225,6 +226,10 @@ const validateBatchPreconditionsStep = createStep(
                 "payment_collections.status",
                 "payment_collections.payments.id",
                 "payment_collections.payments.data",
+                "payment_collections.payment_sessions.id",
+                "payment_collections.payment_sessions.amount",
+                "payment_collections.payment_sessions.provider_id",
+                "payment_collections.payment_sessions.data",
             ],
             filters: { id: input.orderId },
         });
@@ -246,9 +251,29 @@ const validateBatchPreconditionsStep = createStep(
             throw new OrderLockedError(input.orderId);
         }
 
-        // 4. Get PaymentIntent ID
+        // 4. Get PaymentIntent ID and PaymentSession ID
         let paymentIntentId = order.metadata?.stripe_payment_intent_id as string | undefined;
+        let paymentSessionId: string | undefined;
 
+        // Find Stripe payment session
+        const paymentSessions = paymentCollection?.payment_sessions as any[] | undefined;
+        if (paymentSessions?.length) {
+            for (const session of paymentSessions) {
+                if (!session) continue;
+                // Check if this is a Stripe session
+                if (session.provider_id === "pp_stripe" || session.provider_id === "stripe") {
+                    paymentSessionId = session.id;
+                    // Also try to get PaymentIntent ID from session data
+                    const sessionData = session.data as Record<string, unknown> | undefined;
+                    if (!paymentIntentId && sessionData?.id && typeof sessionData.id === "string" && sessionData.id.startsWith("pi_")) {
+                        paymentIntentId = sessionData.id;
+                    }
+                    break;
+                }
+            }
+        }
+
+        // Fallback to payments if no session found
         if (!paymentIntentId && paymentCollection?.payments?.length) {
             for (const payment of paymentCollection.payments) {
                 if (!payment) continue;
@@ -330,6 +355,7 @@ const validateBatchPreconditionsStep = createStep(
             orderId: input.orderId,
             paymentIntentId,
             paymentCollectionId: paymentCollection?.id,
+            paymentSessionId,
             order: {
                 id: order.id,
                 status: order.status,
@@ -429,7 +455,13 @@ const calculateBatchTotalsStep = createStep(
 );
 
 /**
- * Step 3: Increment Stripe PaymentIntent (single update for all items)
+ * Step 3: Increment Stripe PaymentIntent authorization (single update for all items)
+ *
+ * IMPORTANT: For PaymentIntents in `requires_capture` status, we must use
+ * `incrementAuthorization` instead of `update`. The `update` method cannot
+ * change the authorized amount - only `incrementAuthorization` can do that.
+ *
+ * @see https://docs.stripe.com/api/payment_intents/increment_authorization
  */
 const incrementStripeBatchStep = createStep(
     "increment-stripe-batch",
@@ -455,11 +487,13 @@ const incrementStripeBatchStep = createStep(
         }
 
         const stripe = getStripeClient();
-        const idempotencyKey = `batch-modify-${input.orderId}-${input.requestId}`;
+        const idempotencyKey = `batch-modify-increment-${input.orderId}-${input.requestId}`;
 
         try {
+            // Use incrementAuthorization for PaymentIntents in requires_capture status
+            // This is the only way to increase the authorized amount
             const updatedPI = await retryWithBackoff(
-                async () => stripe.paymentIntents.update(
+                async () => stripe.paymentIntents.incrementAuthorization(
                     input.paymentIntentId,
                     { amount: input.newAmount },
                     { idempotencyKey }
@@ -476,6 +510,7 @@ const incrementStripeBatchStep = createStep(
                 paymentIntentId: input.paymentIntentId,
                 previousAmount: input.currentAmount,
                 newAmount: updatedPI.amount,
+                amountCapturable: updatedPI.amount_capturable,
             });
 
             return new StepResponse({
@@ -489,25 +524,28 @@ const incrementStripeBatchStep = createStep(
             if (error instanceof Stripe.errors.StripeCardError) {
                 throw new CardDeclinedError(error.message, error.decline_code);
             }
+            // If incrementAuthorization fails (e.g., not supported), log detailed error
+            logger.error("batch-modify-order", "Failed to increment Stripe authorization", {
+                paymentIntentId: input.paymentIntentId,
+                currentAmount: input.currentAmount,
+                newAmount: input.newAmount,
+            }, error instanceof Error ? error : new Error(String(error)));
             throw error;
         }
     },
-    // Compensation: rollback PI amount if downstream steps fail
+    // Compensation: We cannot easily rollback an increment, but we can try to update
+    // Note: Stripe doesn't support decrementing authorization, so this is best-effort
     async (prev?: BatchStripeResult) => {
         if (!prev || prev.skipped) return;
 
-        const stripe = getStripeClient();
-        try {
-            await stripe.paymentIntents.update(prev.paymentIntentId, { amount: prev.previousAmount });
-            logger.info("batch-modify-order", "Rolled back Stripe authorization", {
-                paymentIntentId: prev.paymentIntentId,
-                previousAmount: prev.previousAmount,
-            });
-        } catch (rollbackError) {
-            logger.error("batch-modify-order", "Failed to rollback Stripe authorization", {
-                paymentIntentId: prev.paymentIntentId,
-            }, rollbackError instanceof Error ? rollbackError : new Error(String(rollbackError)));
-        }
+        // Note: Stripe doesn't support decrementing authorization.
+        // The best we can do is log this and let the capture happen at the original amount
+        // or let the authorization expire.
+        logger.warn("batch-modify-order", "Cannot rollback Stripe authorization increment - authorization will remain at new amount", {
+            paymentIntentId: prev.paymentIntentId,
+            previousAmount: prev.previousAmount,
+            newAmount: prev.newAmount,
+        });
     }
 );
 
@@ -665,6 +703,85 @@ const updateBatchPaymentCollectionStep = createStep(
             compensation.paymentCollectionId,
             { amount: compensation.previousAmount }
         );
+    }
+);
+
+interface PaymentSessionUpdateResult {
+    updated: boolean;
+    paymentSessionId: string;
+    previousAmount: number;
+    currencyCode: string;
+}
+
+/**
+ * Step 6: Update PaymentSession amount to match new authorization
+ *
+ * This step updates the PaymentSession's amount field to reflect the new
+ * Stripe authorization. This ensures the Medusa admin UI shows the correct
+ * amount that can be captured.
+ */
+const updateBatchPaymentSessionStep = createStep(
+    "update-batch-payment-session",
+    async (
+        input: {
+            paymentSessionId: string | undefined;
+            amount: number;
+            previousAmount: number;
+            currencyCode: string;
+        },
+        { container }
+    ): Promise<StepResponse<PaymentSessionUpdateResult, PaymentSessionUpdateResult>> => {
+        if (!input.paymentSessionId) {
+            logger.info("batch-modify-order", "No PaymentSession to update", {});
+            return new StepResponse(
+                { updated: false, paymentSessionId: "", previousAmount: 0, currencyCode: input.currencyCode },
+                { updated: false, paymentSessionId: "", previousAmount: 0, currencyCode: input.currencyCode }
+            );
+        }
+
+        const paymentModuleService = container.resolve(Modules.PAYMENT);
+
+        await paymentModuleService.updatePaymentSession({
+            id: input.paymentSessionId,
+            amount: input.amount,
+            currency_code: input.currencyCode,
+            data: {}, // Preserve existing data - Medusa will merge this
+        });
+
+        logger.info("batch-modify-order", "Updated PaymentSession", {
+            paymentSessionId: input.paymentSessionId,
+            amount: input.amount,
+        });
+
+        const result: PaymentSessionUpdateResult = {
+            updated: true,
+            paymentSessionId: input.paymentSessionId,
+            previousAmount: input.previousAmount,
+            currencyCode: input.currencyCode,
+        };
+
+        return new StepResponse(result, result);
+    },
+    async (compensation, { container }) => {
+        if (!compensation || !compensation.paymentSessionId || !compensation.updated) return;
+
+        const paymentModuleService = container.resolve(Modules.PAYMENT);
+        try {
+            await paymentModuleService.updatePaymentSession({
+                id: compensation.paymentSessionId,
+                amount: compensation.previousAmount,
+                currency_code: compensation.currencyCode,
+                data: {},
+            });
+            logger.info("batch-modify-order", "Rolled back PaymentSession amount", {
+                paymentSessionId: compensation.paymentSessionId,
+                amount: compensation.previousAmount,
+            });
+        } catch (rollbackError) {
+            logger.error("batch-modify-order", "Failed to rollback PaymentSession", {
+                paymentSessionId: compensation.paymentSessionId,
+            }, rollbackError instanceof Error ? rollbackError : new Error(String(rollbackError)));
+        }
     }
 );
 
@@ -989,7 +1106,16 @@ export const batchModifyOrderWorkflow = createWorkflow(
         }));
         updateBatchPaymentCollectionStep(pcInput);
 
-        // Step 6: Create inventory reservations for new line items
+        // Step 6: Update PaymentSession amount to match new authorization
+        const psInput = transform({ validation, totals }, (data) => ({
+            paymentSessionId: data.validation.paymentSessionId,
+            amount: data.totals.newOrderTotal,
+            previousAmount: data.validation.order.total,
+            currencyCode: data.validation.order.currency_code,
+        }));
+        updateBatchPaymentSessionStep(psInput);
+
+        // Step 7: Create inventory reservations for new line items
         const reservationInput = transform({ editResult, input }, (data) => ({
             orderId: data.input.orderId,
             newLineItemIds: data.editResult.newLineItemIds,
