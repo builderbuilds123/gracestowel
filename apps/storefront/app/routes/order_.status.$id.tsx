@@ -3,7 +3,7 @@ import type { CloudflareEnv } from "../utils/monitored-fetch";
 import { useLoaderData, useNavigate, useActionData, useFetcher } from "react-router";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { useState, useEffect, lazy, Suspense } from "react";
-import { Package, Truck, AlertCircle, MapPin, Loader2 } from "../lib/icons";
+import { Package, Truck, AlertCircle, MapPin, Check } from "../lib/icons";
 import { CancelOrderDialog } from "../components/CancelOrderDialog";
 import { CancelRejectedModal } from "../components/order/CancelRejectedModal";
 import { getGuestToken, setGuestToken, clearGuestToken } from "../utils/guest-session.server";
@@ -49,14 +49,30 @@ interface ErrorData {
 export async function loader({ params, request, context }: LoaderFunctionArgs) {
     const { id } = params;
     const env = context.cloudflare.env as unknown as CloudflareEnv;
+    const logger = createLogger({ context: "order-status-loader" });
 
     // Check URL for token (from email link) and error codes
     const url = new URL(request.url);
     const urlToken = url.searchParams.get("token");
     const errorCode = url.searchParams.get("error");
 
+    // Debug: Log incoming cookies
+    const cookieHeader = request.headers.get("cookie");
+    logger.info("Order status loader", {
+        orderId: id,
+        hasUrlToken: !!urlToken,
+        hasCookieHeader: !!cookieHeader,
+        cookiePreview: cookieHeader?.substring(0, 200),
+    });
+
     // Check for existing guest token in cookie
     const { token: cookieToken, source } = await getGuestToken(request, id!);
+
+    logger.info("Guest token check result", {
+        orderId: id,
+        hasToken: !!cookieToken,
+        source,
+    });
 
     // Determine auth method and build headers
     let authHeaders: HeadersInit = {};
@@ -387,11 +403,10 @@ export default function OrderStatus() {
             <div className="max-w-3xl mx-auto">
                 {/* Header - "We're on it!" */}
                 <div className="text-center mb-8">
-                    <div className="w-20 h-20 bg-accent-earthy/10 rounded-full flex items-center justify-center mx-auto mb-6">
-                        <Loader2 className="w-10 h-10 text-accent-earthy animate-spin" />
+                    <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <Check className="w-10 h-10 text-green-600" />
                     </div>
                     <h1 className="text-4xl font-serif text-text-earthy mb-2">We're on it!</h1>
-                    <p className="text-text-earthy/70 text-lg">Order #{order.display_id}</p>
                 </div>
 
                 {/* Error Display */}
@@ -402,36 +417,6 @@ export default function OrderStatus() {
                         {errorDisplay.action && (
                             <p className="text-sm text-red-600">{errorDisplay.action}</p>
                         )}
-                    </div>
-                )}
-
-                {/* Action Buttons */}
-                {isModificationActive && (
-                    <div className="bg-white rounded-lg shadow-lg p-4 mb-6 flex flex-col sm:flex-row items-center justify-between gap-4 border border-accent-earthy/20">
-                        <p className="text-sm text-text-earthy">
-                            You can modify this order until it ships.
-                        </p>
-                        <div className="flex gap-3">
-                            <Link
-                                to={`/order/${order.id}/edit`}
-                                className="px-6 py-2 bg-accent-earthy text-white rounded-lg hover:bg-accent-earthy/90 transition-colors font-medium"
-                            >
-                                Edit Order
-                            </Link>
-                            <button
-                                onClick={() => setShowCancelDialog(true)}
-                                disabled={isCanceling}
-                                className="px-6 py-2 text-red-600 border border-red-300 rounded-lg hover:bg-red-50 transition-colors font-medium disabled:opacity-50"
-                            >
-                                Cancel Order
-                            </button>
-                        </div>
-                    </div>
-                )}
-
-                {!isModificationActive && (
-                    <div className="bg-gray-100 rounded-lg p-4 mb-6 text-center text-text-earthy/60">
-                        Order is being processed. Modifications are no longer available.
                     </div>
                 )}
 
@@ -638,6 +623,36 @@ export default function OrderStatus() {
                         </Link>
                     </div>
                 </div>
+
+                {/* Order Modification Actions */}
+                {isModificationActive && (
+                    <div className="bg-white rounded-lg shadow-lg p-4 mt-8 flex flex-col sm:flex-row items-center justify-between gap-4 border border-accent-earthy/20">
+                        <p className="text-sm text-text-earthy">
+                            You can modify this order until it ships.
+                        </p>
+                        <div className="flex gap-3">
+                            <Link
+                                to={`/order/${order.id}/edit`}
+                                className="px-6 py-2 bg-accent-earthy text-white rounded-lg hover:bg-accent-earthy/90 transition-colors font-medium"
+                            >
+                                Edit Order
+                            </Link>
+                            <button
+                                onClick={() => setShowCancelDialog(true)}
+                                disabled={isCanceling}
+                                className="px-6 py-2 text-red-600 border border-red-300 rounded-lg hover:bg-red-50 transition-colors font-medium disabled:opacity-50"
+                            >
+                                Cancel Order
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {!isModificationActive && (
+                    <div className="bg-gray-100 rounded-lg p-4 mt-8 text-center text-text-earthy/60">
+                        Order is being processed. Modifications are no longer available.
+                    </div>
+                )}
 
                 {/* Cancel Dialog */}
                 <CancelOrderDialog
