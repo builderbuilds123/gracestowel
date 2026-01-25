@@ -119,17 +119,22 @@ Without this, checkout will appear to succeed but orders won't be created (Medus
 
 ### Log Output for Agent Inspection
 
-When running servers, write logs to temp directory for debugging:
+**ALWAYS write logs to temp files when starting servers:**
 
 ```bash
-# Start with log files
+# ALWAYS start servers with logs persisted to temp directory
 pnpm dev:api 2>&1 | tee /tmp/gracestowel-api.log
 pnpm dev:storefront 2>&1 | tee /tmp/gracestowel-storefront.log
 
-# Check logs
+# Check logs in real-time
 tail -f /tmp/gracestowel-api.log
+tail -f /tmp/gracestowel-storefront.log
+
+# Check recent log entries
 tail -100 /tmp/gracestowel-storefront.log
 ```
+
+Log files persist across restarts for post-session debugging.
 
 ---
 

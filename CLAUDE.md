@@ -179,16 +179,22 @@ Without webhook forwarding, checkout completion will fail because Medusa won't r
 
 ### Writing Logs to Temp Directory
 
-When starting servers for debugging or agent inspection, write logs to temp files:
+**ALWAYS write logs to temp files when starting servers.** This enables agents and developers to inspect logs for debugging:
 
 ```bash
-# Start servers with logs written to temp directory
+# ALWAYS start servers with logs persisted to temp directory
 pnpm dev:api 2>&1 | tee /tmp/gracestowel-api.log
 pnpm dev:storefront 2>&1 | tee /tmp/gracestowel-storefront.log
 
-# Agents can then check logs
+# Check logs in real-time
 tail -f /tmp/gracestowel-api.log
+tail -f /tmp/gracestowel-storefront.log
+
+# Check recent log entries
+tail -100 /tmp/gracestowel-storefront.log
 ```
+
+The log files persist across restarts, making it easy to review what happened during a session.
 
 ## Logging Guidelines
 
