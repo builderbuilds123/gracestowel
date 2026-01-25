@@ -17,6 +17,11 @@ createOrderFulfillmentWorkflow.hooks.fulfillmentCreated(
         const query = container.resolve("query");
         // Cast to any to avoid strict type checks on DTO properties that exist at runtime
         const orderId = (fulfillment as any).order_id;
+        
+        logger.info("fulfillment-hook", "Hook triggered for fulfillment", { 
+            fulfillmentId: fulfillment.id,
+            orderId 
+        });
 
         try {
             // Step 1: Get Payment Intent from Order (Runtime Query)

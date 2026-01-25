@@ -183,29 +183,54 @@ export async function POST(
             total_difference: result.result.total_difference,
         });
     } catch (error) {
+        // Helper to extract error code from workflow errors
+        // Workflow errors often wrap the original error, with the error details in the message
+        const getErrorCode = (err: unknown): string | null => {
+            if (!err) return null;
+
+            // Direct error with code
+            if (typeof err === "object" && "code" in err) {
+                return (err as { code: string }).code;
+            }
+
+            // Try to parse code from error message (workflow serializes errors as JSON strings)
+            if (err instanceof Error) {
+                try {
+                    const parsed = JSON.parse(err.message);
+                    if (parsed?.code) return parsed.code;
+                } catch {
+                    // Not a JSON message
+                }
+            }
+
+            return null;
+        };
+
+        const errorCode = getErrorCode(error);
+
         // Token errors - 401
-        if (error instanceof TokenExpiredError) {
+        if (error instanceof TokenExpiredError || errorCode === "TOKEN_EXPIRED") {
             res.status(401).json({
-                code: error.code,
-                message: error.message,
+                code: "TOKEN_EXPIRED",
+                message: error instanceof TokenExpiredError ? error.message : "The modification window has expired",
                 expired: true,
             });
             return;
         }
 
-        if (error instanceof TokenInvalidError) {
+        if (error instanceof TokenInvalidError || errorCode === "TOKEN_INVALID") {
             res.status(401).json({
-                code: error.code,
-                message: error.message,
+                code: "TOKEN_INVALID",
+                message: error instanceof TokenInvalidError ? error.message : "Invalid modification token",
             });
             return;
         }
 
         // Token mismatch - 403
-        if (error instanceof TokenMismatchError) {
+        if (error instanceof TokenMismatchError || errorCode === "TOKEN_MISMATCH") {
             res.status(403).json({
-                code: error.code,
-                message: error.message,
+                code: "TOKEN_MISMATCH",
+                message: error instanceof TokenMismatchError ? error.message : "Token does not match this order",
             });
             return;
         }
@@ -223,43 +248,69 @@ export async function POST(
             return;
         }
 
-        // Order state errors - 422
-        if (error instanceof InvalidOrderStateError) {
-            res.status(422).json({
-                code: error.code,
-                message: error.message,
-                order_id: error.orderId,
-                current_status: error.status,
+        // Handle batch validation errors from workflow (by code)
+        if (errorCode === "ORDER_NOT_FOUND") {
+            res.status(404).json({
+                code: "ORDER_NOT_FOUND",
+                message: "Order not found",
             });
             return;
         }
 
-        if (error instanceof InvalidPaymentStateError) {
+        if (errorCode === "INSUFFICIENT_STOCK") {
+            res.status(409).json({
+                code: "INSUFFICIENT_STOCK",
+                message: "Insufficient stock for one or more items",
+            });
+            return;
+        }
+
+        // Order state errors - 422
+        if (error instanceof InvalidOrderStateError || errorCode === "INVALID_ORDER_STATE") {
             res.status(422).json({
-                code: error.code,
-                message: error.message,
-                payment_intent_id: error.paymentIntentId,
-                current_status: error.status,
+                code: "INVALID_ORDER_STATE",
+                message: error instanceof InvalidOrderStateError ? error.message : "Order is not in a modifiable state",
+                order_id: error instanceof InvalidOrderStateError ? error.orderId : undefined,
+                current_status: error instanceof InvalidOrderStateError ? error.status : undefined,
+            });
+            return;
+        }
+
+        if (error instanceof InvalidPaymentStateError || errorCode === "INVALID_PAYMENT_STATE") {
+            res.status(422).json({
+                code: "INVALID_PAYMENT_STATE",
+                message: error instanceof InvalidPaymentStateError ? error.message : "Payment is not in a modifiable state",
+                payment_intent_id: error instanceof InvalidPaymentStateError ? error.paymentIntentId : undefined,
+                current_status: error instanceof InvalidPaymentStateError ? error.status : undefined,
             });
             return;
         }
 
         // Order locked - 409
-        if (error instanceof OrderLockedError) {
+        if (error instanceof OrderLockedError || errorCode === "ORDER_LOCKED") {
             res.status(409).json({
-                code: error.code,
-                message: error.message,
+                code: "ORDER_LOCKED",
+                message: error instanceof OrderLockedError ? error.message : "Order is locked for processing",
             });
             return;
         }
 
         // Card declined - 402
-        if (error instanceof CardDeclinedError) {
+        if (error instanceof CardDeclinedError || errorCode === "PAYMENT_DECLINED") {
             res.status(402).json({
-                code: error.code,
-                message: error.userMessage,
-                decline_code: error.declineCode,
-                retryable: error.retryable,
+                code: "PAYMENT_DECLINED",
+                message: error instanceof CardDeclinedError ? error.userMessage : "Payment was declined",
+                decline_code: error instanceof CardDeclinedError ? error.declineCode : undefined,
+                retryable: error instanceof CardDeclinedError ? error.retryable : false,
+            });
+            return;
+        }
+
+        // No payment intent found
+        if (errorCode === "NO_PAYMENT_INTENT") {
+            res.status(422).json({
+                code: "NO_PAYMENT_INTENT",
+                message: "No payment intent found for this order",
             });
             return;
         }
@@ -283,6 +334,7 @@ export async function POST(
             requestId,
             errorMessage,
             errorDetails,
+            errorCode,
         }, error instanceof Error ? error : new Error(errorMessage));
 
         res.status(500).json({

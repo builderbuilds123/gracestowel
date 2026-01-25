@@ -16,7 +16,7 @@
 import { data, redirect } from "react-router";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { useLoaderData, useActionData, useNavigation, Link, useRevalidator, useNavigate } from "react-router";
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { ArrowLeft, AlertCircle, Package, Truck, X } from "../lib/icons";
 import { OrderQuickAddDialog } from "../components/order/OrderQuickAddDialog";
 import { getGuestToken, setGuestToken, clearGuestToken } from "../utils/guest-session.server";
@@ -445,6 +445,9 @@ export default function OrderEdit() {
     const [isSavingItems, setIsSavingItems] = useState(false);
     const [saveError, setSaveError] = useState<string | null>(null);
 
+    // Ref to track intentional save - prevents beforeunload warning during form submission
+    const isIntentionalSaveRef = useRef(false);
+
     // Derived state for conditional rendering (React best practice: rerender-derived-state)
     const hasPendingChanges = pendingItems.length > 0;
 
@@ -566,6 +569,8 @@ export default function OrderEdit() {
             }
 
             // Step 2: Submit the form for address/shipping changes via React Router action
+            // Mark as intentional save to bypass beforeunload warning
+            isIntentionalSaveRef.current = true;
             formElement.submit();
         } catch (err) {
             setSaveError(err instanceof Error ? err.message : 'Failed to save changes');
@@ -579,6 +584,9 @@ export default function OrderEdit() {
         if (!hasPendingChanges) return;
 
         const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            // Skip warning if user is intentionally saving
+            if (isIntentionalSaveRef.current) return;
+
             e.preventDefault();
             // Modern browsers ignore custom messages, but we still need to set returnValue
             e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';

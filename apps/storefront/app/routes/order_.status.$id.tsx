@@ -307,6 +307,7 @@ export default function OrderStatus() {
 
     const [showCancelDialog, setShowCancelDialog] = useState(false);
     const [showCancelRejectedModal, setShowCancelRejectedModal] = useState(false);
+    const [showCancelSuccess, setShowCancelSuccess] = useState(false);
     const [showRatingModal, setShowRatingModal] = useState(false);
     const [mapCoordinates, setMapCoordinates] = useState<[number, number] | null>(null);
 
@@ -426,7 +427,12 @@ export default function OrderStatus() {
         if (fetcher.data) {
             if (fetcher.data.success && fetcher.data.action === "canceled") {
                 setShowCancelDialog(false);
-                navigate("/");
+                setShowCancelSuccess(true);
+                // Redirect to home after showing success message
+                const timer = setTimeout(() => {
+                    navigate("/");
+                }, 3000);
+                return () => clearTimeout(timer);
             } else if (fetcher.data.errorCode === "order_shipped") {
                 setShowCancelDialog(false);
                 setShowCancelRejectedModal(true);
@@ -448,6 +454,26 @@ export default function OrderStatus() {
             currency: order.currency_code?.toUpperCase() || "USD",
         }).format(amount);
     };
+
+    // Show cancel success message before redirect
+    if (showCancelSuccess) {
+        return (
+            <div className="min-h-screen bg-background-earthy flex items-center justify-center p-4">
+                <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8 text-center">
+                    <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <Check className="w-8 h-8 text-green-600" />
+                    </div>
+                    <h1 className="text-2xl font-serif text-text-earthy mb-2">Order Canceled</h1>
+                    <p className="text-text-earthy/70 mb-4">
+                        Your order #{order.display_id} has been canceled. A refund will be processed to your original payment method within 5-10 business days.
+                    </p>
+                    <p className="text-sm text-text-earthy/50">
+                        Redirecting to home page...
+                    </p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-background-earthy py-12 px-4">
