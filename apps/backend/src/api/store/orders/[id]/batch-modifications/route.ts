@@ -46,7 +46,8 @@ import { logger } from "../../../../../utils/logger";
 interface BatchModificationRequestBody {
     items: Array<{
         action: string;
-        variant_id: string;
+        variant_id?: string;  // Required for 'add'
+        item_id?: string;     // Required for 'update_quantity' (line item ID)
         quantity: number;
     }>;
 }
@@ -91,14 +92,30 @@ function validateRequestBody(body: unknown): {
             itemErrors.push(`action must be one of: ${validActions.join(", ")}`);
         }
 
-        if (!itemObj.variant_id || typeof itemObj.variant_id !== "string" || itemObj.variant_id.length === 0) {
-            itemErrors.push("variant_id is required and must be a non-empty string");
+        // Validate variant_id or item_id based on action type
+        const action = itemObj.action as string;
+        if (action === "add") {
+            // 'add' action requires variant_id
+            if (!itemObj.variant_id || typeof itemObj.variant_id !== "string" || itemObj.variant_id.length === 0) {
+                itemErrors.push("variant_id is required and must be a non-empty string for add action");
+            }
+        } else if (action === "update_quantity") {
+            // 'update_quantity' action requires item_id (line item ID)
+            if (!itemObj.item_id || typeof itemObj.item_id !== "string" || itemObj.item_id.length === 0) {
+                itemErrors.push("item_id is required and must be a non-empty string for update_quantity action");
+            }
         }
 
         if (itemObj.quantity === undefined || itemObj.quantity === null) {
             itemErrors.push("quantity is required");
-        } else if (typeof itemObj.quantity !== "number" || !Number.isInteger(itemObj.quantity) || itemObj.quantity <= 0) {
-            itemErrors.push("quantity must be a positive integer");
+        } else if (typeof itemObj.quantity !== "number" || !Number.isInteger(itemObj.quantity)) {
+            itemErrors.push("quantity must be an integer");
+        } else if (action === "add" && itemObj.quantity <= 0) {
+            // For 'add' action, quantity must be positive
+            itemErrors.push("quantity must be a positive integer for add action");
+        } else if ((action === "update_quantity" || action === "remove") && itemObj.quantity < 0) {
+            // For 'update_quantity' and 'remove', quantity can be 0 (to remove item) but not negative
+            itemErrors.push("quantity cannot be negative");
         }
 
         if (itemErrors.length > 0) {
@@ -106,7 +123,8 @@ function validateRequestBody(body: unknown): {
         } else {
             validatedItems.push({
                 action: itemObj.action as BatchItemAction["action"],
-                variant_id: itemObj.variant_id as string,
+                variant_id: itemObj.variant_id as string | undefined,
+                item_id: itemObj.item_id as string | undefined,
                 quantity: itemObj.quantity as number,
             });
         }

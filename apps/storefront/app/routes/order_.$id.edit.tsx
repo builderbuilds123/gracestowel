@@ -685,11 +685,12 @@ export default function OrderEdit() {
                 // Build batch items array from both pending items and quantity changes
                 const batchItems: Array<{
                     action: 'add' | 'update_quantity';
-                    variant_id: string;
+                    variant_id?: string;
+                    item_id?: string;
                     quantity: number;
                 }> = [];
 
-                // Add new pending items
+                // Add new pending items (use variant_id)
                 pendingItems.forEach(item => {
                     batchItems.push({
                         action: 'add',
@@ -698,11 +699,11 @@ export default function OrderEdit() {
                     });
                 });
 
-                // Add quantity changes for existing items
+                // Add quantity changes for existing items (use item_id - the line item ID)
                 quantityChanges.forEach(change => {
                     batchItems.push({
                         action: 'update_quantity',
-                        variant_id: change.variantId,
+                        item_id: change.lineItemId,
                         quantity: change.newQuantity,
                     });
                 });

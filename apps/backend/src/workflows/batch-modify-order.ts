@@ -13,6 +13,7 @@ import { retryWithBackoff, isRetryableStripeError } from "../utils/stripe-retry"
 import {
     beginOrderEditOrderWorkflow,
     orderEditAddNewItemWorkflow,
+    orderEditUpdateItemQuantityWorkflow,
     createReservationsWorkflow,
 } from "@medusajs/core-flows";
 import { logger } from "../utils/logger";
@@ -24,7 +25,8 @@ import { formatModificationWindow } from "../lib/payment-capture-queue";
 
 export interface BatchItemAction {
     action: 'add' | 'remove' | 'update_quantity';
-    variant_id: string;
+    variant_id?: string;   // Required for 'add', optional for 'update_quantity'
+    item_id?: string;      // Required for 'update_quantity' (line item ID)
     quantity: number;
 }
 
@@ -64,6 +66,10 @@ interface ItemTotalsResult {
     quantity: number;
     unitPrice: number;
     itemTotal: number;
+    // Fields for update_quantity action
+    isQuantityUpdate?: boolean;
+    lineItemId?: string;
+    oldQuantity?: number;
 }
 
 interface BatchTotalsResult {
@@ -83,6 +89,7 @@ interface BatchStripeResult {
 interface BatchEditResult {
     orderChangeId: string;
     itemsAdded: number;
+    itemsUpdated: number;
     newLineItemIds: string[];
     orderPreview: any;
 }
@@ -302,14 +309,17 @@ const validateBatchPreconditionsStep = createStep(
         const failedItems: Array<{ variant_id: string; reason: string }> = [];
 
         for (const item of addItems) {
+            // variant_id is guaranteed to exist for 'add' action (validated at route level)
+            const variantId = item.variant_id!;
+
             const { data: variants } = await query.graph({
                 entity: "product_variant",
                 fields: ["id", "title", "inventory_items.inventory_item_id"],
-                filters: { id: item.variant_id },
+                filters: { id: variantId },
             });
 
             if (!variants.length) {
-                failedItems.push({ variant_id: item.variant_id, reason: "Variant not found" });
+                failedItems.push({ variant_id: variantId, reason: "Variant not found" });
                 continue;
             }
 
@@ -330,7 +340,7 @@ const validateBatchPreconditionsStep = createStep(
 
                 if (totalAvailable < item.quantity) {
                     failedItems.push({
-                        variant_id: item.variant_id,
+                        variant_id: variantId,
                         reason: `Insufficient stock: ${totalAvailable} available, ${item.quantity} requested`,
                     });
                 }
@@ -377,6 +387,7 @@ const validateBatchPreconditionsStep = createStep(
 
 /**
  * Step 2: Calculate totals for all items
+ * Handles both 'add' (new items) and 'update_quantity' (existing item changes)
  */
 const calculateBatchTotalsStep = createStep(
     "calculate-batch-totals",
@@ -385,6 +396,13 @@ const calculateBatchTotalsStep = createStep(
             items: BatchItemAction[];
             currentTotal: number;
             currencyCode: string;
+            orderItems: Array<{
+                id: string;
+                variant_id: string;
+                quantity: number;
+                unit_price: number;
+                title: string;
+            }>;
         },
         { container }
     ): Promise<StepResponse<BatchTotalsResult>> => {
@@ -394,48 +412,71 @@ const calculateBatchTotalsStep = createStep(
         let totalDifference = 0;
 
         for (const item of input.items) {
-            if (item.action !== 'add') continue;
+            if (item.action === 'add') {
+                // Handle new item additions
+                const { data: variants } = await query.graph({
+                    entity: "product_variant",
+                    fields: [
+                        "id",
+                        "title",
+                        "calculated_price.calculated_amount",
+                        "calculated_price.calculated_amount_with_tax",
+                        "calculated_price.currency_code",
+                        "product.title",
+                    ],
+                    filters: { id: item.variant_id },
+                    context: {
+                        calculated_price: QueryContext({
+                            currency_code: input.currencyCode,
+                        }),
+                    },
+                });
 
-            const { data: variants } = await query.graph({
-                entity: "product_variant",
-                fields: [
-                    "id",
-                    "title",
-                    "calculated_price.calculated_amount",
-                    "calculated_price.calculated_amount_with_tax",
-                    "calculated_price.currency_code",
-                    "product.title",
-                ],
-                filters: { id: item.variant_id },
-                context: {
-                    calculated_price: QueryContext({
-                        currency_code: input.currencyCode,
-                    }),
-                },
-            });
+                if (!variants.length) {
+                    throw new BatchValidationError(`Variant ${item.variant_id} not found`, "VARIANT_NOT_FOUND");
+                }
 
-            if (!variants.length) {
-                throw new BatchValidationError(`Variant ${item.variant_id} not found`, "VARIANT_NOT_FOUND");
+                const variant = variants[0] as any;
+                const price = variant.calculated_price;
+
+                if (!price || !price.calculated_amount) {
+                    throw new BatchValidationError(`No price found for variant ${item.variant_id}`, "PRICE_NOT_FOUND");
+                }
+
+                const unitPrice = price.calculated_amount_with_tax || price.calculated_amount;
+                const itemTotal = unitPrice * item.quantity;
+                totalDifference += itemTotal;
+
+                itemResults.push({
+                    variantId: item.variant_id!,
+                    variantTitle: `${variant.product?.title || ""} - ${variant.title || ""}`.trim(),
+                    quantity: item.quantity,
+                    unitPrice,
+                    itemTotal,
+                });
+            } else if (item.action === 'update_quantity' && item.item_id) {
+                // Handle quantity updates to existing items
+                const existingItem = input.orderItems.find(oi => oi.id === item.item_id);
+
+                if (!existingItem) {
+                    throw new BatchValidationError(`Line item ${item.item_id} not found in order`, "LINE_ITEM_NOT_FOUND");
+                }
+
+                const quantityDiff = item.quantity - existingItem.quantity;
+                const priceDiff = quantityDiff * existingItem.unit_price;
+                totalDifference += priceDiff;
+
+                itemResults.push({
+                    variantId: existingItem.variant_id,
+                    variantTitle: existingItem.title,
+                    quantity: item.quantity,
+                    unitPrice: existingItem.unit_price,
+                    itemTotal: priceDiff,
+                    isQuantityUpdate: true,
+                    lineItemId: item.item_id,
+                    oldQuantity: existingItem.quantity,
+                });
             }
-
-            const variant = variants[0] as any;
-            const price = variant.calculated_price;
-
-            if (!price || !price.calculated_amount) {
-                throw new BatchValidationError(`No price found for variant ${item.variant_id}`, "PRICE_NOT_FOUND");
-            }
-
-            const unitPrice = price.calculated_amount_with_tax || price.calculated_amount;
-            const itemTotal = unitPrice * item.quantity;
-            totalDifference += itemTotal;
-
-            itemResults.push({
-                variantId: item.variant_id,
-                variantTitle: `${variant.product?.title || ""} - ${variant.title || ""}`.trim(),
-                quantity: item.quantity,
-                unitPrice,
-                itemTotal,
-            });
         }
 
         const newOrderTotal = input.currentTotal + totalDifference;
@@ -602,7 +643,7 @@ const executeBatchOrderEditStep = createStep(
             orderChangeId = newEdit.id;
         }
 
-        // 2. Add all items to order edit
+        // 2a. Add all new items to order edit
         const addItems = input.items.filter(i => i.action === 'add');
         let itemsAdded = 0;
 
@@ -611,12 +652,29 @@ const executeBatchOrderEditStep = createStep(
                 input: {
                     order_id: input.orderId,
                     items: [{
-                        variant_id: item.variant_id,
+                        variant_id: item.variant_id!,
                         quantity: item.quantity,
                     }],
                 },
             });
             itemsAdded++;
+        }
+
+        // 2b. Update quantities for existing items
+        const updateItems = input.items.filter(i => i.action === 'update_quantity' && i.item_id);
+        let itemsUpdated = 0;
+
+        for (const item of updateItems) {
+            await orderEditUpdateItemQuantityWorkflow(container).run({
+                input: {
+                    order_id: input.orderId,
+                    items: [{
+                        id: item.item_id!,
+                        quantity: item.quantity,
+                    }],
+                },
+            });
+            itemsUpdated++;
         }
 
         // 3. Confirm the order change directly (without payment reconciliation)
@@ -650,12 +708,14 @@ const executeBatchOrderEditStep = createStep(
             orderId: input.orderId,
             orderChangeId,
             itemsAdded,
+            itemsUpdated,
             newLineItemIds,
         });
 
         return new StepResponse({
             orderChangeId,
             itemsAdded,
+            itemsUpdated,
             newLineItemIds,
             orderPreview: updatedOrder,
         });
@@ -1072,11 +1132,18 @@ export const batchModifyOrderWorkflow = createWorkflow(
             items: input.items,
         });
 
-        // Step 2: Calculate totals for all items
+        // Step 2: Calculate totals for all items (including quantity updates)
         const totalsInput = transform({ validation, input }, (data) => ({
             items: data.input.items,
             currentTotal: data.validation.order.total,
             currencyCode: data.validation.order.currency_code,
+            orderItems: data.validation.order.items.map((item: any) => ({
+                id: item.id,
+                variant_id: item.variant_id,
+                quantity: item.quantity,
+                unit_price: item.unit_price,
+                title: item.title,
+            })),
         }));
         const totals = calculateBatchTotalsStep(totalsInput);
 
