@@ -61,6 +61,7 @@ interface ShippingMethod {
 interface OrderItem {
     id: string;
     title: string;
+    variant_id: string;
     thumbnail?: string;
     quantity: number;
     unit_price: number;
@@ -88,12 +89,25 @@ export interface PendingItem {
 }
 
 /**
+ * Tracks quantity changes for existing confirmed line items.
+ * Positive delta = increase quantity, negative delta = decrease quantity.
+ */
+interface QuantityChange {
+    lineItemId: string;
+    variantId: string;
+    originalQuantity: number;
+    newQuantity: number;
+    unitPrice: number;
+}
+
+/**
  * Combined display item for rendering both confirmed and pending items
  * in a unified list with visual distinction.
  */
 interface DisplayItem {
     id: string;
     title: string;
+    variantId: string;
     variantTitle?: string;
     thumbnail?: string;
     quantity: number;
@@ -442,6 +456,8 @@ export default function OrderEdit() {
 
     // Pending items state - items added locally but not yet saved to server
     const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
+    // Quantity changes for existing confirmed items (keyed by line item ID)
+    const [quantityChanges, setQuantityChanges] = useState<Map<string, QuantityChange>>(new Map());
     const [isSavingItems, setIsSavingItems] = useState(false);
     const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -449,27 +465,45 @@ export default function OrderEdit() {
     const isIntentionalSaveRef = useRef(false);
 
     // Derived state for conditional rendering (React best practice: rerender-derived-state)
-    const hasPendingChanges = pendingItems.length > 0;
+    const hasPendingChanges = pendingItems.length > 0 || quantityChanges.size > 0;
 
     // Calculate pending totals in a single pass (React best practice: js-combine-iterations)
+    // Includes both new items and quantity changes to existing items
     const pendingTotal = useMemo(() => {
-        return pendingItems.reduce((sum, item) => sum + item.subtotal, 0);
-    }, [pendingItems]);
+        // Sum of new pending items
+        const newItemsTotal = pendingItems.reduce((sum, item) => sum + item.subtotal, 0);
+
+        // Sum of quantity change deltas (can be positive or negative)
+        let quantityChangeTotal = 0;
+        quantityChanges.forEach(change => {
+            const delta = change.newQuantity - change.originalQuantity;
+            quantityChangeTotal += delta * change.unitPrice;
+        });
+
+        return newItemsTotal + quantityChangeTotal;
+    }, [pendingItems, quantityChanges]);
 
     // Combine confirmed items + pending items for unified display
+    // Apply quantity changes to confirmed items for display
     const displayItems: DisplayItem[] = useMemo(() => [
-        ...order.items.map(item => ({
-            id: item.id,
-            title: item.title,
-            thumbnail: item.thumbnail,
-            quantity: item.quantity,
-            unitPrice: item.unit_price,
-            subtotal: item.subtotal,
-            status: 'confirmed' as const,
-        })),
+        ...order.items.map(item => {
+            const change = quantityChanges.get(item.id);
+            const displayQuantity = change ? change.newQuantity : item.quantity;
+            return {
+                id: item.id,
+                title: item.title,
+                variantId: item.variant_id,
+                thumbnail: item.thumbnail,
+                quantity: displayQuantity,
+                unitPrice: item.unit_price,
+                subtotal: item.unit_price * displayQuantity,
+                status: 'confirmed' as const,
+            };
+        }).filter(item => item.quantity > 0), // Hide items with quantity 0
         ...pendingItems.map(item => ({
             id: item.id,
             title: item.productTitle,
+            variantId: item.variantId,
             variantTitle: item.variantTitle,
             thumbnail: item.thumbnail,
             quantity: item.quantity,
@@ -477,17 +511,43 @@ export default function OrderEdit() {
             subtotal: item.subtotal,
             status: 'pending' as const,
         })),
-    ], [order.items, pendingItems]);
+    ], [order.items, pendingItems, quantityChanges]);
 
     // Handler for adding items from OrderQuickAddDialog (React best practice: rerender-functional-setstate)
-    // If the same variant already exists in pending items, increase quantity instead of creating duplicate
+    // Checks in order: 1) existing confirmed items, 2) pending items, 3) creates new pending item
     const handleAddPendingItem = useCallback((item: Omit<PendingItem, 'id'>) => {
+        // First, check if this variant exists in confirmed items
+        const existingConfirmedItem = order.items.find(i => i.variant_id === item.variantId);
+
+        if (existingConfirmedItem) {
+            // Increment quantity of existing confirmed item via quantityChanges
+            setQuantityChanges(prev => {
+                const newMap = new Map(prev);
+                const existingChange = newMap.get(existingConfirmedItem.id);
+                const currentQuantity = existingChange
+                    ? existingChange.newQuantity
+                    : existingConfirmedItem.quantity;
+
+                newMap.set(existingConfirmedItem.id, {
+                    lineItemId: existingConfirmedItem.id,
+                    variantId: existingConfirmedItem.variant_id,
+                    originalQuantity: existingConfirmedItem.quantity,
+                    newQuantity: currentQuantity + item.quantity,
+                    unitPrice: existingConfirmedItem.unit_price,
+                });
+
+                return newMap;
+            });
+            setSaveError(null);
+            return;
+        }
+
+        // Then, check if this variant exists in pending items
         setPendingItems(prev => {
-            // Check if this variant already exists in pending items
             const existingIndex = prev.findIndex(p => p.variantId === item.variantId);
 
             if (existingIndex >= 0) {
-                // Merge: update quantity and subtotal of existing item
+                // Merge: update quantity and subtotal of existing pending item
                 return prev.map((p, idx) => {
                     if (idx === existingIndex) {
                         const newQuantity = p.quantity + item.quantity;
@@ -501,7 +561,7 @@ export default function OrderEdit() {
                 });
             }
 
-            // New variant: add to list
+            // New variant: add to pending list
             return [
                 ...prev,
                 {
@@ -511,7 +571,7 @@ export default function OrderEdit() {
             ];
         });
         setSaveError(null);
-    }, []);
+    }, [order.items]);
 
     // Handler for removing a pending item
     const handleRemovePendingItem = useCallback((itemId: string) => {
@@ -541,9 +601,40 @@ export default function OrderEdit() {
         );
     }, []);
 
+    // Handler for updating confirmed item quantity (React best practice: rerender-functional-setstate)
+    // Tracks the change in quantityChanges map; reverts to original if quantity matches
+    const handleUpdateConfirmedQuantity = useCallback((lineItemId: string, newQuantity: number) => {
+        const confirmedItem = order.items.find(item => item.id === lineItemId);
+        if (!confirmedItem) return;
+
+        setQuantityChanges(prev => {
+            const newMap = new Map(prev);
+
+            // If new quantity matches original, remove the change entry
+            if (newQuantity === confirmedItem.quantity) {
+                newMap.delete(lineItemId);
+                return newMap;
+            }
+
+            // Prevent negative quantities (but allow 0 for removal)
+            if (newQuantity < 0) return prev;
+
+            newMap.set(lineItemId, {
+                lineItemId,
+                variantId: confirmedItem.variant_id,
+                originalQuantity: confirmedItem.quantity,
+                newQuantity,
+                unitPrice: confirmedItem.unit_price,
+            });
+
+            return newMap;
+        });
+    }, [order.items]);
+
     // Handler for discarding all pending changes
     const handleDiscardChanges = useCallback(() => {
         setPendingItems([]);
+        setQuantityChanges(new Map());
         setSaveError(null);
     }, []);
 
@@ -576,7 +667,7 @@ export default function OrderEdit() {
         return Object.keys(newErrors).length === 0;
     }, [formData.address1, formData.city, formData.postalCode, formData.country]);
 
-    // Unified handler for saving ALL changes (pending items + address/shipping)
+    // Unified handler for saving ALL changes (pending items + quantity changes + address/shipping)
     const handleSaveChanges = useCallback(async (formElement: HTMLFormElement) => {
         // Validate form first
         if (!validateForm()) {
@@ -587,21 +678,42 @@ export default function OrderEdit() {
         setSaveError(null);
 
         try {
-            // Step 1: If there are pending items, save them via batch API
-            if (pendingItems.length > 0) {
+            // Step 1: If there are pending items or quantity changes, save them via batch API
+            const hasItemChanges = pendingItems.length > 0 || quantityChanges.size > 0;
+
+            if (hasItemChanges) {
+                // Build batch items array from both pending items and quantity changes
+                const batchItems: Array<{
+                    action: 'add' | 'update_quantity';
+                    variant_id: string;
+                    quantity: number;
+                }> = [];
+
+                // Add new pending items
+                pendingItems.forEach(item => {
+                    batchItems.push({
+                        action: 'add',
+                        variant_id: item.variantId,
+                        quantity: item.quantity,
+                    });
+                });
+
+                // Add quantity changes for existing items
+                quantityChanges.forEach(change => {
+                    batchItems.push({
+                        action: 'update_quantity',
+                        variant_id: change.variantId,
+                        quantity: change.newQuantity,
+                    });
+                });
+
                 const batchResponse = await fetch(`/api/orders/${order.id}/batch-modify`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'x-modification-token': modificationToken,
                     },
-                    body: JSON.stringify({
-                        items: pendingItems.map(item => ({
-                            action: 'add',
-                            variant_id: item.variantId,
-                            quantity: item.quantity,
-                        })),
-                    }),
+                    body: JSON.stringify({ items: batchItems }),
                 });
 
                 if (!batchResponse.ok) {
@@ -609,8 +721,9 @@ export default function OrderEdit() {
                     throw new Error(errorData.message || 'Failed to save items');
                 }
 
-                // Clear pending items after successful batch save
+                // Clear pending items and quantity changes after successful batch save
                 setPendingItems([]);
+                setQuantityChanges(new Map());
             }
 
             // Step 2: Submit the form for address/shipping changes via React Router action
@@ -622,7 +735,7 @@ export default function OrderEdit() {
             setIsSavingItems(false);
         }
         // Note: Don't set isSavingItems=false on success - the form submission will cause a page transition
-    }, [pendingItems, order.id, modificationToken, validateForm]);
+    }, [pendingItems, quantityChanges, order.id, modificationToken, validateForm]);
 
     // Navigation warning when there are unsaved changes
     useEffect(() => {
@@ -953,7 +1066,7 @@ export default function OrderEdit() {
                                     {isSubmitting || isSavingItems
                                         ? "Saving..."
                                         : hasPendingChanges
-                                            ? `Save Changes (+${formatPrice(pendingTotal)})`
+                                            ? `Save Changes (${pendingTotal >= 0 ? '+' : ''}${formatPrice(pendingTotal)})`
                                             : "Save Changes"
                                     }
                                 </button>
@@ -980,67 +1093,110 @@ export default function OrderEdit() {
 
                             {/* Items - Combined confirmed + pending with visual distinction */}
                             <div className="space-y-3 mb-4 max-h-64 overflow-y-auto">
-                                {displayItems.map((item) => (
-                                    <div
-                                        key={item.id}
-                                        className={`flex gap-3 p-2 rounded transition-colors ${
-                                            item.status === 'pending'
-                                                ? 'bg-amber-50 border border-amber-200'
-                                                : ''
-                                        }`}
-                                    >
-                                        <div className="w-12 h-12 bg-gray-100 rounded overflow-hidden flex-shrink-0">
-                                            {item.thumbnail && (
-                                                <img src={item.thumbnail} alt={item.title} className="w-full h-full object-cover" />
-                                            )}
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-start gap-1">
-                                                <p className="text-sm font-medium text-text-earthy truncate flex-1">{item.title}</p>
-                                                {item.status === 'pending' && (
-                                                    <button
-                                                        onClick={() => handleRemovePendingItem(item.id)}
-                                                        className="p-0.5 text-amber-600 hover:text-amber-800 transition-colors"
-                                                        aria-label="Remove pending item"
-                                                    >
-                                                        <X className="w-3.5 h-3.5" />
-                                                    </button>
+                                {displayItems.map((item) => {
+                                    // Check if this confirmed item has quantity changes
+                                    const hasQuantityChange = item.status === 'confirmed' && quantityChanges.has(item.id);
+                                    const originalQuantity = hasQuantityChange
+                                        ? order.items.find(i => i.id === item.id)?.quantity
+                                        : undefined;
+
+                                    return (
+                                        <div
+                                            key={item.id}
+                                            className={`flex gap-3 p-2 rounded transition-colors ${
+                                                item.status === 'pending'
+                                                    ? 'bg-amber-50 border border-amber-200'
+                                                    : hasQuantityChange
+                                                        ? 'bg-blue-50 border border-blue-200'
+                                                        : ''
+                                            }`}
+                                        >
+                                            <div className="w-12 h-12 bg-gray-100 rounded overflow-hidden flex-shrink-0">
+                                                {item.thumbnail && (
+                                                    <img src={item.thumbnail} alt={item.title} className="w-full h-full object-cover" />
                                                 )}
                                             </div>
-                                            <div className="flex items-center gap-2">
-                                                {item.status === 'pending' ? (
-                                                    // Quantity controls for pending items (matches checkout OrderSummary pattern)
-                                                    <>
-                                                        <div className="flex items-center gap-1.5">
-                                                            <button
-                                                                onClick={() => handleUpdatePendingQuantity(item.id, item.quantity - 1)}
-                                                                className="p-0.5 rounded-full hover:bg-amber-100 border border-amber-300 transition-colors cursor-pointer"
-                                                                aria-label="Decrease quantity"
-                                                            >
-                                                                <Minus className="w-2.5 h-2.5 text-amber-700" />
-                                                            </button>
-                                                            <span className="w-4 text-center text-xs text-amber-700 font-medium">{item.quantity}</span>
-                                                            <button
-                                                                onClick={() => handleUpdatePendingQuantity(item.id, item.quantity + 1)}
-                                                                className="p-0.5 rounded-full hover:bg-amber-100 border border-amber-300 transition-colors cursor-pointer"
-                                                                aria-label="Increase quantity"
-                                                            >
-                                                                <Plus className="w-2.5 h-2.5 text-amber-700" />
-                                                            </button>
-                                                        </div>
-                                                        <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">
-                                                            Pending
-                                                        </span>
-                                                    </>
-                                                ) : (
-                                                    // Static quantity display for confirmed items
-                                                    <p className="text-xs text-text-earthy/60">Qty: {item.quantity}</p>
-                                                )}
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-start gap-1">
+                                                    <p className="text-sm font-medium text-text-earthy truncate flex-1">{item.title}</p>
+                                                    {item.status === 'pending' && (
+                                                        <button
+                                                            onClick={() => handleRemovePendingItem(item.id)}
+                                                            className="p-0.5 text-amber-600 hover:text-amber-800 transition-colors"
+                                                            aria-label="Remove pending item"
+                                                        >
+                                                            <X className="w-3.5 h-3.5" />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    {item.status === 'pending' ? (
+                                                        // Quantity controls for pending items
+                                                        <>
+                                                            <div className="flex items-center gap-1.5">
+                                                                <button
+                                                                    onClick={() => handleUpdatePendingQuantity(item.id, item.quantity - 1)}
+                                                                    className="p-0.5 rounded-full hover:bg-amber-100 border border-amber-300 transition-colors cursor-pointer"
+                                                                    aria-label="Decrease quantity"
+                                                                >
+                                                                    <Minus className="w-2.5 h-2.5 text-amber-700" />
+                                                                </button>
+                                                                <span className="w-4 text-center text-xs text-amber-700 font-medium">{item.quantity}</span>
+                                                                <button
+                                                                    onClick={() => handleUpdatePendingQuantity(item.id, item.quantity + 1)}
+                                                                    className="p-0.5 rounded-full hover:bg-amber-100 border border-amber-300 transition-colors cursor-pointer"
+                                                                    aria-label="Increase quantity"
+                                                                >
+                                                                    <Plus className="w-2.5 h-2.5 text-amber-700" />
+                                                                </button>
+                                                            </div>
+                                                            <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">
+                                                                Pending
+                                                            </span>
+                                                        </>
+                                                    ) : (
+                                                        // Quantity controls for confirmed items
+                                                        <>
+                                                            <div className="flex items-center gap-1.5">
+                                                                <button
+                                                                    onClick={() => handleUpdateConfirmedQuantity(item.id, item.quantity - 1)}
+                                                                    className={`p-0.5 rounded-full transition-colors cursor-pointer ${
+                                                                        hasQuantityChange
+                                                                            ? 'hover:bg-blue-100 border border-blue-300'
+                                                                            : 'hover:bg-gray-100 border border-gray-300'
+                                                                    }`}
+                                                                    aria-label="Decrease quantity"
+                                                                >
+                                                                    <Minus className={`w-2.5 h-2.5 ${hasQuantityChange ? 'text-blue-700' : 'text-text-earthy/60'}`} />
+                                                                </button>
+                                                                <span className={`w-4 text-center text-xs font-medium ${
+                                                                    hasQuantityChange ? 'text-blue-700' : 'text-text-earthy/60'
+                                                                }`}>{item.quantity}</span>
+                                                                <button
+                                                                    onClick={() => handleUpdateConfirmedQuantity(item.id, item.quantity + 1)}
+                                                                    className={`p-0.5 rounded-full transition-colors cursor-pointer ${
+                                                                        hasQuantityChange
+                                                                            ? 'hover:bg-blue-100 border border-blue-300'
+                                                                            : 'hover:bg-gray-100 border border-gray-300'
+                                                                    }`}
+                                                                    aria-label="Increase quantity"
+                                                                >
+                                                                    <Plus className={`w-2.5 h-2.5 ${hasQuantityChange ? 'text-blue-700' : 'text-text-earthy/60'}`} />
+                                                                </button>
+                                                            </div>
+                                                            {hasQuantityChange && originalQuantity !== undefined && (
+                                                                <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">
+                                                                    was {originalQuantity}
+                                                                </span>
+                                                            )}
+                                                        </>
+                                                    )}
+                                                </div>
                                             </div>
+                                            <p className="text-sm font-medium text-text-earthy flex-shrink-0">{formatPrice(item.subtotal)}</p>
                                         </div>
-                                        <p className="text-sm font-medium text-text-earthy flex-shrink-0">{formatPrice(item.subtotal)}</p>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
 
                             {/* Totals */}
@@ -1050,11 +1206,24 @@ export default function OrderEdit() {
                                     <span className="text-text-earthy">{formatPrice(order.subtotal)}</span>
                                 </div>
 
-                                {/* Pending Items Total */}
+                                {/* Pending Changes Total */}
                                 {hasPendingChanges && (
-                                    <div className="flex justify-between text-sm bg-amber-50 p-2 rounded border border-amber-200">
-                                        <span className="text-amber-700">+ Pending Items ({pendingItems.length})</span>
-                                        <span className="text-amber-700 font-medium">+{formatPrice(pendingTotal)}</span>
+                                    <div className={`flex justify-between text-sm p-2 rounded border ${
+                                        pendingTotal >= 0
+                                            ? 'bg-amber-50 border-amber-200'
+                                            : 'bg-blue-50 border-blue-200'
+                                    }`}>
+                                        <span className={pendingTotal >= 0 ? 'text-amber-700' : 'text-blue-700'}>
+                                            {pendingItems.length > 0 && quantityChanges.size > 0
+                                                ? `Pending Changes (${pendingItems.length} new, ${quantityChanges.size} modified)`
+                                                : pendingItems.length > 0
+                                                    ? `+ New Items (${pendingItems.length})`
+                                                    : `Quantity Changes (${quantityChanges.size})`
+                                            }
+                                        </span>
+                                        <span className={`font-medium ${pendingTotal >= 0 ? 'text-amber-700' : 'text-blue-700'}`}>
+                                            {pendingTotal >= 0 ? '+' : ''}{formatPrice(pendingTotal)}
+                                        </span>
                                     </div>
                                 )}
 
