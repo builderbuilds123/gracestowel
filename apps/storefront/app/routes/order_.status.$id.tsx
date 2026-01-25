@@ -1,16 +1,21 @@
-import { data } from "react-router";
-import { resolveCSRFSecret, validateCSRFToken } from "../utils/csrf.server";
+import { data, Link } from "react-router";
 import type { CloudflareEnv } from "../utils/monitored-fetch";
-import { useLoaderData, useRevalidator, useNavigate, useActionData, useSubmit } from "react-router";
+import { useLoaderData, useNavigate, useActionData, useFetcher } from "react-router";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { useState, useCallback, useEffect } from "react";
-import { CheckCircle2, MapPin, Package, Truck, AlertCircle } from "../lib/icons";
-// Story 4.2: OrderTimer removed - replaced with simple status message
-import { OrderModificationDialogs } from "../components/order/OrderModificationDialogs";
+import { useState, useEffect, lazy, Suspense } from "react";
+import { Package, Truck, AlertCircle, MapPin, Loader2 } from "../lib/icons";
+import { CancelOrderDialog } from "../components/CancelOrderDialog";
+import { CancelRejectedModal } from "../components/order/CancelRejectedModal";
 import { getGuestToken, setGuestToken, clearGuestToken } from "../utils/guest-session.server";
 import { medusaFetch } from "../lib/medusa-fetch";
 import { createLogger } from "../lib/logger";
 import { getErrorDisplay } from "../utils/error-messages";
+import { posts } from "../data/blogPosts";
+import { Image } from "../components/ui/Image";
+import { resolveCSRFSecret, validateCSRFToken } from "../utils/csrf.server";
+
+// Lazy load Map component to avoid SSR issues with Leaflet
+const Map = lazy(() => import("../components/Map.client"));
 
 interface LoaderData {
     order?: any;
@@ -20,7 +25,7 @@ interface LoaderData {
     needsAuth?: boolean;
     orderId?: string;
     error?: string;
-    errorCode?: string; // Story 4.1: Error code for user-friendly display
+    errorCode?: string;
     message?: string;
     modification_window?: {
         status: "active" | "expired";
@@ -40,40 +45,28 @@ interface ErrorData {
 
 /**
  * Story 2.4: Detect auth method in order status loader
- * 
- * Priority:
- * 1. Customer session (Authorization header from cookies)
- * 2. Guest token (cookie or URL param)
- * 3. Show login form if neither
  */
 export async function loader({ params, request, context }: LoaderFunctionArgs) {
     const { id } = params;
     const env = context.cloudflare.env as unknown as CloudflareEnv;
-    const medusaBackendUrl = env.MEDUSA_BACKEND_URL;
-    const medusaPublishableKey = env.MEDUSA_PUBLISHABLE_KEY;
 
     // Check URL for token (from email link) and error codes
     const url = new URL(request.url);
     const urlToken = url.searchParams.get("token");
-    const errorCode = url.searchParams.get("error"); // Story 4.1: Error code from redirects
+    const errorCode = url.searchParams.get("error");
 
     // Check for existing guest token in cookie
     const { token: cookieToken, source } = await getGuestToken(request, id!);
 
     // Determine auth method and build headers
-    // Note: Customer sessions are handled via cookies automatically by Medusa middleware
-    // We only need to explicitly set guest token header
     let authHeaders: HeadersInit = {};
     let authMethod: "customer_session" | "guest_token" | "none" = "none";
 
     if (urlToken || cookieToken) {
-        // Guest token (Priority 2 - customer session takes precedence on backend)
         const token = urlToken || cookieToken;
         authHeaders["x-modification-token"] = token!;
         authMethod = "guest_token";
     }
-    // If no guest token, backend will check for customer session cookie automatically
-    // If neither exists, backend will return 401
 
     // Fetch order with appropriate auth
     const response = await medusaFetch(`/store/orders/${id}`, {
@@ -85,38 +78,38 @@ export async function loader({ params, request, context }: LoaderFunctionArgs) {
 
     if (!response.ok) {
         if (response.status === 401 || response.status === 403) {
-            // Story 4.1: Use error messages utility
             const errorDisplay = getErrorDisplay("UNAUTHORIZED");
-            // Clear guest token cookie on auth errors
             if (authMethod === "guest_token") {
                 const clearCookieHeader = await clearGuestToken(id!);
                 return data(
-                    { 
-                        needsAuth: true, 
+                    {
+                        needsAuth: true,
                         orderId: id,
                         error: "UNAUTHORIZED",
                         errorCode: "UNAUTHORIZED",
                         message: errorDisplay.message,
+                        env: { STRIPE_PUBLISHABLE_KEY: env.STRIPE_PUBLISHABLE_KEY }
                     } as LoaderData,
-                    { 
+                    {
                         status: 401,
                         headers: { "Set-Cookie": clearCookieHeader }
                     }
                 );
             }
-            return data({ 
-                needsAuth: true, 
+            return data({
+                needsAuth: true,
                 orderId: id,
                 error: "UNAUTHORIZED",
                 errorCode: "UNAUTHORIZED",
                 message: errorDisplay.message,
+                env: { STRIPE_PUBLISHABLE_KEY: env.STRIPE_PUBLISHABLE_KEY }
             } as LoaderData, { status: 401 });
         }
         throw new Response("Order Not Found", { status: 404 });
     }
 
-    const responseData = await response.json() as { 
-        order: any; 
+    const responseData = await response.json() as {
+        order: any;
         authMethod: string;
         canEdit: boolean;
         modification?: {
@@ -128,8 +121,7 @@ export async function loader({ params, request, context }: LoaderFunctionArgs) {
 
     // Build response headers
     const responseHeaders: HeadersInit = {};
-    
-    // Story 2.4: Set cookie if token came from URL (first visit via magic link)
+
     if (authMethod === "guest_token" && source === 'url') {
         const token = urlToken || cookieToken;
         if (token) {
@@ -137,8 +129,7 @@ export async function loader({ params, request, context }: LoaderFunctionArgs) {
         }
     }
 
-    // Build modification window data (for guest tokens)
-    const modification_window = responseData.modification 
+    const modification_window = responseData.modification
         ? {
             status: responseData.modification.can_modify ? "active" as const : "expired" as const,
             expires_at: responseData.modification.expires_at,
@@ -147,7 +138,6 @@ export async function loader({ params, request, context }: LoaderFunctionArgs) {
         }
         : undefined;
 
-    // Story 4.1: Check for error code in URL (from redirects)
     const errorDisplay = errorCode ? getErrorDisplay(errorCode) : null;
 
     return data({
@@ -155,7 +145,7 @@ export async function loader({ params, request, context }: LoaderFunctionArgs) {
         authMethod: responseData.authMethod,
         canEdit: responseData.canEdit,
         modification_window,
-        errorCode: errorCode || undefined, // Story 4.1: Pass error code for display
+        errorCode: errorCode || undefined,
         env: {
             STRIPE_PUBLISHABLE_KEY: env.STRIPE_PUBLISHABLE_KEY
         }
@@ -163,19 +153,11 @@ export async function loader({ params, request, context }: LoaderFunctionArgs) {
 }
 
 /**
- * Remix Action: Handle order modifications server-side
- * Token is read from HttpOnly cookie (not passed from client)
- * 
- * Intents:
- * - CANCEL_ORDER: Cancel the order
- * - UPDATE_ADDRESS: Update shipping address
- * - ADD_ITEMS: Add line items (future)
+ * Action: Handle order cancellation
  */
 export async function action({ params, request, context }: ActionFunctionArgs) {
     const { id } = params;
     const env = context.cloudflare.env as any;
-    const medusaBackendUrl = env.MEDUSA_BACKEND_URL;
-    const medusaPublishableKey = env.MEDUSA_PUBLISHABLE_KEY;
 
     // CSRF Check
     const jwtSecret = resolveCSRFSecret(env.JWT_SECRET);
@@ -187,7 +169,7 @@ export async function action({ params, request, context }: ActionFunctionArgs) {
         return data({ error: "Invalid CSRF token" }, { status: 403 });
     }
 
-    // Get token from HttpOnly cookie (secure - not accessible to client JS)
+    // Get token from HttpOnly cookie
     const { token } = await getGuestToken(request, id!);
 
     if (!token) {
@@ -205,7 +187,7 @@ export async function action({ params, request, context }: ActionFunctionArgs) {
     try {
         if (intent === "CANCEL_ORDER") {
             const reason = formData.get("reason") as string || "Customer requested cancellation";
-            
+
             const response = await medusaFetch(`/store/orders/${id}/cancel`, {
                 method: "POST",
                 headers,
@@ -216,205 +198,79 @@ export async function action({ params, request, context }: ActionFunctionArgs) {
 
             if (!response.ok) {
                 const errorData = await response.json() as { message?: string; code?: string };
-                // Clear cookie on auth errors
                 if (response.status === 401 || response.status === 403) {
                     return data(
                         { success: false, error: errorData.message || "Authorization failed" },
                         { status: response.status, headers: { "Set-Cookie": await clearGuestToken(id!) } }
                     );
                 }
-                return data({ success: false, error: errorData.message || "Failed to cancel order", errorCode: errorData.code }, { status: response.status === 409 ? 409 : 400 });
+                return data({
+                    success: false,
+                    error: errorData.message || "Failed to cancel order",
+                    errorCode: errorData.code
+                }, { status: response.status === 409 ? 409 : 400 });
             }
 
             return data({ success: true, action: "canceled" });
         }
 
-        if (intent === "UPDATE_ADDRESS") {
-            const address = JSON.parse(formData.get("address") as string);
-            
-            const response = await medusaFetch(`/store/orders/${id}/address`, {
-                method: "POST",
-                headers,
-                body: JSON.stringify({ address }),
-                label: "order-address-update",
-                context,
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json() as { message?: string };
-                if (response.status === 401 || response.status === 403) {
-                    return data(
-                        { success: false, error: errorData.message || "Authorization failed" },
-                        { status: response.status, headers: { "Set-Cookie": await clearGuestToken(id!) } }
-                    );
-                }
-                return data({ success: false, error: errorData.message || "Failed to update address" }, { status: 400 });
-            }
-
-            return data({ success: true, action: "address_updated", address });
-        }
-
-        if (intent === "UPDATE_QUANTITY") {
-            let updates: Array<{ item_id: string; quantity: number }>;
-            try {
-                const updateData = JSON.parse(formData.get("items") as string);
-                if (!Array.isArray(updateData) || !updateData.every(item => 
-                    item && typeof item.item_id === 'string' && typeof item.quantity === 'number'
-                )) {
-                    return data({ success: false, error: "Invalid updates format." }, { status: 400 });
-                }
-                updates = updateData;
-            } catch {
-                return data({ success: false, error: "Invalid updates format." }, { status: 400 });
-            }
-
-            if (updates.length === 0) {
-                return data({ success: false, error: "No changes to save" }, { status: 400 });
-            }
-
-            // Story 15: Migration to Order Edit API
-            let itemsUpdated = 0;
-
-            for (const update of updates) {
-                // /store/orders/:id/edit/items/:item_id
-                const response = await medusaFetch(`/store/orders/${id}/edit/items/${update.item_id}`, {
-                    method: "POST",
-                    headers,
-                    body: JSON.stringify({ quantity: update.quantity }),
-                    label: "order-edit-update-quantity",
-                    context,
-                });
-
-                if (!response.ok) {
-                    const errorData = await response.json() as { message?: string };
-                    return data({ success: false, error: errorData.message || "Failed to update item", itemsUpdated }, { status: 400 });
-                }
-                itemsUpdated++;
-            }
-
-            // After all updates, attempt to auto-confirm (or check if payment needed)
-            const confirmRes = await medusaFetch(`/store/orders/${id}/edit/confirm`, {
-                method: "POST",
-                headers,
-                label: "order-edit-confirm",
-                context,
-            });
-
-            if (!confirmRes.ok) {
-                const errorData = await confirmRes.json() as { message?: string };
-                 return data({ success: false, error: errorData.message || "Failed to confirm changes" }, { status: 400 });
-            }
-
-            const confirmData = await confirmRes.json() as { status: string; payment_collection?: any };
-            
-            if (confirmData.status === "payment_required") {
-                return data({ 
-                    success: true, 
-                    action: "payment_required", 
-                    payment_collection: confirmData.payment_collection 
-                });
-            }
-
-            return data({ success: true, action: "items_updated", itemsUpdated });
-        }
-
-        if (intent === "ADD_ITEMS") {
-            let items: Array<{ variant_id: string; quantity: number }>;
-            try {
-                const itemsData = JSON.parse(formData.get("items") as string);
-                if (!Array.isArray(itemsData) || !itemsData.every(item => 
-                    item && typeof item.variant_id === 'string' && typeof item.quantity === 'number'
-                )) {
-                    return data({ success: false, error: "Invalid items format." }, { status: 400 });
-                }
-                items = itemsData;
-            } catch {
-                return data({ success: false, error: "Invalid items format." }, { status: 400 });
-            }
-            
-            if (items.length === 0) {
-                return data({ success: false, error: "No items to add" }, { status: 400 });
-            }
-
-            let itemsAdded = 0;
-            
-            for (const item of items) {
-                const response = await medusaFetch(`/store/orders/${id}/edit/items`, {
-                    method: "POST",
-                    headers,
-                    body: JSON.stringify({ variant_id: item.variant_id, quantity: item.quantity }),
-                    label: "order-edit-add-item",
-                    context,
-                });
-
-                if (!response.ok) {
-                    const errorData = await response.json() as { message?: string };
-                    return data({ success: false, error: errorData.message || "Failed to add item", itemsAdded }, { status: 400 });
-                }
-                itemsAdded++;
-            }
-
-            // Confirm
-            const confirmRes = await medusaFetch(`/store/orders/${id}/edit/confirm`, {
-                method: "POST",
-                headers,
-                label: "order-edit-confirm",
-                context,
-            });
-
-            if (!confirmRes.ok) {
-                const errorData = await confirmRes.json() as { message?: string };
-                 return data({ success: false, error: errorData.message || "Failed to confirm changes" }, { status: 400 });
-            }
-
-            const confirmData = await confirmRes.json() as { status: string; payment_collection?: any };
-            
-            if (confirmData.status === "payment_required") {
-                return data({ 
-                    success: true, 
-                    action: "payment_required", 
-                    payment_collection: confirmData.payment_collection 
-                });
-            }
-
-            return data({ success: true, action: "items_added", itemsAdded });
-        }
-
-        if (intent === "CONFIRM_EDIT") {
-            const confirmRes = await medusaFetch(`/store/orders/${id}/edit/confirm`, {
-                method: "POST",
-                headers,
-                label: "order-edit-auto-confirm",
-                context,
-            });
-
-            if (!confirmRes.ok) {
-                const errorData = await confirmRes.json() as { message?: string };
-                 return data({ success: false, error: errorData.message || "Failed to confirm changes" }, { status: 400 });
-            }
-
-            return data({ success: true, action: "items_updated" });
-        }
-
         return data({ success: false, error: "Unknown intent" }, { status: 400 });
     } catch (error) {
-        // Issue #37: Use structured logging
         const logger = createLogger({ context: "order-status-action" });
         logger.error("Action error", error instanceof Error ? error : new Error(String(error)));
         return data({ success: false, error: "An unexpected error occurred" }, { status: 500 });
     }
 }
 
+/**
+ * Geocode address to coordinates using Nominatim
+ */
+async function geocodeAddress(address: any): Promise<[number, number] | null> {
+    if (!address) return null;
+
+    const addressString = [
+        address.address_1,
+        address.city,
+        address.province,
+        address.postal_code,
+        address.country_code?.toUpperCase()
+    ].filter(Boolean).join(", ");
+
+    try {
+        const response = await fetch(
+            `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addressString)}`,
+            {
+                method: "GET",
+                headers: {
+                    "User-Agent": "Grace's Towel E-Commerce/1.0 (https://gracestowel.com)",
+                },
+            }
+        );
+
+        const data = await response.json() as any[];
+        if (Array.isArray(data) && data.length > 0) {
+            return [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+        }
+    } catch {
+        // Silently fail - geocoding is non-critical
+    }
+
+    return null;
+}
+
 export default function OrderStatus() {
     const loaderData = useLoaderData<LoaderData | ErrorData>();
-    const revalidator = useRevalidator();
     const navigate = useNavigate();
-    
-    // Story 2.4: Handle needsAuth case (no authentication provided)
+    const fetcher = useFetcher<{ success: boolean; action?: string; error?: string; errorCode?: string }>();
+
+    const [showCancelDialog, setShowCancelDialog] = useState(false);
+    const [showCancelRejectedModal, setShowCancelRejectedModal] = useState(false);
+    const [mapCoordinates, setMapCoordinates] = useState<[number, number] | null>(null);
+
+    // Handle needsAuth case
     if ('needsAuth' in loaderData && loaderData.needsAuth) {
-        // Story 4.1: Use error messages utility for consistent display
         const errorDisplay = getErrorDisplay(loaderData.errorCode || loaderData.error);
-        
+
         return (
             <div className="min-h-screen bg-background-earthy flex items-center justify-center p-4">
                 <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8 text-center">
@@ -427,13 +283,13 @@ export default function OrderStatus() {
                         <p className="text-sm text-text-earthy/60 mb-6">{errorDisplay.action}</p>
                     )}
                     <div className="flex gap-4 justify-center">
-                        <button 
+                        <button
                             onClick={() => navigate('/account/login')}
                             className="bg-accent-earthy text-white px-6 py-2 rounded-lg hover:bg-accent-earthy/90"
                         >
                             Sign In
                         </button>
-                        <button 
+                        <button
                             onClick={() => navigate('/')}
                             className="bg-gray-200 text-text-earthy px-6 py-2 rounded-lg hover:bg-gray-300"
                         >
@@ -444,12 +300,11 @@ export default function OrderStatus() {
             </div>
         );
     }
-    
-    // Handle Token Expired View (legacy error format)
-    if ('error' in loaderData) {
-        // Story 4.1: Use error messages utility
+
+    // Handle legacy error format
+    if ('error' in loaderData && !('order' in loaderData)) {
         const errorDisplay = getErrorDisplay(loaderData.error);
-        
+
         return (
             <div className="min-h-screen bg-background-earthy flex items-center justify-center p-4">
                 <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8 text-center">
@@ -461,8 +316,8 @@ export default function OrderStatus() {
                     {errorDisplay.action && (
                         <p className="text-sm text-text-earthy/60 mb-6">{errorDisplay.action}</p>
                     )}
-                    <button 
-                        onClick={() => window.location.reload()} // Placeholder for "Resend Link" flow
+                    <button
+                        onClick={() => window.location.reload()}
                         className="bg-accent-earthy text-white px-6 py-2 rounded-lg hover:bg-accent-earthy/90"
                     >
                         Request New Link
@@ -471,13 +326,10 @@ export default function OrderStatus() {
             </div>
         );
     }
-    
-    // Story 2.4: Handle order data with new structure
-    const { order, modification_window, authMethod, canEdit, errorCode } = loaderData as LoaderData;
-    
-    // Story 4.1: Display error message if error code is present
+
+    const { order, modification_window, canEdit, errorCode } = loaderData as LoaderData;
     const errorDisplay = errorCode ? getErrorDisplay(errorCode) : null;
-    
+
     if (!order) {
         return (
             <div className="min-h-screen bg-background-earthy flex items-center justify-center p-4">
@@ -488,54 +340,61 @@ export default function OrderStatus() {
             </div>
         );
     }
-    
-    const [orderDetails, setOrderDetails] = useState(order);
-    const [shippingAddress, setShippingAddress] = useState(order.shipping_address);
+
+    const shippingAddress = order.shipping_address;
     const isModificationActive = modification_window?.status === "active" || canEdit === true;
-    const submit = useSubmit();
-    const actionData = useActionData<any>();
+    const isCanceling = fetcher.state !== "idle";
 
-    // Handle automatic confirmation after successful payment redirect
+    // Geocode address on mount
     useEffect(() => {
-        const url = new URL(window.location.href);
-        if (url.searchParams.get("payment_success") === "true") {
-            // Remove the query param to prevent multiple submissions
-            url.searchParams.delete("payment_success");
-            window.history.replaceState({}, "", url.pathname + url.search);
-            
-            // Confirm the order edit
-            submit({ intent: "CONFIRM_EDIT" }, { method: "POST" });
+        if (shippingAddress && !mapCoordinates) {
+            geocodeAddress(shippingAddress).then(coords => {
+                if (coords) setMapCoordinates(coords);
+            });
         }
-    }, [submit]);
+    }, [shippingAddress, mapCoordinates]);
 
-    // Handle generic action success (like auto-confirm)
+    // Handle cancel action result
     useEffect(() => {
-        if (actionData?.success) {
-            revalidator.revalidate();
+        if (fetcher.data) {
+            if (fetcher.data.success && fetcher.data.action === "canceled") {
+                setShowCancelDialog(false);
+                navigate("/");
+            } else if (fetcher.data.errorCode === "order_shipped") {
+                setShowCancelDialog(false);
+                setShowCancelRejectedModal(true);
+            }
         }
-    }, [actionData, revalidator]);
+    }, [fetcher.data, navigate]);
 
-    // Callbacks to update local state
-    const handleOrderUpdate = (newTotal?: number) => {
-        // Story 6.4 Fix: Always revalidate after item add to refresh totals
-        // Even if newTotal is undefined, we need fresh data from server
-        revalidator.revalidate();
+    const handleCancelOrder = async () => {
+        fetcher.submit(
+            { intent: "CANCEL_ORDER", reason: "Customer requested cancellation" },
+            { method: "POST" }
+        );
     };
-    
-    // Story 4.2: Removed handleExpire callback - no longer needed without timer
+
+    // Format price with currency
+    const formatPrice = (amount: number) => {
+        return new Intl.NumberFormat("en-US", {
+            style: "currency",
+            currency: order.currency_code?.toUpperCase() || "USD",
+        }).format(amount);
+    };
 
     return (
         <div className="min-h-screen bg-background-earthy py-12 px-4">
             <div className="max-w-3xl mx-auto">
+                {/* Header - "We're on it!" */}
                 <div className="text-center mb-8">
-                     <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                        <CheckCircle2 className="w-12 h-12 text-green-600" />
+                    <div className="w-20 h-20 bg-accent-earthy/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <Loader2 className="w-10 h-10 text-accent-earthy animate-spin" />
                     </div>
-                    <h1 className="text-3xl font-serif text-text-earthy mb-2">Order Status</h1>
-                    <p className="text-text-earthy/70">Order #{orderDetails.display_id}</p>
+                    <h1 className="text-4xl font-serif text-text-earthy mb-2">We're on it!</h1>
+                    <p className="text-text-earthy/70 text-lg">Order #{order.display_id}</p>
                 </div>
 
-                {/* Story 4.1: Display user-friendly error message if error code is present */}
+                {/* Error Display */}
                 {errorDisplay && (
                     <div className="bg-red-50 border border-red-200 rounded-lg p-6 mb-6">
                         <h2 className="text-lg font-medium text-red-800 mb-2">{errorDisplay.title}</h2>
@@ -546,82 +405,253 @@ export default function OrderStatus() {
                     </div>
                 )}
 
-                {isModificationActive ? (
+                {/* Action Buttons */}
+                {isModificationActive && (
                     <div className="bg-white rounded-lg shadow-lg p-4 mb-6 flex flex-col sm:flex-row items-center justify-between gap-4 border border-accent-earthy/20">
-                         {/* Story 4.2: Simple status message instead of countdown timer */}
-                         <div className="flex items-center gap-3">
-                             <p className="text-sm text-text-earthy">
-                                 You can modify this order until it ships.
-                             </p>
-                         </div>
-                         <OrderModificationDialogs 
-                            orderId={orderDetails.id}
-                            orderNumber={orderDetails.display_id}
-                            currencyCode={orderDetails.currency_code}
-                            items={orderDetails.items}
-                            currentAddress={shippingAddress}
-                            token={loaderData.token} // Optional - only for guest tokens
-                            stripePublishableKey={loaderData.env?.STRIPE_PUBLISHABLE_KEY || ""}
-                            onOrderUpdated={handleOrderUpdate}
-                            onAddressUpdated={setShippingAddress}
-                            onOrderCanceled={() => navigate("/")}
-                         />
-                         {/* Story 2.4: Display auth method for debugging */}
-                         {process.env.NODE_ENV === 'development' && authMethod && (
-                             <div className="text-xs text-gray-500 mt-2">
-                                 Auth: {authMethod}
-                             </div>
-                         )}
+                        <p className="text-sm text-text-earthy">
+                            You can modify this order until it ships.
+                        </p>
+                        <div className="flex gap-3">
+                            <Link
+                                to={`/order/${order.id}/edit`}
+                                className="px-6 py-2 bg-accent-earthy text-white rounded-lg hover:bg-accent-earthy/90 transition-colors font-medium"
+                            >
+                                Edit Order
+                            </Link>
+                            <button
+                                onClick={() => setShowCancelDialog(true)}
+                                disabled={isCanceling}
+                                className="px-6 py-2 text-red-600 border border-red-300 rounded-lg hover:bg-red-50 transition-colors font-medium disabled:opacity-50"
+                            >
+                                Cancel Order
+                            </button>
+                        </div>
                     </div>
-                ) : null}
+                )}
 
-                {!isModificationActive ? (
-                     <div className="bg-gray-100 rounded-lg p-4 mb-6 text-center text-text-earthy/60 flex items-center justify-center gap-2">
-                         <CheckCircle2 className="w-5 h-5" />
-                         <span>Order is being processed. Modifications are no longer available.</span>
-                     </div>
-                ) : null}
-
-                {/* Display Read-Only Order Details (Masked) */}
-                <div className="bg-white rounded-lg shadow-lg p-8 mb-6">
-                    <h3 className="font-serif text-xl text-text-earthy mb-4">Order Summary</h3>
-                    <div className="space-y-4">
-                         {orderDetails.items?.map((item: any) => (
-                             <div key={item.id} className="flex gap-4 border-b border-gray-100 pb-4 last:border-0">
-                                 <div className="w-16 h-16 bg-gray-100 rounded overflow-hidden">
-                                     {item.thumbnail && <img src={item.thumbnail} alt={item.title} className="w-full h-full object-cover"/>}
-                                 </div>
-                                 <div className="flex-1">
-                                     <p className="font-medium text-text-earthy">{item.title}</p>
-                                     <p className="text-sm text-text-earthy/60">Qty: {item.quantity}</p>
-                                 </div>
-                                 <div className="text-right">
-                                     <p className="font-medium">{item.unit_price.toFixed(2)} {orderDetails.currency_code.toUpperCase()}</p>
-                                 </div>
-                             </div>
-                         ))}
+                {!isModificationActive && (
+                    <div className="bg-gray-100 rounded-lg p-4 mb-6 text-center text-text-earthy/60">
+                        Order is being processed. Modifications are no longer available.
                     </div>
-                    <div className="mt-4 pt-4 border-t border-gray-200 flex justify-between items-center">
-                        <span className="font-serif text-lg">Total</span>
-                        <span className="font-bold text-xl">{orderDetails.total.toFixed(2)} {orderDetails.currency_code.toUpperCase()}</span>
+                )}
+
+                {/* Two-Column Layout */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    {/* Order Details Card */}
+                    <div className="bg-white rounded-lg shadow-lg p-8">
+                        <div className="border-b border-gray-200 pb-6 mb-6">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <h2 className="text-sm text-text-earthy/60 mb-1">Order Number</h2>
+                                    <p className="text-2xl font-semibold text-text-earthy">#{order.display_id}</p>
+                                </div>
+                                <div className="text-right">
+                                    <h2 className="text-sm text-text-earthy/60 mb-1">Order Date</h2>
+                                    <p className="text-lg text-text-earthy">
+                                        {new Date(order.created_at).toLocaleDateString('en-US', {
+                                            year: 'numeric',
+                                            month: 'long',
+                                            day: 'numeric'
+                                        })}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Order Items */}
+                        <div className="mb-6">
+                            <h3 className="font-serif text-xl text-text-earthy mb-4">Order Items</h3>
+                            <div className="space-y-4">
+                                {order.items?.map((item: any) => (
+                                    <div key={item.id} className="flex gap-4">
+                                        <div className="w-20 h-20 bg-card-earthy/30 rounded-md overflow-hidden flex-shrink-0">
+                                            {item.thumbnail && (
+                                                <Image
+                                                    src={item.thumbnail}
+                                                    alt={item.title}
+                                                    width={80}
+                                                    height={80}
+                                                    className="w-full h-full object-cover"
+                                                />
+                                            )}
+                                        </div>
+                                        <div className="flex-1">
+                                            <h4 className="font-medium text-text-earthy">{item.title}</h4>
+                                            {item.variant_title && (
+                                                <p className="text-sm text-text-earthy/60">{item.variant_title}</p>
+                                            )}
+                                            <p className="text-sm text-text-earthy/60 mt-1">Qty: {item.quantity}</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="font-medium text-accent-earthy">
+                                                {formatPrice(item.unit_price * item.quantity)}
+                                            </p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Order Total */}
+                        <div className="border-t border-gray-200 pt-4">
+                            <div className="flex justify-between items-center mb-2">
+                                <span className="text-text-earthy/80">Subtotal</span>
+                                <span className="text-text-earthy font-medium">
+                                    {formatPrice(order.subtotal || order.items?.reduce((acc: number, item: any) => acc + item.unit_price * item.quantity, 0) || 0)}
+                                </span>
+                            </div>
+
+                            {order.discount_total > 0 && (
+                                <div className="flex justify-between items-center mb-2">
+                                    <span className="text-text-earthy/80">Discount</span>
+                                    <span className="text-green-600 font-medium">
+                                        -{formatPrice(order.discount_total)}
+                                    </span>
+                                </div>
+                            )}
+
+                            <div className="flex justify-between items-center mb-4">
+                                <span className="text-text-earthy/80">Shipping</span>
+                                <span className="text-text-earthy font-medium">
+                                    {order.shipping_total === 0 ? 'Free' : formatPrice(order.shipping_total || 0)}
+                                </span>
+                            </div>
+
+                            <div className="flex justify-between items-center pt-2 border-t border-gray-100">
+                                <span className="font-serif text-lg text-text-earthy">Total</span>
+                                <span className="font-bold text-2xl text-accent-earthy">
+                                    {formatPrice(order.total)}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Shipping & What's Next Column */}
+                    <div className="space-y-6">
+                        {/* Shipping Address */}
+                        <div className="bg-white rounded-lg shadow-lg p-8">
+                            <div className="flex items-center gap-3 mb-4">
+                                <MapPin className="w-6 h-6 text-accent-earthy" />
+                                <h3 className="font-serif text-xl text-text-earthy">Delivery Address</h3>
+                            </div>
+                            {shippingAddress ? (
+                                <div className="text-text-earthy/80">
+                                    <p className="font-medium text-text-earthy">
+                                        {shippingAddress.first_name} {shippingAddress.last_name}
+                                    </p>
+                                    <p>{shippingAddress.address_1}</p>
+                                    {shippingAddress.address_2 && <p>{shippingAddress.address_2}</p>}
+                                    <p>
+                                        {shippingAddress.city}
+                                        {shippingAddress.province && `, ${shippingAddress.province}`} {shippingAddress.postal_code}
+                                    </p>
+                                    <p>{shippingAddress.country_code?.toUpperCase()}</p>
+                                    {shippingAddress.phone && (
+                                        <p className="mt-2 text-sm">{shippingAddress.phone}</p>
+                                    )}
+                                </div>
+                            ) : (
+                                <p className="text-text-earthy/60 italic">No shipping address</p>
+                            )}
+
+                            {/* Map */}
+                            {mapCoordinates && (
+                                <div className="mt-6 rounded-lg overflow-hidden h-48 z-0 relative border border-gray-100">
+                                    <Suspense fallback={
+                                        <div className="h-full w-full bg-gray-100 animate-pulse flex items-center justify-center text-gray-400">
+                                            Loading map...
+                                        </div>
+                                    }>
+                                        <Map coordinates={mapCoordinates} />
+                                    </Suspense>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* What's Next Section */}
+                        <div className="bg-white rounded-lg shadow-lg p-8">
+                            <h3 className="font-serif text-xl text-text-earthy mb-6">What's Next?</h3>
+                            <div className="space-y-4">
+                                <div className="flex gap-4">
+                                    <div className="w-10 h-10 bg-accent-earthy/10 rounded-full flex items-center justify-center flex-shrink-0">
+                                        <Package className="w-5 h-5 text-accent-earthy" />
+                                    </div>
+                                    <div>
+                                        <h4 className="font-medium text-text-earthy mb-1">Order Confirmation</h4>
+                                        <p className="text-sm text-text-earthy/70">
+                                            We'll send you an email confirmation with your order details shortly.
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="flex gap-4">
+                                    <div className="w-10 h-10 bg-accent-earthy/10 rounded-full flex items-center justify-center flex-shrink-0">
+                                        <Truck className="w-5 h-5 text-accent-earthy" />
+                                    </div>
+                                    <div>
+                                        <h4 className="font-medium text-text-earthy mb-1">Shipping Updates</h4>
+                                        <p className="text-sm text-text-earthy/70">
+                                            We'll notify you when your order ships. Estimated delivery: 3-5 business days.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
-                <div className="bg-white rounded-lg shadow-lg p-8">
-                     <h3 className="font-serif text-xl text-text-earthy mb-4 flex items-center gap-2">
-                        <MapPin className="w-5 h-5 text-accent-earthy" />
-                        Shipping To
-                     </h3>
-                     {shippingAddress ? (
-                         <div className="text-text-earthy/80">
-                             <p className="font-medium">{shippingAddress.last_name}</p>
-                             <p>{shippingAddress.country_code?.toUpperCase()}</p>
-                             <p className="text-xs text-text-earthy/50 mt-2 italic">* Personal details masked for security</p>
-                         </div>
-                     ) : (
-                         <p className="italic text-text-earthy/60">No shipping address</p>
-                     )}
+                {/* From the Journal Section */}
+                <div className="mt-12">
+                    <h3 className="text-2xl font-serif text-text-earthy mb-6">From the Journal</h3>
+                    <div className="grid md:grid-cols-2 gap-6">
+                        {posts.slice(0, 2).map((post) => (
+                            <Link
+                                key={post.id}
+                                to={`/blog/${post.id}`}
+                                className="group block bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all"
+                            >
+                                <div className="aspect-[3/2] overflow-hidden">
+                                    <img
+                                        src={post.image}
+                                        alt={post.title}
+                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                                    />
+                                </div>
+                                <div className="p-6">
+                                    <div className="flex items-center gap-3 text-xs text-text-earthy/60 mb-3">
+                                        <span className="text-accent-earthy font-medium">{post.category}</span>
+                                        <span>•</span>
+                                        <span>{post.date}</span>
+                                    </div>
+                                    <h4 className="text-xl font-serif text-text-earthy group-hover:text-accent-earthy transition-colors mb-2">
+                                        {post.title}
+                                    </h4>
+                                    <p className="text-text-earthy/70 text-sm line-clamp-2">
+                                        {post.excerpt}
+                                    </p>
+                                </div>
+                            </Link>
+                        ))}
+                    </div>
+                    <div className="text-center mt-8">
+                        <Link to="/blog" className="text-accent-earthy font-medium hover:underline">
+                            View all stories &rarr;
+                        </Link>
+                    </div>
                 </div>
+
+                {/* Cancel Dialog */}
+                <CancelOrderDialog
+                    isOpen={showCancelDialog}
+                    onClose={() => setShowCancelDialog(false)}
+                    onConfirm={handleCancelOrder}
+                    orderNumber={String(order.display_id)}
+                />
+
+                {/* Cancel Rejected Modal */}
+                <CancelRejectedModal
+                    isOpen={showCancelRejectedModal}
+                    onClose={() => setShowCancelRejectedModal(false)}
+                />
             </div>
         </div>
     );
