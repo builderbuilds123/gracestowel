@@ -2,6 +2,7 @@ import { useRef, useCallback, useReducer } from "react";
 import { createLogger } from "../lib/logger";
 import { monitoredFetch } from "../utils/monitored-fetch";
 import type { ShippingOption } from "../types/checkout";
+import type { CartWithPromotions } from "../types/promotion";
 
 interface ShippingPersistenceState {
   error: string | null;
@@ -37,7 +38,14 @@ function shippingPersistenceReducer(
   }
 }
 
-export function useShippingPersistence(cartId?: string, traceId?: string) {
+interface UseShippingPersistenceOptions {
+  cartId?: string;
+  traceId?: string;
+  onCartUpdated?: (cart: CartWithPromotions) => void;
+}
+
+export function useShippingPersistence(options: UseShippingPersistenceOptions) {
+  const { cartId, traceId, onCartUpdated } = options;
   const [state, dispatch] = useReducer(shippingPersistenceReducer, initialPersistenceState);
   
   // SHP-01 Review Fix (Issue 6): Use Set to track in-flight requests for better race condition handling
@@ -110,10 +118,16 @@ export function useShippingPersistence(cartId?: string, traceId?: string) {
         lastPersistedShipping.current = option.id;
         dispatch({ type: 'PERSIST_SUCCESS' });
 
-        logger.info('[SHP-01] Shipping method persisted to cart successfully', { 
+        logger.info('[SHP-01] Shipping method persisted to cart successfully', {
           optionId: option.id,
-          cartId 
+          cartId
         });
+
+        // Update cart state with new totals if callback provided
+        const responseData = await response.json() as { cart?: CartWithPromotions };
+        if (responseData.cart && onCartUpdated) {
+          onCartUpdated(responseData.cart);
+        }
       }
     } catch (error) {
       logger.error('[SHP-01] Error persisting shipping method', error as Error, { 
@@ -129,7 +143,7 @@ export function useShippingPersistence(cartId?: string, traceId?: string) {
       // SHP-01 Review Fix (Issue 6): Remove from in-flight set
       inFlightShippingRequests.current.delete(option.id);
     }
-  }, [cartId, traceId]);
+  }, [cartId, traceId, onCartUpdated]);
 
   return {
     isShippingPersisted: state.isPersisted,

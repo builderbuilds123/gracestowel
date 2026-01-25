@@ -1,3 +1,6 @@
+// DEPRECATED: Replaced by native workflow (create-fulfillment-with-capture)
+// This subscriber is disabled to prevent double-capture.
+/*
 import type {
   SubscriberArgs,
   SubscriberConfig,
@@ -133,3 +136,4 @@ export default async function fulfillmentCreatedHandler({
 export const config: SubscriberConfig = {
   event: "fulfillment.created",
 }
+*/

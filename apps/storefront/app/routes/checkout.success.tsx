@@ -70,9 +70,12 @@ const getCartIdFromCookie = (cookieHeader: string | null): string | null => {
 
 /**
  * Clear cart cookie
+ * Note: NOT HttpOnly - must be readable by JavaScript in MedusaCartContext
+ * so the client can detect when the cart cookie has been cleared by the server
+ * and sync client-side storage (localStorage/sessionStorage) accordingly.
  */
 const clearCartCookie = (): string =>
-    "medusa_cart_id=; Max-Age=0; Path=/; SameSite=Lax; HttpOnly";
+    "medusa_cart_id=; Max-Age=0; Path=/; SameSite=Lax";
 
 /**
  * Fetch order from Medusa by payment intent ID with retry logic

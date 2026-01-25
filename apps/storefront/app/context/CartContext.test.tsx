@@ -1,19 +1,16 @@
 /**
- * Unit tests for CartContext - Active Order State
- * 
- * Story 3.1: Add Order State to CartContext with sessionStorage
- * 
+ * Unit tests for CartContext - Basic Cart Operations
+ *
  * Tests:
- * - Active order state management
+ * - Cart item management (add, remove, update)
  * - sessionStorage persistence
- * - Expiry handling
- * - Edge cases
+ * - Cart total calculation
  */
 
 import React from "react";
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
-import { CartProvider, ActiveOrderData, useCart } from "./CartContext";
+import { CartProvider, useCart } from "./CartContext";
 import { MedusaCartProvider } from "./MedusaCartContext";
 import { LocaleProvider } from "./LocaleContext";
 import { CustomerProvider } from "./CustomerContext";
@@ -75,32 +72,16 @@ const createWrapper = ({ children }: { children: React.ReactNode }) => (
   </LocaleProvider>
 );
 
-const mockActiveOrderData: ActiveOrderData = {
-  orderId: "order_123",
-  items: [
-    {
-      id: "item_1",
-      title: "Test Product",
-      quantity: 2,
-      thumbnail: "https://example.com/image.jpg",
-      unit_price: 5000,
-    },
-  ],
-  shippingAddress: {
-    first_name: "John",
-    last_name: "Doe",
-    address_1: "123 Main St",
-    city: "New York",
-    postal_code: "10001",
-    country_code: "us",
-  },
-  shippingMethodId: "sm_123",
-  email: "test@example.com",
-  customerName: "John Doe",
-  createdAt: new Date().toISOString(),
+const mockCartItem = {
+  id: "prod_123",
+  variantId: "var_123",
+  title: "Test Product",
+  price: "$50.00",
+  image: "https://example.com/image.jpg",
+  quantity: 1,
 };
 
-describe("CartContext - Active Order State (Story 3.1)", () => {
+describe("CartContext - Basic Cart Operations", () => {
   beforeEach(() => {
     mockSessionStorage.clear();
     vi.clearAllMocks();
@@ -110,170 +91,197 @@ describe("CartContext - Active Order State (Story 3.1)", () => {
     mockSessionStorage.clear();
   });
 
-  describe("setActiveOrder", () => {
-    it("should set active order and persist to sessionStorage", () => {
+  describe("addToCart", () => {
+    it("should add an item to the cart", () => {
       const { result } = renderHook(() => useCart(), { wrapper: createWrapper });
 
       act(() => {
-        result.current.setActiveOrder(mockActiveOrderData);
+        result.current.addToCart(mockCartItem);
       });
 
-      expect(result.current.activeOrder).toEqual(mockActiveOrderData);
-      expect(result.current.isModifyingOrder).toBe(true);
-
-      const stored = mockSessionStorage.getItem("activeOrder");
-      expect(stored).toBeTruthy();
-      const parsed = JSON.parse(stored!);
-      expect(parsed.orderId).toBe(mockActiveOrderData.orderId);
+      expect(result.current.items).toHaveLength(1);
+      expect(result.current.items[0].title).toBe("Test Product");
     });
 
-    it("should update sessionStorage when active order changes", () => {
+    it("should increment quantity when adding the same item", () => {
       const { result } = renderHook(() => useCart(), { wrapper: createWrapper });
 
-      const firstOrder = { ...mockActiveOrderData, orderId: "order_1" };
-      const secondOrder = { ...mockActiveOrderData, orderId: "order_2" };
-
       act(() => {
-        result.current.setActiveOrder(firstOrder);
+        result.current.addToCart(mockCartItem);
       });
 
       act(() => {
-        result.current.setActiveOrder(secondOrder);
+        result.current.addToCart(mockCartItem);
       });
 
-      const stored = mockSessionStorage.getItem("activeOrder");
-      const parsed = JSON.parse(stored!);
-      expect(parsed.orderId).toBe("order_2");
+      expect(result.current.items).toHaveLength(1);
+      expect(result.current.items[0].quantity).toBe(2);
+    });
+
+    it("should add different items separately", () => {
+      const { result } = renderHook(() => useCart(), { wrapper: createWrapper });
+
+      act(() => {
+        result.current.addToCart(mockCartItem);
+      });
+
+      act(() => {
+        result.current.addToCart({
+          ...mockCartItem,
+          id: "prod_456",
+          variantId: "var_456",
+          title: "Another Product",
+        });
+      });
+
+      expect(result.current.items).toHaveLength(2);
+    });
+
+    it("should open cart drawer when adding item", () => {
+      const { result } = renderHook(() => useCart(), { wrapper: createWrapper });
+
+      expect(result.current.isOpen).toBe(false);
+
+      act(() => {
+        result.current.addToCart(mockCartItem);
+      });
+
+      expect(result.current.isOpen).toBe(true);
+    });
+
+    it("should not open cart drawer when adding with silent option", () => {
+      const { result } = renderHook(() => useCart(), { wrapper: createWrapper });
+
+      expect(result.current.isOpen).toBe(false);
+
+      act(() => {
+        result.current.addToCart(mockCartItem, { silent: true });
+      });
+
+      expect(result.current.isOpen).toBe(false);
     });
   });
 
-  describe("clearActiveOrder", () => {
-    it("should clear active order and remove from sessionStorage", () => {
+  describe("removeFromCart", () => {
+    it("should remove an item from the cart", () => {
       const { result } = renderHook(() => useCart(), { wrapper: createWrapper });
 
       act(() => {
-        result.current.setActiveOrder(mockActiveOrderData);
+        result.current.addToCart(mockCartItem);
       });
 
-      expect(result.current.activeOrder).toBeTruthy();
+      expect(result.current.items).toHaveLength(1);
 
       act(() => {
-        result.current.clearActiveOrder();
+        result.current.removeFromCart(mockCartItem.id, undefined, mockCartItem.variantId);
       });
 
-      expect(result.current.activeOrder).toBe(null);
-      expect(result.current.isModifyingOrder).toBe(false);
-      expect(mockSessionStorage.getItem("activeOrder")).toBeNull();
+      expect(result.current.items).toHaveLength(0);
     });
   });
 
-  describe("isModifyingOrder", () => {
-    it("should be true when active order is set", () => {
+  describe("updateQuantity", () => {
+    it("should update item quantity", () => {
       const { result } = renderHook(() => useCart(), { wrapper: createWrapper });
 
       act(() => {
-        result.current.setActiveOrder(mockActiveOrderData);
+        result.current.addToCart(mockCartItem);
       });
 
-      expect(result.current.isModifyingOrder).toBe(true);
+      act(() => {
+        result.current.updateQuantity(mockCartItem.id, 5, undefined, mockCartItem.variantId);
+      });
+
+      expect(result.current.items[0].quantity).toBe(5);
     });
 
-    it("should be false when active order is null", () => {
+    it("should remove item when quantity is set to 0", () => {
       const { result } = renderHook(() => useCart(), { wrapper: createWrapper });
 
-      expect(result.current.isModifyingOrder).toBe(false);
+      act(() => {
+        result.current.addToCart(mockCartItem);
+      });
+
+      act(() => {
+        result.current.updateQuantity(mockCartItem.id, 0, undefined, mockCartItem.variantId);
+      });
+
+      expect(result.current.items).toHaveLength(0);
     });
   });
 
-  describe("sessionStorage persistence on mount", () => {
-    it("should load active order from sessionStorage on mount", async () => {
-      mockSessionStorage.setItem("activeOrder", JSON.stringify(mockActiveOrderData));
-
+  describe("clearCart", () => {
+    it("should clear all items from the cart", () => {
       const { result } = renderHook(() => useCart(), { wrapper: createWrapper });
 
-      await waitFor(() => {
-        expect(result.current.activeOrder).toBeTruthy();
+      act(() => {
+        result.current.addToCart(mockCartItem);
+        result.current.addToCart({
+          ...mockCartItem,
+          id: "prod_456",
+          variantId: "var_456",
+        });
       });
 
-      expect(result.current.activeOrder?.orderId).toBe(mockActiveOrderData.orderId);
+      expect(result.current.items).toHaveLength(2);
+
+      act(() => {
+        result.current.clearCart();
+      });
+
+      expect(result.current.items).toHaveLength(0);
     });
 
-    it("should remove expired active order from sessionStorage", async () => {
-      const expiredOrder = {
-        ...mockActiveOrderData,
-        createdAt: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(), // 25 hours ago
-      };
-      mockSessionStorage.setItem("activeOrder", JSON.stringify(expiredOrder));
-
+    it("should close the cart drawer when clearing", () => {
       const { result } = renderHook(() => useCart(), { wrapper: createWrapper });
 
-      await waitFor(() => {
-        expect(result.current.activeOrder).toBe(null);
+      act(() => {
+        result.current.addToCart(mockCartItem);
       });
 
-      expect(mockSessionStorage.getItem("activeOrder")).toBeNull();
-    });
+      expect(result.current.isOpen).toBe(true);
 
-    it("should handle corrupted sessionStorage data gracefully", async () => {
-      mockSessionStorage.setItem("activeOrder", "invalid json");
-
-      const { result } = renderHook(() => useCart(), { wrapper: createWrapper });
-
-      await waitFor(() => {
-        expect(result.current.activeOrder).toBe(null);
+      act(() => {
+        result.current.clearCart();
       });
 
-      expect(mockSessionStorage.getItem("activeOrder")).toBeNull();
-    });
-
-    it("should handle missing createdAt field", async () => {
-      const invalidOrder = { ...mockActiveOrderData };
-      delete (invalidOrder as any).createdAt;
-      mockSessionStorage.setItem("activeOrder", JSON.stringify(invalidOrder));
-
-      const { result } = renderHook(() => useCart(), { wrapper: createWrapper });
-
-      await waitFor(() => {
-        // Should either load it or clear it - depends on implementation
-        expect(result.current.activeOrder === null || result.current.activeOrder !== null).toBe(true);
-      });
+      expect(result.current.isOpen).toBe(false);
     });
   });
 
-  describe("edge cases", () => {
-    it("should handle empty active order data", () => {
+  describe("toggleCart", () => {
+    it("should toggle cart open/closed", () => {
       const { result } = renderHook(() => useCart(), { wrapper: createWrapper });
 
-      const emptyOrder = {
-        ...mockActiveOrderData,
-        items: [],
-      };
+      expect(result.current.isOpen).toBe(false);
 
       act(() => {
-        result.current.setActiveOrder(emptyOrder);
+        result.current.toggleCart();
       });
 
-      expect(result.current.activeOrder?.items).toEqual([]);
+      expect(result.current.isOpen).toBe(true);
+
+      act(() => {
+        result.current.toggleCart();
+      });
+
+      expect(result.current.isOpen).toBe(false);
     });
+  });
 
-    it("should handle active order with many items", () => {
+  describe("cartTotal", () => {
+    it("should calculate cart total correctly", () => {
       const { result } = renderHook(() => useCart(), { wrapper: createWrapper });
 
-      const largeOrder = {
-        ...mockActiveOrderData,
-        items: Array.from({ length: 100 }, (_, i) => ({
-          id: `item_${i}`,
-          title: `Product ${i}`,
-          quantity: 1,
-          unit_price: 1000,
-        })),
-      };
-
       act(() => {
-        result.current.setActiveOrder(largeOrder);
+        result.current.addToCart({
+          ...mockCartItem,
+          price: "$25.00",
+          quantity: 2,
+        });
       });
 
-      expect(result.current.activeOrder?.items.length).toBe(100);
+      expect(result.current.cartTotal).toBe(50);
     });
   });
 });

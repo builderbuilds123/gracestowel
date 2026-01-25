@@ -1,4 +1,4 @@
-import { X, Minus, Plus, Sparkles, Towel, CheckCircle } from '../lib/icons';
+import { X, Minus, Plus, Sparkles, Towel } from '../lib/icons';
 import { useCart } from '../context/CartContext';
 import { useLocale } from '../context/LocaleContext';
 import { Link } from 'react-router';
@@ -16,14 +16,9 @@ export function CartDrawer() {
         updateQuantity,
         cartTotal,
         isSyncing,
-        activeOrder,
-        isModifyingOrder,
-        clearActiveOrder,
-        isPostCheckout,
-        postCheckoutOrderId,
     } = useCart();
     const { formatPrice, t } = useLocale();
-    
+
     // PROMO-1 Phase 3: Fetch free shipping threshold from backend
     const { freeShippingThreshold } = useAutomaticPromotions({
         cartSubtotal: cartTotal,
@@ -49,66 +44,22 @@ export function CartDrawer() {
                 <div className="p-6 border-b border-gray-100 flex justify-between items-center">
                     <h2 className="text-2xl font-serif text-text-earthy flex items-center gap-2">
                         <Towel size={24} weight="regular" />
-                        {isModifyingOrder || isPostCheckout ? "Modify Order" : t('cart.title')}
+                        {t('cart.title')}
                     </h2>
                     <button onClick={toggleCart} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
                         <X className="w-6 h-6 text-text-earthy" />
                     </button>
                 </div>
 
-                {/* Story 3.2: Order Confirmed Banner - show in modification or post-checkout mode */}
-                {(isModifyingOrder || isPostCheckout) ? (
-                    <div className="mx-6 mt-4 bg-green-50 border border-green-200 p-4 rounded-lg">
-                        <div className="flex items-center gap-2 text-green-800">
-                            <CheckCircle className="w-5 h-5" />
-                            <span className="font-medium">Checkout Confirmed</span>
-                        </div>
-                        <p className="text-sm text-green-700 mt-1">
-                            You can modify your order until it ships.
-                        </p>
-                    </div>
-                ) : null}
-
                 <div className="flex-1 overflow-y-auto p-6">
-                    {!isModifyingOrder && items.length > 0 && freeShippingThreshold !== null ? (
-                        <CartProgressBar 
+                    {items.length > 0 && freeShippingThreshold !== null ? (
+                        <CartProgressBar
                             currentAmount={cartTotal}
                             threshold={freeShippingThreshold}
                             type="free_shipping"
                         />
                     ) : null}
-                    {isModifyingOrder && activeOrder ? (
-                        // Story 3.2: Show order items in modification mode
-                        <div className="space-y-6">
-                            {activeOrder.items.map((item) => (
-                                <div key={item.id} className="flex gap-4">
-                                    <div className="w-24 h-24 bg-card-earthy/30 rounded-md overflow-hidden flex-shrink-0">
-                                        {item.thumbnail ? (
-                                            <Image src={item.thumbnail} alt={item.title} width={96} height={96} className="w-full h-full object-cover" />
-                                        ) : (
-                                            <div className="w-full h-full flex items-center justify-center bg-gray-100">
-                                                <Towel size={32} weight="thin" className="opacity-20" />
-                                            </div>
-                                        )}
-                                    </div>
-                                    <div className="flex-1">
-                                        <div className="flex justify-between items-start mb-2">
-                                            <div>
-                                                <h3 className="font-medium text-text-earthy">{item.title}</h3>
-                                            </div>
-                                        </div>
-                                        <ProductPrice
-                                            price={formatPrice(item.unit_price)}
-                                            className="mb-4"
-                                        />
-                                        <div className="flex items-center gap-3">
-                                            <span className="w-8 text-center text-text-earthy/60">Qty: {item.quantity}</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    ) : items.length === 0 ? (
+                    {items.length === 0 ? (
                         <div className="h-full flex flex-col items-center justify-center text-text-earthy/60">
                             <Towel size={64} weight="thin" className="mb-4 opacity-20" />
                             <p className="text-lg">{t('cart.empty')}</p>
@@ -199,34 +150,24 @@ export function CartDrawer() {
                     )}
                 </div>
 
-                {(items.length > 0 || isModifyingOrder || isPostCheckout) ? (
+                {items.length > 0 ? (
                     <div className="p-6 border-t border-gray-100 bg-gray-50">
-                        {!isModifyingOrder && !isPostCheckout ? (
-                            <>
-                                <div className="flex justify-between items-center mb-4">
-                                    <span className="text-text-earthy/60">{t('cart.subtotal')}</span>
-                                    {isSyncing ? (
-                                        <span className="inline-block w-20 h-7 bg-gray-200 rounded animate-pulse" />
-                                    ) : (
-                                        <span className="text-xl font-bold text-text-earthy">{formatPrice(cartTotal)}</span>
-                                    )}
-                                </div>
-                                <p className="text-xs text-text-earthy/40 mb-4 text-center">Shipping and taxes calculated at checkout.</p>
-                            </>
-                        ) : null}
+                        <div className="flex justify-between items-center mb-4">
+                            <span className="text-text-earthy/60">{t('cart.subtotal')}</span>
+                            {isSyncing ? (
+                                <span className="inline-block w-20 h-7 bg-gray-200 rounded animate-pulse" />
+                            ) : (
+                                <span className="text-xl font-bold text-text-earthy">{formatPrice(cartTotal)}</span>
+                            )}
+                        </div>
+                        <p className="text-xs text-text-earthy/40 mb-4 text-center">Shipping and taxes calculated at checkout.</p>
                         <Link
-                            to={
-                                isModifyingOrder && activeOrder
-                                    ? `/order/${activeOrder.orderId}/edit`
-                                    : isPostCheckout && postCheckoutOrderId
-                                        ? `/order/${postCheckoutOrderId}/edit`
-                                        : "/checkout"
-                            }
+                            to="/checkout"
                             onClick={toggleCart}
                             prefetch="intent"
                             className="block w-full py-4 bg-accent-earthy text-white text-center font-semibold rounded hover:bg-accent-earthy/90 transition-colors shadow-lg"
                         >
-                            {isModifyingOrder || isPostCheckout ? "Edit Order" : t('cart.checkout')}
+                            {t('cart.checkout')}
                         </Link>
                     </div>
                 ) : null}

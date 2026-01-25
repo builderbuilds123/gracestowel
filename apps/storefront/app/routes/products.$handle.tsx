@@ -159,26 +159,22 @@ export async function loader({ params, context }: Route.LoaderArgs) {
 
     // OPTIMIZATION: Await reviews here (not related products - that streams via Suspense)
     // Reviews are needed for initial render, related products can stream
-    const reviewsData = (await reviewsPromise) as { reviews: Review[]; stats: ReviewStats };
-
+    // UPDATE: Now deferring reviews as well for faster LCP
+    
     return {
         product,
         relatedProducts: relatedProductsPromise,
-        reviews: reviewsData.reviews,
-        reviewStats: reviewsData.stats,
+        reviewsPromise,
+        initialReviews: null, // No longer waiting in loader
+        initialStats: null,
     };
 }
 
 export default function ProductDetailPage({ loaderData }: Route.ComponentProps) {
-    const { product, relatedProducts, reviews: initialReviews, reviewStats: initialStats } = loaderData;
+    const { product, relatedProducts, reviewsPromise } = loaderData;
     const { addToCart, items: cartItems, toggleCart } = useCart();
     const logger = useMemo(() => createLogger({ context: "product-page" }), []);
 
-    const [isReviewFormOpen, setIsReviewFormOpen] = useState(false);
-    const [reviews, setReviews] = useState<Review[]>(initialReviews || []);
-    const [reviewStats, setReviewStats] = useState<ReviewStats>(initialStats || { average: 0, count: 0, distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 } });
-    const [reviewSort, setReviewSort] = useState("newest");
-    const [isSubmittingReview, setIsSubmittingReview] = useState(false);
     const [selectedColor, setSelectedColor] = useState(product.colors?.[0] || "");
     const [quantity, setQuantity] = useState(1);
 
@@ -223,43 +219,7 @@ export default function ProductDetailPage({ loaderData }: Route.ComponentProps) 
         }
     }, [product.id, product.handle, product.title, product.price, stockStatus]);
 
-    const handleSortChange = useCallback(async (sort: string) => {
-        setReviewSort(sort);
-        try {
-            // Client-side: medusaFetch will use window.ENV for publishable key
-            const response = await medusaFetch(`/store/products/${product.id}/reviews?sort=${sort}&limit=10`, {
-                method: "GET",
-                label: "product-reviews",
-            });
-            if (response.ok) {
-                const data = (await response.json()) as { reviews: Review[] };
-                setReviews(data.reviews);
-            }
-        } catch (error) {
-            logger.error("Failed to fetch reviews", error instanceof Error ? error : new Error(String(error)), { productId: product.id, sort });
-        }
-    }, [product.id, logger]);
 
-    const handleSubmitReview = async (reviewData: { rating: number; title: string; content: string; customer_name: string; customer_email?: string }) => {
-        setIsSubmittingReview(true);
-        try {
-            // Client-side: medusaFetch will use window.ENV for publishable key
-            const response = await medusaFetch(`/store/products/${product.id}/reviews`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(reviewData),
-                label: "product-review-submit",
-            });
-            if (!response.ok) {
-                const error = (await response.json()) as { message?: string };
-                throw new Error(error.message || "Failed to submit review");
-            }
-            setIsReviewFormOpen(false);
-            handleSortChange(reviewSort);
-        } finally {
-            setIsSubmittingReview(false);
-        }
-    };
 
     // Filter images based on selected color - Using Medusa's native variant images
     const filteredImages = useMemo(() => {
@@ -362,14 +322,7 @@ export default function ProductDetailPage({ loaderData }: Route.ComponentProps) 
                 "@type": "Organization",
                 name: "Grace Stowel"
             }
-        },
-        ...(reviewStats.count > 0 ? {
-            aggregateRating: {
-                "@type": "AggregateRating",
-                ratingValue: reviewStats.average.toFixed(1),
-                reviewCount: String(reviewStats.count)
-            }
-        } : {})
+        }
     };
 
 
@@ -408,16 +361,35 @@ export default function ProductDetailPage({ loaderData }: Route.ComponentProps) 
                 </div>
             </section>
 
-            {/* Product Details */}
 
-
-            {/* Reviews */}
+            {/* Reviews - Deferred Loading */}
             <div id="reviews">
-                <ReviewRiver
-                    reviews={reviews}
-                    stats={reviewStats}
-                    onWriteReview={() => setIsReviewFormOpen(true)}
-                />
+                <Suspense fallback={
+                    <div className="py-12 bg-gray-50 animate-pulse">
+                        <div className="max-w-4xl mx-auto px-6">
+                            <div className="h-8 bg-gray-200 rounded w-48 mb-6 mx-auto"></div>
+                            <div className="h-4 bg-gray-200 rounded w-full max-w-2xl mx-auto mb-12"></div>
+                            <div className="space-y-4">
+                                <div className="h-24 bg-white rounded-lg p-6"></div>
+                                <div className="h-24 bg-white rounded-lg p-6"></div>
+                            </div>
+                        </div>
+                    </div>
+                }>
+                    <Await resolve={reviewsPromise} errorElement={
+                        <div className="py-12 text-center text-text-earthy/60">
+                            Unable to load reviews at this time.
+                        </div>
+                    }>
+                        {(resolvedReviews: any) => (
+                            <ReviewsContainer 
+                                initialReviews={resolvedReviews.reviews} 
+                                initialStats={resolvedReviews.stats}
+                                product={product}
+                            /> 
+                        )}
+                    </Await>
+                </Suspense>
             </div>
 
             {/* Related Products */}
@@ -466,6 +438,65 @@ export default function ProductDetailPage({ loaderData }: Route.ComponentProps) 
                 onViewCart={toggleCart}
                 cartItemCount={cartItemCount}
             />
+        </div>
+    );
+}
+
+// Separate component to handle Review state and logic
+function ReviewsContainer({ initialReviews, initialStats, product }: { initialReviews: Review[], initialStats: ReviewStats, product: ProductDetail }) {
+    const [reviews, setReviews] = useState<Review[]>(initialReviews || []);
+    const [reviewStats, setReviewStats] = useState<ReviewStats>(initialStats || { average: 0, count: 0, distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 } });
+    const [reviewSort, setReviewSort] = useState("newest");
+    const [isReviewFormOpen, setIsReviewFormOpen] = useState(false);
+    const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+    
+    // Create logger inside the component to ensure it's available
+    const logger = useMemo(() => createLogger({ context: "reviews-container" }), []);
+
+    const handleSortChange = useCallback(async (sort: string) => {
+        setReviewSort(sort);
+        try {
+            // Client-side: medusaFetch will use window.ENV
+            const response = await medusaFetch(`/store/products/${product.id}/reviews?sort=${sort}&limit=10`, {
+                method: "GET",
+                label: "product-reviews",
+            });
+            if (response.ok) {
+                const data = (await response.json()) as { reviews: Review[] };
+                setReviews(data.reviews);
+            }
+        } catch (error) {
+            logger.error("Failed to fetch reviews", error instanceof Error ? error : new Error(String(error)), { productId: product.id, sort });
+        }
+    }, [product.id, logger]);
+
+    const handleSubmitReview = async (reviewData: { rating: number; title: string; content: string; customer_name: string; customer_email?: string }) => {
+        setIsSubmittingReview(true);
+        try {
+            const response = await medusaFetch(`/store/products/${product.id}/reviews`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(reviewData),
+                label: "product-review-submit",
+            });
+            if (!response.ok) {
+                const error = (await response.json()) as { message?: string };
+                throw new Error(error.message || "Failed to submit review");
+            }
+            setIsReviewFormOpen(false);
+            handleSortChange(reviewSort);
+        } finally {
+            setIsSubmittingReview(false);
+        }
+    };
+
+    return (
+        <>
+            <ReviewRiver
+                reviews={reviews}
+                stats={reviewStats}
+                onWriteReview={() => setIsReviewFormOpen(true)}
+            />
 
             {/* Review Form Modal - Lazy loaded */}
             {isReviewFormOpen ? (
@@ -486,6 +517,6 @@ export default function ProductDetailPage({ loaderData }: Route.ComponentProps) 
                     />
                 </Suspense>
             ) : null}
-        </div>
+        </>
     );
 }

@@ -1,6 +1,6 @@
 import { useRef, useCallback, useReducer } from "react";
-import { getMedusaClient } from "../lib/medusa";
 import { createLogger } from "../lib/logger";
+import { monitoredFetch } from "../utils/monitored-fetch";
 import type { AppliedPromoCode, CartWithPromotions, LineItemAdjustment, ShippingMethodAdjustment } from "../types/promotion";
 
 const isDevelopment = process.env.NODE_ENV === 'development';
@@ -8,6 +8,8 @@ const isDevelopment = process.env.NODE_ENV === 'development';
 interface UsePromoCodeOptions {
   cartId: string | undefined;
   onCartUpdate?: () => void;
+  /** Called with the updated cart after promo code operations - avoids extra API call */
+  onCartUpdated?: (cart: CartWithPromotions) => void;
 }
 
 interface UsePromoCodeReturn {
@@ -203,6 +205,7 @@ function getDiscountState(
 export function usePromoCode({
   cartId,
   onCartUpdate,
+  onCartUpdated,
 }: UsePromoCodeOptions): UsePromoCodeReturn {
   const [state, dispatch] = useReducer(promoCodeReducer, initialPromoState);
 
@@ -226,12 +229,19 @@ export function usePromoCode({
 
     dispatch({ type: 'SET_LOADING', payload: true });
     try {
-      const client = getMedusaClient();
-      logger.info('[PromoCode] Refreshing discount from cart', { cartId });
-      
-      const { cart } = await client.store.cart.retrieve(cartId, {
-        fields: '+promotions,+promotions.application_method,+items.adjustments,+shipping_methods.adjustments',
+      logger.info('[PromoCode] Refreshing discount from cart via API route', { cartId });
+
+      // Use the loader endpoint to fetch cart data with promo info
+      const response = await monitoredFetch(`/api/carts/${cartId}`, {
+        method: 'GET',
+        label: 'refresh-promo-discount',
       });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch cart: ${response.status}`);
+      }
+
+      const result = await response.json() as { cart?: CartWithPromotions };
 
       if (currentRequestId !== refreshRequestIdRef.current) {
         logger.info('[PromoCode] Stale request, skipping', { currentRequestId, latestRequestId: refreshRequestIdRef.current });
@@ -239,15 +249,17 @@ export function usePromoCode({
         return;
       }
 
-      dispatch({ 
-        type: 'SET_DISCOUNT_STATE', 
-        payload: getDiscountState(cart as unknown as CartWithPromotions, logger) 
-      });
+      if (result.cart) {
+        dispatch({
+          type: 'SET_DISCOUNT_STATE',
+          payload: getDiscountState(result.cart, logger)
+        });
+      }
     } catch (err) {
       logger.warn('Failed to refresh discount', { error: err });
-      dispatch({ 
-        type: 'SET_ERROR', 
-        payload: "Failed to refresh discounts. Please try again." 
+      dispatch({
+        type: 'SET_ERROR',
+        payload: "Failed to refresh discounts. Please try again."
       });
     }
   }, [cartId, logger]);
@@ -287,39 +299,60 @@ export function usePromoCode({
       dispatch({ type: 'SET_LOADING', payload: true });
 
       try {
-        const client = getMedusaClient();
-        logger.info('[PromoCode] Applying promo code', { code: normalizedCode });
-        
+        logger.info('[PromoCode] Applying promo code via API route', { code: normalizedCode, cartId });
+
         const manualCodes = state.appliedCodes
           .filter(c => !c.isAutomatic)
           .map(c => c.code);
-        
+
         const allManualCodes = [...manualCodes, normalizedCode];
 
-        const { cart } = await client.store.cart.update(cartId, {
-          promo_codes: allManualCodes,
+        // Use the proxied API route instead of direct SDK call to avoid CORS issues
+        const response = await monitoredFetch(`/api/carts/${cartId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ promo_codes: allManualCodes }),
+          label: 'apply-promo-code',
         });
 
-        const rebuiltCodes = extractAppliedCodesFromCart(cart as unknown as CartWithPromotions, logger);
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          const errorMessage = (errorData as { error?: string }).error || 'Failed to apply promo code';
+          logger.warn('[PromoCode] API returned error', { status: response.status, error: errorMessage });
+          dispatch({ type: 'SET_ERROR', payload: extractErrorMessage(new Error(errorMessage)) });
+          return false;
+        }
+
+        const result = await response.json() as { cart?: CartWithPromotions };
+        const cart = result.cart;
+
+        if (!cart) {
+          dispatch({ type: 'SET_ERROR', payload: 'Failed to get updated cart' });
+          return false;
+        }
+
+        const rebuiltCodes = extractAppliedCodesFromCart(cart, logger);
         const wasApplied = rebuiltCodes.some(c => c.code.toUpperCase() === normalizedCode);
-        
+
         if (!wasApplied) {
           logger.warn('[PromoCode] Code accepted by API but not found in adjustments', {
             code: normalizedCode,
             availableCodes: rebuiltCodes.map(c => c.code)
           });
-          dispatch({ 
-            type: 'SET_ERROR', 
-            payload: `Promo code "${normalizedCode}" could not be applied. Check requirements.` 
+          dispatch({
+            type: 'SET_ERROR',
+            payload: `Promo code "${normalizedCode}" could not be applied. Check requirements.`
           });
           return false;
         }
 
-        dispatch({ 
-          type: 'SET_DISCOUNT_STATE', 
-          payload: getDiscountState(cart as unknown as CartWithPromotions, logger) 
+        dispatch({
+          type: 'SET_DISCOUNT_STATE',
+          payload: getDiscountState(cart, logger)
         });
         dispatch({ type: 'SET_SUCCESS', payload: `Promo code "${normalizedCode}" applied!` });
+        // Update medusaCart directly with the response to avoid extra API call
+        onCartUpdated?.(cart);
         onCartUpdate?.();
         return true;
       } catch (err: unknown) {
@@ -328,7 +361,7 @@ export function usePromoCode({
         return false;
       }
     },
-    [cartId, state.appliedCodes, onCartUpdate, logger]
+    [cartId, state.appliedCodes, onCartUpdate, onCartUpdated, logger]
   );
 
   const removePromoCode = useCallback(
@@ -342,22 +375,43 @@ export function usePromoCode({
       dispatch({ type: 'SET_LOADING', payload: true });
 
       try {
-        const client = getMedusaClient();
-        logger.info('[PromoCode] Removing promo code', { code });
-        
+        logger.info('[PromoCode] Removing promo code via API route', { code, cartId });
+
         const remainingManualCodes = state.appliedCodes
           .filter(c => c.code !== code && !c.isAutomatic)
           .map(c => c.code);
-        
-        const { cart } = await client.store.cart.update(cartId, {
-          promo_codes: remainingManualCodes,
+
+        // Use the proxied API route instead of direct SDK call to avoid CORS issues
+        const response = await monitoredFetch(`/api/carts/${cartId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ promo_codes: remainingManualCodes }),
+          label: 'remove-promo-code',
         });
 
-        dispatch({ 
-          type: 'SET_DISCOUNT_STATE', 
-          payload: getDiscountState(cart as unknown as CartWithPromotions, logger) 
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          const errorMessage = (errorData as { error?: string }).error || 'Failed to remove promo code';
+          logger.warn('[PromoCode] API returned error', { status: response.status, error: errorMessage });
+          dispatch({ type: 'SET_ERROR', payload: extractErrorMessage(new Error(errorMessage)) });
+          return false;
+        }
+
+        const result = await response.json() as { cart?: CartWithPromotions };
+        const cart = result.cart;
+
+        if (!cart) {
+          dispatch({ type: 'SET_ERROR', payload: 'Failed to get updated cart' });
+          return false;
+        }
+
+        dispatch({
+          type: 'SET_DISCOUNT_STATE',
+          payload: getDiscountState(cart, logger)
         });
         dispatch({ type: 'SET_SUCCESS', payload: "Promo code removed" });
+        // Update medusaCart directly with the response to avoid extra API call
+        onCartUpdated?.(cart);
         onCartUpdate?.();
         return true;
       } catch (err: unknown) {
@@ -366,7 +420,7 @@ export function usePromoCode({
         return false;
       }
     },
-    [cartId, state.appliedCodes, onCartUpdate, logger]
+    [cartId, state.appliedCodes, onCartUpdate, onCartUpdated, logger]
   );
 
   return {

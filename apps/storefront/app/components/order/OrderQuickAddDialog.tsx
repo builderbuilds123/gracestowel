@@ -44,12 +44,30 @@ interface Product {
     }>;
 }
 
+/**
+ * Pending item structure for batch modification flow.
+ * Matches the PendingItem interface in order_.$id.edit.tsx
+ */
+export interface PendingItemData {
+    variantId: string;
+    productTitle: string;
+    variantTitle?: string;
+    thumbnail?: string;
+    quantity: number;
+    unitPrice: number;
+    subtotal: number;
+}
+
 interface OrderQuickAddDialogProps {
     isOpen: boolean;
     onToggle: () => void;
     orderId: string;
     modificationToken: string;
     regionId?: string | null;
+    currencyCode?: string;
+    /** New batch flow: Add item to pending state instead of API call */
+    onAddItem?: (item: PendingItemData) => void;
+    /** Legacy: Refresh order data after immediate API call (deprecated) */
     onItemAdded: () => void;
 }
 
@@ -63,9 +81,13 @@ export function OrderQuickAddDialog({
     orderId,
     modificationToken,
     regionId,
+    currencyCode: propCurrencyCode,
+    onAddItem,
     onItemAdded,
 }: OrderQuickAddDialogProps) {
-    const { currency: currencyCode } = useLocale();
+    const { currency: localeCurrency } = useLocale();
+    // Use prop currency code if provided (from order), fallback to locale
+    const currencyCode = propCurrencyCode || localeCurrency;
     const [isLoadingProducts, setIsLoadingProducts] = useState(false);
     const [products, setProducts] = useState<Product[]>([]);
     const [selectedVariants, setSelectedVariants] = useState<Record<string, string>>({});
@@ -169,10 +191,33 @@ export function OrderQuickAddDialog({
         if (!variant) return;
 
         const quantity = quantities[product.id] || 1;
+        const priceAmount = getVariantPrice(variant);
+        if (priceAmount === null) return;
 
         setAddingProductId(product.id);
         setError(null);
 
+        // NEW: Batch modification flow - add to pending state instead of API call
+        if (onAddItem) {
+            const pendingItem: PendingItemData = {
+                variantId,
+                productTitle: product.title,
+                variantTitle: variant.title !== 'Default Title' ? variant.title : undefined,
+                thumbnail: product.thumbnail,
+                quantity,
+                unitPrice: priceAmount,
+                subtotal: priceAmount * quantity,
+            };
+
+            onAddItem(pendingItem);
+
+            // Reset quantity and show brief feedback
+            setQuantities(prev => ({ ...prev, [product.id]: 1 }));
+            setTimeout(() => setAddingProductId(null), 500);
+            return;
+        }
+
+        // LEGACY: Immediate API call (deprecated, kept for backward compatibility)
         try {
             const response = await medusaFetch(`/store/orders/${orderId}/line-items`, {
                 method: "POST",
@@ -204,7 +249,7 @@ export function OrderQuickAddDialog({
             setError(err instanceof Error ? err.message : "Failed to add item");
             setAddingProductId(null);
         }
-    }, [selectedVariants, quantities, orderId, modificationToken, onItemAdded, logger]);
+    }, [selectedVariants, quantities, orderId, modificationToken, onAddItem, onItemAdded, getVariantPrice, logger]);
 
     // Check if a variant is available for purchase
     const isVariantAvailable = useCallback((variant: ProductVariant): boolean => {

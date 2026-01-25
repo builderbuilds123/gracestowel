@@ -28,6 +28,10 @@ interface ProductVariant {
         value: string;
         option_id: string;
     }>;
+    // Inventory tracking
+    inventory_quantity?: number;
+    manage_inventory?: boolean;
+    allow_backorder?: boolean;
 }
 
 interface Product {
@@ -79,7 +83,7 @@ export function QuickAddProductDialog({ isOpen, onToggle, regionId }: QuickAddPr
             params.append('limit', '6');
             // Use Medusa v2 field patterns for pricing
             // +field adds to defaults, *relation expands nested data
-            params.append('fields', '+variants.calculated_price,*variants.options,*options');
+            params.append('fields', '+variants.calculated_price,*variants.options,*options,+variants.inventory_quantity,+variants.manage_inventory,+variants.allow_backorder');
             if (regionId) {
                 params.append('region_id', regionId);
             }
@@ -89,15 +93,27 @@ export function QuickAddProductDialog({ isOpen, onToggle, regionId }: QuickAddPr
             });
             if (response.ok) {
                 const data = await response.json() as { products?: Product[] };
-                const productList = data.products || [];
+                const allProducts = data.products || [];
+
+                // Filter to only products with at least one available variant
+                const isAvailable = (variant: ProductVariant): boolean => {
+                    if (variant.manage_inventory === false) return true;
+                    if (variant.allow_backorder) return true;
+                    return (variant.inventory_quantity ?? 0) > 0;
+                };
+
+                const productList = allProducts.filter(product =>
+                    product.variants.some(isAvailable)
+                );
                 setProducts(productList);
 
-                // Initialize selected variants to first variant of each product
+                // Initialize selected variants to first available variant of each product
                 const initialVariants: Record<string, string> = {};
                 const initialQuantities: Record<string, number> = {};
                 productList.forEach(product => {
-                    if (product.variants.length > 0) {
-                        initialVariants[product.id] = product.variants[0].id;
+                    const availableVariant = product.variants.find(isAvailable);
+                    if (availableVariant) {
+                        initialVariants[product.id] = availableVariant.id;
                         initialQuantities[product.id] = 1;
                     }
                 });
@@ -172,18 +188,35 @@ export function QuickAddProductDialog({ isOpen, onToggle, regionId }: QuickAddPr
             image: product.thumbnail || product.images?.[0]?.url || "",
             quantity,
             color: colorOption?.value,
-        });
+        }, { silent: true });
 
         // Reset quantity and show brief feedback
         setQuantities(prev => ({ ...prev, [product.id]: 1 }));
         setTimeout(() => setAddingProductId(null), 800);
     }, [selectedVariants, quantities, currencyCode, addToCart, getVariantPrice]);
 
+    // Check if a variant is available for purchase
+    const isVariantAvailable = useCallback((variant: ProductVariant): boolean => {
+        // If inventory is not managed, always available
+        if (variant.manage_inventory === false) return true;
+        // If backorders are allowed, always available
+        if (variant.allow_backorder) return true;
+        // Otherwise, check inventory quantity
+        return (variant.inventory_quantity ?? 0) > 0;
+    }, []);
+
+    // Get available variants for a product
+    const getAvailableVariants = useCallback((product: Product): ProductVariant[] => {
+        return product.variants.filter(isVariantAvailable);
+    }, [isVariantAvailable]);
+
     const getColorOptions = (product: Product): Array<{ variantId: string; color: string }> => {
         const colorOptionDef = product.options?.find(o => o.title.toLowerCase() === 'color');
         if (!colorOptionDef) return [];
 
+        // Only include available variants
         return product.variants
+            .filter(isVariantAvailable)
             .map(variant => {
                 const colorOpt = variant.options?.find(opt => opt.option_id === colorOptionDef.id);
                 return colorOpt ? { variantId: variant.id, color: colorOpt.value } : null;
@@ -213,7 +246,7 @@ export function QuickAddProductDialog({ isOpen, onToggle, regionId }: QuickAddPr
 
             {/* Expandable Products Section */}
             {isOpen && (
-                <div className="mt-4 space-y-3">
+                <div className="mt-4 max-h-80 overflow-y-auto space-y-3 pr-1">
                     {isLoadingProducts ? (
                         <div className="flex items-center justify-center py-6">
                             <Loader2 className="w-5 h-5 animate-spin text-accent-earthy" />

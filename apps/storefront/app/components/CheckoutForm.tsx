@@ -14,7 +14,6 @@ import type {
     StripeLinkAuthenticationElementChangeEvent,
 } from '@stripe/stripe-js';
 import { useCheckout } from './checkout/CheckoutProvider';
-import { useCart } from '../context/CartContext';
 import { createLogger } from '../lib/logger';
 import { monitoredFetch } from '../utils/monitored-fetch';
 import { ShippingSection } from './checkout/ShippingSection';
@@ -51,9 +50,6 @@ export function CheckoutForm({
         persistShippingOption,
         appliedPromoCodes
     } = useCheckout();
-
-    // Get post-checkout state from cart context
-    const { isPostCheckout } = useCart();
 
     const { 
         shippingOptions, 
@@ -488,10 +484,7 @@ export function CheckoutForm({
                 className="w-full bg-accent-earthy hover:bg-accent-earthy/90 text-white font-medium py-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-md active:scale-[0.98] transform"
             >
                 <span id="button-text">
-                    {isLoading
-                        ? (isPostCheckout ? 'Updating...' : 'Processing...')
-                        : (isPostCheckout ? 'Update Now' : 'Pay now')
-                    }
+                    {isLoading ? 'Processing...' : 'Pay now'}
                 </span>
             </button>
 

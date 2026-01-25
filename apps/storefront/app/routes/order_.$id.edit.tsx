@@ -15,9 +15,9 @@
  */
 import { data, redirect } from "react-router";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { useLoaderData, useActionData, useNavigation, Link, useRevalidator } from "react-router";
-import { useState, useEffect } from "react";
-import { ArrowLeft, AlertCircle, Package, Truck } from "../lib/icons";
+import { useLoaderData, useActionData, useNavigation, Link, useRevalidator, useNavigate } from "react-router";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { ArrowLeft, AlertCircle, Package, Truck, X } from "../lib/icons";
 import { OrderQuickAddDialog } from "../components/order/OrderQuickAddDialog";
 import { getGuestToken, setGuestToken, clearGuestToken } from "../utils/guest-session.server";
 import { medusaFetch } from "../lib/medusa-fetch";
@@ -70,6 +70,36 @@ interface OrderItem {
 interface PromoCode {
     code: string;
     amount: number;
+}
+
+/**
+ * Pending item added locally but not yet saved to server.
+ * Used for batch modification flow.
+ */
+export interface PendingItem {
+    id: string; // Temporary client-side ID (e.g., `pending_${variantId}_${timestamp}`)
+    variantId: string;
+    productTitle: string;
+    variantTitle?: string;
+    thumbnail?: string;
+    quantity: number;
+    unitPrice: number;
+    subtotal: number;
+}
+
+/**
+ * Combined display item for rendering both confirmed and pending items
+ * in a unified list with visual distinction.
+ */
+interface DisplayItem {
+    id: string;
+    title: string;
+    variantTitle?: string;
+    thumbnail?: string;
+    quantity: number;
+    unitPrice: number;
+    subtotal: number;
+    status: 'confirmed' | 'pending';
 }
 
 interface Order {
@@ -404,13 +434,128 @@ export default function OrderEdit() {
     const actionData = useActionData<ActionData>();
     const navigation = useNavigation();
     const revalidator = useRevalidator();
+    const navigate = useNavigate();
     const isSubmitting = navigation.state === "submitting";
 
     // Quick add dialog state
     const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
 
+    // Pending items state - items added locally but not yet saved to server
+    const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
+    const [isSavingItems, setIsSavingItems] = useState(false);
+    const [saveError, setSaveError] = useState<string | null>(null);
+
+    // Derived state for conditional rendering (React best practice: rerender-derived-state)
+    const hasPendingChanges = pendingItems.length > 0;
+
+    // Calculate pending totals in a single pass (React best practice: js-combine-iterations)
+    const pendingTotal = useMemo(() => {
+        return pendingItems.reduce((sum, item) => sum + item.subtotal, 0);
+    }, [pendingItems]);
+
+    // Combine confirmed items + pending items for unified display
+    const displayItems: DisplayItem[] = useMemo(() => [
+        ...order.items.map(item => ({
+            id: item.id,
+            title: item.title,
+            thumbnail: item.thumbnail,
+            quantity: item.quantity,
+            unitPrice: item.unit_price,
+            subtotal: item.subtotal,
+            status: 'confirmed' as const,
+        })),
+        ...pendingItems.map(item => ({
+            id: item.id,
+            title: item.productTitle,
+            variantTitle: item.variantTitle,
+            thumbnail: item.thumbnail,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            subtotal: item.subtotal,
+            status: 'pending' as const,
+        })),
+    ], [order.items, pendingItems]);
+
+    // Handler for adding items from OrderQuickAddDialog (React best practice: rerender-functional-setstate)
+    const handleAddPendingItem = useCallback((item: Omit<PendingItem, 'id'>) => {
+        setPendingItems(prev => [
+            ...prev,
+            {
+                ...item,
+                id: `pending_${item.variantId}_${Date.now()}`,
+            },
+        ]);
+        setSaveError(null);
+    }, []);
+
+    // Handler for removing a pending item
+    const handleRemovePendingItem = useCallback((itemId: string) => {
+        setPendingItems(prev => prev.filter(item => item.id !== itemId));
+    }, []);
+
+    // Handler for discarding all pending changes
+    const handleDiscardChanges = useCallback(() => {
+        setPendingItems([]);
+        setSaveError(null);
+    }, []);
+
+    // Handler for saving all pending items to server
+    const handleSaveItems = useCallback(async () => {
+        if (pendingItems.length === 0) return;
+
+        setIsSavingItems(true);
+        setSaveError(null);
+
+        try {
+            const response = await fetch(`/api/orders/${order.id}/batch-modify`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-modification-token': modificationToken,
+                },
+                body: JSON.stringify({
+                    items: pendingItems.map(item => ({
+                        action: 'add',
+                        variant_id: item.variantId,
+                        quantity: item.quantity,
+                    })),
+                }),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json() as { message?: string; code?: string; failed_items?: Array<{ variant_id: string; reason: string }> };
+                throw new Error(errorData.message || 'Failed to save items');
+            }
+
+            // Success - clear pending items and redirect to order status
+            setPendingItems([]);
+            navigate(`/order/status/${order.id}`);
+        } catch (err) {
+            setSaveError(err instanceof Error ? err.message : 'Failed to save items');
+        } finally {
+            setIsSavingItems(false);
+        }
+    }, [pendingItems, order.id, modificationToken, navigate]);
+
+    // Navigation warning when there are unsaved changes
+    useEffect(() => {
+        if (!hasPendingChanges) return;
+
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            e.preventDefault();
+            // Modern browsers ignore custom messages, but we still need to set returnValue
+            e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
+            return e.returnValue;
+        };
+
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    }, [hasPendingChanges]);
+
+    // Legacy handler - kept for backward compatibility but now unused
     const handleItemAdded = () => {
-        // Refresh the order data after an item is added
+        // With batch modification, we no longer refresh on each add
+        // Items are accumulated locally until user clicks "Save Changes"
         revalidator.revalidate();
     };
 
@@ -448,7 +593,8 @@ export default function OrderEdit() {
     const currentShippingCost = order.shipping_total;
     const newShippingCost = selectedShippingOption?.amount || currentShippingCost;
     const shippingDifference = newShippingCost - currentShippingCost;
-    const newTotal = order.total + shippingDifference;
+    // Include pending items in total calculation
+    const newTotal = order.total + shippingDifference + pendingTotal;
 
     // Format currency (Medusa uses major units - dollars, not cents)
     const formatPrice = (amount: number) => {
@@ -755,21 +901,48 @@ export default function OrderEdit() {
                                 orderId={order.id}
                                 modificationToken={modificationToken}
                                 regionId={order.region_id}
+                                currencyCode={order.currency_code}
+                                onAddItem={handleAddPendingItem}
                                 onItemAdded={handleItemAdded}
                             />
 
-                            {/* Items */}
+                            {/* Items - Combined confirmed + pending with visual distinction */}
                             <div className="space-y-3 mb-4 max-h-64 overflow-y-auto">
-                                {order.items.map((item) => (
-                                    <div key={item.id} className="flex gap-3">
+                                {displayItems.map((item) => (
+                                    <div
+                                        key={item.id}
+                                        className={`flex gap-3 p-2 rounded transition-colors ${
+                                            item.status === 'pending'
+                                                ? 'bg-amber-50 border border-amber-200'
+                                                : ''
+                                        }`}
+                                    >
                                         <div className="w-12 h-12 bg-gray-100 rounded overflow-hidden flex-shrink-0">
                                             {item.thumbnail && (
                                                 <img src={item.thumbnail} alt={item.title} className="w-full h-full object-cover" />
                                             )}
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <p className="text-sm font-medium text-text-earthy truncate">{item.title}</p>
-                                            <p className="text-xs text-text-earthy/60">Qty: {item.quantity}</p>
+                                            <div className="flex items-start gap-1">
+                                                <p className="text-sm font-medium text-text-earthy truncate flex-1">{item.title}</p>
+                                                {item.status === 'pending' && (
+                                                    <button
+                                                        onClick={() => handleRemovePendingItem(item.id)}
+                                                        className="p-0.5 text-amber-600 hover:text-amber-800 transition-colors"
+                                                        aria-label="Remove pending item"
+                                                    >
+                                                        <X className="w-3.5 h-3.5" />
+                                                    </button>
+                                                )}
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <p className="text-xs text-text-earthy/60">Qty: {item.quantity}</p>
+                                                {item.status === 'pending' && (
+                                                    <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">
+                                                        Pending
+                                                    </span>
+                                                )}
+                                            </div>
                                         </div>
                                         <p className="text-sm font-medium text-text-earthy">{formatPrice(item.subtotal)}</p>
                                     </div>
@@ -782,6 +955,14 @@ export default function OrderEdit() {
                                     <span className="text-text-earthy/70">Subtotal</span>
                                     <span className="text-text-earthy">{formatPrice(order.subtotal)}</span>
                                 </div>
+
+                                {/* Pending Items Total */}
+                                {hasPendingChanges && (
+                                    <div className="flex justify-between text-sm bg-amber-50 p-2 rounded border border-amber-200">
+                                        <span className="text-amber-700">+ Pending Items ({pendingItems.length})</span>
+                                        <span className="text-amber-700 font-medium">+{formatPrice(pendingTotal)}</span>
+                                    </div>
+                                )}
 
                                 {/* Promo Codes */}
                                 {order.promo_codes?.map((promo) => (
@@ -831,6 +1012,36 @@ export default function OrderEdit() {
                                             ? "Shipping cost will increase. The difference will be charged to your original payment method."
                                             : "Shipping cost will decrease. The difference will be refunded to your original payment method."}
                                     </p>
+                                </div>
+                            )}
+
+                            {/* Save/Discard Pending Items Buttons */}
+                            {hasPendingChanges && (
+                                <div className="mt-4 space-y-2">
+                                    {/* Save Error Display */}
+                                    {saveError && (
+                                        <div className="p-2 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+                                            {saveError}
+                                        </div>
+                                    )}
+
+                                    <button
+                                        onClick={handleSaveItems}
+                                        disabled={isSavingItems}
+                                        className="w-full py-2.5 px-4 bg-accent-earthy text-white rounded-lg hover:bg-accent-earthy/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                                    >
+                                        {isSavingItems
+                                            ? "Saving Items..."
+                                            : `Save Items (+${formatPrice(pendingTotal)})`
+                                        }
+                                    </button>
+                                    <button
+                                        onClick={handleDiscardChanges}
+                                        disabled={isSavingItems}
+                                        className="w-full py-2 px-4 text-text-earthy/70 hover:text-text-earthy transition-colors text-sm"
+                                    >
+                                        Discard Pending Items
+                                    </button>
                                 </div>
                             )}
                         </div>

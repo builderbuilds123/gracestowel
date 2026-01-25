@@ -1,6 +1,5 @@
 import { useState, type FormEvent } from "react";
 import { X, Tag, Loader2 } from "../lib/icons";
-import { formatCurrencyFixed } from "../utils/format-currency";
 
 interface PromoCodeInputProps {
   cartId: string | undefined;
@@ -126,20 +125,16 @@ interface AppliedPromoBadgeProps {
  */
 function AppliedPromoBadge({
   code,
-  discount,
   isAutomatic = false,
   onRemove,
   isLoading,
 }: AppliedPromoBadgeProps) {
-  const formattedDiscount = formatCurrencyFixed(discount);
-
   // Style variants for automatic vs manual promos
   const badgeStyles = isAutomatic
     ? "bg-purple-50 border-purple-200"
     : "bg-green-50 border-green-200";
   const iconStyles = isAutomatic ? "text-purple-600" : "text-green-600";
   const textStyles = isAutomatic ? "text-purple-800" : "text-green-800";
-  const discountStyles = isAutomatic ? "text-purple-600" : "text-green-600";
 
   return (
     <div 
@@ -151,9 +146,6 @@ function AppliedPromoBadge({
         <span className={`text-sm font-medium ${textStyles}`}>{code}</span>
         {isAutomatic ? (
           <span className="text-xs text-purple-500 bg-purple-100 px-1.5 py-0.5 rounded">Auto</span>
-        ) : null}
-        {discount > 0 ? (
-          <span className={`text-sm ${discountStyles}`}>-{formattedDiscount}</span>
         ) : null}
       </div>
       {!isAutomatic ? (

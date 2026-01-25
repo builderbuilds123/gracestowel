@@ -33,23 +33,11 @@ interface MobileMenuProps {
     setCurrency: (currency: 'CAD' | 'USD') => void;
 }
 
-function MobileMenu({ isOpen, onClose, showSolidHeader, language, setLanguage, currency, setCurrency }: MobileMenuProps) {
-    const menuRef = useRef<HTMLDivElement>(null);
+import { useFocusTrap } from "../hooks/useFocusTrap";
 
-    // Close on escape key
-    useEffect(() => {
-        const handleEscape = (e: KeyboardEvent) => {
-            if (e.key === "Escape") onClose();
-        };
-        if (isOpen) {
-            document.addEventListener("keydown", handleEscape);
-            document.body.style.overflow = "hidden";
-        }
-        return () => {
-            document.removeEventListener("keydown", handleEscape);
-            document.body.style.overflow = "";
-        };
-    }, [isOpen, onClose]);
+function MobileMenu({ isOpen, onClose, showSolidHeader, language, setLanguage, currency, setCurrency }: MobileMenuProps) {
+    // Use focus trap hook
+    const menuRef = useFocusTrap<HTMLDivElement>(isOpen, onClose);
 
     if (!isOpen) return null;
 
@@ -65,7 +53,8 @@ function MobileMenu({ isOpen, onClose, showSolidHeader, language, setLanguage, c
             {/* Slide-out drawer */}
             <div
                 ref={menuRef}
-                className="fixed top-0 left-0 h-full w-72 max-w-[80vw] bg-white z-50 shadow-2xl lg:hidden animate-in slide-in-from-left duration-300"
+                className="fixed top-0 left-0 h-full w-72 max-w-[80vw] bg-white z-50 shadow-2xl lg:hidden animate-in slide-in-from-left duration-300 outline-none"
+                tabIndex={-1}
             >
                 <div className="flex flex-col h-full">
                     {/* Header */}

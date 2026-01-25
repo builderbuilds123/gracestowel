@@ -36,30 +36,46 @@ export const CAPTURE_BUFFER_SECONDS = parseInt(
 
 // Story 1.1: Payment capture delay - configurable via env, defaults to 3 days (259200000ms)
 // Using 3 days as conservative window to accommodate shorter card network periods (e.g., Visa's 5-day window)
-const DEFAULT_CAPTURE_DELAY_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
+export const DEFAULT_CAPTURE_DELAY_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
 
 const envDelay = process.env.PAYMENT_CAPTURE_DELAY_MS;
 
 // DEBUG: Log environment variable state at module load time
-console.log(`[CAPTURE_QUEUE][DEBUG] Module loading at ${new Date().toISOString()}`);
-console.log(`[CAPTURE_QUEUE][DEBUG] process.env.PAYMENT_CAPTURE_DELAY_MS = "${envDelay}" (type: ${typeof envDelay})`);
-console.log(`[CAPTURE_QUEUE][DEBUG] process.env.NODE_ENV = "${process.env.NODE_ENV}"`);
-console.log(`[CAPTURE_QUEUE][DEBUG] CAPTURE_BUFFER_SECONDS = ${CAPTURE_BUFFER_SECONDS}`);
+logger.debug("capture-queue", "Module loading", {
+    timestamp: new Date().toISOString(),
+    envDelay: envDelay,
+    envDelayType: typeof envDelay,
+    nodeEnv: process.env.NODE_ENV,
+    bufferSeconds: CAPTURE_BUFFER_SECONDS
+});
+
+let parsedDelay = DEFAULT_CAPTURE_DELAY_MS;
 
 if (!envDelay) {
-    console.log(`[PAYMENT_CAPTURE] PAYMENT_CAPTURE_DELAY_MS not set, using default: ${DEFAULT_CAPTURE_DELAY_MS}ms (${DEFAULT_CAPTURE_DELAY_MS / (1000 * 60 * 60 * 24)} days)`);
-} else if (isNaN(parseInt(envDelay, 10))) {
-    console.error(`[CRITICAL] PAYMENT_CAPTURE_DELAY_MS environment variable is invalid: "${envDelay}". Using default of 3 days.`);
+    logger.info("capture-queue", "PAYMENT_CAPTURE_DELAY_MS not set, using default", {
+        delayMs: DEFAULT_CAPTURE_DELAY_MS,
+        delayDays: DEFAULT_CAPTURE_DELAY_MS / (1000 * 60 * 60 * 24)
+    });
+} else {
+    const parsed = parseInt(envDelay, 10);
+    if (isNaN(parsed)) {
+        logger.error("capture-queue", "PAYMENT_CAPTURE_DELAY_MS environment variable is invalid - using default", {
+            invalidValue: envDelay,
+            defaultMs: DEFAULT_CAPTURE_DELAY_MS
+        });
+    } else {
+        parsedDelay = parsed;
+    }
 }
 
-export const PAYMENT_CAPTURE_DELAY_MS = parseInt(
-    envDelay || String(DEFAULT_CAPTURE_DELAY_MS),
-    10
-);
+export const PAYMENT_CAPTURE_DELAY_MS = parsedDelay;
 
 // Log at module load for debugging
 const delayDays = PAYMENT_CAPTURE_DELAY_MS / (1000 * 60 * 60 * 24);
-console.log(`[PAYMENT_CAPTURE] Capture delay: ${PAYMENT_CAPTURE_DELAY_MS}ms (${delayDays} days)`);
+logger.info("capture-queue", "Capture delay configured", {
+    delayMs: PAYMENT_CAPTURE_DELAY_MS,
+    delayDays
+});
 
 // DEBUG: Log final computed value (inline calculation to avoid forward reference)
 const _debugDelaySeconds = Math.floor(PAYMENT_CAPTURE_DELAY_MS / 1000);
@@ -67,8 +83,14 @@ const _debugDelayMinutes = Math.floor(_debugDelaySeconds / 60);
 const _debugDelayRemainingSeconds = _debugDelaySeconds % 60;
 const _debugDelayHours = Math.floor(_debugDelayMinutes / 60);
 const _debugDelayDays = Math.floor(_debugDelayHours / 24);
-console.log(`[CAPTURE_QUEUE][DEBUG] Final PAYMENT_CAPTURE_DELAY_MS = ${PAYMENT_CAPTURE_DELAY_MS}ms`);
-console.log(`[CAPTURE_QUEUE][DEBUG] Modification window = ${_debugDelayDays} days ${_debugDelayHours % 24} hours ${_debugDelayMinutes % 60} minutes ${_debugDelayRemainingSeconds} seconds`);
+
+logger.debug("capture-queue", "Final delay configuration details", {
+    days: _debugDelayDays,
+    hours: _debugDelayHours % 24,
+    minutes: _debugDelayMinutes % 60,
+    seconds: _debugDelayRemainingSeconds,
+    totalMs: PAYMENT_CAPTURE_DELAY_MS
+});
 
 /**
  * Get the modification window duration in seconds
