@@ -17,7 +17,7 @@ import { data, redirect } from "react-router";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { useLoaderData, useActionData, useNavigation, Link, useRevalidator, useNavigate } from "react-router";
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { ArrowLeft, AlertCircle, Package, Truck, X } from "../lib/icons";
+import { ArrowLeft, AlertCircle, Package, Truck, X, Plus, Minus } from "../lib/icons";
 import { OrderQuickAddDialog } from "../components/order/OrderQuickAddDialog";
 import { getGuestToken, setGuestToken, clearGuestToken } from "../utils/guest-session.server";
 import { medusaFetch } from "../lib/medusa-fetch";
@@ -480,20 +480,65 @@ export default function OrderEdit() {
     ], [order.items, pendingItems]);
 
     // Handler for adding items from OrderQuickAddDialog (React best practice: rerender-functional-setstate)
+    // If the same variant already exists in pending items, increase quantity instead of creating duplicate
     const handleAddPendingItem = useCallback((item: Omit<PendingItem, 'id'>) => {
-        setPendingItems(prev => [
-            ...prev,
-            {
-                ...item,
-                id: `pending_${item.variantId}_${Date.now()}`,
-            },
-        ]);
+        setPendingItems(prev => {
+            // Check if this variant already exists in pending items
+            const existingIndex = prev.findIndex(p => p.variantId === item.variantId);
+
+            if (existingIndex >= 0) {
+                // Merge: update quantity and subtotal of existing item
+                return prev.map((p, idx) => {
+                    if (idx === existingIndex) {
+                        const newQuantity = p.quantity + item.quantity;
+                        return {
+                            ...p,
+                            quantity: newQuantity,
+                            subtotal: p.unitPrice * newQuantity,
+                        };
+                    }
+                    return p;
+                });
+            }
+
+            // New variant: add to list
+            return [
+                ...prev,
+                {
+                    ...item,
+                    id: `pending_${item.variantId}_${Date.now()}`,
+                },
+            ];
+        });
         setSaveError(null);
     }, []);
 
     // Handler for removing a pending item
     const handleRemovePendingItem = useCallback((itemId: string) => {
         setPendingItems(prev => prev.filter(item => item.id !== itemId));
+    }, []);
+
+    // Handler for updating pending item quantity (React best practice: rerender-functional-setstate)
+    // Auto-removes item if quantity becomes 0 (matches checkout behavior)
+    const handleUpdatePendingQuantity = useCallback((itemId: string, newQuantity: number) => {
+        if (newQuantity <= 0) {
+            // Remove item when quantity reaches 0
+            setPendingItems(prev => prev.filter(item => item.id !== itemId));
+            return;
+        }
+
+        setPendingItems(prev =>
+            prev.map(item => {
+                if (item.id === itemId) {
+                    return {
+                        ...item,
+                        quantity: newQuantity,
+                        subtotal: item.unitPrice * newQuantity,
+                    };
+                }
+                return item;
+            })
+        );
     }, []);
 
     // Handler for discarding all pending changes
@@ -963,15 +1008,37 @@ export default function OrderEdit() {
                                                 )}
                                             </div>
                                             <div className="flex items-center gap-2">
-                                                <p className="text-xs text-text-earthy/60">Qty: {item.quantity}</p>
-                                                {item.status === 'pending' && (
-                                                    <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">
-                                                        Pending
-                                                    </span>
+                                                {item.status === 'pending' ? (
+                                                    // Quantity controls for pending items (matches checkout OrderSummary pattern)
+                                                    <>
+                                                        <div className="flex items-center gap-1.5">
+                                                            <button
+                                                                onClick={() => handleUpdatePendingQuantity(item.id, item.quantity - 1)}
+                                                                className="p-0.5 rounded-full hover:bg-amber-100 border border-amber-300 transition-colors cursor-pointer"
+                                                                aria-label="Decrease quantity"
+                                                            >
+                                                                <Minus className="w-2.5 h-2.5 text-amber-700" />
+                                                            </button>
+                                                            <span className="w-4 text-center text-xs text-amber-700 font-medium">{item.quantity}</span>
+                                                            <button
+                                                                onClick={() => handleUpdatePendingQuantity(item.id, item.quantity + 1)}
+                                                                className="p-0.5 rounded-full hover:bg-amber-100 border border-amber-300 transition-colors cursor-pointer"
+                                                                aria-label="Increase quantity"
+                                                            >
+                                                                <Plus className="w-2.5 h-2.5 text-amber-700" />
+                                                            </button>
+                                                        </div>
+                                                        <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">
+                                                            Pending
+                                                        </span>
+                                                    </>
+                                                ) : (
+                                                    // Static quantity display for confirmed items
+                                                    <p className="text-xs text-text-earthy/60">Qty: {item.quantity}</p>
                                                 )}
                                             </div>
                                         </div>
-                                        <p className="text-sm font-medium text-text-earthy">{formatPrice(item.subtotal)}</p>
+                                        <p className="text-sm font-medium text-text-earthy flex-shrink-0">{formatPrice(item.subtotal)}</p>
                                     </div>
                                 ))}
                             </div>
