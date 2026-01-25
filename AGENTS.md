@@ -93,6 +93,69 @@ See nested AGENTS.md files for app-specific patterns:
 
 ---
 
+## Server Process Management
+
+### Cleanup Before Starting Servers
+
+**ALWAYS clean up existing processes before starting dev servers:**
+
+```bash
+# Kill processes on common ports
+lsof -ti:5173 | xargs kill -9 2>/dev/null  # Storefront
+lsof -ti:9000 | xargs kill -9 2>/dev/null  # Backend API
+lsof -ti:9001 | xargs kill -9 2>/dev/null  # Stripe webhooks
+```
+
+### Stripe Webhook Forwarding
+
+**CRITICAL for checkout testing:** Stripe webhooks must be forwarded locally:
+
+```bash
+# Start Stripe CLI webhook forwarding
+stripe listen --forward-to localhost:9000/webhooks/stripe
+```
+
+Without this, checkout will appear to succeed but orders won't be created (Medusa won't receive payment confirmation).
+
+### Log Output for Agent Inspection
+
+When running servers, write logs to temp directory for debugging:
+
+```bash
+# Start with log files
+pnpm dev:api 2>&1 | tee /tmp/gracestowel-api.log
+pnpm dev:storefront 2>&1 | tee /tmp/gracestowel-storefront.log
+
+# Check logs
+tail -f /tmp/gracestowel-api.log
+tail -100 /tmp/gracestowel-storefront.log
+```
+
+---
+
+## Structured Logging
+
+**NEVER use `console.log/warn/error` directly.** Use structured logger:
+
+```typescript
+import { createLogger, getTraceIdFromRequest } from "../lib/logger";
+
+// In route handlers
+const traceId = getTraceIdFromRequest(request);
+const logger = createLogger({ traceId, context: "api.carts" });
+
+logger.info("Cart completed", { cartId, orderId });
+logger.error("Failed to process", error, { cartId });
+```
+
+**Why:**
+- Trace IDs correlate requests across services
+- JSON format enables log search/aggregation
+- Prevents accidental PII exposure
+- Consistent debugging experience
+
+---
+
 ## Ralph Orchestrator
 
 **Ralph Orchestrator** is installed as a git submodule in `tools/ralph-orchestrator/`. It enables autonomous AI agent orchestration for complex, multi-iteration tasks.
@@ -189,7 +252,9 @@ CI runs: Lint → Type Check → Security Scan → Unit Tests → E2E → Deploy
 | Ignore catch errors | Log and handle properly |
 | Send email synchronously | Use BullMQ queue |
 | Log raw PII | Mask: `****@domain.com` |
-| Use `console.log` | Use structured logger |
+| Use `console.log/warn/error` | Use `createLogger()` from `lib/logger.ts` |
+| Start servers without cleanup | Kill existing port processes first |
+| Test checkout without Stripe CLI | Run `stripe listen --forward-to localhost:9000/webhooks/stripe` |
 
 ---
 
