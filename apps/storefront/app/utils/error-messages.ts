@@ -96,6 +96,26 @@ export const ORDER_ERROR_MESSAGES: Record<string, ErrorDisplay> = {
     message: "This order has been canceled and cannot be modified.",
     action: "Please place a new order if you'd like to purchase.",
   },
+  ORDER_SHIPPED: {
+    title: "Order Shipped",
+    message: "This order has shipped and cannot be modified.",
+    action: "Track your order or contact support if needed.",
+  },
+  ORDER_DELIVERED: {
+    title: "Order Delivered",
+    message: "This order has been delivered.",
+    action: "If you need to return an item, please use the return option.",
+  },
+  not_editable: {
+    title: "Cannot Modify Order",
+    message: "This order can no longer be modified.",
+    action: "Contact support if you need assistance.",
+  },
+  state_changed: {
+    title: "Order Status Changed",
+    message: "The order status has changed since you started editing.",
+    action: "Please review the current order status.",
+  },
 };
 
 /**

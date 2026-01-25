@@ -9,6 +9,122 @@ import { logOrderModificationAttempt } from "../../../../utils/audit-logger";
 import { modificationTokenService } from "../../../../services/modification-token";
 
 /**
+ * Order display states for the frontend
+ */
+type OrderDisplayStatus = "editable" | "processing" | "shipped" | "delivered" | "canceled";
+
+interface OrderState {
+    display_status: OrderDisplayStatus;
+    can_edit: boolean;
+    can_cancel: boolean;
+    can_return: boolean;
+    can_rate: boolean;
+    message: string | null;
+}
+
+const CAPTURED_PAYMENT_STATUSES = ["captured", "completed", "partially_captured"];
+const SHIPPED_FULFILLMENT_STATUSES = ["shipped", "partially_shipped"];
+const DELIVERED_FULFILLMENT_STATUSES = ["delivered", "partially_delivered"];
+const FULFILLED_STATUSES = ["fulfilled", "partially_fulfilled", ...SHIPPED_FULFILLMENT_STATUSES, ...DELIVERED_FULFILLMENT_STATUSES];
+
+/**
+ * Compute payment status from order's payment collections
+ */
+function computePaymentStatus(order: any): string {
+    const paymentCollection = order.payment_collections?.[0];
+    if (!paymentCollection) return "unknown";
+
+    // Check if payment has been captured
+    const payment = paymentCollection.payments?.[0];
+    if (payment?.captured_at) {
+        return "captured";
+    }
+
+    // Use payment collection status
+    return paymentCollection.status || "unknown";
+}
+
+/**
+ * Compute the order state for frontend display
+ */
+function computeOrderState(
+    order: any,
+    fulfillmentStatus: string,
+    paymentStatus: string,
+    canModifyFromToken: boolean
+): OrderState {
+    // Canceled - no actions available
+    if (order.status === "canceled") {
+        return {
+            display_status: "canceled",
+            can_edit: false,
+            can_cancel: false,
+            can_return: false,
+            can_rate: false,
+            message: "This order has been canceled",
+        };
+    }
+
+    // Delivered - can return and rate
+    if (DELIVERED_FULFILLMENT_STATUSES.includes(fulfillmentStatus)) {
+        return {
+            display_status: "delivered",
+            can_edit: false,
+            can_cancel: false,
+            can_return: true,
+            can_rate: true,
+            message: null,
+        };
+    }
+
+    // Shipped - tracking only
+    if (SHIPPED_FULFILLMENT_STATUSES.includes(fulfillmentStatus)) {
+        return {
+            display_status: "shipped",
+            can_edit: false,
+            can_cancel: false,
+            can_return: false,
+            can_rate: false,
+            message: "Your order is on its way",
+        };
+    }
+
+    // Being processed (payment captured but not shipped/fulfilled)
+    if (CAPTURED_PAYMENT_STATUSES.includes(paymentStatus) && !FULFILLED_STATUSES.includes(fulfillmentStatus)) {
+        return {
+            display_status: "processing",
+            can_edit: false,
+            can_cancel: false,
+            can_return: false,
+            can_rate: false,
+            message: "Order is being processed. Modifications are no longer available.",
+        };
+    }
+
+    // Editable (payment authorized/not captured, not fulfilled, within modification window)
+    if (!CAPTURED_PAYMENT_STATUSES.includes(paymentStatus) && !FULFILLED_STATUSES.includes(fulfillmentStatus)) {
+        return {
+            display_status: "editable",
+            can_edit: canModifyFromToken,
+            can_cancel: canModifyFromToken,
+            can_return: false,
+            can_rate: false,
+            message: null,
+        };
+    }
+
+    // Default: view only (fulfilled but not shipped/delivered - rare state)
+    return {
+        display_status: "processing",
+        can_edit: false,
+        can_cancel: false,
+        can_return: false,
+        can_rate: false,
+        message: null,
+    };
+}
+
+/**
  * GET /store/orders/:id
  * 
  * Story 2.2, 2.3: Fetch order details with dual authentication support
@@ -36,6 +152,7 @@ export async function GET(
                 "display_id",
                 "email",
                 "status",
+                "fulfillment_status",
                 "currency_code",
                 "total",
                 "subtotal",
@@ -141,12 +258,19 @@ export async function GET(
             });
         });
 
+        // Compute order state for frontend display
+        // Note: fulfillment_status is queried from DB but not in the TS Order type
+        const fulfillmentStatus = (order as any).fulfillment_status || "not_fulfilled";
+        const paymentStatus = computePaymentStatus(order);
+        const orderState = computeOrderState(order, fulfillmentStatus, paymentStatus, canModify);
+
         res.status(200).json({
             order: {
                 id: order.id,
                 display_id: order.display_id,
                 email: order.email,
                 status: order.status,
+                fulfillment_status: fulfillmentStatus,
                 currency_code: order.currency_code,
                 total: order.total,
                 subtotal: order.subtotal,
@@ -169,6 +293,8 @@ export async function GET(
                 })),
                 shipping_address: order.shipping_address,
             },
+            order_state: orderState,
+            payment_status: paymentStatus,
             authMethod: authResult.method,
             canEdit: canModify, // Frontend will call eligibility endpoint separately
             modification: authResult.method === "guest_token" ? {

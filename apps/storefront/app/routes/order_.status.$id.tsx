@@ -17,11 +17,21 @@ import { resolveCSRFSecret, validateCSRFToken, createCSRFToken } from "../utils/
 // Lazy load Map component to avoid SSR issues with Leaflet
 const Map = lazy(() => import("../components/Map.client"));
 
+interface OrderState {
+    display_status: "editable" | "processing" | "shipped" | "delivered" | "canceled";
+    can_edit: boolean;
+    can_cancel: boolean;
+    can_return: boolean;
+    can_rate: boolean;
+    message: string | null;
+}
+
 interface LoaderData {
     order?: any;
     token?: string;
     authMethod?: "customer_session" | "guest_token" | "none";
     canEdit?: boolean;
+    order_state?: OrderState;
     needsAuth?: boolean;
     orderId?: string;
     error?: string;
@@ -129,6 +139,7 @@ export async function loader({ params, request, context }: LoaderFunctionArgs) {
         order: any;
         authMethod: string;
         canEdit: boolean;
+        order_state?: OrderState;
         modification?: {
             can_modify: boolean;
             remaining_seconds: number;
@@ -173,6 +184,7 @@ export async function loader({ params, request, context }: LoaderFunctionArgs) {
         order: responseData.order,
         authMethod: responseData.authMethod,
         canEdit: responseData.canEdit,
+        order_state: responseData.order_state,
         modification_window,
         errorCode: errorCode || undefined,
         csrfToken,
@@ -295,6 +307,7 @@ export default function OrderStatus() {
 
     const [showCancelDialog, setShowCancelDialog] = useState(false);
     const [showCancelRejectedModal, setShowCancelRejectedModal] = useState(false);
+    const [showRatingModal, setShowRatingModal] = useState(false);
     const [mapCoordinates, setMapCoordinates] = useState<[number, number] | null>(null);
 
     // Handle needsAuth case
@@ -357,8 +370,25 @@ export default function OrderStatus() {
         );
     }
 
-    const { order, modification_window, canEdit, errorCode, csrfToken } = loaderData as LoaderData;
+    const { order, modification_window, canEdit, order_state, errorCode, csrfToken } = loaderData as LoaderData;
     const errorDisplay = errorCode ? getErrorDisplay(errorCode) : null;
+
+    // Status badge configuration
+    const statusBadgeColors: Record<string, string> = {
+        editable: "bg-blue-100 text-blue-800",
+        processing: "bg-yellow-100 text-yellow-800",
+        shipped: "bg-purple-100 text-purple-800",
+        delivered: "bg-green-100 text-green-800",
+        canceled: "bg-red-100 text-red-800",
+    };
+
+    const statusBadgeLabels: Record<string, string> = {
+        editable: "Open for Changes",
+        processing: "Processing",
+        shipped: "Shipped",
+        delivered: "Delivered",
+        canceled: "Canceled",
+    };
 
     if (!order) {
         return (
@@ -372,7 +402,14 @@ export default function OrderStatus() {
     }
 
     const shippingAddress = order.shipping_address;
-    const isModificationActive = modification_window?.status === "active" || canEdit === true;
+    // Use order_state from backend for state-aware UI, fallback to legacy logic
+    const displayStatus = order_state?.display_status ||
+        ((modification_window?.status === "active" || canEdit === true) ? "editable" : "processing");
+    const canEditOrder = order_state?.can_edit ?? (modification_window?.status === "active" || canEdit === true);
+    const canCancelOrder = order_state?.can_cancel ?? canEditOrder;
+    const canReturn = order_state?.can_return ?? false;
+    const canRate = order_state?.can_rate ?? false;
+    const statusMessage = order_state?.message || null;
     const isCanceling = fetcher.state !== "idle";
 
     // Geocode address on mount
@@ -442,7 +479,12 @@ export default function OrderStatus() {
                             <div className="flex justify-between items-start">
                                 <div>
                                     <h2 className="text-sm text-text-earthy/60 mb-1">Order Number</h2>
-                                    <p className="text-2xl font-semibold text-text-earthy">#{order.display_id}</p>
+                                    <div className="flex items-center gap-3">
+                                        <p className="text-2xl font-semibold text-text-earthy">#{order.display_id}</p>
+                                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusBadgeColors[displayStatus] || statusBadgeColors.processing}`}>
+                                            {statusBadgeLabels[displayStatus] || "Processing"}
+                                        </span>
+                                    </div>
                                 </div>
                                 <div className="text-right">
                                     <h2 className="text-sm text-text-earthy/60 mb-1">Order Date</h2>
@@ -619,33 +661,77 @@ export default function OrderStatus() {
                     </div>
                 </div>
 
-                {/* Order Modification Actions */}
-                {isModificationActive && (
+                {/* Order Actions - State-Aware */}
+                {displayStatus === "editable" && (canEditOrder || canCancelOrder) && (
                     <div className="bg-white rounded-lg shadow-lg p-4 mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 border border-accent-earthy/20">
                         <p className="text-sm text-text-earthy">
                             You can modify this order until it ships.
                         </p>
                         <div className="flex gap-3">
-                            <Link
-                                to={`/order/${order.id}/edit`}
-                                className="px-6 py-2 bg-accent-earthy text-white rounded-lg hover:bg-accent-earthy/90 transition-colors font-medium"
-                            >
-                                Edit Order
-                            </Link>
-                            <button
-                                onClick={() => setShowCancelDialog(true)}
-                                disabled={isCanceling}
-                                className="px-6 py-2 text-red-600 border border-red-300 rounded-lg hover:bg-red-50 transition-colors font-medium disabled:opacity-50"
-                            >
-                                Cancel Order
-                            </button>
+                            {canEditOrder && (
+                                <Link
+                                    to={`/order/${order.id}/edit`}
+                                    className="px-6 py-2 bg-accent-earthy text-white rounded-lg hover:bg-accent-earthy/90 transition-colors font-medium"
+                                >
+                                    Edit Order
+                                </Link>
+                            )}
+                            {canCancelOrder && (
+                                <button
+                                    onClick={() => setShowCancelDialog(true)}
+                                    disabled={isCanceling}
+                                    className="px-6 py-2 text-red-600 border border-red-300 rounded-lg hover:bg-red-50 transition-colors font-medium disabled:opacity-50"
+                                >
+                                    Cancel Order
+                                </button>
+                            )}
                         </div>
                     </div>
                 )}
 
-                {!isModificationActive && (
+                {displayStatus === "delivered" && (
+                    <div className="bg-white rounded-lg shadow-lg p-4 mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 border border-green-200">
+                        <p className="text-sm text-text-earthy">
+                            Your order has been delivered. We hope you love your new towels!
+                        </p>
+                        <div className="flex gap-3">
+                            {canReturn && (
+                                <Link
+                                    to={`/order/${order.id}/return`}
+                                    className="px-6 py-2 text-text-earthy border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                                >
+                                    Request Return
+                                </Link>
+                            )}
+                            {canRate && (
+                                <button
+                                    onClick={() => setShowRatingModal(true)}
+                                    className="px-6 py-2 bg-accent-earthy text-white rounded-lg hover:bg-accent-earthy/90 transition-colors font-medium"
+                                >
+                                    Rate My Purchase
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {displayStatus === "shipped" && (
+                    <div className="bg-purple-50 rounded-lg p-4 mt-6 text-center">
+                        <p className="text-purple-800">
+                            {statusMessage || "Your order is on its way!"}
+                        </p>
+                    </div>
+                )}
+
+                {displayStatus === "processing" && (
                     <div className="bg-gray-100 rounded-lg p-4 mt-6 text-center text-text-earthy/60">
-                        Order is being processed. Modifications are no longer available.
+                        {statusMessage || "Order is being processed. Modifications are no longer available."}
+                    </div>
+                )}
+
+                {displayStatus === "canceled" && (
+                    <div className="bg-red-50 rounded-lg p-4 mt-6 text-center text-red-700">
+                        {statusMessage || "This order has been canceled."}
                     </div>
                 )}
 
@@ -702,6 +788,24 @@ export default function OrderStatus() {
                     isOpen={showCancelRejectedModal}
                     onClose={() => setShowCancelRejectedModal(false)}
                 />
+
+                {/* Rating Modal (Placeholder) */}
+                {showRatingModal && (
+                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                        <div className="bg-white rounded-lg shadow-xl p-8 max-w-md w-full mx-4">
+                            <h2 className="text-2xl font-serif text-text-earthy mb-4">Rate Your Purchase</h2>
+                            <p className="text-text-earthy/70 mb-6">
+                                Rating feature coming soon! We'd love to hear about your experience with our towels.
+                            </p>
+                            <button
+                                onClick={() => setShowRatingModal(false)}
+                                className="w-full px-6 py-2 bg-accent-earthy text-white rounded-lg hover:bg-accent-earthy/90 transition-colors font-medium"
+                            >
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );

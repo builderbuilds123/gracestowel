@@ -15,6 +15,8 @@ export default [
     route("account/login", "routes/account.login.tsx"),
     route("account/register", "routes/account.register.tsx"),
     route("order/status/:id", "routes/order_.status.$id.tsx"),
+    route("order/:id/edit", "routes/order_.$id.edit.tsx"),
+    route("order/:id/return", "routes/order_.$id.return.tsx"),
     route("api/shipping-rates", "routes/api.shipping-rates.ts"),
     route("api/checkout-session", "routes/api.checkout-session.ts"),
     // Cart API routes

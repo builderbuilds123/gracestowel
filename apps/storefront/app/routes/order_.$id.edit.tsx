@@ -203,14 +203,31 @@ export async function loader({ params, request, context }: LoaderFunctionArgs) {
     const orderData = (await orderResponse.json()) as {
         order: Order;
         canEdit: boolean;
+        order_state?: {
+            display_status: string;
+            can_edit: boolean;
+            message: string | null;
+        };
         modification?: {
             can_modify: boolean;
             remaining_seconds: number;
         };
     };
 
-    // 2. Check if order can be edited
-    if (!orderData.canEdit) {
+    // 2. Check if order can be edited using order_state (if available) or legacy canEdit
+    const canEditOrder = orderData.order_state?.can_edit ?? orderData.canEdit;
+    if (!canEditOrder) {
+        // Redirect with specific error based on display_status
+        const displayStatus = orderData.order_state?.display_status;
+        if (displayStatus === "delivered") {
+            return redirect(`/order/status/${id}?error=ORDER_DELIVERED`);
+        } else if (displayStatus === "shipped") {
+            return redirect(`/order/status/${id}?error=ORDER_SHIPPED`);
+        } else if (displayStatus === "canceled") {
+            return redirect(`/order/status/${id}?error=ORDER_CANCELED`);
+        } else if (displayStatus === "processing") {
+            return redirect(`/order/status/${id}?error=PAYMENT_CAPTURED`);
+        }
         return redirect(`/order/status/${id}?error=EDIT_NOT_ALLOWED`);
     }
 
