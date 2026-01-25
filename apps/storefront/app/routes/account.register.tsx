@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { useCustomer } from '../context/CustomerContext';
 import { useMedusaCart } from '../context/MedusaCartContext';
-import { Eye, EyeOff, Mail, Lock, User } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock, User } from '../lib/icons';
 
 export function meta() {
     return [

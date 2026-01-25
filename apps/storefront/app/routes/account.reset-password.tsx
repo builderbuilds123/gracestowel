@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router';
 import { useCustomer } from '../context/CustomerContext';
-import { Eye, EyeOff, Lock, CheckCircle2, AlertCircle, ArrowLeft } from 'lucide-react';
+import { Eye, EyeOff, Lock, CheckCircle2, AlertCircle, ArrowLeft } from '../lib/icons';
 
 export function meta() {
     return [

@@ -54,20 +54,23 @@ export async function loader({
 
 export default function Checkout() {
   const { stripePublishableKey } = useLoaderData<LoaderData>();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [, setSearchParams] = useSearchParams();
   const [errorBanner, setErrorBanner] = useState<{ title: string; message: string } | null>(null);
 
   // Handle error query parameter
+  // OPTIMIZATION: Read error param directly from URL instead of subscribing to all search param changes
   useEffect(() => {
-    const errorCode = searchParams.get("error");
+    if (typeof window === 'undefined') return;
+    
+    const params = new URLSearchParams(window.location.search);
+    const errorCode = params.get("error");
     if (errorCode && ERROR_MESSAGES[errorCode]) {
       setErrorBanner(ERROR_MESSAGES[errorCode]);
       // Remove error param from URL without triggering navigation
-      const newParams = new URLSearchParams(searchParams);
-      newParams.delete("error");
-      setSearchParams(newParams, { replace: true });
+      params.delete("error");
+      setSearchParams(params, { replace: true });
     }
-  }, [searchParams, setSearchParams]);
+  }, [setSearchParams]);
 
   // Initialize Stripe once
   useEffect(() => {

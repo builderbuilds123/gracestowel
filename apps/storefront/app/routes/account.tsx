@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { useCustomer, getAuthToken } from '../context/CustomerContext';
 import { medusaFetch } from '../lib/medusa-fetch';
-import { Package, MapPin, User, LogOut, ChevronRight } from 'lucide-react';
+import { Package, MapPin, User, LogOut, ChevronRight } from '../lib/icons';
 import { createLogger } from '../lib/logger';
 
 export function meta() {

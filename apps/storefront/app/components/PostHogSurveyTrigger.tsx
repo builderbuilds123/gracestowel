@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { MessageSquare, X } from 'lucide-react';
+import { MessageSquare, X } from '../lib/icons';
 import { usePostHogSurveys } from '../hooks/usePostHogSurveys';
 import { useExitIntent } from '../hooks/useExitIntent';
 

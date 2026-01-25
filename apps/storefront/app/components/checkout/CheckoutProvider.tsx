@@ -302,7 +302,7 @@ export function CheckoutProvider({ children }: CheckoutProviderProps) {
   // Best Practice: rerender-dependencies - Use primitive dependencies for effects
   // Stable string hash to prevent infinite loops when array reference changes
   const promoCodesHash = useMemo(() => {
-    return JSON.stringify([...appliedPromoCodes.map(c => c.code)].sort());
+    return JSON.stringify([...appliedPromoCodes.map(c => c.code)].toSorted());
   }, [appliedPromoCodes]);
 
   // Best Practice: rerender-dependencies - Derive primitive dependencies

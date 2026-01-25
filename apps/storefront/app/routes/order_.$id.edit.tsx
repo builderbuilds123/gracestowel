@@ -531,7 +531,7 @@ export default function OrderEdit() {
                                             id="address1"
                                             name="address1"
                                             value={formData.address1}
-                                            onChange={(e) => setFormData({ ...formData, address1: e.target.value })}
+                                            onChange={(e) => setFormData(prev => ({ ...prev, address1: e.target.value }))}
                                             className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-earthy ${
                                                 errors.address1 ? "border-red-500" : "border-gray-300"
                                             }`}
@@ -548,7 +548,7 @@ export default function OrderEdit() {
                                             id="address2"
                                             name="address2"
                                             value={formData.address2}
-                                            onChange={(e) => setFormData({ ...formData, address2: e.target.value })}
+                                            onChange={(e) => setFormData(prev => ({ ...prev, address2: e.target.value }))}
                                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-earthy"
                                         />
                                     </div>
@@ -562,7 +562,7 @@ export default function OrderEdit() {
                                             id="city"
                                             name="city"
                                             value={formData.city}
-                                            onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                                            onChange={(e) => setFormData(prev => ({ ...prev, city: e.target.value }))}
                                             className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-earthy ${
                                                 errors.city ? "border-red-500" : "border-gray-300"
                                             }`}
@@ -579,7 +579,7 @@ export default function OrderEdit() {
                                             id="province"
                                             name="province"
                                             value={formData.province}
-                                            onChange={(e) => setFormData({ ...formData, province: e.target.value })}
+                                            onChange={(e) => setFormData(prev => ({ ...prev, province: e.target.value }))}
                                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-earthy"
                                         />
                                     </div>
@@ -593,7 +593,7 @@ export default function OrderEdit() {
                                             id="postalCode"
                                             name="postalCode"
                                             value={formData.postalCode}
-                                            onChange={(e) => setFormData({ ...formData, postalCode: e.target.value })}
+                                            onChange={(e) => setFormData(prev => ({ ...prev, postalCode: e.target.value }))}
                                             className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-earthy ${
                                                 errors.postalCode ? "border-red-500" : "border-gray-300"
                                             }`}
@@ -610,7 +610,7 @@ export default function OrderEdit() {
                                         <select
                                             id="country"
                                             value={formData.country}
-                                            onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                                            onChange={(e) => setFormData(prev => ({ ...prev, country: e.target.value }))}
                                             disabled
                                             className={`w-full px-3 py-2 border rounded-lg bg-gray-100 cursor-not-allowed ${
                                                 errors.country ? "border-red-500" : "border-gray-300"
@@ -633,7 +633,7 @@ export default function OrderEdit() {
                                             id="phone"
                                             name="phone"
                                             value={formData.phone}
-                                            onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                                            onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
                                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-earthy"
                                             placeholder="For delivery updates"
                                         />
@@ -670,7 +670,7 @@ export default function OrderEdit() {
                                                             value={option.id}
                                                             checked={formData.shippingOptionId === option.id}
                                                             onChange={(e) =>
-                                                                setFormData({ ...formData, shippingOptionId: e.target.value })
+                                                                setFormData(prev => ({ ...prev, shippingOptionId: e.target.value }))
                                                             }
                                                             className="w-4 h-4 text-accent-earthy focus:ring-accent-earthy"
                                                         />

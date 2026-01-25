@@ -47,6 +47,12 @@ export { default as Gift } from 'lucide-react/dist/esm/icons/gift';
 
 // User & Account
 export { default as User } from 'lucide-react/dist/esm/icons/user';
+export { default as Eye } from 'lucide-react/dist/esm/icons/eye';
+export { default as EyeOff } from 'lucide-react/dist/esm/icons/eye-off';
+export { default as Lock } from 'lucide-react/dist/esm/icons/lock';
+export { default as Mail } from 'lucide-react/dist/esm/icons/mail';
+export { default as LogOut } from 'lucide-react/dist/esm/icons/log-out';
+export { default as MessageSquare } from 'lucide-react/dist/esm/icons/message-square';
 
 // Delivery & Shipping
 export { default as Truck } from 'lucide-react/dist/esm/icons/truck';

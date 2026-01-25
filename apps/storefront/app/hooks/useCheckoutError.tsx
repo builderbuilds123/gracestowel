@@ -226,7 +226,7 @@ export function useCheckoutError(): UseCheckoutErrorResult {
    * Issue #20: Use .toSorted() for immutability
    */
   const errorList = useMemo(() =>
-    [...(Array.from(errors.values()) as CheckoutError[])].sort((a: CheckoutError, b: CheckoutError) => b.timestamp - a.timestamp),
+    [...(Array.from(errors.values()) as CheckoutError[])].toSorted((a: CheckoutError, b: CheckoutError) => b.timestamp - a.timestamp),
     [errors]
   );
 
