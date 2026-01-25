@@ -908,8 +908,8 @@ export default function OrderEdit() {
                         </form>
                     </div>
 
-                    {/* Order Summary Sidebar */}
-                    <div className="lg:col-span-1">
+                    {/* Order Summary Sidebar - 5 columns */}
+                    <div className="lg:col-span-5">
                         <div className="bg-white rounded-lg shadow p-6 sticky top-8">
                             <h2 className="text-xl font-serif text-text-earthy mb-4">Order Summary</h2>
 

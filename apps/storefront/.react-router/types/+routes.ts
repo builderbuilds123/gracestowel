@@ -112,6 +112,11 @@ type Pages = {
   "/api/set-guest-token": {
     params: {};
   };
+  "/api/orders/:id/batch-modify": {
+    params: {
+      "id": string;
+    };
+  };
   "/blog/:id": {
     params: {
       "id": string;
@@ -128,7 +133,7 @@ type Pages = {
 type RouteFiles = {
   "root.tsx": {
     id: "root";
-    page: "/" | "/products/:handle" | "/collections/:handle" | "/checkout" | "/checkout/success" | "/about" | "/blog" | "/towels" | "/search" | "/wishlist" | "/account" | "/account/login" | "/account/register" | "/order/status/:id" | "/order/:id/edit" | "/order/:id/return" | "/api/shipping-rates" | "/api/checkout-session" | "/api/carts" | "/api/carts/:id" | "/api/carts/:id/shipping-options" | "/api/carts/:id/shipping-methods" | "/api/carts/:id/complete" | "/api/payment-collections" | "/api/payment-collections/:id/sessions" | "/api/health" | "/api/set-guest-token" | "/blog/:id" | "/sitemap.xml" | "/robots.txt";
+    page: "/" | "/products/:handle" | "/collections/:handle" | "/checkout" | "/checkout/success" | "/about" | "/blog" | "/towels" | "/search" | "/wishlist" | "/account" | "/account/login" | "/account/register" | "/order/status/:id" | "/order/:id/edit" | "/order/:id/return" | "/api/shipping-rates" | "/api/checkout-session" | "/api/carts" | "/api/carts/:id" | "/api/carts/:id/shipping-options" | "/api/carts/:id/shipping-methods" | "/api/carts/:id/complete" | "/api/payment-collections" | "/api/payment-collections/:id/sessions" | "/api/health" | "/api/set-guest-token" | "/api/orders/:id/batch-modify" | "/blog/:id" | "/sitemap.xml" | "/robots.txt";
   };
   "routes/home.tsx": {
     id: "routes/home";
@@ -238,6 +243,10 @@ type RouteFiles = {
     id: "routes/api.set-guest-token";
     page: "/api/set-guest-token";
   };
+  "routes/api.orders.$id.batch-modify.ts": {
+    id: "routes/api.orders.$id.batch-modify";
+    page: "/api/orders/:id/batch-modify";
+  };
   "routes/blog.$id.tsx": {
     id: "routes/blog.$id";
     page: "/blog/:id";
@@ -281,6 +290,7 @@ type RouteModules = {
   "routes/api.payment-collections.$id.sessions": typeof import("./app/routes/api.payment-collections.$id.sessions.ts");
   "routes/api.health": typeof import("./app/routes/api.health.ts");
   "routes/api.set-guest-token": typeof import("./app/routes/api.set-guest-token.ts");
+  "routes/api.orders.$id.batch-modify": typeof import("./app/routes/api.orders.$id.batch-modify.ts");
   "routes/blog.$id": typeof import("./app/routes/blog.$id.tsx");
   "routes/sitemap[.]xml": typeof import("./app/routes/sitemap[.]xml.tsx");
   "routes/robots[.]txt": typeof import("./app/routes/robots[.]txt.tsx");

@@ -8,41 +8,48 @@
  */
 
 import { createOrderFulfillmentWorkflow } from "@medusajs/core-flows";
-import { StepResponse } from "@medusajs/framework/workflows-sdk";
-import { cancelPaymentCaptureJobStep } from "../steps/cancel-capture-job";
-import { capturePaymentStep } from "../steps/capture-payment-step";
-import { useQueryGraphStep } from "@medusajs/core-flows";
-import { transform } from "@medusajs/framework/workflows-sdk";
+import { executePaymentCapture } from "../../services/payment-capture-core";
+import { cancelPaymentCaptureJob } from "../../lib/payment-capture-queue";
 
 createOrderFulfillmentWorkflow.hooks.fulfillmentCreated(
-    async ({ fulfillment, additional_data }, { container }) => {
-        const orderId = fulfillment.order_id;
-        
-        // Step 1: Get Payment Intent from Order
-        const orderQuery = useQueryGraphStep({
-            entity: "order",
-            fields: ["id", "metadata"],
-            filters: { id: orderId },
-        });
+    async ({ fulfillment }, { container }) => {
+        const logger = container.resolve("logger");
+        const query = container.resolve("query");
+        // Cast to any to avoid strict type checks on DTO properties that exist at runtime
+        const orderId = (fulfillment as any).order_id;
 
-        const paymentIntentId = transform({ orderQuery }, (data) => {
-            const order = data.orderQuery.data[0];
-            const pi = order?.metadata?.stripe_payment_intent_id;
-            if (!pi || typeof pi !== 'string') {
-                return null;
+        try {
+            // Step 1: Get Payment Intent from Order (Runtime Query)
+            const { data: orders } = await query.graph({
+                entity: "order",
+                fields: ["metadata"],
+                filters: { id: orderId },
+            });
+
+            const order = orders[0];
+            const paymentIntentId = order?.metadata?.stripe_payment_intent_id as string | undefined;
+
+            if (!paymentIntentId) {
+                logger.info("fulfillment-hook", "Skipping capture: No Stripe Payment Intent found", { orderId });
+                return;
             }
-            return pi;
-        });
 
-        // Step 2: Capture Payment
-        capturePaymentStep({
-            orderId: orderId,
-            paymentIntentId: paymentIntentId, 
-        });
+            // Step 2: Capture Payment (Direct Service Call)
+            // We use a unique idempotency key for this hook execution
+            const idempotencyKey = `hook_capture_${orderId}_${paymentIntentId}`;
+            
+            await executePaymentCapture(container, orderId, paymentIntentId, idempotencyKey);
 
-        // Step 3: Cancel 3-day backup job
-        // Only executed if capture succeeds (as capture throws on failure)
-        // This ensures the safety net job remains if native capture fails.
-        cancelPaymentCaptureJobStep(orderId);
+            // Step 3: Cancel 3-day backup job
+            // Only runs if capture succeeds
+            await cancelPaymentCaptureJob(orderId);
+            
+            logger.info("fulfillment-hook", "Successfully captured payment and cancelled backup job", { orderId });
+
+        } catch (error) {
+            logger.error("fulfillment-hook", "Failed to execute payment capture in hook", { orderId }, error);
+            // CRUDELY RE-THROW to ensure Workflow Rollback
+            throw error; 
+        }
     }
 );

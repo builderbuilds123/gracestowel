@@ -31,6 +31,8 @@ export default [
     // Utility routes
     route("api/health", "routes/api.health.ts"),
     route("api/set-guest-token", "routes/api.set-guest-token.ts"),
+    // Order API routes
+    route("api/orders/:id/batch-modify", "routes/api.orders.$id.batch-modify.ts"),
     route("blog/:id", "routes/blog.$id.tsx"),
     // SEO routes
     route("sitemap.xml", "routes/sitemap[.]xml.tsx"),
