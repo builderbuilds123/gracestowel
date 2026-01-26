@@ -101,13 +101,25 @@ export async function action({ request, context }: ActionFunctionArgs) {
       collectionId: collection.id 
     });
 
-    // 2. Create Stripe session
+    // 2. Create Stripe session with incremental authorization enabled
+    // This allows us to use incrementAuthorization API for order modifications
+    // @see https://docs.stripe.com/payments/incremental-authorization
     const sessionRes = await medusaFetch(`/store/payment-collections/${collection.id}/payment-sessions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ provider_id: "pp_stripe" }),
+      body: JSON.stringify({
+        provider_id: "pp_stripe",
+        data: {
+          // Enable incremental authorization for order modifications
+          payment_method_options: {
+            card: {
+              request_incremental_authorization: "if_available",
+            },
+          },
+        },
+      }),
       label: "create-missing-stripe-session",
       context,
     });
