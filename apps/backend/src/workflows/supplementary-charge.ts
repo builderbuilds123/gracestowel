@@ -5,10 +5,12 @@
  * for orders that required additional payment (e.g., items added during modification window
  * on Stripe accounts without IC+ pricing).
  *
- * Uses Medusa's native payment workflows:
- * 1. Creates NEW PaymentCollection linked to order
- * 2. Creates PaymentSession with off-session Stripe data
- * 3. Authorizes and captures immediately
+ * IMPORTANT: For off-session payments, Stripe requires a Customer with an attached PaymentMethod.
+ * This workflow handles guest customers by:
+ * 1. Creating/finding a Stripe Customer
+ * 2. Attaching the PaymentMethod to the customer
+ * 3. Creating an off-session PaymentIntent directly via Stripe API
+ * 4. Recording the payment in Medusa
  */
 
 import {
@@ -18,12 +20,8 @@ import {
     WorkflowResponse,
     transform,
 } from "@medusajs/framework/workflows-sdk";
-import {
-    createPaymentSessionsWorkflow,
-    authorizePaymentSessionStep,
-    capturePaymentStep,
-} from "@medusajs/core-flows";
 import { Modules } from "@medusajs/framework/utils";
+import { getStripeClient } from "../utils/stripe";
 
 /**
  * Input for the supplementary charge workflow
@@ -41,6 +39,8 @@ export interface SupplementaryChargeInput {
     customerId?: string;
     /** Region ID for the payment collection */
     regionId?: string;
+    /** Customer email for Stripe Customer lookup/creation */
+    customerEmail?: string;
 }
 
 /**
@@ -274,12 +274,248 @@ const createSupplementaryTransactionStep = createStep(
 );
 
 /**
+ * Step to process off-session Stripe payment
+ *
+ * This step handles the Stripe-specific logic for off-session payments:
+ * 1. Creates/finds a Stripe Customer (required for off-session payments)
+ * 2. Attaches the PaymentMethod to the customer
+ * 3. Creates a PaymentIntent with off_session: true and captures immediately
+ * 4. Returns the PaymentIntent details for recording in Medusa
+ */
+const processStripeOffSessionPaymentStep = createStep(
+    "process-stripe-off-session-payment",
+    async (
+        input: {
+            paymentCollectionId: string;
+            orderId: string;
+            amount: number;
+            currencyCode: string;
+            stripePaymentMethodId: string;
+            customerEmail?: string;
+        },
+        { container }
+    ) => {
+        const stepLogger = container.resolve("logger");
+        const stripe = getStripeClient();
+
+        stepLogger.info(
+            `[supplementary-charge] Processing Stripe off-session payment for order ${input.orderId}`,
+            { amount: input.amount, currency: input.currencyCode, paymentMethod: input.stripePaymentMethodId }
+        );
+
+        // Step 1: Get or create a Stripe Customer
+        // For off-session payments, Stripe requires the PaymentMethod to be attached to a Customer
+        let stripeCustomerId: string;
+
+        // Try to find existing customer by email if provided
+        if (input.customerEmail) {
+            const existingCustomers = await stripe.customers.list({
+                email: input.customerEmail,
+                limit: 1,
+            });
+
+            if (existingCustomers.data.length > 0) {
+                stripeCustomerId = existingCustomers.data[0].id;
+                stepLogger.info(
+                    `[supplementary-charge] Found existing Stripe Customer: ${stripeCustomerId}`
+                );
+            } else {
+                // Create new customer
+                const newCustomer = await stripe.customers.create({
+                    email: input.customerEmail,
+                    metadata: {
+                        medusa_order_id: input.orderId,
+                        created_for: "supplementary_charge",
+                    },
+                });
+                stripeCustomerId = newCustomer.id;
+                stepLogger.info(
+                    `[supplementary-charge] Created new Stripe Customer: ${stripeCustomerId}`
+                );
+            }
+        } else {
+            // No email - create anonymous customer for this charge
+            const newCustomer = await stripe.customers.create({
+                metadata: {
+                    medusa_order_id: input.orderId,
+                    created_for: "supplementary_charge",
+                    anonymous: "true",
+                },
+            });
+            stripeCustomerId = newCustomer.id;
+            stepLogger.info(
+                `[supplementary-charge] Created anonymous Stripe Customer: ${stripeCustomerId}`
+            );
+        }
+
+        // Step 2: Attach PaymentMethod to Customer
+        // This is required before using the PaymentMethod for off-session payments
+        try {
+            await stripe.paymentMethods.attach(input.stripePaymentMethodId, {
+                customer: stripeCustomerId,
+            });
+            stepLogger.info(
+                `[supplementary-charge] Attached PaymentMethod ${input.stripePaymentMethodId} to Customer ${stripeCustomerId}`
+            );
+        } catch (attachError: unknown) {
+            // PaymentMethod might already be attached to this customer
+            const errorMessage = attachError instanceof Error ? attachError.message : String(attachError);
+            if (!errorMessage.includes("already been attached")) {
+                throw attachError;
+            }
+            stepLogger.info(
+                `[supplementary-charge] PaymentMethod already attached to customer`
+            );
+        }
+
+        // Step 3: Create and confirm PaymentIntent with off_session
+        const paymentIntent = await stripe.paymentIntents.create({
+            amount: input.amount, // Already in cents
+            currency: input.currencyCode.toLowerCase(),
+            customer: stripeCustomerId,
+            payment_method: input.stripePaymentMethodId,
+            off_session: true,
+            confirm: true,
+            capture_method: "automatic",
+            metadata: {
+                medusa_order_id: input.orderId,
+                medusa_payment_collection_id: input.paymentCollectionId,
+                supplementary_charge: "true",
+            },
+        });
+
+        stepLogger.info(
+            `[supplementary-charge] Created PaymentIntent ${paymentIntent.id} with status: ${paymentIntent.status}`,
+            {
+                amount: paymentIntent.amount,
+                currency: paymentIntent.currency,
+                capturedAmount: paymentIntent.amount_received
+            }
+        );
+
+        // Verify payment was successful
+        if (paymentIntent.status !== "succeeded") {
+            throw new Error(
+                `PaymentIntent ${paymentIntent.id} not successful. Status: ${paymentIntent.status}`
+            );
+        }
+
+        return new StepResponse(
+            {
+                stripePaymentIntentId: paymentIntent.id,
+                stripeCustomerId,
+                amount: paymentIntent.amount,
+                amountReceived: paymentIntent.amount_received,
+                status: paymentIntent.status,
+            },
+            // Compensation data
+            {
+                stripePaymentIntentId: paymentIntent.id,
+                stripeCustomerId,
+            }
+        );
+    },
+    // Compensation: Refund the PaymentIntent if workflow fails
+    async (compensationData, { container }) => {
+        if (!compensationData?.stripePaymentIntentId) return;
+
+        const stepLogger = container.resolve("logger");
+        const stripe = getStripeClient();
+
+        try {
+            stepLogger.warn(
+                `[supplementary-charge] Rolling back: refunding PaymentIntent ${compensationData.stripePaymentIntentId}`
+            );
+            await stripe.refunds.create({
+                payment_intent: compensationData.stripePaymentIntentId,
+            });
+            stepLogger.info(
+                `[supplementary-charge] Refunded PaymentIntent ${compensationData.stripePaymentIntentId}`
+            );
+        } catch (error) {
+            stepLogger.error(
+                `[supplementary-charge] Failed to refund PaymentIntent ${compensationData.stripePaymentIntentId}`,
+                error
+            );
+        }
+    }
+);
+
+/**
+ * Step to record the Stripe payment in Medusa's Payment module
+ */
+const recordSupplementaryPaymentStep = createStep(
+    "record-supplementary-payment",
+    async (
+        input: {
+            paymentCollectionId: string;
+            stripePaymentIntentId: string;
+            amount: number;
+            currencyCode: string;
+        },
+        { container }
+    ) => {
+        const stepLogger = container.resolve("logger");
+
+        // Create a PaymentSession record in Medusa to track this payment
+        interface PaymentModuleService {
+            createPaymentSession: (
+                paymentCollectionId: string,
+                input: {
+                    provider_id: string;
+                    amount: number;
+                    currency_code: string;
+                    data?: Record<string, unknown>;
+                }
+            ) => Promise<{ id: string; data?: Record<string, unknown> }>;
+            updatePaymentSession: (
+                input: {
+                    id: string;
+                    data?: Record<string, unknown>;
+                }
+            ) => Promise<{ id: string }>;
+        }
+        const paymentModuleService = container.resolve(
+            Modules.PAYMENT
+        ) as PaymentModuleService;
+
+        // Convert cents to major units for Medusa
+        const amountInMajorUnits = input.amount / 100;
+
+        // Create session (which will create a new PI in Stripe normally, but we'll update it)
+        // Actually, we already have a captured PI, so we just need to record it
+        const paymentSession = await paymentModuleService.createPaymentSession(
+            input.paymentCollectionId,
+            {
+                provider_id: "pp_stripe",
+                amount: amountInMajorUnits,
+                currency_code: input.currencyCode.toLowerCase(),
+                data: {
+                    id: input.stripePaymentIntentId,
+                    status: "succeeded",
+                    amount: input.amount,
+                    currency: input.currencyCode.toLowerCase(),
+                },
+            }
+        );
+
+        stepLogger.info(
+            `[supplementary-charge] Recorded PaymentSession ${paymentSession.id} for PaymentIntent ${input.stripePaymentIntentId}`
+        );
+
+        return new StepResponse({
+            paymentSessionId: paymentSession.id,
+        });
+    }
+);
+
+/**
  * Supplementary Charge Workflow
  *
  * Processes an off-session charge for additional order amounts using:
  * 1. A NEW PaymentCollection (separate from the original)
- * 2. The customer's saved payment method from the original checkout
- * 3. Immediate capture (no authorization hold)
+ * 2. Direct Stripe API for off-session payment (handles Customer creation)
+ * 3. Immediate capture
  */
 export const supplementaryChargeWorkflow = createWorkflow(
     "supplementary-charge",
@@ -294,95 +530,60 @@ export const supplementaryChargeWorkflow = createWorkflow(
             }
         );
 
-        // Step 2: Create off-session payment session using Medusa's native workflow
-        // This will create a Stripe PaymentIntent with:
-        // - payment_method: the saved payment method
-        // - off_session: true (no customer interaction)
-        // - confirm: true (immediately confirm)
-        // - capture_method: automatic (capture on confirmation)
-        //
-        // Note: createPaymentSessionsWorkflow fetches amount and currency_code
-        // from the PaymentCollection internally, so we don't need to pass them here.
-        // The `data` object contains Stripe-specific off-session payment fields.
-        const paymentSessionInput = transform(
+        // Step 2: Prepare input for Stripe off-session payment
+        // We need the customer email to find/create a Stripe Customer for off-session payments
+        const stripePaymentInput = transform(
             { paymentCollectionResult, input },
             (data) => ({
-                payment_collection_id: data.paymentCollectionResult.paymentCollectionId,
-                provider_id: "pp_stripe_stripe",
-                customer_id: data.input.customerId,
-                data: {
-                    // Stripe-specific fields for off-session payment
-                    payment_method: data.input.stripePaymentMethodId,
-                    off_session: true,
-                    confirm: true,
-                    capture_method: "automatic",
-                },
+                paymentCollectionId: data.paymentCollectionResult.paymentCollectionId,
+                orderId: data.input.orderId,
+                amount: data.input.amount,
+                currencyCode: data.input.currencyCode,
+                stripePaymentMethodId: data.input.stripePaymentMethodId,
+                customerEmail: data.input.customerEmail,
             })
         );
 
-        const paymentSession = createPaymentSessionsWorkflow.runAsStep({
-            input: paymentSessionInput,
-        });
+        // Step 3: Process Stripe off-session payment directly
+        const stripePaymentResult = processStripeOffSessionPaymentStep(stripePaymentInput);
 
-        // Step 3: Authorize the payment session
-        // This triggers Stripe to confirm the PaymentIntent
-        // The context from paymentSession contains provider-specific data
-        const authorizeInput = transform({ paymentSession }, (data) => ({
-            id: data.paymentSession.id,
-            context: data.paymentSession.context || {},
-        }));
+        // Step 4: Record the payment in Medusa
+        const recordInput = transform(
+            { paymentCollectionResult, stripePaymentResult, input },
+            (data) => ({
+                paymentCollectionId: data.paymentCollectionResult.paymentCollectionId,
+                stripePaymentIntentId: data.stripePaymentResult.stripePaymentIntentId,
+                amount: data.input.amount,
+                currencyCode: data.input.currencyCode,
+            })
+        );
 
-        const payment = authorizePaymentSessionStep(authorizeInput);
-
-        // Step 4: Capture the payment
-        // With capture_method: "automatic", the payment is already captured by Stripe
-        // but this step ensures the Payment record status is updated in Medusa
-        const captureInput = transform({ payment }, (data) => {
-            if (!data.payment) {
-                throw new Error("Payment authorization failed - no payment returned");
-            }
-            return {
-                payment_id: data.payment.id,
-                amount: data.payment.amount,
-            };
-        });
-
-        capturePaymentStep(captureInput);
+        const recordResult = recordSupplementaryPaymentStep(recordInput);
 
         // Step 5: Create OrderTransaction record
-        // Note: payment.amount is in Medusa's format (major units), not cents
         const transactionInput = transform(
-            { input, paymentCollectionResult, payment },
-            (data) => {
-                if (!data.payment) {
-                    throw new Error("Payment not available for transaction creation");
-                }
-                return {
-                    orderId: data.input.orderId,
-                    amount: data.input.amount, // Keep in cents for consistency with input
-                    currencyCode: data.input.currencyCode,
-                    paymentCollectionId: data.paymentCollectionResult.paymentCollectionId,
-                    paymentId: data.payment.id,
-                };
-            }
+            { input, paymentCollectionResult, recordResult },
+            (data) => ({
+                orderId: data.input.orderId,
+                amount: data.input.amount,
+                currencyCode: data.input.currencyCode,
+                paymentCollectionId: data.paymentCollectionResult.paymentCollectionId,
+                paymentId: data.recordResult.paymentSessionId,
+            })
         );
 
         createSupplementaryTransactionStep(transactionInput);
 
         // Return result
         const result = transform(
-            { paymentCollectionResult, paymentSession, payment },
-            (data) => {
-                if (!data.payment) {
-                    throw new Error("Payment not available for result");
-                }
-                return {
-                    paymentCollectionId: data.paymentCollectionResult.paymentCollectionId,
-                    paymentSessionId: data.paymentSession.id,
-                    paymentId: data.payment.id,
-                    success: true,
-                };
-            }
+            { paymentCollectionResult, stripePaymentResult, recordResult },
+            (data) => ({
+                paymentCollectionId: data.paymentCollectionResult.paymentCollectionId,
+                paymentSessionId: data.recordResult.paymentSessionId,
+                stripePaymentIntentId: data.stripePaymentResult.stripePaymentIntentId,
+                stripeCustomerId: data.stripePaymentResult.stripeCustomerId,
+                success: true,
+            })
         );
 
         return new WorkflowResponse(result);

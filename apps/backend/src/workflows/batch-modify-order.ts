@@ -242,6 +242,7 @@ const validateBatchPreconditionsStep = createStep(
                 "currency_code",
                 "customer_id",
                 "region_id",
+                "email", // Needed for Stripe Customer creation in supplementary charges
                 "metadata",
                 "items.*",
                 "payment_collections.id",
@@ -390,6 +391,7 @@ const validateBatchPreconditionsStep = createStep(
                 currency_code: order.currency_code,
                 customer_id: order.customer_id,
                 region_id: order.region_id,
+                email: order.email, // For Stripe Customer creation in supplementary charges
                 metadata: order.metadata || {},
                 items: order.items || [],
             },
@@ -801,6 +803,7 @@ const createSupplementaryPaymentCollectionStep = createStep(
             paymentIntentId: string;
             customerId?: string;
             regionId?: string;
+            customerEmail?: string;
         },
         { container }
     ): Promise<StepResponse<SupplementaryChargeResult>> => {
@@ -838,7 +841,7 @@ const createSupplementaryPaymentCollectionStep = createStep(
 
             // Run the supplementary charge workflow
             // This creates a new PaymentCollection, links it to the order,
-            // creates an off-session PaymentSession, and authorizes it
+            // creates an off-session PaymentIntent with a Stripe Customer, and captures it
             const result = await supplementaryChargeWorkflow(container).run({
                 input: {
                     orderId: input.orderId,
@@ -847,6 +850,7 @@ const createSupplementaryPaymentCollectionStep = createStep(
                     stripePaymentMethodId,
                     customerId: input.customerId,
                     regionId: input.regionId,
+                    customerEmail: input.customerEmail,
                 },
             });
 
@@ -866,10 +870,21 @@ const createSupplementaryPaymentCollectionStep = createStep(
         } catch (error) {
             // Log error but don't fail the entire workflow
             // The order modification itself succeeded, but the supplementary charge failed
+            // Handle object errors by serializing them properly
+            let errorMessage = "Unknown error";
+            if (error instanceof Error) {
+                errorMessage = error.message;
+            } else if (typeof error === 'object' && error !== null) {
+                errorMessage = JSON.stringify(error, null, 2);
+            } else {
+                errorMessage = String(error);
+            }
+
             logger.error("batch-modify-order", "Failed to create supplementary PaymentCollection", {
                 orderId: input.orderId,
                 supplementaryAmount: input.supplementaryAmount,
-            }, error instanceof Error ? error : new Error(String(error)));
+                errorDetails: errorMessage,
+            }, error instanceof Error ? error : new Error(errorMessage));
 
             // Store the failure in order metadata for manual follow-up
             const orderModuleService = container.resolve(Modules.ORDER);
@@ -1484,6 +1499,7 @@ export const batchModifyOrderWorkflow = createWorkflow(
             paymentIntentId: data.validation.paymentIntentId,
             customerId: data.validation.order.customer_id,
             regionId: data.validation.order.region_id,
+            customerEmail: data.validation.order.email, // For Stripe Customer creation
         }));
         const supplementaryResult = createSupplementaryPaymentCollectionStep(supplementaryChargeInput);
 
