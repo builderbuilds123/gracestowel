@@ -299,8 +299,7 @@ const processStripeOffSessionPaymentStep = createStep(
         const stripe = getStripeClient();
 
         stepLogger.info(
-            `[supplementary-charge] Processing Stripe off-session payment for order ${input.orderId}`,
-            { amount: input.amount, currency: input.currencyCode, paymentMethod: input.stripePaymentMethodId }
+            `[supplementary-charge] Processing Stripe off-session payment for order ${input.orderId}, amount: ${input.amount} ${input.currencyCode}, pm: ${input.stripePaymentMethodId}`
         );
 
         // Step 1: Get or create a Stripe Customer
@@ -385,12 +384,7 @@ const processStripeOffSessionPaymentStep = createStep(
         });
 
         stepLogger.info(
-            `[supplementary-charge] Created PaymentIntent ${paymentIntent.id} with status: ${paymentIntent.status}`,
-            {
-                amount: paymentIntent.amount,
-                currency: paymentIntent.currency,
-                capturedAmount: paymentIntent.amount_received
-            }
+            `[supplementary-charge] Created PaymentIntent ${paymentIntent.id} with status: ${paymentIntent.status}, amount: ${paymentIntent.amount}, captured: ${paymentIntent.amount_received}`
         );
 
         // Verify payment was successful
@@ -442,7 +436,14 @@ const processStripeOffSessionPaymentStep = createStep(
 );
 
 /**
- * Step to record the Stripe payment in Medusa's Payment module
+ * Step to record the completed Stripe payment in Medusa
+ *
+ * IMPORTANT: We DON'T use createPaymentSession here because that triggers
+ * the Stripe provider to create a NEW PaymentIntent. Instead, we directly
+ * update the PaymentCollection to mark it as completed/captured.
+ *
+ * The actual Stripe PaymentIntent was created and captured in the
+ * processStripeOffSessionPaymentStep. This step just updates Medusa's records.
  */
 const recordSupplementaryPaymentStep = createStep(
     "record-supplementary-payment",
@@ -450,6 +451,7 @@ const recordSupplementaryPaymentStep = createStep(
         input: {
             paymentCollectionId: string;
             stripePaymentIntentId: string;
+            stripeCustomerId: string;
             amount: number;
             currencyCode: string;
         },
@@ -457,23 +459,18 @@ const recordSupplementaryPaymentStep = createStep(
     ) => {
         const stepLogger = container.resolve("logger");
 
-        // Create a PaymentSession record in Medusa to track this payment
         interface PaymentModuleService {
-            createPaymentSession: (
+            updatePaymentCollections: (
                 paymentCollectionId: string,
-                input: {
-                    provider_id: string;
-                    amount: number;
-                    currency_code: string;
-                    data?: Record<string, unknown>;
+                data: {
+                    status?: string;
+                    captured_amount?: number;
+                    metadata?: Record<string, unknown>;
                 }
-            ) => Promise<{ id: string; data?: Record<string, unknown> }>;
-            updatePaymentSession: (
-                input: {
-                    id: string;
-                    data?: Record<string, unknown>;
-                }
-            ) => Promise<{ id: string }>;
+            ) => Promise<{ id: string; status?: string }>;
+            retrievePaymentCollection: (
+                paymentCollectionId: string
+            ) => Promise<{ id: string; metadata?: Record<string, unknown> }>;
         }
         const paymentModuleService = container.resolve(
             Modules.PAYMENT
@@ -482,29 +479,35 @@ const recordSupplementaryPaymentStep = createStep(
         // Convert cents to major units for Medusa
         const amountInMajorUnits = input.amount / 100;
 
-        // Create session (which will create a new PI in Stripe normally, but we'll update it)
-        // Actually, we already have a captured PI, so we just need to record it
-        const paymentSession = await paymentModuleService.createPaymentSession(
+        // Get existing metadata
+        const existingCollection = await paymentModuleService.retrievePaymentCollection(
+            input.paymentCollectionId
+        );
+
+        // Update the PaymentCollection to mark it as completed
+        // This records that the payment was captured without creating a new Stripe PI
+        const updatedCollection = await paymentModuleService.updatePaymentCollections(
             input.paymentCollectionId,
             {
-                provider_id: "pp_stripe",
-                amount: amountInMajorUnits,
-                currency_code: input.currencyCode.toLowerCase(),
-                data: {
-                    id: input.stripePaymentIntentId,
-                    status: "succeeded",
-                    amount: input.amount,
-                    currency: input.currencyCode.toLowerCase(),
+                status: "completed",
+                captured_amount: amountInMajorUnits,
+                metadata: {
+                    ...(existingCollection.metadata || {}),
+                    stripe_payment_intent_id: input.stripePaymentIntentId,
+                    stripe_customer_id: input.stripeCustomerId,
+                    captured_at: new Date().toISOString(),
+                    capture_method: "off_session_direct",
                 },
             }
         );
 
         stepLogger.info(
-            `[supplementary-charge] Recorded PaymentSession ${paymentSession.id} for PaymentIntent ${input.stripePaymentIntentId}`
+            `[supplementary-charge] Updated PaymentCollection ${input.paymentCollectionId} to completed for PaymentIntent ${input.stripePaymentIntentId}, capturedAmount: ${amountInMajorUnits}`
         );
 
         return new StepResponse({
-            paymentSessionId: paymentSession.id,
+            paymentCollectionId: input.paymentCollectionId,
+            status: "completed",
         });
     }
 );
@@ -547,12 +550,13 @@ export const supplementaryChargeWorkflow = createWorkflow(
         // Step 3: Process Stripe off-session payment directly
         const stripePaymentResult = processStripeOffSessionPaymentStep(stripePaymentInput);
 
-        // Step 4: Record the payment in Medusa
+        // Step 4: Record the payment in Medusa (updates PaymentCollection status)
         const recordInput = transform(
             { paymentCollectionResult, stripePaymentResult, input },
             (data) => ({
                 paymentCollectionId: data.paymentCollectionResult.paymentCollectionId,
                 stripePaymentIntentId: data.stripePaymentResult.stripePaymentIntentId,
+                stripeCustomerId: data.stripePaymentResult.stripeCustomerId,
                 amount: data.input.amount,
                 currencyCode: data.input.currencyCode,
             })
@@ -561,6 +565,7 @@ export const supplementaryChargeWorkflow = createWorkflow(
         const recordResult = recordSupplementaryPaymentStep(recordInput);
 
         // Step 5: Create OrderTransaction record
+        // Note: We use paymentCollectionId as the reference since we don't create a PaymentSession
         const transactionInput = transform(
             { input, paymentCollectionResult, recordResult },
             (data) => ({
@@ -568,7 +573,7 @@ export const supplementaryChargeWorkflow = createWorkflow(
                 amount: data.input.amount,
                 currencyCode: data.input.currencyCode,
                 paymentCollectionId: data.paymentCollectionResult.paymentCollectionId,
-                paymentId: data.recordResult.paymentSessionId,
+                paymentId: data.recordResult.paymentCollectionId, // Use PC ID as reference
             })
         );
 
@@ -579,9 +584,9 @@ export const supplementaryChargeWorkflow = createWorkflow(
             { paymentCollectionResult, stripePaymentResult, recordResult },
             (data) => ({
                 paymentCollectionId: data.paymentCollectionResult.paymentCollectionId,
-                paymentSessionId: data.recordResult.paymentSessionId,
                 stripePaymentIntentId: data.stripePaymentResult.stripePaymentIntentId,
                 stripeCustomerId: data.stripePaymentResult.stripeCustomerId,
+                status: data.recordResult.status,
                 success: true,
             })
         );
