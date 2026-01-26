@@ -135,19 +135,59 @@ const createSupplementaryPaymentCollectionStep = createStep(
             {
                 paymentCollectionId: paymentCollection.id,
             },
-            // Compensation: delete the PaymentCollection if workflow fails
-            paymentCollection.id
+            // Compensation data: include both IDs needed for rollback
+            {
+                paymentCollectionId: paymentCollection.id,
+                orderId: input.orderId,
+            }
         );
     },
-    // Compensation handler
-    async (paymentCollectionId, { container }) => {
-        if (!paymentCollectionId) return;
+    // Compensation handler - deletes BOTH the PaymentCollection AND the link to prevent orphaned links
+    async (compensationData, { container }) => {
+        if (!compensationData?.paymentCollectionId) return;
 
+        const { paymentCollectionId, orderId } = compensationData;
         const stepLogger = container.resolve("logger");
+
         stepLogger.warn(
-            `[supplementary-charge] Rolling back: deleting PaymentCollection ${paymentCollectionId}`
+            `[supplementary-charge] Rolling back: deleting PaymentCollection ${paymentCollectionId} and its link to order ${orderId}`
         );
 
+        // First, delete the link to prevent orphaned links
+        // This MUST happen before deleting the PaymentCollection
+        if (orderId) {
+            try {
+                interface RemoteLinkService {
+                    dismiss: (links: {
+                        [key: string]: {
+                            [idKey: string]: string;
+                        };
+                    }) => Promise<void>;
+                }
+                const remoteLink = container.resolve("remoteLink") as unknown as RemoteLinkService;
+
+                await remoteLink.dismiss({
+                    [Modules.ORDER]: {
+                        order_id: orderId,
+                    },
+                    [Modules.PAYMENT]: {
+                        payment_collection_id: paymentCollectionId,
+                    },
+                });
+
+                stepLogger.info(
+                    `[supplementary-charge] Deleted link between order ${orderId} and PaymentCollection ${paymentCollectionId}`
+                );
+            } catch (linkError) {
+                stepLogger.error(
+                    `[supplementary-charge] Failed to delete link for PaymentCollection ${paymentCollectionId}`,
+                    linkError
+                );
+                // Continue to delete the PaymentCollection even if link deletion fails
+            }
+        }
+
+        // Then delete the PaymentCollection
         try {
             interface PaymentModuleService {
                 deletePaymentCollections: (ids: string[]) => Promise<void>;
@@ -158,9 +198,13 @@ const createSupplementaryPaymentCollectionStep = createStep(
             await paymentModuleService.deletePaymentCollections([
                 paymentCollectionId,
             ]);
+
+            stepLogger.info(
+                `[supplementary-charge] Deleted PaymentCollection ${paymentCollectionId}`
+            );
         } catch (error) {
             stepLogger.error(
-                `[supplementary-charge] Failed to rollback PaymentCollection ${paymentCollectionId}`,
+                `[supplementary-charge] Failed to delete PaymentCollection ${paymentCollectionId}`,
                 error
             );
         }
