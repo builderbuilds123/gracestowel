@@ -65,6 +65,10 @@ const createSupplementaryPaymentCollectionStep = createStep(
             throw new Error(`Invalid supplementary amount: ${input.amount}`);
         }
 
+        // Convert from cents to major units for Medusa
+        // Input amount is in cents (for Stripe compatibility), but Medusa v2 uses major units
+        const amountInMajorUnits = input.amount / 100;
+
         // Create PaymentCollection using Payment Module
         interface PaymentModuleService {
             createPaymentCollections: (
@@ -83,12 +87,13 @@ const createSupplementaryPaymentCollectionStep = createStep(
         const [paymentCollection] =
             await paymentModuleService.createPaymentCollections([
                 {
-                    amount: input.amount,
+                    amount: amountInMajorUnits,
                     currency_code: input.currencyCode.toLowerCase(),
                     region_id: input.regionId,
                     metadata: {
                         supplementary_charge: true,
                         source_order_id: input.orderId,
+                        amount_in_cents: input.amount, // Store original cents for reference
                         created_at: new Date().toISOString(),
                     },
                 },
@@ -100,7 +105,7 @@ const createSupplementaryPaymentCollectionStep = createStep(
 
         stepLogger.info(
             `[supplementary-charge] Created PaymentCollection ${paymentCollection.id} ` +
-                `for order ${input.orderId} (amount: ${input.amount} ${input.currencyCode})`
+                `for order ${input.orderId} (amount: ${amountInMajorUnits} ${input.currencyCode}, ${input.amount} cents)`
         );
 
         // Link PaymentCollection to Order using remoteLink

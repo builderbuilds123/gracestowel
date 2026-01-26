@@ -6,10 +6,8 @@ import {
     transform,
 } from "@medusajs/framework/workflows-sdk";
 import { ContainerRegistrationKeys, Modules, QueryContext } from "@medusajs/framework/utils";
-import Stripe from "stripe";
 import { getStripeClient } from "../utils/stripe";
 import { modificationTokenService } from "../services/modification-token";
-import { retryWithBackoff, isRetryableStripeError } from "../utils/stripe-retry";
 import {
     beginOrderEditOrderWorkflow,
     orderEditAddNewItemWorkflow,
@@ -18,6 +16,7 @@ import {
 } from "@medusajs/core-flows";
 import { logger } from "../utils/logger";
 import { formatModificationWindow } from "../lib/payment-capture-queue";
+import { supplementaryChargeWorkflow } from "./supplementary-charge";
 
 // ============================================================================
 // Input/Output Types
@@ -50,6 +49,8 @@ interface BatchValidationResult {
         tax_total: number;
         subtotal: number;
         currency_code: string;
+        customer_id?: string;
+        region_id?: string;
         metadata: Record<string, any>;
         items: any[];
     };
@@ -239,6 +240,8 @@ const validateBatchPreconditionsStep = createStep(
                 "tax_total",
                 "subtotal",
                 "currency_code",
+                "customer_id",
+                "region_id",
                 "metadata",
                 "items.*",
                 "payment_collections.id",
@@ -385,6 +388,8 @@ const validateBatchPreconditionsStep = createStep(
                 tax_total: order.tax_total || 0,
                 subtotal: order.subtotal || 0,
                 currency_code: order.currency_code,
+                customer_id: order.customer_id,
+                region_id: order.region_id,
                 metadata: order.metadata || {},
                 items: order.items || [],
             },
@@ -508,124 +513,60 @@ const calculateBatchTotalsStep = createStep(
 );
 
 /**
- * Step 3: Increment Stripe PaymentIntent authorization (single update for all items)
+ * Step 3: Calculate supplementary charge amount for order modifications
  *
- * IMPORTANT: For PaymentIntents in `requires_capture` status, we must use
- * `incrementAuthorization` instead of `update`. The `update` method cannot
- * change the authorized amount - only `incrementAuthorization` can do that.
- *
- * @see https://docs.stripe.com/api/payment_intents/increment_authorization
+ * Instead of trying to increment the Stripe authorization (which requires IC+ pricing),
+ * we simply calculate the difference and flag it for a supplementary charge at capture time.
+ * This approach works with all Stripe accounts.
  */
-const incrementStripeBatchStep = createStep(
-    "increment-stripe-batch",
+const calculateSupplementaryChargeStep = createStep(
+    "calculate-supplementary-charge",
     async (
         input: {
             paymentIntentId: string;
             currentAmount: number;
             newAmount: number;
             orderId: string;
-            requestId: string;
         }
     ): Promise<StepResponse<BatchStripeResult>> => {
         const difference = input.newAmount - input.currentAmount;
 
         if (difference <= 0) {
+            // No increase in order total - no supplementary charge needed
+            logger.info("batch-modify-order", "No supplementary charge needed (total not increased)", {
+                orderId: input.orderId,
+                currentAmount: input.currentAmount,
+                newAmount: input.newAmount,
+            });
+
             return new StepResponse({
                 success: true,
                 previousAmount: input.currentAmount,
                 newAmount: input.currentAmount,
                 skipped: true,
                 paymentIntentId: input.paymentIntentId,
+                requiresSupplementaryCharge: false,
+                supplementaryAmount: 0,
             });
         }
 
-        const stripe = getStripeClient();
-        const idempotencyKey = `batch-modify-increment-${input.orderId}-${input.requestId}`;
+        // Order total increased - flag for supplementary charge at capture time
+        logger.info("batch-modify-order", "Supplementary charge will be required at capture", {
+            orderId: input.orderId,
+            paymentIntentId: input.paymentIntentId,
+            currentAmount: input.currentAmount,
+            newAmount: input.newAmount,
+            supplementaryAmount: difference,
+        });
 
-        try {
-            // Use incrementAuthorization for PaymentIntents in requires_capture status
-            // This is the only way to increase the authorized amount
-            const updatedPI = await retryWithBackoff(
-                async () => stripe.paymentIntents.incrementAuthorization(
-                    input.paymentIntentId,
-                    { amount: input.newAmount },
-                    { idempotencyKey }
-                ),
-                {
-                    maxRetries: 3,
-                    initialDelayMs: 200,
-                    factor: 2,
-                    shouldRetry: isRetryableStripeError,
-                }
-            );
-
-            logger.info("batch-modify-order", "Stripe authorization incremented", {
-                paymentIntentId: input.paymentIntentId,
-                previousAmount: input.currentAmount,
-                newAmount: updatedPI.amount,
-                amountCapturable: updatedPI.amount_capturable,
-            });
-
-            return new StepResponse({
-                success: true,
-                previousAmount: input.currentAmount,
-                newAmount: updatedPI.amount,
-                skipped: false,
-                paymentIntentId: input.paymentIntentId,
-            });
-        } catch (error) {
-            if (error instanceof Stripe.errors.StripeCardError) {
-                throw new CardDeclinedError(error.message, error.decline_code);
-            }
-
-            // Check if this is an "account not eligible" error for incremental authorization
-            // This happens with standard Stripe accounts (IC+ pricing required)
-            const errorMessage = error instanceof Error ? error.message : String(error);
-            const isNotEligible = errorMessage.includes("not eligible for the requested card features") ||
-                                  errorMessage.includes("incremental_authorization");
-
-            if (isNotEligible) {
-                // Gracefully handle - the order changes will go through, but we'll need to
-                // create a supplementary charge at capture time for the difference
-                logger.warn("batch-modify-order", "Incremental authorization not available - will require supplementary charge at capture", {
-                    paymentIntentId: input.paymentIntentId,
-                    currentAmount: input.currentAmount,
-                    requestedAmount: input.newAmount,
-                    difference: input.newAmount - input.currentAmount,
-                });
-
-                return new StepResponse({
-                    success: true,
-                    previousAmount: input.currentAmount,
-                    newAmount: input.currentAmount, // Keeps current authorization
-                    skipped: false,
-                    paymentIntentId: input.paymentIntentId,
-                    requiresSupplementaryCharge: true,
-                    supplementaryAmount: input.newAmount - input.currentAmount,
-                });
-            }
-
-            // For other errors, log and re-throw
-            logger.error("batch-modify-order", "Failed to increment Stripe authorization", {
-                paymentIntentId: input.paymentIntentId,
-                currentAmount: input.currentAmount,
-                newAmount: input.newAmount,
-            }, error instanceof Error ? error : new Error(String(error)));
-            throw error;
-        }
-    },
-    // Compensation: We cannot easily rollback an increment, but we can try to update
-    // Note: Stripe doesn't support decrementing authorization, so this is best-effort
-    async (prev?: BatchStripeResult) => {
-        if (!prev || prev.skipped) return;
-
-        // Note: Stripe doesn't support decrementing authorization.
-        // The best we can do is log this and let the capture happen at the original amount
-        // or let the authorization expire.
-        logger.warn("batch-modify-order", "Cannot rollback Stripe authorization increment - authorization will remain at new amount", {
-            paymentIntentId: prev.paymentIntentId,
-            previousAmount: prev.previousAmount,
-            newAmount: prev.newAmount,
+        return new StepResponse({
+            success: true,
+            previousAmount: input.currentAmount,
+            newAmount: input.currentAmount, // Authorization stays at original amount
+            skipped: false,
+            paymentIntentId: input.paymentIntentId,
+            requiresSupplementaryCharge: true,
+            supplementaryAmount: difference,
         });
     }
 );
@@ -659,7 +600,7 @@ const executeBatchOrderEditStep = createStep(
         const existingItemInfo = new Map<string, { variantId: string; quantity: number }>(
             existingOrder[0]?.items?.map((item: any) => [
                 item.id,
-                { variantId: item.variant_id, quantity: item.quantity }
+                { variantId: item.variant_id, quantity: Number(item.quantity) || 0 }
             ]) || []
         );
 
@@ -716,11 +657,12 @@ const executeBatchOrderEditStep = createStep(
             const existingInfo = existingItemInfo.get(item.item_id!);
             if (existingInfo) {
                 // Track the quantity change for reservation updates
+                // Ensure quantities are numbers (Medusa may return BigNumber)
                 quantityUpdates.push({
                     lineItemId: item.item_id!,
                     variantId: existingInfo.variantId,
-                    oldQuantity: existingInfo.quantity,
-                    newQuantity: item.quantity,
+                    oldQuantity: Number(existingInfo.quantity) || 0,
+                    newQuantity: Number(item.quantity) || 0,
                 });
             }
 
@@ -831,70 +773,132 @@ const updateBatchPaymentCollectionStep = createStep(
     }
 );
 
+interface SupplementaryChargeResult {
+    created: boolean;
+    paymentCollectionId?: string;
+    paymentSessionId?: string;
+    paymentId?: string;
+}
+
 /**
- * Step: Update order metadata with supplementary charge info
+ * Step: Create supplementary PaymentCollection for the additional amount
  *
- * When incremental authorization isn't available (standard Stripe accounts),
- * we store the supplementary charge info in order metadata so the capture
- * flow knows to create an additional charge for the difference.
+ * When the order total increases, we immediately create a new PaymentCollection
+ * with a PaymentSession for the difference amount. This creates an off-session
+ * Stripe PaymentIntent using the customer's saved payment method.
  *
- * IMPORTANT: This step ACCUMULATES amounts across multiple edits. If the customer
- * makes multiple modifications (e.g., adds item A, then adds item B), the
- * supplementary_charge_amount will be the sum of all additional amounts.
+ * The PaymentCollection is linked to the order, and the charge is authorized
+ * (and can be captured) separately from the original payment.
  */
-const updateOrderSupplementaryChargeStep = createStep(
-    "update-order-supplementary-charge",
+const createSupplementaryPaymentCollectionStep = createStep(
+    "create-supplementary-payment-collection",
     async (
         input: {
             orderId: string;
             requiresSupplementaryCharge: boolean;
             supplementaryAmount: number;
             currencyCode: string;
+            paymentIntentId: string;
+            customerId?: string;
+            regionId?: string;
         },
         { container }
-    ): Promise<StepResponse<{ updated: boolean; previousAmount: number }>> => {
+    ): Promise<StepResponse<SupplementaryChargeResult>> => {
         if (!input.requiresSupplementaryCharge || input.supplementaryAmount <= 0) {
-            return new StepResponse({ updated: false, previousAmount: 0 });
+            logger.info("batch-modify-order", "No supplementary charge needed", {
+                orderId: input.orderId,
+                requiresSupplementaryCharge: input.requiresSupplementaryCharge,
+                supplementaryAmount: input.supplementaryAmount,
+            });
+            return new StepResponse({ created: false });
         }
 
-        const orderModuleService = container.resolve(Modules.ORDER);
-        const query = container.resolve("query");
-
-        // Fetch existing metadata to accumulate amounts
-        const { data: orders } = await query.graph({
-            entity: "order",
-            fields: ["id", "metadata"],
-            filters: { id: input.orderId },
-        });
-
-        const existingMetadata = (orders?.[0]?.metadata || {}) as Record<string, unknown>;
-        const existingAmount = typeof existingMetadata.supplementary_charge_amount === "number"
-            ? existingMetadata.supplementary_charge_amount
-            : 0;
-
-        // Accumulate the new amount with any existing amount
-        const totalSupplementaryAmount = existingAmount + input.supplementaryAmount;
-
-        // Update order metadata with accumulated supplementary charge info
-        await orderModuleService.updateOrders([{
-            id: input.orderId,
-            metadata: {
-                ...existingMetadata,
-                supplementary_charge_required: true,
-                supplementary_charge_amount: totalSupplementaryAmount,
-                supplementary_charge_currency: input.currencyCode,
-            },
-        }]);
-
-        logger.info("batch-modify-order", "Updated order with supplementary charge info", {
+        logger.info("batch-modify-order", "Creating supplementary PaymentCollection", {
             orderId: input.orderId,
-            newAmount: input.supplementaryAmount,
-            previousAmount: existingAmount,
-            totalAmount: totalSupplementaryAmount,
+            supplementaryAmount: input.supplementaryAmount,
             currencyCode: input.currencyCode,
         });
 
-        return new StepResponse({ updated: true, previousAmount: existingAmount });
+        try {
+            // Get payment method from original PaymentIntent
+            const stripe = getStripeClient();
+            const originalPI = await stripe.paymentIntents.retrieve(input.paymentIntentId);
+
+            if (!originalPI.payment_method) {
+                logger.error("batch-modify-order", "Original PaymentIntent has no saved payment method", {
+                    orderId: input.orderId,
+                    paymentIntentId: input.paymentIntentId,
+                });
+                throw new Error("Original PaymentIntent has no saved payment method - cannot create supplementary charge");
+            }
+
+            const stripePaymentMethodId = typeof originalPI.payment_method === 'string'
+                ? originalPI.payment_method
+                : originalPI.payment_method.id;
+
+            // Run the supplementary charge workflow
+            // This creates a new PaymentCollection, links it to the order,
+            // creates an off-session PaymentSession, and authorizes it
+            const result = await supplementaryChargeWorkflow(container).run({
+                input: {
+                    orderId: input.orderId,
+                    amount: input.supplementaryAmount,
+                    currencyCode: input.currencyCode,
+                    stripePaymentMethodId,
+                    customerId: input.customerId,
+                    regionId: input.regionId,
+                },
+            });
+
+            logger.info("batch-modify-order", "Supplementary PaymentCollection created", {
+                orderId: input.orderId,
+                paymentCollectionId: result.result?.paymentCollectionId,
+                paymentSessionId: result.result?.paymentSessionId,
+                paymentId: result.result?.paymentId,
+            });
+
+            return new StepResponse({
+                created: true,
+                paymentCollectionId: result.result?.paymentCollectionId,
+                paymentSessionId: result.result?.paymentSessionId,
+                paymentId: result.result?.paymentId,
+            });
+        } catch (error) {
+            // Log error but don't fail the entire workflow
+            // The order modification itself succeeded, but the supplementary charge failed
+            logger.error("batch-modify-order", "Failed to create supplementary PaymentCollection", {
+                orderId: input.orderId,
+                supplementaryAmount: input.supplementaryAmount,
+            }, error instanceof Error ? error : new Error(String(error)));
+
+            // Store the failure in order metadata for manual follow-up
+            const orderModuleService = container.resolve(Modules.ORDER);
+            const query = container.resolve("query");
+
+            const { data: orders } = await query.graph({
+                entity: "order",
+                fields: ["id", "metadata"],
+                filters: { id: input.orderId },
+            });
+
+            const existingMetadata = (orders?.[0]?.metadata || {}) as Record<string, unknown>;
+
+            await orderModuleService.updateOrders([{
+                id: input.orderId,
+                metadata: {
+                    ...existingMetadata,
+                    supplementary_charge_required: true,
+                    supplementary_charge_amount: input.supplementaryAmount,
+                    supplementary_charge_currency: input.currencyCode,
+                    supplementary_charge_failed: true,
+                    supplementary_charge_error: error instanceof Error ? error.message : String(error),
+                    supplementary_charge_failed_at: new Date().toISOString(),
+                },
+            }]);
+
+            // Return as not created - but don't throw (order modification still succeeded)
+            return new StepResponse({ created: false });
+        }
     }
 );
 
@@ -1292,9 +1296,12 @@ const updateBatchReservationsStep = createStep(
         let createdCount = 0;
 
         for (const update of input.quantityUpdates) {
-            const quantityDiff = update.newQuantity - update.oldQuantity;
+            // Ensure quantities are numbers (defensive conversion)
+            const newQty = Number(update.newQuantity) || 0;
+            const oldQty = Number(update.oldQuantity) || 0;
+            const quantityDiff = newQty - oldQty;
 
-            if (quantityDiff === 0) continue;
+            if (quantityDiff === 0 || !Number.isFinite(quantityDiff)) continue;
 
             // Find existing reservation for this line item
             const { data: reservations } = await query.graph({
@@ -1306,7 +1313,8 @@ const updateBatchReservationsStep = createStep(
             if (reservations.length > 0) {
                 // Update existing reservation
                 const reservation = reservations[0] as any;
-                const newReservationQuantity = reservation.quantity + quantityDiff;
+                const currentReservationQty = Number(reservation.quantity) || 0;
+                const newReservationQuantity = currentReservationQty + quantityDiff;
 
                 if (newReservationQuantity <= 0) {
                     // Delete reservation if quantity becomes 0 or negative
@@ -1324,7 +1332,7 @@ const updateBatchReservationsStep = createStep(
                     logger.info("batch-modify-order", "Updated reservation quantity", {
                         reservationId: reservation.id,
                         lineItemId: update.lineItemId,
-                        oldQuantity: reservation.quantity,
+                        oldQuantity: currentReservationQty,
                         newQuantity: newReservationQuantity,
                     });
                 }
@@ -1356,14 +1364,14 @@ const updateBatchReservationsStep = createStep(
                                 reservations: [{
                                     inventory_item_id: inventoryItemId,
                                     location_id: locationId,
-                                    quantity: update.newQuantity,
+                                    quantity: newQty,
                                     line_item_id: update.lineItemId,
                                 }],
                             },
                         });
                         logger.info("batch-modify-order", "Created new reservation for existing item", {
                             lineItemId: update.lineItemId,
-                            quantity: update.newQuantity,
+                            quantity: newQty,
                             locationId,
                         });
                         createdCount++;
@@ -1417,15 +1425,18 @@ export const batchModifyOrderWorkflow = createWorkflow(
         }));
         const totals = calculateBatchTotalsStep(totalsInput);
 
-        // Step 3: Single Stripe PI update for total difference
+        // Step 3: Calculate supplementary charge if order total increased
+        // Instead of trying to increment Stripe authorization (requires IC+ pricing),
+        // we flag the difference for a supplementary charge at capture time
+        // Note: Stripe amounts are in cents, Medusa order totals are in major units
+        // Convert newOrderTotal to cents for comparison with PaymentIntent.amount
         const stripeInput = transform({ validation, totals, input }, (data) => ({
             paymentIntentId: data.validation.paymentIntentId,
-            currentAmount: data.validation.paymentIntent.amount,
-            newAmount: data.totals.newOrderTotal,
+            currentAmount: data.validation.paymentIntent.amount, // cents (from Stripe)
+            newAmount: Math.round(data.totals.newOrderTotal * 100), // convert to cents
             orderId: data.input.orderId,
-            requestId: data.input.requestId,
         }));
-        const stripeResult = incrementStripeBatchStep(stripeInput);
+        const stripeResult = calculateSupplementaryChargeStep(stripeInput);
 
         // Step 4: Execute batch order edit
         const editInput = transform({ validation, input }, (data) => ({
@@ -1443,11 +1454,10 @@ export const batchModifyOrderWorkflow = createWorkflow(
         }));
         updateBatchPaymentCollectionStep(pcInput);
 
-        // Note: We do NOT call updateBatchPaymentSessionStep here.
-        // Stripe's updatePayment API doesn't support PaymentIntents with status "requires_capture".
-        // The Stripe authorization is already updated via incrementAuthorization (Step 3),
-        // and PaymentCollection is updated above (Step 5). PaymentSession.amount is informational
-        // and will be synced when the payment is captured.
+        // Note: We do NOT update the Stripe authorization amount here.
+        // Instead, any increase in order total is handled via a supplementary charge
+        // that gets processed at capture time. PaymentCollection is updated above (Step 5)
+        // to reflect the new order total for Medusa's internal tracking.
 
         // Step 6: Create inventory reservations for new line items
         const reservationInput = transform({ editResult, input }, (data) => ({
@@ -1463,34 +1473,39 @@ export const batchModifyOrderWorkflow = createWorkflow(
         }));
         const reservationUpdateResult = updateBatchReservationsStep(reservationUpdateInput);
 
-        // Step 8: Update order metadata if supplementary charge is required
-        // This stores the info so capture flow knows to create an additional charge
+        // Step 8: Create supplementary PaymentCollection if order total increased
+        // This immediately creates a new PaymentCollection with an off-session charge
+        // using the customer's saved payment method from the original checkout
         const supplementaryChargeInput = transform({ stripeResult, input, validation }, (data) => ({
             orderId: data.input.orderId,
             requiresSupplementaryCharge: data.stripeResult.requiresSupplementaryCharge || false,
             supplementaryAmount: data.stripeResult.supplementaryAmount || 0,
             currencyCode: data.validation.order.currency_code,
+            paymentIntentId: data.validation.paymentIntentId,
+            customerId: data.validation.order.customer_id,
+            regionId: data.validation.order.region_id,
         }));
-        updateOrderSupplementaryChargeStep(supplementaryChargeInput);
+        const supplementaryResult = createSupplementaryPaymentCollectionStep(supplementaryChargeInput);
 
         // Build final result
         const result = transform(
-            { validation, totals, stripeResult, editResult, reservationResult, reservationUpdateResult, input },
+            { validation, totals, stripeResult, editResult, reservationResult, reservationUpdateResult, supplementaryResult, input },
             (data) => ({
                 order: data.editResult.orderPreview,
                 items_added: data.editResult.itemsAdded,
                 items_updated: data.editResult.itemsUpdated,
                 order_change_id: data.editResult.orderChangeId,
                 payment_status: data.stripeResult.requiresSupplementaryCharge
-                    ? "requires_supplementary_charge"
+                    ? (data.supplementaryResult.created ? "supplementary_authorized" : "supplementary_failed")
                     : data.stripeResult.skipped
                     ? "unchanged"
                     : "succeeded",
                 total_difference: data.totals.totalDifference,
                 reservations_created: data.reservationResult.reservationCount,
                 reservations_updated: data.reservationUpdateResult.updatedCount + data.reservationUpdateResult.createdCount,
-                // Include supplementary charge info if incremental auth wasn't available
-                requires_supplementary_charge: data.stripeResult.requiresSupplementaryCharge || false,
+                // Supplementary PaymentCollection info
+                supplementary_charge_created: data.supplementaryResult.created || false,
+                supplementary_payment_collection_id: data.supplementaryResult.paymentCollectionId,
                 supplementary_amount: data.stripeResult.supplementaryAmount || 0,
             })
         );
