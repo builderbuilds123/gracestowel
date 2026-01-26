@@ -282,6 +282,15 @@ export async function executePaymentCapture(
 
     // Step 4: Update Medusa Records
     await updateOrderAfterCapture(container, orderId, finalCaptureAmount);
+
+    // Step 5: Process supplementary charge if required
+    // This handles orders modified on standard Stripe accounts without IC+ pricing
+    await processSupplementaryChargeIfRequired(
+        container,
+        orderId,
+        paymentIntentId,
+        currencyCode
+    );
 }
 
 // Helper: Update Order Logic (Migrated from worker)
@@ -369,16 +378,16 @@ async function updatePaymentCollectionOnCapture(
 
         // Type assertion for Medusa Payment Module
         interface PaymentModuleService {
-            updatePaymentCollections: (updates: Array<{ id: string; status: string }>) => Promise<void>;
+            updatePaymentCollections: (
+                idOrSelector: string | Record<string, unknown>,
+                data: { status: string }
+            ) => Promise<void>;
         }
         const paymentModuleService = container.resolve(Modules.PAYMENT) as unknown as PaymentModuleService;
         
-        await paymentModuleService.updatePaymentCollections([
-            {
-                id: collection.id,
-                status: PaymentCollectionStatus.COMPLETED,
-            },
-        ]);
+        await paymentModuleService.updatePaymentCollections(collection.id, {
+            status: PaymentCollectionStatus.COMPLETED,
+        });
 
         return { 
             paymentCollectionId: collection.id, 
@@ -404,7 +413,7 @@ async function createOrderTransactionOnCapture(
     try {
         const orderModuleService = container.resolve(Modules.ORDER) as any;
         const amountInMajorUnits = amountCaptured / 100;
-        
+
         await orderModuleService.addOrderTransactions({
             order_id: orderId,
             amount: amountInMajorUnits,
@@ -414,5 +423,133 @@ async function createOrderTransactionOnCapture(
         });
     } catch (error) {
         logger.error("payment-capture-core", "OrderTransaction creation failed", { orderId }, error);
+    }
+}
+
+/**
+ * Process supplementary charge if the order was modified on a standard Stripe account
+ *
+ * When customers add items during the modification window and the Stripe account
+ * doesn't support incrementAuthorization (requires IC+ pricing), we need to create
+ * a separate off-session charge for the additional amount.
+ *
+ * Metadata flags checked:
+ * - supplementary_charge_required: boolean
+ * - supplementary_charge_amount: number (in cents)
+ * - supplementary_charge_currency: string
+ */
+async function processSupplementaryChargeIfRequired(
+    container: MedusaContainer,
+    orderId: string,
+    paymentIntentId: string,
+    currencyCode: string
+): Promise<void> {
+    const logger = container.resolve("logger");
+
+    try {
+        // Check if supplementary charge is required from order metadata
+        const metadata = await getOrderMetadata(container, orderId);
+        const supplementaryRequired = metadata?.supplementary_charge_required === true;
+        const supplementaryAmount = metadata?.supplementary_charge_amount as number | undefined;
+        const supplementaryCurrency = (metadata?.supplementary_charge_currency as string | undefined) || currencyCode;
+
+        if (!supplementaryRequired || !supplementaryAmount || supplementaryAmount <= 0) {
+            // No supplementary charge needed
+            return;
+        }
+
+        logger.info("payment-capture-core", "Processing supplementary charge", {
+            orderId,
+            supplementaryAmount,
+            currency: supplementaryCurrency,
+        });
+
+        // Get payment method from original PaymentIntent
+        const stripe = getStripeClient();
+        const originalPI = await stripe.paymentIntents.retrieve(paymentIntentId);
+
+        if (!originalPI.payment_method) {
+            logger.error("payment-capture-core", "Original PaymentIntent has no saved payment method", {
+                orderId,
+                paymentIntentId,
+            });
+            // Keep metadata for manual follow-up
+            return;
+        }
+
+        // Get customer_id and region_id from order
+        const query = container.resolve("query");
+        const { data: orders } = await query.graph({
+            entity: "order",
+            fields: ["customer_id", "region_id"],
+            filters: { id: orderId },
+        });
+
+        const order = orders?.[0];
+
+        // Run supplementary charge workflow
+        const { supplementaryChargeWorkflow } = await import("../workflows/supplementary-charge.js");
+
+        const result = await supplementaryChargeWorkflow(container).run({
+            input: {
+                orderId,
+                amount: supplementaryAmount,
+                currencyCode: supplementaryCurrency,
+                stripePaymentMethodId: typeof originalPI.payment_method === 'string'
+                    ? originalPI.payment_method
+                    : originalPI.payment_method.id,
+                customerId: order?.customer_id || undefined,
+                regionId: order?.region_id || undefined,
+            },
+        });
+
+        logger.info("payment-capture-core", "Supplementary charge succeeded", {
+            orderId,
+            amount: supplementaryAmount,
+            paymentCollectionId: result.result?.paymentCollectionId,
+        });
+
+        // Clear supplementary charge flags from order metadata
+        const orderService = container.resolve("order");
+        const updatedMetadata = { ...metadata };
+        delete updatedMetadata.supplementary_charge_required;
+        delete updatedMetadata.supplementary_charge_amount;
+        delete updatedMetadata.supplementary_charge_currency;
+        updatedMetadata.supplementary_charge_captured_at = new Date().toISOString();
+        updatedMetadata.supplementary_charge_payment_collection_id = result.result?.paymentCollectionId;
+
+        await orderService.updateOrders([{
+            id: orderId,
+            metadata: updatedMetadata,
+        }]);
+
+        logger.info("payment-capture-core", "Cleared supplementary charge flags from order", { orderId });
+
+    } catch (error) {
+        // Log error but don't fail - main capture already succeeded
+        // Customer has their original items, supplementary charge can be retried manually
+        logger.error("payment-capture-core", "Supplementary charge failed", {
+            orderId,
+            paymentIntentId,
+        }, error instanceof Error ? error : new Error(String(error)));
+
+        // Update metadata to indicate failure for manual follow-up
+        try {
+            const metadata = await getOrderMetadata(container, orderId);
+            const orderService = container.resolve("order");
+            await orderService.updateOrders([{
+                id: orderId,
+                metadata: {
+                    ...metadata,
+                    supplementary_charge_failed: true,
+                    supplementary_charge_error: error instanceof Error ? error.message : String(error),
+                    supplementary_charge_failed_at: new Date().toISOString(),
+                },
+            }]);
+        } catch (metadataError) {
+            logger.error("payment-capture-core", "Failed to update metadata after supplementary charge failure", {
+                orderId,
+            }, metadataError instanceof Error ? metadataError : new Error(String(metadataError)));
+        }
     }
 }
