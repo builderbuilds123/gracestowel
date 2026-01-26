@@ -251,6 +251,10 @@ export const supplementaryChargeWorkflow = createWorkflow(
         // - off_session: true (no customer interaction)
         // - confirm: true (immediately confirm)
         // - capture_method: automatic (capture on confirmation)
+        //
+        // Note: createPaymentSessionsWorkflow fetches amount and currency_code
+        // from the PaymentCollection internally, so we don't need to pass them here.
+        // The `data` object contains Stripe-specific off-session payment fields.
         const paymentSessionInput = transform(
             { paymentCollectionResult, input },
             (data) => ({
@@ -258,6 +262,7 @@ export const supplementaryChargeWorkflow = createWorkflow(
                 provider_id: "pp_stripe_stripe",
                 customer_id: data.input.customerId,
                 data: {
+                    // Stripe-specific fields for off-session payment
                     payment_method: data.input.stripePaymentMethodId,
                     off_session: true,
                     confirm: true,
@@ -272,6 +277,7 @@ export const supplementaryChargeWorkflow = createWorkflow(
 
         // Step 3: Authorize the payment session
         // This triggers Stripe to confirm the PaymentIntent
+        // The context from paymentSession contains provider-specific data
         const authorizeInput = transform({ paymentSession }, (data) => ({
             id: data.paymentSession.id,
             context: data.paymentSession.context || {},
@@ -280,25 +286,36 @@ export const supplementaryChargeWorkflow = createWorkflow(
         const payment = authorizePaymentSessionStep(authorizeInput);
 
         // Step 4: Capture the payment
-        // With capture_method: "automatic", this should be a no-op but ensures
-        // the Payment record is marked as captured
-        const captureInput = transform({ payment, input }, (data) => ({
-            payment_id: data.payment?.id || "",
-            amount: data.input.amount,
-        }));
+        // With capture_method: "automatic", the payment is already captured by Stripe
+        // but this step ensures the Payment record status is updated in Medusa
+        const captureInput = transform({ payment }, (data) => {
+            if (!data.payment) {
+                throw new Error("Payment authorization failed - no payment returned");
+            }
+            return {
+                payment_id: data.payment.id,
+                amount: data.payment.amount,
+            };
+        });
 
         capturePaymentStep(captureInput);
 
         // Step 5: Create OrderTransaction record
+        // Note: payment.amount is in Medusa's format (major units), not cents
         const transactionInput = transform(
             { input, paymentCollectionResult, payment },
-            (data) => ({
-                orderId: data.input.orderId,
-                amount: data.input.amount,
-                currencyCode: data.input.currencyCode,
-                paymentCollectionId: data.paymentCollectionResult.paymentCollectionId,
-                paymentId: data.payment?.id || "",
-            })
+            (data) => {
+                if (!data.payment) {
+                    throw new Error("Payment not available for transaction creation");
+                }
+                return {
+                    orderId: data.input.orderId,
+                    amount: data.input.amount, // Keep in cents for consistency with input
+                    currencyCode: data.input.currencyCode,
+                    paymentCollectionId: data.paymentCollectionResult.paymentCollectionId,
+                    paymentId: data.payment.id,
+                };
+            }
         );
 
         createSupplementaryTransactionStep(transactionInput);
@@ -306,12 +323,17 @@ export const supplementaryChargeWorkflow = createWorkflow(
         // Return result
         const result = transform(
             { paymentCollectionResult, paymentSession, payment },
-            (data) => ({
-                paymentCollectionId: data.paymentCollectionResult.paymentCollectionId,
-                paymentSessionId: data.paymentSession.id,
-                paymentId: data.payment?.id || "",
-                success: true,
-            })
+            (data) => {
+                if (!data.payment) {
+                    throw new Error("Payment not available for result");
+                }
+                return {
+                    paymentCollectionId: data.paymentCollectionResult.paymentCollectionId,
+                    paymentSessionId: data.paymentSession.id,
+                    paymentId: data.payment.id,
+                    success: true,
+                };
+            }
         );
 
         return new WorkflowResponse(result);
