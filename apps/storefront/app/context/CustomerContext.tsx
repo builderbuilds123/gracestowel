@@ -36,6 +36,7 @@ interface CustomerContextType {
     isAuthenticated: boolean;
     isLoading: boolean;
     login: (email: string, password: string, cartId?: string) => Promise<{ success: boolean; error?: string }>;
+    loginWithGoogle: (cartId?: string) => Promise<{ success: boolean; error?: string }>;
     register: (email: string, password: string, firstName?: string, lastName?: string, cartId?: string) => Promise<{ success: boolean; error?: string }>;
     logout: () => Promise<void>;
     refreshCustomer: () => Promise<void>;
@@ -158,6 +159,73 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
         } catch (error) {
             logger.error('Login error', error as Error);
             return { success: false, error: 'An error occurred during login' };
+        }
+    };
+
+    const loginWithGoogle = async (cartId?: string): Promise<{ success: boolean; error?: string }> => {
+        try {
+            // Step 1: Initiate Google OAuth flow
+            const authResponse = await medusaFetch(`/auth/customer/google`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({}),
+                label: 'google-oauth-initiate',
+            });
+
+            if (!authResponse.ok) {
+                const error = (await authResponse.json()) as { message?: string };
+                return { success: false, error: error.message || 'Failed to initiate Google sign in' };
+            }
+
+            const result = await authResponse.json();
+
+            // Step 2: Check if we got a redirect URL (new OAuth flow)
+            if (typeof result === 'object' && result.location) {
+                // Store cartId in sessionStorage so callback can transfer cart
+                if (cartId) {
+                    sessionStorage.setItem('google_auth_cart_id', cartId);
+                }
+                // Redirect to Google OAuth
+                window.location.href = result.location;
+                // Return success immediately - actual auth happens in callback
+                return { success: true };
+            }
+
+            // Step 3: Check if we got a token (user already authenticated)
+            if (typeof result === 'string' || (typeof result === 'object' && result.token)) {
+                const token = typeof result === 'string' ? result : result.token;
+                
+                // Store token and update state
+                setCachedStorage(TOKEN_KEY, token);
+                setToken(token);
+
+                // Transfer cart if guest cart exists
+                if (cartId) {
+                    try {
+                        await monitoredFetch(`/api/carts/${cartId}/transfer`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${token}`,
+                            },
+                            label: 'cart-transfer-google-auth',
+                        });
+                        logger.info('Cart transferred successfully', { cartId });
+                    } catch (err) {
+                        logger.error('Failed to transfer cart during Google login', err as Error);
+                        // Continue anyway, as login was successful
+                    }
+                }
+
+                return { success: true };
+            }
+
+            // Step 4: Unexpected response format
+            logger.error('Unexpected Google auth response format', new Error('Invalid response'), { result });
+            return { success: false, error: 'Unexpected authentication response. Please try again.' };
+        } catch (error) {
+            logger.error('Google login error', error as Error);
+            return { success: false, error: 'An error occurred during Google sign in' };
         }
     };
 
@@ -302,6 +370,7 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
                 isAuthenticated: !!customer,
                 isLoading,
                 login,
+                loginWithGoogle,
                 register,
                 logout,
                 refreshCustomer,

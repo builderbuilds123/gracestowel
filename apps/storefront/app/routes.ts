@@ -14,6 +14,7 @@ export default [
     route("account", "routes/account.tsx"),
     route("account/login", "routes/account.login.tsx"),
     route("account/register", "routes/account.register.tsx"),
+    route("account/auth/google/callback", "routes/account.auth.google.callback.tsx"),
     route("order/status/:id", "routes/order_.status.$id.tsx"),
     route("order/:id/edit", "routes/order_.$id.edit.tsx"),
     route("order/:id/return", "routes/order_.$id.return.tsx"),

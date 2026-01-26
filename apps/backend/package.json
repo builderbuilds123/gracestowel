@@ -31,6 +31,7 @@
     "@medusajs/analytics-local": "2.12.5",
     "@medusajs/analytics-posthog": "2.12.5",
     "@medusajs/auth-emailpass": "2.12.5",
+    "@medusajs/auth-google": "2.12.5",
     "@medusajs/cli": "2.12.5",
     "@medusajs/core-flows": "2.12.5",
     "@medusajs/dashboard": "2.12.5",
