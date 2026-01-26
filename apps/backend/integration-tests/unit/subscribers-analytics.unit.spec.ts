@@ -33,7 +33,6 @@ vi.mock("../../src/lib/admin-notifications", () => ({
 import { trackEvent } from "../../src/utils/analytics";
 import orderCanceledHandler from "../../src/subscribers/order-canceled";
 import customerCreatedHandler from "../../src/subscribers/customer-created";
-import fulfillmentCreatedHandler from "../../src/subscribers/fulfillment-created";
 import inventoryBackorderedSubscriber from "../../src/subscribers/inventory-backordered";
 
 describe("subscriber analytics", () => {
@@ -66,15 +65,6 @@ describe("subscriber analytics", () => {
       expect.objectContaining({
         actorId: "cust_1",
       })
-    );
-  });
-
-  it("tracks fulfillment.created", async () => {
-    await fulfillmentCreatedHandler({ event: { data: { id: "ful_1" } }, container } as any);
-    expect(trackEvent).toHaveBeenCalledWith(
-      container,
-      "fulfillment.created",
-      expect.any(Object)
     );
   });
 

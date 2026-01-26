@@ -538,12 +538,9 @@ async function updatePaymentCollectionOnRefund(
         // downstream logic. OrderTransactions are the source of truth for refund amounts.
         const newStatus = isFullRefund ? "canceled" : "completed";
 
-        await paymentModuleService.updatePaymentCollections([
-            {
-                id: paymentCollection.id,
-                status: newStatus,
-            },
-        ]);
+        await paymentModuleService.updatePaymentCollections(paymentCollection.id, {
+            status: newStatus,
+        });
 
         logger.info("stripe-worker", "PaymentCollection updated on refund", {
             orderId,

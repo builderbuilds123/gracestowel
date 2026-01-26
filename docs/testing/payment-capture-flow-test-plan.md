@@ -15,6 +15,39 @@ Each scenario includes verification steps using:
 - **Database**: Direct PostgreSQL queries
 - **Admin UI**: Order status display
 
+## Architecture Note
+
+**All payment captures use Medusa's native `capturePaymentWorkflow`:**
+- Both original and supplementary PaymentCollections are captured via the same workflow
+- No direct Stripe API calls for capture - Medusa handles the Stripe provider interaction
+- The workflow updates PaymentCollection status, Payment.captured_at, and creates OrderTransaction
+
+---
+
+## Capture Architecture
+
+### Fulfillment Path (`captureAllOrderPayments`)
+
+When a fulfillment is created, the hook calls `captureAllOrderPayments()` which:
+1. Fetches all PaymentCollections for the order
+2. For each PaymentCollection in "authorized" status:
+   - Finds the associated Payment record
+   - Calls `capturePaymentWorkflow(container).run({ input: { payment_id } })`
+3. Returns result with captured/skipped/failed counts
+
+### Fallback Worker Path (`executePaymentCapture`)
+
+When the 3-day fallback job runs:
+1. Receives `orderId` and `paymentIntentId` from job data
+2. Queries order to find Payment record matching the PaymentIntent ID
+3. Calls `capturePaymentWorkflow(container).run({ input: { payment_id } })`
+4. Also calls `captureSupplementaryPaymentCollections()` for any supplementary charges
+
+### Key Points
+- **No direct Stripe API calls** - All captures go through Medusa's `capturePaymentWorkflow`
+- **Unified behavior** - Original and supplementary payments use the same capture mechanism
+- **Idempotent** - Already-captured payments are detected and skipped
+
 ---
 
 ## Prerequisites
@@ -167,9 +200,12 @@ Network tab > Filter: "fulfillments"
 
 **Log Verification:**
 ```bash
-grep "fulfillment-hook" /tmp/gracestowel-api.log | tail -10
+grep -E "(fulfillment-hook|payment-capture-core)" /tmp/gracestowel-api.log | tail -15
 # Expected logs:
 # "[fulfillment-hook] Hook triggered for fulfillment..."
+# "Capturing all payments for order..."
+# "Capturing original payment..." (uses capturePaymentWorkflow)
+# "Original payment captured..."
 # "[fulfillment-hook] Payment capture completed..."
 # "[fulfillment-hook] Removed fallback capture job..."
 ```
@@ -300,15 +336,19 @@ stripe payment_intents list --limit 2
 
 **Log Verification:**
 ```bash
-grep "fulfillment-hook" /tmp/gracestowel-api.log | tail -15
+grep -E "(fulfillment-hook|payment-capture-core)" /tmp/gracestowel-api.log | tail -20
 # Expected:
-# "Hook triggered for fulfillment..."
-# "Capturing supplementary payment..."
+# "[fulfillment-hook] Hook triggered for fulfillment..."
+# "Capturing all payments for order..."
+# "Capturing original payment..." (via capturePaymentWorkflow)
+# "Original payment captured..."
+# "Capturing supplementary payment..." (via capturePaymentWorkflow)
 # "Supplementary payment captured..."
-# "Stripe capture successful..."
-# "Payment capture completed for order... (captured: 2, skipped: 0)"
-# "Removed fallback capture job..."
+# "[fulfillment-hook] Payment capture completed for order... (captured: 2, skipped: 0)"
+# "[fulfillment-hook] Removed fallback capture job..."
 ```
+
+**Note:** Both original and supplementary payments are captured using Medusa's native `capturePaymentWorkflow` - no direct Stripe API calls.
 
 **Database Verification:**
 ```sql
@@ -416,11 +456,15 @@ Restart backend.
 
 **Log Verification:**
 ```bash
-grep "payment-capture-worker" /tmp/gracestowel-api.log | tail -10
+grep -E "(payment-capture-worker|payment-capture-core)" /tmp/gracestowel-api.log | tail -15
 # Expected:
 # "Processing payment capture job..."
+# "Executing payment capture..." (resolves Payment by PI ID)
+# "Payment captured via workflow..." (uses capturePaymentWorkflow)
 # "Payment capture executed successfully..."
 ```
+
+**Note:** The fallback worker now resolves the Payment record by PaymentIntent ID and uses `capturePaymentWorkflow` for capture (no direct Stripe API calls).
 
 **Database Verification:**
 ```sql

@@ -101,16 +101,22 @@ export async function action({ request, context }: ActionFunctionArgs) {
       collectionId: collection.id 
     });
 
-    // 2. Create Stripe session
-    // Note: request_incremental_authorization requires Stripe IC+ pricing plan
-    // which is not available on standard accounts. Order modifications will
-    // use supplementary charges instead.
+    // 2. Create Stripe session with setup_future_usage for off-session charges
+    // This enables reusing the payment method for supplementary charges when
+    // items are added to the order (since incremental authorization requires IC+ pricing)
+    // @see https://docs.stripe.com/payments/save-during-payment
     const sessionRes = await medusaFetch(`/store/payment-collections/${collection.id}/payment-sessions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ provider_id: "pp_stripe" }),
+      body: JSON.stringify({
+        provider_id: "pp_stripe",
+        data: {
+          // Save payment method for future off-session charges (e.g., order modifications)
+          setup_future_usage: "off_session",
+        },
+      }),
       label: "create-missing-stripe-session",
       context,
     });

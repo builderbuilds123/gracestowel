@@ -14,6 +14,7 @@ import { startPaymentCaptureWorker } from "../workers/payment-capture-worker"
 import { startEmailWorker } from "../workers/email-worker"
 import { sendAdminNotification, AdminNotificationType } from "../lib/admin-notifications"
 import { logger } from "../utils/logger"
+import { extractStripePaymentIntentId, shouldPersistStripePaymentIntentId } from "../utils/payment-intent"
 
 interface OrderPlacedEventData {
   id: string;
@@ -178,32 +179,34 @@ export default async function orderPlacedHandler({
             }
         }
 
+        const paymentIntentId = extractStripePaymentIntentId(order);
+        if (shouldPersistStripePaymentIntentId(order.metadata as Record<string, unknown> | undefined, paymentIntentId)) {
+            try {
+                const orderService = container.resolve("order");
+                await orderService.updateOrders([{
+                    id: order.id,
+                    metadata: {
+                        ...(order.metadata || {}),
+                        stripe_payment_intent_id: paymentIntentId,
+                    },
+                }]);
+                logger.info("order-placed", "Stored Stripe PaymentIntent ID on order metadata", {
+                    order_id: order.id,
+                });
+            } catch (updateError: unknown) {
+                logger.error(
+                    "order-placed",
+                    "Failed to store Stripe PaymentIntent ID on order metadata",
+                    { order_id: order.id },
+                    updateError instanceof Error ? updateError : new Error(String(updateError))
+                );
+            }
+        }
+
         // Generate magic link for guests only
         let magicLink: string | null = null
         if (isGuest) {
             try {
-                // Get payment_intent_id from order
-                const paymentCollection = order.payment_collections?.[0];
-                const payment = paymentCollection?.payments?.[0];
-                interface PaymentData {
-                    id?: string;
-                    [key: string]: unknown;
-                }
-                const paymentData = payment?.data as PaymentData | undefined;
-
-                const paymentIntentIdFromPaymentCollection =
-                  typeof paymentData?.id === "string" && paymentData.id.startsWith("pi_")
-                    ? paymentData.id
-                    : undefined
-
-                const paymentIntentIdFromMetadata =
-                  typeof order.metadata?.stripe_payment_intent_id === "string" &&
-                  order.metadata.stripe_payment_intent_id.startsWith("pi_")
-                    ? order.metadata.stripe_payment_intent_id
-                    : undefined
-
-                const paymentIntentId = paymentIntentIdFromPaymentCollection || paymentIntentIdFromMetadata
-
                 if (paymentIntentId) {
                      // Resolve service from container for dependency injection
                      const modificationTokenService = container.resolve("modificationTokenService") as ModificationTokenService;

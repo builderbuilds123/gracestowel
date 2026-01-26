@@ -92,5 +92,74 @@ describe("payment-capture-core", () => {
 
             expect(mockCaptureRun).toHaveBeenCalledWith({ input: { payment_id: "pay_1" } });
         });
+
+        it("skips capture if payment already captured", async () => {
+            mockQuery.graph.mockResolvedValueOnce({
+                data: [{
+                    id: "order_1",
+                    status: "pending",
+                    payment_collections: [{
+                        id: "pc_1",
+                        status: "completed",
+                        payments: [{ id: "pay_1", captured_at: "2024-01-01T00:00:00Z", data: { id: "pi_1" } }],
+                    }],
+                }],
+            });
+
+            await executePaymentCapture(mockContainer, "order_1", "pi_1");
+
+            expect(mockCaptureRun).not.toHaveBeenCalled();
+            expect(mockLogger.info).toHaveBeenCalledWith(
+                "payment-capture-core",
+                "Payment already captured in Medusa",
+                expect.objectContaining({ orderId: "order_1", paymentId: "pay_1" })
+            );
+        });
+
+        it("skips capture if order is canceled", async () => {
+            mockQuery.graph.mockResolvedValueOnce({
+                data: [{
+                    id: "order_1",
+                    status: "canceled",
+                    payment_collections: [{
+                        id: "pc_1",
+                        status: "authorized",
+                        payments: [{ id: "pay_1", captured_at: null, data: { id: "pi_1" } }],
+                    }],
+                }],
+            });
+
+            await executePaymentCapture(mockContainer, "order_1", "pi_1");
+
+            expect(mockCaptureRun).not.toHaveBeenCalled();
+            expect(mockLogger.warn).toHaveBeenCalledWith(
+                "payment-capture-core",
+                "Skipping capture: Order is canceled",
+                expect.objectContaining({ orderId: "order_1" })
+            );
+        });
+
+        it("warns if no payment found for PaymentIntent ID", async () => {
+            mockQuery.graph.mockResolvedValueOnce({
+                data: [{
+                    id: "order_1",
+                    status: "pending",
+                    payment_collections: [{
+                        id: "pc_1",
+                        status: "authorized",
+                        payments: [{ id: "pay_1", captured_at: null, data: { id: "pi_different" } }],
+                    }],
+                }],
+            });
+
+            await executePaymentCapture(mockContainer, "order_1", "pi_1");
+
+            expect(mockCaptureRun).not.toHaveBeenCalled();
+            expect(mockLogger.warn).toHaveBeenCalledWith(
+                "payment-capture-core",
+                "No Payment found for PaymentIntent",
+                expect.objectContaining({ orderId: "order_1", paymentIntentId: "pi_1" })
+            );
+        });
     });
 });
