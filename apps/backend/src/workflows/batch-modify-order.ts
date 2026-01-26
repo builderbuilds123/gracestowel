@@ -1344,25 +1344,20 @@ export const batchModifyOrderWorkflow = createWorkflow(
         }));
         updateBatchPaymentCollectionStep(pcInput);
 
-        // Step 6: Update PaymentSession amount to match new authorization
-        // Pass the PaymentIntent ID so Stripe provider can find it in data.id
-        const psInput = transform({ validation, totals }, (data) => ({
-            paymentSessionId: data.validation.paymentSessionId,
-            paymentIntentId: data.validation.paymentIntentId,
-            amount: data.totals.newOrderTotal,
-            previousAmount: data.validation.order.total,
-            currencyCode: data.validation.order.currency_code,
-        }));
-        updateBatchPaymentSessionStep(psInput);
+        // Note: We do NOT call updateBatchPaymentSessionStep here.
+        // Stripe's updatePayment API doesn't support PaymentIntents with status "requires_capture".
+        // The Stripe authorization is already updated via incrementAuthorization (Step 3),
+        // and PaymentCollection is updated above (Step 5). PaymentSession.amount is informational
+        // and will be synced when the payment is captured.
 
-        // Step 7: Create inventory reservations for new line items
+        // Step 6: Create inventory reservations for new line items
         const reservationInput = transform({ editResult, input }, (data) => ({
             orderId: data.input.orderId,
             newLineItemIds: data.editResult.newLineItemIds,
         }));
         const reservationResult = createBatchReservationsStep(reservationInput);
 
-        // Step 8: Update reservations for quantity changes to existing items
+        // Step 7: Update reservations for quantity changes to existing items
         const reservationUpdateInput = transform({ editResult, input }, (data) => ({
             orderId: data.input.orderId,
             quantityUpdates: data.editResult.quantityUpdates,
