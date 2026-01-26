@@ -69,6 +69,9 @@ importers:
       '@medusajs/auth-emailpass':
         specifier: 2.12.5
         version: 2.12.5(@medusajs/framework@2.12.5(@medusajs/cli@2.12.5(@types/node@25.0.9))(@types/node@25.0.9)(ioredis@5.9.2)(vite@7.3.1(@types/node@25.0.9)(jiti@1.21.7)(lightningcss@1.30.2)(terser@5.46.0)(yaml@2.8.2)))
+      '@medusajs/auth-google':
+        specifier: 2.12.5
+        version: 2.12.5(@medusajs/framework@2.12.5(@medusajs/cli@2.12.5(@types/node@25.0.9))(@types/node@25.0.9)(ioredis@5.9.2)(vite@7.3.1(@types/node@25.0.9)(jiti@1.21.7)(lightningcss@1.30.2)(terser@5.46.0)(yaml@2.8.2)))
       '@medusajs/cli':
         specifier: 2.12.5
         version: 2.12.5(@types/node@25.0.9)

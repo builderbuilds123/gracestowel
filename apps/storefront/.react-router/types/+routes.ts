@@ -54,6 +54,9 @@ type Pages = {
   "/account/register": {
     params: {};
   };
+  "/account/auth/google/callback": {
+    params: {};
+  };
   "/order/status/:id": {
     params: {
       "id": string;
@@ -133,7 +136,7 @@ type Pages = {
 type RouteFiles = {
   "root.tsx": {
     id: "root";
-    page: "/" | "/products/:handle" | "/collections/:handle" | "/checkout" | "/checkout/success" | "/about" | "/blog" | "/towels" | "/search" | "/wishlist" | "/account" | "/account/login" | "/account/register" | "/order/status/:id" | "/order/:id/edit" | "/order/:id/return" | "/api/shipping-rates" | "/api/checkout-session" | "/api/carts" | "/api/carts/:id" | "/api/carts/:id/shipping-options" | "/api/carts/:id/shipping-methods" | "/api/carts/:id/complete" | "/api/payment-collections" | "/api/payment-collections/:id/sessions" | "/api/health" | "/api/set-guest-token" | "/api/orders/:id/batch-modify" | "/blog/:id" | "/sitemap.xml" | "/robots.txt";
+    page: "/" | "/products/:handle" | "/collections/:handle" | "/checkout" | "/checkout/success" | "/about" | "/blog" | "/towels" | "/search" | "/wishlist" | "/account" | "/account/login" | "/account/register" | "/account/auth/google/callback" | "/order/status/:id" | "/order/:id/edit" | "/order/:id/return" | "/api/shipping-rates" | "/api/checkout-session" | "/api/carts" | "/api/carts/:id" | "/api/carts/:id/shipping-options" | "/api/carts/:id/shipping-methods" | "/api/carts/:id/complete" | "/api/payment-collections" | "/api/payment-collections/:id/sessions" | "/api/health" | "/api/set-guest-token" | "/api/orders/:id/batch-modify" | "/blog/:id" | "/sitemap.xml" | "/robots.txt";
   };
   "routes/home.tsx": {
     id: "routes/home";
@@ -186,6 +189,10 @@ type RouteFiles = {
   "routes/account.register.tsx": {
     id: "routes/account.register";
     page: "/account/register";
+  };
+  "routes/account.auth.google.callback.tsx": {
+    id: "routes/account.auth.google.callback";
+    page: "/account/auth/google/callback";
   };
   "routes/order_.status.$id.tsx": {
     id: "routes/order_.status.$id";
@@ -276,6 +283,7 @@ type RouteModules = {
   "routes/account": typeof import("./app/routes/account.tsx");
   "routes/account.login": typeof import("./app/routes/account.login.tsx");
   "routes/account.register": typeof import("./app/routes/account.register.tsx");
+  "routes/account.auth.google.callback": typeof import("./app/routes/account.auth.google.callback.tsx");
   "routes/order_.status.$id": typeof import("./app/routes/order_.status.$id.tsx");
   "routes/order_.$id.edit": typeof import("./app/routes/order_.$id.edit.tsx");
   "routes/order_.$id.return": typeof import("./app/routes/order_.$id.return.tsx");
