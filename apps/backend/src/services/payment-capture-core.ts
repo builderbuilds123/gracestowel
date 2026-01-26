@@ -206,83 +206,69 @@ export async function executePaymentCapture(
     paymentIntentId: string,
     idempotencyKey?: string
 ): Promise<void> {
-    const stripe = getStripeClient();
+    void idempotencyKey;
 
     logger.info("payment-capture-core", "Executing payment capture", { orderId, paymentIntentId });
 
-    // Step 1: Check Stripe status
-    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+    // Resolve payment by PaymentIntent ID
+    const query = container.resolve("query");
+    const { data: orders } = await query.graph({
+        entity: "order",
+        fields: [
+            "id",
+            "status",
+            "payment_collections.id",
+            "payment_collections.status",
+            "payment_collections.payments.id",
+            "payment_collections.payments.captured_at",
+            "payment_collections.payments.data",
+        ],
+        filters: { id: orderId },
+    });
 
-    if (paymentIntent.status === "canceled") {
-        logger.info("payment-capture-core", "Payment was canceled", { orderId, paymentIntentId });
+    const order = orders?.[0];
+    if (!order || !order.payment_collections?.length) {
+        logger.warn("payment-capture-core", "No payment collections found for order", { orderId });
         return;
     }
 
-    if (paymentIntent.status === "succeeded") {
-        logger.info("payment-capture-core", "Payment already captured in Stripe", { orderId, paymentIntentId });
-        // Still proceed to update Medusa state to be sure
-    } else if (paymentIntent.status !== "requires_capture") {
-        logger.warn("payment-capture-core", "PaymentIntent not in capturable state", { 
-            orderId, 
-            status: paymentIntent.status 
-        });
-        return;
-    }
-
-    // Step 2: Fetch Order Total
-    const orderData = await fetchOrderTotal(container, orderId);
-    if (!orderData) {
-        logger.error("payment-capture-core", "Could not fetch order data", { orderId });
-        return;
-    }
-
-    const { totalCents, currencyCode, status } = orderData;
-    
-    // Guard: Do not capture if order is canceled in Medusa
-    if (status === "canceled") {
+    if (order.status === "canceled") {
         logger.warn("payment-capture-core", "Skipping capture: Order is canceled", { orderId });
         return;
     }
 
-    const amountToCapture = paymentIntent.amount_capturable ?? totalCents;
+    const payment = order.payment_collections
+        .flatMap((pc: any) => pc.payments || [])
+        .find((p: any) => p?.data?.id === paymentIntentId);
 
-    // Validation: Ensure we don't capture more than authorized
-    if (totalCents > amountToCapture) {
-        // Story 3.2 / 6.3: If order total changed and exceeds auth, we can only capture auth amount
-        // (Unless we support partial capture + re-auth, but per current logic we cap at capturable)
-        logger.warn("payment-capture-core", "Order total exceeds capturable amount", {
+    if (!payment?.id) {
+        logger.warn("payment-capture-core", "No Payment found for PaymentIntent", {
             orderId,
-            totalCents,
-            amountToCapture
+            paymentIntentId,
         });
-    }
-    
-    // Determine final capture amount (min of total vs capturable)
-    const finalCaptureAmount = Math.min(totalCents, amountToCapture);
-
-    // Step 3: Capture via Stripe
-    if (paymentIntent.status === "requires_capture") {
-        try {
-            await stripe.paymentIntents.capture(paymentIntentId, {
-                amount_to_capture: finalCaptureAmount,
-            }, {
-                idempotencyKey: idempotencyKey // Passed from workflow or worker for safety
-            });
-            logger.info("payment-capture-core", "Stripe capture successful", { 
-                orderId, 
-                amount: finalCaptureAmount 
-            });
-        } catch (error) {
-            logger.error("payment-capture-core", "Stripe capture failed", { orderId }, error);
-            throw error;
-        }
+        return;
     }
 
-    // Step 4: Update Medusa Records (for original PaymentCollection)
-    await updateOrderAfterCapture(container, orderId, finalCaptureAmount);
+    if (payment.captured_at) {
+        logger.info("payment-capture-core", "Payment already captured in Medusa", {
+            orderId,
+            paymentId: payment.id,
+        });
+        return;
+    }
 
-    // Step 5: Capture any authorized supplementary PaymentCollections
-    // These were created during order modification but only authorized, not captured
+    // Use native Medusa workflow for capture
+    const { capturePaymentWorkflow } = await import("@medusajs/medusa/core-flows");
+    await capturePaymentWorkflow(container).run({
+        input: { payment_id: payment.id },
+    });
+
+    logger.info("payment-capture-core", "Payment captured via workflow", {
+        orderId,
+        paymentId: payment.id,
+    });
+
+    // Capture any authorized supplementary PaymentCollections (legacy path)
     await captureSupplementaryPaymentCollections(container, orderId);
 }
 
@@ -460,7 +446,7 @@ export async function captureAllOrderPayments(
     idempotencyKeyPrefix: string
 ): Promise<CaptureAllPaymentsResult> {
     const query = container.resolve("query");
-    const stripe = getStripeClient();
+    void idempotencyKeyPrefix;
 
     logger.info("payment-capture-core", "Capturing all payments for order", { orderId });
 
@@ -569,89 +555,48 @@ export async function captureAllOrderPayments(
         }
 
         try {
-            if (isSupplementary && payment) {
-                // Supplementary payments: Use native capturePaymentWorkflow
+            if (!payment) {
+                logger.warn("payment-capture-core", "No Payment record found for PaymentCollection", {
+                    orderId,
+                    paymentCollectionId: pc.id,
+                });
+                failedCount++;
+                continue;
+            }
+
+            if (isSupplementary) {
                 logger.info("payment-capture-core", "Capturing supplementary payment", {
                     orderId,
                     paymentCollectionId: pc.id,
                     paymentId: payment.id,
                     amount: pc.amount,
                 });
-
-                await capturePaymentWorkflow(container).run({
-                    input: { payment_id: payment.id },
+            } else {
+                logger.info("payment-capture-core", "Capturing original payment", {
+                    orderId,
+                    paymentCollectionId: pc.id,
+                    paymentId: payment.id,
+                    amount: pc.amount,
                 });
+            }
 
-                capturedCount++;
+            await capturePaymentWorkflow(container).run({
+                input: { payment_id: payment.id },
+            });
+
+            capturedCount++;
+            if (isSupplementary) {
                 logger.info("payment-capture-core", "Supplementary payment captured", {
                     orderId,
                     paymentCollectionId: pc.id,
                     paymentId: payment.id,
                 });
-
             } else {
-                // Original payment: Use direct Stripe capture + Medusa update
-                const paymentIntentId = payment?.data?.id as string | undefined;
-
-                if (!paymentIntentId || !paymentIntentId.startsWith("pi_")) {
-                    logger.warn("payment-capture-core", "No valid PaymentIntent ID found", {
-                        orderId,
-                        paymentCollectionId: pc.id,
-                    });
-                    failedCount++;
-                    continue;
-                }
-
-                // Check Stripe status
-                const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
-
-                if (paymentIntent.status === "succeeded") {
-                    // Already captured in Stripe, just update Medusa
-                    logger.info("payment-capture-core", "Payment already captured in Stripe, updating Medusa", {
-                        orderId,
-                        paymentIntentId,
-                    });
-                    await updateOrderAfterCapture(container, orderId, paymentIntent.amount_received);
-                    skippedCount++;
-                    continue;
-                }
-
-                if (paymentIntent.status === "canceled") {
-                    logger.warn("payment-capture-core", "Payment was canceled", {
-                        orderId,
-                        paymentIntentId,
-                    });
-                    continue;
-                }
-
-                if (paymentIntent.status !== "requires_capture") {
-                    logger.warn("payment-capture-core", "PaymentIntent not capturable", {
-                        orderId,
-                        paymentIntentId,
-                        status: paymentIntent.status,
-                    });
-                    continue;
-                }
-
-                // Capture via Stripe
-                const captureAmount = paymentIntent.amount_capturable;
-                const idempotencyKey = `${idempotencyKeyPrefix}_${paymentIntentId}`;
-
-                await stripe.paymentIntents.capture(paymentIntentId, {
-                    amount_to_capture: captureAmount,
-                }, {
-                    idempotencyKey,
-                });
-
-                logger.info("payment-capture-core", "Stripe capture successful", {
+                logger.info("payment-capture-core", "Original payment captured", {
                     orderId,
-                    paymentIntentId,
-                    amount: captureAmount,
+                    paymentCollectionId: pc.id,
+                    paymentId: payment.id,
                 });
-
-                // Update Medusa records
-                await updateOrderAfterCapture(container, orderId, captureAmount);
-                capturedCount++;
             }
 
         } catch (error) {
