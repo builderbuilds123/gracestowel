@@ -18,6 +18,7 @@ import {
     isTerminalStatus,
     type PaymentCollectionStatusType,
 } from "../types/payment-collection-status";
+import { sendAdminNotification, AdminNotificationType } from "../lib/admin-notifications";
 
 /**
  * Fetch order metadata for locking checks
@@ -277,17 +278,12 @@ export async function executePaymentCapture(
         }
     }
 
-    // Step 4: Update Medusa Records
+    // Step 4: Update Medusa Records (for original PaymentCollection)
     await updateOrderAfterCapture(container, orderId, finalCaptureAmount);
 
-    // Step 5: Process supplementary charge if required
-    // This handles orders modified on standard Stripe accounts without IC+ pricing
-    await processSupplementaryChargeIfRequired(
-        container,
-        orderId,
-        paymentIntentId,
-        currencyCode
-    );
+    // Step 5: Capture any authorized supplementary PaymentCollections
+    // These were created during order modification but only authorized, not captured
+    await captureSupplementaryPaymentCollections(container, orderId);
 }
 
 // Helper: Update Order Logic (Migrated from worker)
@@ -425,127 +421,429 @@ async function createOrderTransactionOnCapture(
 }
 
 /**
- * Process supplementary charge if the order was modified on a standard Stripe account
- *
- * When customers add items during the modification window and the Stripe account
- * doesn't support incrementAuthorization (requires IC+ pricing), we need to create
- * a separate off-session charge for the additional amount.
- *
- * Metadata flags checked:
- * - supplementary_charge_required: boolean
- * - supplementary_charge_amount: number (in cents)
- * - supplementary_charge_currency: string
+ * Result of capturing all order payments
  */
-async function processSupplementaryChargeIfRequired(
+export interface CaptureAllPaymentsResult {
+    /** Whether the order has any payments at all */
+    hasPayments: boolean;
+    /** Whether all payments were already captured (partial fulfillment scenario) */
+    allAlreadyCaptured: boolean;
+    /** Number of payments successfully captured in this call */
+    capturedCount: number;
+    /** Number of payments skipped (already captured) */
+    skippedCount: number;
+    /** Number of payments that failed to capture */
+    failedCount: number;
+    /** Error messages from failed captures */
+    errors: string[];
+}
+
+/**
+ * Capture ALL payments for an order (both original and supplementary)
+ *
+ * This is the main entry point for payment capture on fulfillment.
+ * It captures all PaymentCollections linked to the order that are in capturable state.
+ *
+ * Features:
+ * - Captures original PaymentCollection(s)
+ * - Captures supplementary PaymentCollections (created during order modifications)
+ * - Idempotent: skips already-captured payments with warning
+ * - Returns detailed result for logging/monitoring
+ *
+ * @param container - Medusa container
+ * @param orderId - The order ID
+ * @param idempotencyKeyPrefix - Prefix for Stripe idempotency keys
+ */
+export async function captureAllOrderPayments(
     container: MedusaContainer,
     orderId: string,
-    paymentIntentId: string,
-    currencyCode: string
+    idempotencyKeyPrefix: string
+): Promise<CaptureAllPaymentsResult> {
+    const query = container.resolve("query");
+    const stripe = getStripeClient();
+
+    logger.info("payment-capture-core", "Capturing all payments for order", { orderId });
+
+    // Fetch all PaymentCollections with their payments and Stripe data
+    const { data: orders } = await query.graph({
+        entity: "order",
+        fields: [
+            "id",
+            "currency_code",
+            "status",
+            "payment_collections.id",
+            "payment_collections.status",
+            "payment_collections.amount",
+            "payment_collections.metadata",
+            "payment_collections.payments.id",
+            "payment_collections.payments.amount",
+            "payment_collections.payments.captured_at",
+            "payment_collections.payments.data",
+        ],
+        filters: { id: orderId },
+    });
+
+    const order = orders?.[0];
+    if (!order || !order.payment_collections?.length) {
+        logger.warn("payment-capture-core", "No payment collections found for order", { orderId });
+        return {
+            hasPayments: false,
+            allAlreadyCaptured: false,
+            capturedCount: 0,
+            skippedCount: 0,
+            failedCount: 0,
+            errors: [],
+        };
+    }
+
+    // Guard: Do not capture if order is canceled
+    if (order.status === "canceled") {
+        logger.warn("payment-capture-core", "Skipping capture: Order is canceled", { orderId });
+        return {
+            hasPayments: true,
+            allAlreadyCaptured: false,
+            capturedCount: 0,
+            skippedCount: 0,
+            failedCount: 0,
+            errors: [],
+        };
+    }
+
+    let capturedCount = 0;
+    let skippedCount = 0;
+    let failedCount = 0;
+    const errors: string[] = [];
+
+    // Import capturePaymentWorkflow for supplementary payments
+    const { capturePaymentWorkflow } = await import("@medusajs/medusa/core-flows");
+
+    // Process each PaymentCollection
+    for (const pcRaw of order.payment_collections) {
+        const pc = pcRaw as {
+            id: string;
+            status: string;
+            amount: number;
+            metadata?: Record<string, unknown>;
+            payments?: Array<{
+                id: string;
+                amount: number;
+                captured_at?: string | Date | null;
+                data?: { id?: string };
+            }>;
+        };
+
+        const isSupplementary = pc.metadata?.supplementary_charge === true ||
+                               pc.metadata?.supplementary_charge === "true";
+
+        // Skip if already completed/captured
+        if (pc.status === "completed" || pc.status === "captured") {
+            logger.debug("payment-capture-core", "Skipping already completed PaymentCollection", {
+                orderId,
+                paymentCollectionId: pc.id,
+                isSupplementary,
+            });
+            skippedCount++;
+            continue;
+        }
+
+        // Skip if not in capturable state
+        if (pc.status !== "authorized" && pc.status !== "awaiting") {
+            logger.debug("payment-capture-core", "Skipping PaymentCollection in non-capturable state", {
+                orderId,
+                paymentCollectionId: pc.id,
+                status: pc.status,
+            });
+            continue;
+        }
+
+        // Check if payment record exists and is already captured
+        const payment = pc.payments?.[0];
+        if (payment?.captured_at) {
+            logger.debug("payment-capture-core", "Skipping already captured payment", {
+                orderId,
+                paymentCollectionId: pc.id,
+                paymentId: payment.id,
+            });
+            skippedCount++;
+            continue;
+        }
+
+        try {
+            if (isSupplementary && payment) {
+                // Supplementary payments: Use native capturePaymentWorkflow
+                logger.info("payment-capture-core", "Capturing supplementary payment", {
+                    orderId,
+                    paymentCollectionId: pc.id,
+                    paymentId: payment.id,
+                    amount: pc.amount,
+                });
+
+                await capturePaymentWorkflow(container).run({
+                    input: { payment_id: payment.id },
+                });
+
+                capturedCount++;
+                logger.info("payment-capture-core", "Supplementary payment captured", {
+                    orderId,
+                    paymentCollectionId: pc.id,
+                    paymentId: payment.id,
+                });
+
+            } else {
+                // Original payment: Use direct Stripe capture + Medusa update
+                const paymentIntentId = payment?.data?.id as string | undefined;
+
+                if (!paymentIntentId || !paymentIntentId.startsWith("pi_")) {
+                    logger.warn("payment-capture-core", "No valid PaymentIntent ID found", {
+                        orderId,
+                        paymentCollectionId: pc.id,
+                    });
+                    failedCount++;
+                    continue;
+                }
+
+                // Check Stripe status
+                const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+
+                if (paymentIntent.status === "succeeded") {
+                    // Already captured in Stripe, just update Medusa
+                    logger.info("payment-capture-core", "Payment already captured in Stripe, updating Medusa", {
+                        orderId,
+                        paymentIntentId,
+                    });
+                    await updateOrderAfterCapture(container, orderId, paymentIntent.amount_received);
+                    skippedCount++;
+                    continue;
+                }
+
+                if (paymentIntent.status === "canceled") {
+                    logger.warn("payment-capture-core", "Payment was canceled", {
+                        orderId,
+                        paymentIntentId,
+                    });
+                    continue;
+                }
+
+                if (paymentIntent.status !== "requires_capture") {
+                    logger.warn("payment-capture-core", "PaymentIntent not capturable", {
+                        orderId,
+                        paymentIntentId,
+                        status: paymentIntent.status,
+                    });
+                    continue;
+                }
+
+                // Capture via Stripe
+                const captureAmount = paymentIntent.amount_capturable;
+                const idempotencyKey = `${idempotencyKeyPrefix}_${paymentIntentId}`;
+
+                await stripe.paymentIntents.capture(paymentIntentId, {
+                    amount_to_capture: captureAmount,
+                }, {
+                    idempotencyKey,
+                });
+
+                logger.info("payment-capture-core", "Stripe capture successful", {
+                    orderId,
+                    paymentIntentId,
+                    amount: captureAmount,
+                });
+
+                // Update Medusa records
+                await updateOrderAfterCapture(container, orderId, captureAmount);
+                capturedCount++;
+            }
+
+        } catch (error) {
+            failedCount++;
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            errors.push(`PaymentCollection ${pc.id}: ${errorMessage}`);
+
+            logger.error("payment-capture-core", "Failed to capture PaymentCollection", {
+                orderId,
+                paymentCollectionId: pc.id,
+                isSupplementary,
+            }, error instanceof Error ? error : new Error(String(error)));
+
+            // Don't mark metadata - we'll throw and rollback the fulfillment workflow
+            // The caller is responsible for sending admin notification and handling the error
+        }
+    }
+
+    const totalPayments = order.payment_collections.length;
+    const allAlreadyCaptured = capturedCount === 0 && skippedCount > 0 && failedCount === 0;
+
+    logger.info("payment-capture-core", "Capture all payments completed", {
+        orderId,
+        totalPayments,
+        capturedCount,
+        skippedCount,
+        failedCount,
+        allAlreadyCaptured,
+    });
+
+    return {
+        hasPayments: true,
+        allAlreadyCaptured,
+        capturedCount,
+        skippedCount,
+        failedCount,
+        errors,
+    };
+}
+
+/**
+ * Capture all authorized supplementary PaymentCollections for an order
+ *
+ * During order modification on standard Stripe accounts (without IC+ pricing),
+ * supplementary charges are created and authorized but NOT captured.
+ * This function captures them all at fulfillment time.
+ *
+ * REFACTORED: Now uses Medusa's native capturePaymentWorkflow instead of direct Stripe API calls.
+ * This ensures proper PaymentCollection status updates and OrderTransaction creation.
+ *
+ * Supplementary PaymentCollections are identified by:
+ * - status: "authorized"
+ * - metadata.supplementary_charge: true
+ * - Has a Payment record (created by authorizePaymentSessionStep in supplementary-charge.ts)
+ *
+ * @deprecated Use captureAllOrderPayments instead, which captures all payments including supplementary
+ */
+async function captureSupplementaryPaymentCollections(
+    container: MedusaContainer,
+    orderId: string
 ): Promise<void> {
     try {
-        // Check if supplementary charge is required from order metadata
-        const metadata = await getOrderMetadata(container, orderId);
-        const supplementaryRequired = metadata?.supplementary_charge_required === true;
-        const supplementaryAmount = metadata?.supplementary_charge_amount as number | undefined;
-        const supplementaryCurrency = (metadata?.supplementary_charge_currency as string | undefined) || currencyCode;
-
-        if (!supplementaryRequired || !supplementaryAmount || supplementaryAmount <= 0) {
-            // No supplementary charge needed
-            return;
-        }
-
-        logger.info("payment-capture-core", "Processing supplementary charge", {
-            orderId,
-            supplementaryAmount,
-            currency: supplementaryCurrency,
-        });
-
-        // Get payment method from original PaymentIntent
-        const stripe = getStripeClient();
-        const originalPI = await stripe.paymentIntents.retrieve(paymentIntentId);
-
-        if (!originalPI.payment_method) {
-            logger.error("payment-capture-core", "Original PaymentIntent has no saved payment method", {
-                orderId,
-                paymentIntentId,
-            });
-            // Keep metadata for manual follow-up
-            return;
-        }
-
-        // Get customer_id and region_id from order
         const query = container.resolve("query");
+
+        // Get all PaymentCollections for this order with their Payment records
         const { data: orders } = await query.graph({
             entity: "order",
-            fields: ["customer_id", "region_id"],
+            fields: [
+                "id",
+                "currency_code",
+                "payment_collections.id",
+                "payment_collections.status",
+                "payment_collections.amount",
+                "payment_collections.metadata",
+                "payment_collections.payments.id",
+                "payment_collections.payments.amount",
+                "payment_collections.payments.captured_at",
+            ],
             filters: { id: orderId },
         });
 
         const order = orders?.[0];
+        if (!order || !order.payment_collections?.length) {
+            logger.debug("payment-capture-core", "No payment collections found for order", { orderId });
+            return;
+        }
 
-        // Run supplementary charge workflow
-        const { supplementaryChargeWorkflow } = await import("../workflows/supplementary-charge.js");
+        // Find supplementary PaymentCollections that are authorized but not captured
+        // Now we check for Payment records instead of stripe_payment_intent_id in metadata
+        const supplementaryPCs = order.payment_collections.filter((pc: any) => {
+            const metadata = pc.metadata as Record<string, unknown> | undefined;
+            // Check for supplementary_charge as boolean true or string "true"
+            const isSupplementary = metadata?.supplementary_charge === true || metadata?.supplementary_charge === "true";
+            // Must have a Payment record (created by authorizePaymentSessionStep)
+            const hasPaymentRecord = pc.payments && pc.payments.length > 0;
+            // Payment must not already be captured
+            const paymentNotCaptured = hasPaymentRecord && !pc.payments[0]?.captured_at;
 
-        const result = await supplementaryChargeWorkflow(container).run({
-            input: {
-                orderId,
-                amount: supplementaryAmount,
-                currencyCode: supplementaryCurrency,
-                stripePaymentMethodId: typeof originalPI.payment_method === 'string'
-                    ? originalPI.payment_method
-                    : originalPI.payment_method.id,
-                customerId: order?.customer_id || undefined,
-                regionId: order?.region_id || undefined,
-            },
+            return (
+                pc.status === "authorized" &&
+                isSupplementary &&
+                hasPaymentRecord &&
+                paymentNotCaptured
+            );
         });
 
-        logger.info("payment-capture-core", "Supplementary charge succeeded", {
+        if (supplementaryPCs.length === 0) {
+            logger.debug("payment-capture-core", "No supplementary PaymentCollections to capture", { orderId });
+            return;
+        }
+
+        logger.info("payment-capture-core", `Found ${supplementaryPCs.length} supplementary PaymentCollection(s) to capture`, {
             orderId,
-            amount: supplementaryAmount,
-            paymentCollectionId: result.result?.paymentCollectionId,
+            count: supplementaryPCs.length,
         });
 
-        // Clear supplementary charge flags from order metadata
-        const orderService = container.resolve("order");
-        const updatedMetadata = { ...metadata };
-        delete updatedMetadata.supplementary_charge_required;
-        delete updatedMetadata.supplementary_charge_amount;
-        delete updatedMetadata.supplementary_charge_currency;
-        updatedMetadata.supplementary_charge_captured_at = new Date().toISOString();
-        updatedMetadata.supplementary_charge_payment_collection_id = result.result?.paymentCollectionId;
+        // Import capturePaymentWorkflow dynamically to use native Medusa workflow
+        const { capturePaymentWorkflow } = await import("@medusajs/medusa/core-flows");
 
-        await orderService.updateOrders([{
-            id: orderId,
-            metadata: updatedMetadata,
-        }]);
+        // Capture each supplementary PaymentCollection using native workflow
+        for (const pcRaw of supplementaryPCs) {
+            // Type assertion - filter above ensures these exist
+            const pc = pcRaw as {
+                id: string;
+                amount: number;
+                metadata: Record<string, unknown>;
+                payments: Array<{ id: string; amount: number; captured_at?: string | Date | null }>;
+            };
+            const metadata = pc.metadata;
+            const payment = pc.payments[0]; // First payment in collection (filter ensures it exists)
+            const paymentId = payment.id;
 
-        logger.info("payment-capture-core", "Cleared supplementary charge flags from order", { orderId });
+            try {
+                logger.info("payment-capture-core", "Capturing supplementary payment via native workflow", {
+                    orderId,
+                    paymentCollectionId: pc.id,
+                    paymentId,
+                    amount: pc.amount,
+                });
+
+                // Use Medusa's native capturePaymentWorkflow
+                // This handles:
+                // 1. Calling Stripe provider to capture the PaymentIntent
+                // 2. Updating PaymentCollection status to "completed"
+                // 3. Creating OrderTransaction record
+                // 4. Emitting payment.captured event
+                await capturePaymentWorkflow(container).run({
+                    input: {
+                        payment_id: paymentId,
+                        // amount is optional - if not provided, captures full amount
+                    },
+                });
+
+                logger.info("payment-capture-core", "Supplementary payment captured via native workflow", {
+                    orderId,
+                    paymentCollectionId: pc.id,
+                    paymentId,
+                    amount: pc.amount,
+                });
+
+            } catch (pcError) {
+                // Log but continue with other PCs - don't fail the whole capture
+                logger.error("payment-capture-core", "Failed to capture supplementary PaymentCollection", {
+                    orderId,
+                    paymentCollectionId: pc.id,
+                    paymentId,
+                }, pcError instanceof Error ? pcError : new Error(String(pcError)));
+
+                // Mark this PC as failed for manual follow-up
+                try {
+                    const paymentModuleService = container.resolve(Modules.PAYMENT) as any;
+                    await paymentModuleService.updatePaymentCollections(pc.id, {
+                        metadata: {
+                            ...metadata,
+                            capture_failed: true,
+                            capture_error: pcError instanceof Error ? pcError.message : String(pcError),
+                            capture_failed_at: new Date().toISOString(),
+                        },
+                    });
+                } catch (updateError) {
+                    logger.error("payment-capture-core", "Failed to update PC metadata after capture failure", {
+                        orderId,
+                        paymentCollectionId: pc.id,
+                    }, updateError instanceof Error ? updateError : new Error(String(updateError)));
+                }
+            }
+        }
 
     } catch (error) {
-        // Log error but don't fail - main capture already succeeded
-        // Customer has their original items, supplementary charge can be retried manually
-        logger.error("payment-capture-core", "Supplementary charge failed", {
+        // Log but don't fail - main capture already succeeded
+        logger.error("payment-capture-core", "Error capturing supplementary PaymentCollections", {
             orderId,
-            paymentIntentId,
         }, error instanceof Error ? error : new Error(String(error)));
-
-        // Update metadata to indicate failure for manual follow-up
-        try {
-            const metadata = await getOrderMetadata(container, orderId);
-            const orderService = container.resolve("order");
-            await orderService.updateOrders([{
-                id: orderId,
-                metadata: {
-                    ...metadata,
-                    supplementary_charge_failed: true,
-                    supplementary_charge_error: error instanceof Error ? error.message : String(error),
-                    supplementary_charge_failed_at: new Date().toISOString(),
-                },
-            }]);
-        } catch (metadataError) {
-            logger.error("payment-capture-core", "Failed to update metadata after supplementary charge failure", {
-                orderId,
-            }, metadataError instanceof Error ? metadataError : new Error(String(metadataError)));
-        }
     }
 }

@@ -12,7 +12,7 @@ export const capturePaymentStep = createStep(
         const logger = container.resolve("logger");
 
         if (!input.paymentIntentId) {
-            logger.info("capture-payment-step", "Skipping capture: No Payment Intent ID provided", { orderId: input.orderId });
+            logger.info(`[capture-payment-step] Skipping capture: No Payment Intent ID provided for order ${input.orderId}`);
             return new StepResponse({ success: true, skipped: true });
         }
         
@@ -30,7 +30,7 @@ export const capturePaymentStep = createStep(
         } catch (error) {
             // Re-throw to trigger workflow rollback
             const errMsg = error instanceof Error ? error.message : String(error);
-            logger.error("capture-payment-step", "Payment Capture Failed", { error: errMsg });
+            logger.error(`[capture-payment-step] Payment Capture Failed: ${errMsg}`);
             throw new Error(`Payment Capture Failed: ${errMsg}`);
         }
     }

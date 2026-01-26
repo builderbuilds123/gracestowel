@@ -17,19 +17,16 @@ export const cancelPaymentCaptureJobStep = createStep(
 
             if (job) {
                 await job.remove();
-                logger.info("cancel-capture-job-step", "Cancelled scheduled capture job", { jobId: jobName });
+                logger.info(`[cancel-capture-job-step] Cancelled scheduled capture job: ${jobName}`);
                 return new StepResponse({ cancelled: true, jobId: jobName }, { cancelled: true, jobId: jobName });
             } else {
-                logger.debug("cancel-capture-job-step", "No scheduled job found to cancel", { jobId: jobName });
+                logger.debug(`[cancel-capture-job-step] No scheduled job found to cancel: ${jobName}`);
                 return new StepResponse({ cancelled: false, jobId: jobName }, { cancelled: false, jobId: jobName });
             }
         } catch (error) {
             // Soft failure: We prefer the workflow to continue even if we fail to remove the backup job.
             // The backup job is idempotent anyway.
-            logger.warn("cancel-capture-job-step", "Failed to cancel capture job", { 
-                orderId, 
-                error: error instanceof Error ? error.message : String(error) 
-            });
+            logger.warn(`[cancel-capture-job-step] Failed to cancel capture job for order ${orderId}: ${error instanceof Error ? error.message : String(error)}`);
             return new StepResponse({ cancelled: false }, { cancelled: false });
         }
     },
@@ -49,7 +46,7 @@ export const cancelPaymentCaptureJobStep = createStep(
         // RECOMMENDATION: This step is robust as is, but logic placement matters.
         const logger = container.resolve("logger");
         if (response?.cancelled) {
-            logger.warn("cancel-capture-job-step", "Compensation: Job was cancelled but cannot be easily restored. Manual check suggested if transaction fails.", { response });
+            logger.warn(`[cancel-capture-job-step] Compensation: Job was cancelled but cannot be easily restored. Manual check suggested if transaction fails.`);
         }
     }
 );
