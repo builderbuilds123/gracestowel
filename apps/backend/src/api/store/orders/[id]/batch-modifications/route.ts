@@ -199,6 +199,9 @@ export async function POST(
             order_change_id: result.result.order_change_id,
             payment_status: result.result.payment_status,
             total_difference: result.result.total_difference,
+            // Include supplementary charge info if incremental auth wasn't available
+            requires_supplementary_charge: result.result.requires_supplementary_charge || false,
+            supplementary_amount: result.result.supplementary_amount || 0,
         });
     } catch (error) {
         // Helper to extract error code from workflow errors

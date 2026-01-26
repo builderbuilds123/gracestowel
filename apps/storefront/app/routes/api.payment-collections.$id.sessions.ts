@@ -80,9 +80,10 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
   }
 
   try {
-    // 3. Create fresh session with incremental authorization enabled
-    // This allows us to use incrementAuthorization API for order modifications
-    // @see https://docs.stripe.com/payments/incremental-authorization
+    // 3. Create fresh session
+    // Note: request_incremental_authorization requires Stripe IC+ pricing plan
+    // which is not available on standard accounts. Order modifications will
+    // use supplementary charges instead.
     const createUrl = `${medusaBackendUrl}/store/payment-collections/${collectionId}/payment-sessions`;
     const response = await monitoredFetch(createUrl, {
       method: "POST",
@@ -90,17 +91,7 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
         "Content-Type": "application/json",
         "x-publishable-api-key": publishableKey,
       },
-      body: JSON.stringify({
-        provider_id,
-        data: {
-          // Enable incremental authorization for order modifications
-          payment_method_options: {
-            card: {
-              request_incremental_authorization: "if_available",
-            },
-          },
-        },
-      }),
+      body: JSON.stringify({ provider_id }),
       label: "create-payment-session",
       cloudflareEnv: env,
     });

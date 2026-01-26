@@ -84,6 +84,10 @@ interface BatchStripeResult {
     newAmount: number;
     skipped: boolean;
     paymentIntentId: string;
+    /** If true, incremental auth wasn't supported - requires supplementary charge at capture */
+    requiresSupplementaryCharge?: boolean;
+    /** Amount that still needs to be authorized/captured separately */
+    supplementaryAmount?: number;
 }
 
 interface QuantityUpdateInfo {
@@ -573,7 +577,35 @@ const incrementStripeBatchStep = createStep(
             if (error instanceof Stripe.errors.StripeCardError) {
                 throw new CardDeclinedError(error.message, error.decline_code);
             }
-            // If incrementAuthorization fails (e.g., not supported), log detailed error
+
+            // Check if this is an "account not eligible" error for incremental authorization
+            // This happens with standard Stripe accounts (IC+ pricing required)
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            const isNotEligible = errorMessage.includes("not eligible for the requested card features") ||
+                                  errorMessage.includes("incremental_authorization");
+
+            if (isNotEligible) {
+                // Gracefully handle - the order changes will go through, but we'll need to
+                // create a supplementary charge at capture time for the difference
+                logger.warn("batch-modify-order", "Incremental authorization not available - will require supplementary charge at capture", {
+                    paymentIntentId: input.paymentIntentId,
+                    currentAmount: input.currentAmount,
+                    requestedAmount: input.newAmount,
+                    difference: input.newAmount - input.currentAmount,
+                });
+
+                return new StepResponse({
+                    success: true,
+                    previousAmount: input.currentAmount,
+                    newAmount: input.currentAmount, // Keeps current authorization
+                    skipped: false,
+                    paymentIntentId: input.paymentIntentId,
+                    requiresSupplementaryCharge: true,
+                    supplementaryAmount: input.newAmount - input.currentAmount,
+                });
+            }
+
+            // For other errors, log and re-throw
             logger.error("batch-modify-order", "Failed to increment Stripe authorization", {
                 paymentIntentId: input.paymentIntentId,
                 currentAmount: input.currentAmount,
@@ -796,6 +828,50 @@ const updateBatchPaymentCollectionStep = createStep(
             compensation.paymentCollectionId,
             { amount: compensation.previousAmount }
         );
+    }
+);
+
+/**
+ * Step: Update order metadata with supplementary charge info
+ *
+ * When incremental authorization isn't available (standard Stripe accounts),
+ * we store the supplementary charge info in order metadata so the capture
+ * flow knows to create an additional charge for the difference.
+ */
+const updateOrderSupplementaryChargeStep = createStep(
+    "update-order-supplementary-charge",
+    async (
+        input: {
+            orderId: string;
+            requiresSupplementaryCharge: boolean;
+            supplementaryAmount: number;
+            currencyCode: string;
+        },
+        { container }
+    ): Promise<StepResponse<{ updated: boolean }>> => {
+        if (!input.requiresSupplementaryCharge || input.supplementaryAmount <= 0) {
+            return new StepResponse({ updated: false });
+        }
+
+        const orderModuleService = container.resolve(Modules.ORDER);
+
+        // Update order metadata with supplementary charge info
+        await orderModuleService.updateOrders([{
+            id: input.orderId,
+            metadata: {
+                supplementary_charge_required: true,
+                supplementary_charge_amount: input.supplementaryAmount,
+                supplementary_charge_currency: input.currencyCode,
+            },
+        }]);
+
+        logger.info("batch-modify-order", "Updated order with supplementary charge info", {
+            orderId: input.orderId,
+            supplementaryAmount: input.supplementaryAmount,
+            currencyCode: input.currencyCode,
+        });
+
+        return new StepResponse({ updated: true });
     }
 );
 
@@ -1364,6 +1440,16 @@ export const batchModifyOrderWorkflow = createWorkflow(
         }));
         const reservationUpdateResult = updateBatchReservationsStep(reservationUpdateInput);
 
+        // Step 8: Update order metadata if supplementary charge is required
+        // This stores the info so capture flow knows to create an additional charge
+        const supplementaryChargeInput = transform({ stripeResult, input, validation }, (data) => ({
+            orderId: data.input.orderId,
+            requiresSupplementaryCharge: data.stripeResult.requiresSupplementaryCharge || false,
+            supplementaryAmount: data.stripeResult.supplementaryAmount || 0,
+            currencyCode: data.validation.order.currency_code,
+        }));
+        updateOrderSupplementaryChargeStep(supplementaryChargeInput);
+
         // Build final result
         const result = transform(
             { validation, totals, stripeResult, editResult, reservationResult, reservationUpdateResult, input },
@@ -1372,10 +1458,17 @@ export const batchModifyOrderWorkflow = createWorkflow(
                 items_added: data.editResult.itemsAdded,
                 items_updated: data.editResult.itemsUpdated,
                 order_change_id: data.editResult.orderChangeId,
-                payment_status: data.stripeResult.skipped ? "unchanged" : "succeeded",
+                payment_status: data.stripeResult.requiresSupplementaryCharge
+                    ? "requires_supplementary_charge"
+                    : data.stripeResult.skipped
+                    ? "unchanged"
+                    : "succeeded",
                 total_difference: data.totals.totalDifference,
                 reservations_created: data.reservationResult.reservationCount,
                 reservations_updated: data.reservationUpdateResult.updatedCount + data.reservationUpdateResult.createdCount,
+                // Include supplementary charge info if incremental auth wasn't available
+                requires_supplementary_charge: data.stripeResult.requiresSupplementaryCharge || false,
+                supplementary_amount: data.stripeResult.supplementaryAmount || 0,
             })
         );
 
