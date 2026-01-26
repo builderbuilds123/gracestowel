@@ -837,6 +837,10 @@ const updateBatchPaymentCollectionStep = createStep(
  * When incremental authorization isn't available (standard Stripe accounts),
  * we store the supplementary charge info in order metadata so the capture
  * flow knows to create an additional charge for the difference.
+ *
+ * IMPORTANT: This step ACCUMULATES amounts across multiple edits. If the customer
+ * makes multiple modifications (e.g., adds item A, then adds item B), the
+ * supplementary_charge_amount will be the sum of all additional amounts.
  */
 const updateOrderSupplementaryChargeStep = createStep(
     "update-order-supplementary-charge",
@@ -848,30 +852,49 @@ const updateOrderSupplementaryChargeStep = createStep(
             currencyCode: string;
         },
         { container }
-    ): Promise<StepResponse<{ updated: boolean }>> => {
+    ): Promise<StepResponse<{ updated: boolean; previousAmount: number }>> => {
         if (!input.requiresSupplementaryCharge || input.supplementaryAmount <= 0) {
-            return new StepResponse({ updated: false });
+            return new StepResponse({ updated: false, previousAmount: 0 });
         }
 
         const orderModuleService = container.resolve(Modules.ORDER);
+        const query = container.resolve("query");
 
-        // Update order metadata with supplementary charge info
+        // Fetch existing metadata to accumulate amounts
+        const { data: orders } = await query.graph({
+            entity: "order",
+            fields: ["id", "metadata"],
+            filters: { id: input.orderId },
+        });
+
+        const existingMetadata = (orders?.[0]?.metadata || {}) as Record<string, unknown>;
+        const existingAmount = typeof existingMetadata.supplementary_charge_amount === "number"
+            ? existingMetadata.supplementary_charge_amount
+            : 0;
+
+        // Accumulate the new amount with any existing amount
+        const totalSupplementaryAmount = existingAmount + input.supplementaryAmount;
+
+        // Update order metadata with accumulated supplementary charge info
         await orderModuleService.updateOrders([{
             id: input.orderId,
             metadata: {
+                ...existingMetadata,
                 supplementary_charge_required: true,
-                supplementary_charge_amount: input.supplementaryAmount,
+                supplementary_charge_amount: totalSupplementaryAmount,
                 supplementary_charge_currency: input.currencyCode,
             },
         }]);
 
         logger.info("batch-modify-order", "Updated order with supplementary charge info", {
             orderId: input.orderId,
-            supplementaryAmount: input.supplementaryAmount,
+            newAmount: input.supplementaryAmount,
+            previousAmount: existingAmount,
+            totalAmount: totalSupplementaryAmount,
             currencyCode: input.currencyCode,
         });
 
-        return new StepResponse({ updated: true });
+        return new StepResponse({ updated: true, previousAmount: existingAmount });
     }
 );
 

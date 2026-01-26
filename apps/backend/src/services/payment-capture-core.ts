@@ -47,12 +47,10 @@ export async function getOrderMetadata(container: MedusaContainer, orderId: stri
  */
 export async function setOrderEditStatus(
     container: MedusaContainer,
-    orderId: string, 
+    orderId: string,
     editStatus: "locked_for_capture" | "idle" | "editable",
     expectCurrentStatus?: "editable" | "idle" | undefined
 ): Promise<boolean> {
-    const logger = container.resolve("logger");
-
     try {
         const currentMetadata = await getOrderMetadata(container, orderId);
 
@@ -207,7 +205,6 @@ export async function executePaymentCapture(
     paymentIntentId: string,
     idempotencyKey?: string
 ): Promise<void> {
-    const logger = container.resolve("logger");
     const stripe = getStripeClient();
 
     logger.info("payment-capture-core", "Executing payment capture", { orderId, paymentIntentId });
@@ -295,11 +292,10 @@ export async function executePaymentCapture(
 
 // Helper: Update Order Logic (Migrated from worker)
 export async function updateOrderAfterCapture(
-    container: MedusaContainer, 
-    orderId: string, 
+    container: MedusaContainer,
+    orderId: string,
     amountCaptured: number
 ): Promise<void> {
-    const logger = container.resolve("logger");
     let currencyCode = "usd";
 
     try {
@@ -350,8 +346,6 @@ async function updatePaymentCollectionOnCapture(
     orderId: string,
     amountCaptured: number
 ): Promise<{ paymentCollectionId: string | null; paymentId: string | null }> {
-    const logger = container.resolve("logger");
-    
     try {
         const query = container.resolve("query");
         const { data: orders } = await query.graph({
@@ -372,9 +366,14 @@ async function updatePaymentCollectionOnCapture(
 
         // Find capturable collection
         const capturableStatuses = ["authorized", "awaiting", "not_paid"];
-        const collection = order.payment_collections.find((pc: any) => 
+        const collection = order.payment_collections.find((pc: any) =>
             capturableStatuses.includes(pc.status)
         ) || order.payment_collections[0];
+
+        if (!collection) {
+            logger.warn("payment-capture-core", "No PaymentCollection found for order", { orderId });
+            return { paymentCollectionId: null, paymentId: null };
+        }
 
         // Type assertion for Medusa Payment Module
         interface PaymentModuleService {
@@ -384,14 +383,14 @@ async function updatePaymentCollectionOnCapture(
             ) => Promise<void>;
         }
         const paymentModuleService = container.resolve(Modules.PAYMENT) as unknown as PaymentModuleService;
-        
+
         await paymentModuleService.updatePaymentCollections(collection.id, {
             status: PaymentCollectionStatus.COMPLETED,
         });
 
-        return { 
-            paymentCollectionId: collection.id, 
-            paymentId: collection.payments?.[0]?.id || null 
+        return {
+            paymentCollectionId: collection.id,
+            paymentId: collection.payments?.[0]?.id || null
         };
 
     } catch (error) {
@@ -409,7 +408,6 @@ async function createOrderTransactionOnCapture(
     paymentCollectionId: string | null,
     paymentId: string | null
 ): Promise<void> {
-    const logger = container.resolve("logger");
     try {
         const orderModuleService = container.resolve(Modules.ORDER) as any;
         const amountInMajorUnits = amountCaptured / 100;
@@ -444,8 +442,6 @@ async function processSupplementaryChargeIfRequired(
     paymentIntentId: string,
     currencyCode: string
 ): Promise<void> {
-    const logger = container.resolve("logger");
-
     try {
         // Check if supplementary charge is required from order metadata
         const metadata = await getOrderMetadata(container, orderId);
