@@ -28,10 +28,31 @@ import { sendAdminNotification, AdminNotificationType } from "../../lib/admin-no
 createOrderFulfillmentWorkflow.hooks.fulfillmentCreated(
     async ({ fulfillment }, { container }) => {
         const logger = container.resolve("logger");
-        // Cast to any to avoid strict type checks on DTO properties that exist at runtime
-        const orderId = (fulfillment as any).order_id;
+        const query = container.resolve("query");
 
-        logger.info(`[fulfillment-hook] Hook triggered for fulfillment ${fulfillment.id}, order ${orderId}`);
+        logger.info(`[fulfillment-hook] Hook triggered for fulfillment ${fulfillment.id}`);
+
+        // The FulfillmentDTO doesn't include order_id directly.
+        // We need to query the link table to get the associated order.
+        let orderId: string | undefined;
+        try {
+            const { data: fulfillments } = await query.graph({
+                entity: "fulfillment",
+                fields: ["order.id"],
+                filters: { id: fulfillment.id }
+            });
+
+            orderId = fulfillments?.[0]?.order?.id;
+            logger.info(`[fulfillment-hook] Resolved order ID: ${orderId} for fulfillment ${fulfillment.id}`);
+        } catch (queryError) {
+            logger.error(`[fulfillment-hook] Failed to query order for fulfillment ${fulfillment.id}`, queryError);
+            throw new Error(`Cannot determine order ID for fulfillment ${fulfillment.id}`);
+        }
+
+        if (!orderId) {
+            logger.warn(`[fulfillment-hook] No order found for fulfillment ${fulfillment.id} - skipping payment capture`);
+            return;
+        }
 
         try {
             // Step 1: Capture ALL payments for the order
