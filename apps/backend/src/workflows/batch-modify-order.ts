@@ -60,6 +60,7 @@ interface BatchValidationResult {
         status: string;
         amount: number;
     };
+    totalAuthorizedCents: number;
 }
 
 interface ItemTotalsResult {
@@ -321,6 +322,48 @@ const validateBatchPreconditionsStep = createStep(
             throw new InvalidPaymentStateError(paymentIntentId, paymentIntent.status);
         }
 
+        // 5b. Calculate total authorized amount across ALL payment collections
+        // (original PI + any existing supplementary PIs from previous modifications)
+        // This prevents spurious supplementary charges when the order total decreases
+        // after a previous increase that already created supplementary PIs.
+        let totalAuthorizedCents = paymentIntent.amount; // Start with original PI
+
+        if (order.payment_collections && order.payment_collections.length > 1) {
+            for (let i = 1; i < order.payment_collections.length; i++) {
+                const pc = order.payment_collections[i] as any;
+                if (pc.status === "canceled") continue; // Skip canceled PCs
+                for (const payment of (pc.payments || [])) {
+                    const paymentData = payment.data as Record<string, unknown> | undefined;
+                    if (paymentData?.id && typeof paymentData.id === "string" && (paymentData.id as string).startsWith("pi_")) {
+                        try {
+                            const suppPI = await stripe.paymentIntents.retrieve(paymentData.id as string);
+                            if (suppPI.status === "requires_capture") {
+                                totalAuthorizedCents += suppPI.amount;
+                                logger.info("batch-modify-order", "Found existing supplementary PI", {
+                                    orderId: input.orderId,
+                                    supplementaryPIId: paymentData.id,
+                                    amount: suppPI.amount,
+                                });
+                            }
+                        } catch (retrieveError) {
+                            logger.warn("batch-modify-order", "Failed to retrieve supplementary PI", {
+                                orderId: input.orderId,
+                                paymentIntentId: paymentData.id,
+                                error: retrieveError instanceof Error ? retrieveError.message : String(retrieveError),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        logger.info("batch-modify-order", "Total authorized amount calculated", {
+            orderId: input.orderId,
+            originalPIAmount: paymentIntent.amount,
+            totalAuthorizedCents,
+            paymentCollectionCount: order.payment_collections?.length || 0,
+        });
+
         // 6. Validate stock for all items being added
         const addItems = input.items.filter(i => i.action === 'add');
         const failedItems: Array<{ variant_id: string; reason: string }> = [];
@@ -401,6 +444,7 @@ const validateBatchPreconditionsStep = createStep(
                 status: paymentIntent.status,
                 amount: paymentIntent.amount,
             },
+            totalAuthorizedCents,
         });
     }
 );
@@ -1448,7 +1492,10 @@ export const batchModifyOrderWorkflow = createWorkflow(
         // Convert newOrderTotal to cents for comparison with PaymentIntent.amount
         const stripeInput = transform({ validation, totals, input }, (data) => ({
             paymentIntentId: data.validation.paymentIntentId,
-            currentAmount: data.validation.paymentIntent.amount, // cents (from Stripe)
+            // Use total authorized across ALL PIs (original + supplementary),
+            // not just the original PI. This prevents spurious supplementary charges
+            // when the order total decreases after a previous increase.
+            currentAmount: data.validation.totalAuthorizedCents, // cents (all uncaptured PIs)
             newAmount: Math.round(data.totals.newOrderTotal * 100), // convert to cents
             orderId: data.input.orderId,
         }));
