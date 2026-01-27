@@ -39,9 +39,9 @@
     "zod": "^4.3.5"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "^1.20.1",
+    "@cloudflare/vite-plugin": "^1.22.0",
     "@faker-js/faker": "^10.2.0",
-    "@react-router/dev": "^7.12.0",
+    "@react-router/dev": "^7.13.0",
     "@tailwindcss/vite": "^4.1.18",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/jest-dom": "^6.9.1",
@@ -52,18 +52,18 @@
     "@types/pg": "^8.16.0",
     "@types/react": "^19.1.15",
     "@types/react-dom": "^19.1.9",
-    "@vitest/coverage-v8": "^4.0.17",
+    "@vitest/coverage-v8": "^4.0.18",
     "happy-dom": "^20.3.3",
     "jsdom": "^27.4.0",
     "msw": "^2.12.7",
-    "pg": "^8.12.0",
+    "pg": "^8.17.2",
     "tailwindcss": "^4.1.18",
     "typescript": "^5.9.2",
     "vite": "^7.3.1",
     "vite-plugin-mkcert": "^1.17.9",
-    "vite-tsconfig-paths": "^6.0.4",
-    "vitest": "^4.0.17",
+    "vite-tsconfig-paths": "^6.0.5",
+    "vitest": "^4.0.18",
     "vitest-axe": "^1.0.0-pre.3",
-    "wrangler": "^4.58.0"
+    "wrangler": "^4.61.0"
   }
 }
