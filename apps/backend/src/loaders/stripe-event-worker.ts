@@ -716,6 +716,11 @@ export function ensureStripeWorkerStarted(container: MedusaContainer): void {
  * Subscribers are auto-discovered by Medusa v2 from src/subscribers/
  */
 export default async function stripeEventWorkerLoader(container: MedusaContainer): Promise<void> {
+    const isIntegrationTest = process.env.TEST_TYPE?.startsWith("integration");
+    if (isIntegrationTest) {
+        return;
+    }
+
     logger.info("stripe-event-worker-loader", "Stripe event worker loader starting");
 
     // Start worker (subscribers are auto-registered by Medusa v2)

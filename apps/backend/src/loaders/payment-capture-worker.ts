@@ -12,6 +12,11 @@ import { logger } from "../utils/logger";
  * Story 2.3: Now passes the container to enable fetching fresh order totals.
  */
 export default async function paymentCaptureWorkerLoader(container: MedusaContainer) {
+    const isIntegrationTest = process.env.TEST_TYPE?.startsWith("integration");
+    if (isIntegrationTest) {
+        return;
+    }
+
     try {
         // Pass container to worker for accessing Medusa services (Story 2.3)
         startPaymentCaptureWorker(container);

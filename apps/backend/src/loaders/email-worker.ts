@@ -7,6 +7,11 @@ import { logger } from "../utils/logger";
  */
 export default async function emailWorkerLoader(container: MedusaContainer) {
     try {
+        const isIntegrationTest = process.env.TEST_TYPE?.startsWith("integration");
+        if (isIntegrationTest) {
+            return;
+        }
+
         // Only start the worker if Redis is configured
         if (process.env.REDIS_URL) {
             startEmailWorker(container);

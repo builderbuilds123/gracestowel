@@ -13,7 +13,8 @@ export default async function customerCreatedHandler({
   container,
 }: SubscriberArgs<{ id: string }>) {
   // Ensure Email worker is running (lazy init)
-  if (process.env.REDIS_URL) {
+  const isIntegrationTest = process.env.TEST_TYPE?.startsWith("integration")
+  if (!isIntegrationTest && process.env.REDIS_URL) {
     startEmailWorker(container)
   }
 
@@ -41,6 +42,9 @@ export default async function customerCreatedHandler({
     }
 
     if (customer.email) {
+      if (isIntegrationTest) {
+        return
+      }
       const result = await enqueueEmail({
         entityId: customer.id,
         template: Templates.WELCOME,
