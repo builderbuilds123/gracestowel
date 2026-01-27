@@ -15,9 +15,8 @@ import {
   Button,
   Textarea,
 } from "@medusajs/ui"
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { useMemo, useState } from "react"
-import { sdk } from "../../lib/sdk"
 
 type Review = {
   id: string
@@ -40,7 +39,10 @@ const commandHelper = createDataTableCommandHelper()
 
 const limit = 20
 
-const ReviewsPage = () => {
+// Create a client for the reviews page
+const queryClient = new QueryClient()
+
+const ReviewsContent = () => {
   const [pagination, setPagination] = useState<DataTablePaginationState>({
     pageSize: limit,
     pageIndex: 0,
@@ -122,6 +124,7 @@ const ReviewsPage = () => {
             className="text-blue-600 hover:underline text-sm"
             target="_blank"
             rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()} // Prevent row click
           >
             View Product
           </a>
@@ -198,10 +201,20 @@ const ReviewsPage = () => {
         params.append("status", statusFilter)
       }
 
-      const response = (await sdk.client.fetch(`/admin/reviews?${params.toString()}`)) as Response
+      // Use native fetch for custom admin endpoints
+      // Session cookies are automatically included
+      const response = await fetch(`/admin/reviews?${params.toString()}`, {
+        credentials: "include", // Include session cookies
+        headers: {
+          "Content-Type": "application/json",
+        },
+      })
+      
       if (!response.ok) {
-        throw new Error("Failed to fetch reviews")
+        const errorText = await response.text()
+        throw new Error(`Failed to fetch reviews: ${response.status} ${errorText}`)
       }
+      
       return (await response.json()) as {
         reviews: Review[]
         count: number
@@ -220,13 +233,17 @@ const ReviewsPage = () => {
           const reviewsToApproveIds = Object.keys(selection)
 
           try {
-            const response = (await sdk.client.fetch("/admin/reviews/batch", {
+            const response = await fetch("/admin/reviews/batch", {
               method: "POST",
-              body: {
+              credentials: "include",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
                 ids: reviewsToApproveIds,
                 action: "approve",
-              },
-            })) as Response
+              }),
+            })
 
             if (!response.ok) {
               throw new Error("Failed to approve reviews")
@@ -247,13 +264,17 @@ const ReviewsPage = () => {
           const reviewsToRejectIds = Object.keys(selection)
 
           try {
-            const response = (await sdk.client.fetch("/admin/reviews/batch", {
+            const response = await fetch("/admin/reviews/batch", {
               method: "POST",
-              body: {
+              credentials: "include",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
                 ids: reviewsToRejectIds,
                 action: "reject",
-              },
-            })) as Response
+              }),
+            })
 
             if (!response.ok) {
               throw new Error("Failed to reject reviews")
@@ -278,13 +299,17 @@ const ReviewsPage = () => {
           }
 
           try {
-            const response = (await sdk.client.fetch("/admin/reviews/batch", {
+            const response = await fetch("/admin/reviews/batch", {
               method: "POST",
-              body: {
+              credentials: "include",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
                 ids: reviewsToDeleteIds,
                 action: "delete",
-              },
-            })) as Response
+              }),
+            })
 
             if (!response.ok) {
               throw new Error("Failed to delete reviews")
@@ -313,12 +338,16 @@ const ReviewsPage = () => {
     try {
       const review = data?.reviews.find((r) => r.id === reviewId)
       const method = review?.admin_response ? "PUT" : "POST"
-      const response = (await sdk.client.fetch(`/admin/reviews/${reviewId}/response`, {
+      const response = await fetch(`/admin/reviews/${reviewId}/response`, {
         method,
-        body: {
-          content: responseContent.trim(),
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
         },
-      })) as Response
+        body: JSON.stringify({
+          content: responseContent.trim(),
+        }),
+      })
 
       if (!response.ok) {
         throw new Error("Failed to save response")
@@ -341,9 +370,13 @@ const ReviewsPage = () => {
     }
 
     try {
-      const response = (await sdk.client.fetch(`/admin/reviews/${reviewId}/response`, {
+      const response = await fetch(`/admin/reviews/${reviewId}/response`, {
         method: "DELETE",
-      })) as Response
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      })
 
       if (!response.ok) {
         throw new Error("Failed to delete response")
@@ -483,6 +516,14 @@ const ReviewsPage = () => {
 
       <Toaster />
     </Container>
+  )
+}
+
+const ReviewsPage = () => {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <ReviewsContent />
+    </QueryClientProvider>
   )
 }
 
