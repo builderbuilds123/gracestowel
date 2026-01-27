@@ -4,11 +4,13 @@ import {
     type MedusaRequest,
     type MedusaResponse,
     authenticate,
+    validateAndTransformBody,
 } from "@medusajs/framework/http";
 import { MedusaError } from "@medusajs/framework/utils";
 import { trackEvent } from "../utils/analytics";
 import { logger } from "../utils/logger";
 import { orderEditRateLimiter } from "../utils/rate-limiter";
+import { PostAdminReviewResponseSchema } from "./admin/reviews/[id]/response/route";
 
 interface Address {
     country_code?: string;
@@ -150,6 +152,14 @@ export default defineMiddlewares({
             matcher: /^\/store\/orders\/[^/]+$/,
             middlewares: [
                 authenticate("customer", ["session", "bearer"], { allowUnauthenticated: true }),
+            ],
+        },
+        {
+            // Admin review response routes - validate request body
+            matcher: "/admin/reviews/:id/response",
+            method: ["POST", "PUT"],
+            middlewares: [
+                validateAndTransformBody(PostAdminReviewResponseSchema as any),
             ],
         },
     ],

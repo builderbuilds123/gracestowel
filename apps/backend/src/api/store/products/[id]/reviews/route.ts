@@ -2,6 +2,7 @@ import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
 import { REVIEW_MODULE } from "../../../../../modules/review"
 import type ReviewModuleService from "../../../../../modules/review/service"
+import { createReviewWorkflow } from "../../../../../workflows/create-review"
 
 import sanitizeHtml from "sanitize-html"
 
@@ -246,19 +247,23 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
   // 4-5 star reviews from verified buyers auto-approve
   const status = reviewService.getAutoApprovalStatus(Math.round(rating), true)
 
-  // 8. Create the review
-  const review = await reviewService.createReviews({
-    product_id: productId,
-    customer_id: customerId,
-    customer_name: customerName,
-    customer_email: customerEmail,
-    order_id: matchingOrder.id ? String(matchingOrder.id) : undefined, // Audit trail
-    rating: Math.round(rating),
-    title: sanitizedTitle,
-    content: sanitizedContent,
-    verified_purchase: true, // Always true for verified-only system
-    status,
+  // 8. Create the review using workflow
+  const { result } = await createReviewWorkflow(req.scope).run({
+    input: {
+      product_id: productId,
+      customer_id: customerId,
+      customer_name: customerName,
+      customer_email: customerEmail,
+      order_id: matchingOrder.id ? String(matchingOrder.id) : undefined, // Audit trail
+      rating: Math.round(rating),
+      title: sanitizedTitle,
+      content: sanitizedContent,
+      verified_purchase: true, // Always true for verified-only system
+      status,
+    },
   })
+
+  const review = result.review
 
   const message = status === "approved"
     ? "Thank you for your verified review!"

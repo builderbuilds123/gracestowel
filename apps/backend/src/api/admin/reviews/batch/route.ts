@@ -1,6 +1,7 @@
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { REVIEW_MODULE } from "../../../../modules/review"
 import type ReviewModuleService from "../../../../modules/review/service"
+import { updateReviewWorkflow } from "../../../../workflows/update-review"
 
 /**
  * POST /admin/reviews/batch
@@ -32,17 +33,20 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     } else {
       const status: "approved" | "rejected" = action === "approve" ? "approved" : "rejected"
 
-      // Update each review with proper typing
+      // Update each review with proper typing using workflow
       const updates: Array<{ id: string; status: "approved" | "rejected" }> = ids.map((id) => ({
         id,
         status,
       }))
 
-      await reviewService.updateReviews(updates)
+      const { result } = await updateReviewWorkflow(req.scope).run({
+        input: updates,
+      })
 
       res.json({
         message: `${ids.length} review(s) ${action}d successfully`,
         count: ids.length,
+        reviews: result.reviews,
       })
     }
   } catch (error) {
