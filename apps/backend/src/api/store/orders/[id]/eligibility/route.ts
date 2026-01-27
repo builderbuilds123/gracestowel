@@ -83,7 +83,7 @@ export async function GET(
         }
 
         // Check eligibility
-        const eligibility = await checkOrderEditEligibility(order);
+        const eligibility = await checkOrderEditEligibility(order as any);
 
         if (!eligibility.eligible) {
             // Log debug context but don't send to client

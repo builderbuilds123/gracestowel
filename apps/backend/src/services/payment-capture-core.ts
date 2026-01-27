@@ -10,7 +10,6 @@
 
 import { MedusaContainer } from "@medusajs/framework/types";
 import { Modules } from "@medusajs/framework/utils";
-import { getStripeClient } from "../utils/stripe";
 import { logger } from "../utils/logger";
 import {
     PaymentCollectionStatus,
@@ -457,7 +456,8 @@ export async function captureAllOrderPayments(
             "id",
             "currency_code",
             "status",
-            "summary.current_order_total",
+            "metadata",
+            "summary.*",
             "payment_collections.id",
             "payment_collections.status",
             "payment_collections.amount",
@@ -501,22 +501,17 @@ export async function captureAllOrderPayments(
     let failedCount = 0;
     const errors: string[] = [];
 
-    // Source of truth: order total from summary
-    const orderTotal = parseFloat(String(order.summary?.current_order_total ?? 0));
+    // Source of truth: real order total from metadata.updated_total / summary / order.total
+    // Do NOT use sum(PC amounts) — supplementary PCs may remain authorized after a
+    // decrease, making the PC sum exceed the actual order total.
+    const orderTotalData = await fetchOrderTotal(container, orderId);
+    if (!orderTotalData) {
+        throw new Error(`Could not fetch order total for ${orderId}`);
+    }
+    const orderTotal = orderTotalData.totalCents / 100; // fetchOrderTotal returns cents
     if (!Number.isFinite(orderTotal) || orderTotal <= 0) {
         logger.error("payment-capture-core", "Invalid order total", { orderId, orderTotal });
         throw new Error(`Invalid order total for order ${orderId}: ${orderTotal}`);
-    }
-
-    // Safety check: sum(PC.amounts) must equal order total
-    const pcTotal = order.payment_collections.reduce(
-        (sum: number, pc: any) => sum + (Number(pc.amount) || 0), 0
-    );
-    if (Math.abs(pcTotal - orderTotal) > 0.01) {
-        logger.error("payment-capture-core", "MISMATCH: PC total != order total", {
-            orderId, pcTotal, orderTotal,
-        });
-        throw new Error(`PaymentCollection total (${pcTotal}) != order total (${orderTotal}) for order ${orderId}`);
     }
 
     // Collect uncaptured payments with their PC and authorized amounts
@@ -526,6 +521,7 @@ export async function captureAllOrderPayments(
         authorizedAmount: number;
         currentPcAmount: number;
         isSupplementary: boolean;
+        stripePaymentIntentId?: string;
     };
     const uncapturedPayments: UncapturedPayment[] = [];
 
@@ -566,6 +562,7 @@ export async function captureAllOrderPayments(
             currentPcAmount: Number(pc.amount),
             isSupplementary: pc.metadata?.supplementary_charge === true ||
                              pc.metadata?.supplementary_charge === "true",
+            stripePaymentIntentId: payment.data?.id,
         });
     }
 
@@ -607,15 +604,40 @@ export async function captureAllOrderPayments(
 
     for (const up of uncapturedPayments) {
         if (remainingToPay <= 0) {
-            logger.info("payment-capture-core", "Skipping payment - order total fully covered", {
-                orderId, paymentId: up.paymentId,
+            // Order total fully covered — cancel the excess payment to release the hold.
+            // Use Medusa's cancelPayment which:
+            // 1. Calls provider.cancelPayment → cancels Stripe PI
+            // 2. Sets Payment.canceled_at → Admin UI shows "Canceled" (not "Pending")
+            logger.info("payment-capture-core", "Cancelling excess payment - order total fully covered", {
+                orderId,
+                paymentId: up.paymentId,
+                paymentIntentId: up.stripePaymentIntentId,
             });
+            try {
+                await paymentModuleService.cancelPayment(up.paymentId);
+                // Also update PC status (cancelPayment doesn't update the collection)
+                await paymentModuleService.updatePaymentCollections(up.paymentCollectionId, {
+                    status: "canceled",
+                });
+                logger.info("payment-capture-core", "Cancelled excess payment and PC", {
+                    orderId,
+                    paymentId: up.paymentId,
+                    paymentCollectionId: up.paymentCollectionId,
+                });
+            } catch (cancelError) {
+                logger.error("payment-capture-core", "Failed to cancel excess payment", {
+                    orderId,
+                    paymentId: up.paymentId,
+                    paymentIntentId: up.stripePaymentIntentId,
+                }, cancelError instanceof Error ? cancelError : new Error(String(cancelError)));
+            }
             skippedCount++;
             continue;
         }
 
         const captureAmount = Math.min(up.authorizedAmount, remainingToPay);
         const isPartial = captureAmount < up.authorizedAmount;
+        const captureAmountCents = Math.round(captureAmount * 100);
 
         // Update PC.amount to captureAmount BEFORE capture
         // This ensures capturePaymentWorkflow sees a full capture → status = completed
@@ -635,12 +657,44 @@ export async function captureAllOrderPayments(
             orderId,
             paymentId: up.paymentId,
             captureAmount,
+            captureAmountCents,
             authorizedAmount: up.authorizedAmount,
             isPartial,
             remainingToPay,
         });
 
         try {
+            // For partial captures, update Payment.amount AND write amount_to_capture
+            // into payment.data so:
+            // 1. Payment.amount matches capture amount → Medusa sets captured_at
+            //    (internal check: capturedAmount >= paymentAmount → set captured_at)
+            // 2. Custom Stripe provider reads amount_to_capture from payment.data
+            //    and passes it to Stripe's paymentIntents.capture API
+            if (isPartial && up.stripePaymentIntentId) {
+                // UpdatePaymentDTO type only declares `id`, but the runtime service
+                // supports `amount` and `data` fields for internal payment updates.
+                await paymentModuleService.updatePayment({
+                    id: up.paymentId,
+                    amount: captureAmount,
+                    data: {
+                        id: up.stripePaymentIntentId,
+                        amount_to_capture: captureAmountCents,
+                    },
+                } as any);
+                logger.info("payment-capture-core", "Updated Payment for partial capture", {
+                    orderId,
+                    paymentId: up.paymentId,
+                    paymentIntentId: up.stripePaymentIntentId,
+                    previousAmount: up.authorizedAmount,
+                    newAmount: captureAmount,
+                    amountToCaptureCents: captureAmountCents,
+                });
+            }
+
+            // Call Medusa's capturePaymentWorkflow to capture via the Stripe provider.
+            // For partial captures: the custom provider reads amount_to_capture from
+            // payment.data and passes it to Stripe.
+            // For full captures: Stripe captures the full authorized amount as normal.
             await capturePaymentWorkflow(container).run({
                 input: {
                     payment_id: up.paymentId,
@@ -654,6 +708,7 @@ export async function captureAllOrderPayments(
                 orderId,
                 paymentId: up.paymentId,
                 captureAmount,
+                captureAmountCents,
                 remainingToPay,
             });
         } catch (error) {
