@@ -49,8 +49,9 @@ interface BatchValidationResult {
         tax_total: number;
         subtotal: number;
         currency_code: string;
-        customer_id?: string;
-        region_id?: string;
+        customer_id?: string | null;
+        region_id?: string | null;
+        email?: string | null;
         metadata: Record<string, any>;
         items: any[];
     };
@@ -1462,17 +1463,23 @@ export const batchModifyOrderWorkflow = createWorkflow(
         const editResult = executeBatchOrderEditStep(editInput);
 
         // Step 5: Update PaymentCollection
-        const pcInput = transform({ validation, totals }, (data) => ({
+        // When a supplementary charge is needed, the original PC should keep its original amount
+        // (matching the Stripe PI), and the supplementary PC handles the difference.
+        // This ensures PC.amount matches what can actually be captured from the associated PI.
+        const pcInput = transform({ validation, totals, stripeResult }, (data) => ({
             paymentCollectionId: data.validation.paymentCollectionId,
-            amount: data.totals.newOrderTotal,
+            // If supplementary charge is needed, keep original PC at original amount
+            // (it matches the Stripe PI). Otherwise, update to new total.
+            amount: data.stripeResult.requiresSupplementaryCharge
+                ? data.validation.order.total  // Keep at original amount (matches Stripe PI)
+                : data.totals.newOrderTotal,   // No supplementary, update to new total
             previousAmount: data.validation.order.total,
         }));
         updateBatchPaymentCollectionStep(pcInput);
 
-        // Note: We do NOT update the Stripe authorization amount here.
-        // Instead, any increase in order total is handled via a supplementary charge
-        // that gets processed at capture time. PaymentCollection is updated above (Step 5)
-        // to reflect the new order total for Medusa's internal tracking.
+        // Note: When order total increases and IC+ is not available, we create a supplementary
+        // PaymentCollection for the difference. The original PC stays at its original amount
+        // to match the Stripe PaymentIntent that was authorized at checkout.
 
         // Step 6: Create inventory reservations for new line items
         const reservationInput = transform({ editResult, input }, (data) => ({
@@ -1497,9 +1504,9 @@ export const batchModifyOrderWorkflow = createWorkflow(
             supplementaryAmount: data.stripeResult.supplementaryAmount || 0,
             currencyCode: data.validation.order.currency_code,
             paymentIntentId: data.validation.paymentIntentId,
-            customerId: data.validation.order.customer_id,
-            regionId: data.validation.order.region_id,
-            customerEmail: data.validation.order.email, // For Stripe Customer creation
+            customerId: data.validation.order.customer_id as string | undefined,
+            regionId: data.validation.order.region_id as string | undefined,
+            customerEmail: data.validation.order.email as string | undefined, // For Stripe Customer creation
         }));
         const supplementaryResult = createSupplementaryPaymentCollectionStep(supplementaryChargeInput);
 
@@ -1523,6 +1530,7 @@ export const batchModifyOrderWorkflow = createWorkflow(
                 supplementary_charge_created: data.supplementaryResult.created || false,
                 supplementary_payment_collection_id: data.supplementaryResult.paymentCollectionId,
                 supplementary_amount: data.stripeResult.supplementaryAmount || 0,
+                requires_supplementary_charge: data.stripeResult.requiresSupplementaryCharge || false,
             })
         );
 
