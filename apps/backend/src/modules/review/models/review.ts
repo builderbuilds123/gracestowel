@@ -13,6 +13,7 @@ const Review = model.define("review", {
   verified_purchase: model.boolean().default(true), // Always true for verified-only system
   status: model.enum(["pending", "approved", "rejected"]).default("pending"),
   helpful_count: model.number().default(0),
+  admin_response: model.text().nullable(), // Admin/merchant response to the review
 })
 .indexes([
   {
