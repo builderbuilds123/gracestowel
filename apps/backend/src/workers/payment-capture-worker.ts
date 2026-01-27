@@ -20,7 +20,7 @@ import {
 } from "../lib/payment-capture-queue";
 import { sendAdminNotification, AdminNotificationType } from "../lib/admin-notifications";
 import { logger } from "../utils/logger";
-import { executePaymentCapture, setOrderEditStatus } from "../services/payment-capture-core";
+import { captureAllOrderPayments, setOrderEditStatus } from "../services/payment-capture-core";
 
 // Re-export specific functions for backward compatibility in testing if needed
 export { fetchOrderTotal, setOrderEditStatus } from "../services/payment-capture-core";
@@ -69,12 +69,22 @@ export async function processPaymentCapture(job: Job<PaymentCaptureJobData>): Pr
         }
 
         // DELEGATE TO CORE SERVICE
-        // Use job ID as idempotency key part to ensure safe retries
+        // Use the same smart capture algorithm as the fulfillment hook
         const idempotencyKey = `worker_capture_${orderId}_${job.id}`;
-        
-        await executePaymentCapture(containerRef, orderId, paymentIntentId, idempotencyKey);
-        
-        logger.info("payment-capture-worker", "Job completed successfully", { orderId });
+
+        const result = await captureAllOrderPayments(containerRef, orderId, idempotencyKey);
+
+        if (!result.hasPayments) {
+            logger.info("payment-capture-worker", "No payments found for order", { orderId });
+        } else if (result.failedCount > 0) {
+            throw new Error(`Failed to capture ${result.failedCount} payment(s): ${result.errors.join("; ")}`);
+        } else {
+            logger.info("payment-capture-worker", "Job completed successfully", {
+                orderId,
+                capturedCount: result.capturedCount,
+                skippedCount: result.skippedCount,
+            });
+        }
 
         // Release lock
         await setOrderEditStatus(containerRef, orderId, "idle");
