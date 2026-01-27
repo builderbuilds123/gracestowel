@@ -457,6 +457,7 @@ export async function captureAllOrderPayments(
             "id",
             "currency_code",
             "status",
+            "summary.current_order_total",
             "payment_collections.id",
             "payment_collections.status",
             "payment_collections.amount",
@@ -500,10 +501,34 @@ export async function captureAllOrderPayments(
     let failedCount = 0;
     const errors: string[] = [];
 
-    // Import capturePaymentWorkflow for supplementary payments
-    const { capturePaymentWorkflow } = await import("@medusajs/medusa/core-flows");
+    // Source of truth: order total from summary
+    const orderTotal = parseFloat(String(order.summary?.current_order_total ?? 0));
+    if (!Number.isFinite(orderTotal) || orderTotal <= 0) {
+        logger.error("payment-capture-core", "Invalid order total", { orderId, orderTotal });
+        throw new Error(`Invalid order total for order ${orderId}: ${orderTotal}`);
+    }
 
-    // Process each PaymentCollection
+    // Safety check: sum(PC.amounts) must equal order total
+    const pcTotal = order.payment_collections.reduce(
+        (sum: number, pc: any) => sum + (Number(pc.amount) || 0), 0
+    );
+    if (Math.abs(pcTotal - orderTotal) > 0.01) {
+        logger.error("payment-capture-core", "MISMATCH: PC total != order total", {
+            orderId, pcTotal, orderTotal,
+        });
+        throw new Error(`PaymentCollection total (${pcTotal}) != order total (${orderTotal}) for order ${orderId}`);
+    }
+
+    // Collect uncaptured payments with their PC and authorized amounts
+    type UncapturedPayment = {
+        paymentId: string;
+        paymentCollectionId: string;
+        authorizedAmount: number;
+        currentPcAmount: number;
+        isSupplementary: boolean;
+    };
+    const uncapturedPayments: UncapturedPayment[] = [];
+
     for (const pcRaw of order.payment_collections) {
         const pc = pcRaw as {
             id: string;
@@ -518,112 +543,139 @@ export async function captureAllOrderPayments(
             }>;
         };
 
-        const isSupplementary = pc.metadata?.supplementary_charge === true ||
-                               pc.metadata?.supplementary_charge === "true";
-
         // Skip if already completed/captured
         if (pc.status === "completed" || pc.status === "captured") {
-            logger.debug("payment-capture-core", "Skipping already completed PaymentCollection", {
-                orderId,
-                paymentCollectionId: pc.id,
-                isSupplementary,
-            });
             skippedCount++;
             continue;
         }
 
-        // Skip if not in capturable state
-        if (pc.status !== "authorized" && pc.status !== "awaiting") {
-            logger.debug("payment-capture-core", "Skipping PaymentCollection in non-capturable state", {
-                orderId,
-                paymentCollectionId: pc.id,
-                status: pc.status,
-            });
-            continue;
-        }
-
-        // Check if payment record exists and is already captured
         const payment = pc.payments?.[0];
-        if (payment?.captured_at) {
-            logger.debug("payment-capture-core", "Skipping already captured payment", {
-                orderId,
-                paymentCollectionId: pc.id,
-                paymentId: payment.id,
+        if (!payment) {
+            continue;
+        }
+
+        if (payment.captured_at) {
+            skippedCount++;
+            continue;
+        }
+
+        uncapturedPayments.push({
+            paymentId: payment.id,
+            paymentCollectionId: pc.id,
+            authorizedAmount: Number(payment.amount),
+            currentPcAmount: Number(pc.amount),
+            isSupplementary: pc.metadata?.supplementary_charge === true ||
+                             pc.metadata?.supplementary_charge === "true",
+        });
+    }
+
+    // If nothing to capture, return early
+    if (uncapturedPayments.length === 0) {
+        const allAlreadyCaptured = skippedCount > 0;
+        logger.info("payment-capture-core", "No uncaptured payments found", {
+            orderId, skippedCount, allAlreadyCaptured,
+        });
+        return {
+            hasPayments: true,
+            allAlreadyCaptured,
+            capturedCount: 0,
+            skippedCount,
+            failedCount: 0,
+            errors: [],
+        };
+    }
+
+    // Sort ascending by authorized amount (capture smaller PIs fully first)
+    uncapturedPayments.sort((a, b) => a.authorizedAmount - b.authorizedAmount);
+
+    logger.info("payment-capture-core", "Smart capture: starting", {
+        orderId,
+        orderTotal,
+        uncapturedCount: uncapturedPayments.length,
+        payments: uncapturedPayments.map(p => ({
+            paymentId: p.paymentId,
+            authorizedAmount: p.authorizedAmount,
+            isSupplementary: p.isSupplementary,
+        })),
+    });
+
+    // Import capturePaymentWorkflow and payment module
+    const { capturePaymentWorkflow } = await import("@medusajs/medusa/core-flows");
+    const paymentModuleService = container.resolve(Modules.PAYMENT);
+
+    let remainingToPay = orderTotal;
+
+    for (const up of uncapturedPayments) {
+        if (remainingToPay <= 0) {
+            logger.info("payment-capture-core", "Skipping payment - order total fully covered", {
+                orderId, paymentId: up.paymentId,
             });
             skippedCount++;
             continue;
         }
+
+        const captureAmount = Math.min(up.authorizedAmount, remainingToPay);
+        const isPartial = captureAmount < up.authorizedAmount;
+
+        // Update PC.amount to captureAmount BEFORE capture
+        // This ensures capturePaymentWorkflow sees a full capture → status = completed
+        if (Math.abs(captureAmount - up.currentPcAmount) > 0.01) {
+            await paymentModuleService.updatePaymentCollections(up.paymentCollectionId, {
+                amount: captureAmount,
+            });
+            logger.info("payment-capture-core", "Updated PC amount before capture", {
+                orderId,
+                paymentCollectionId: up.paymentCollectionId,
+                previousAmount: up.currentPcAmount,
+                newAmount: captureAmount,
+            });
+        }
+
+        logger.info("payment-capture-core", `Capturing ${up.isSupplementary ? "supplementary" : "original"} payment`, {
+            orderId,
+            paymentId: up.paymentId,
+            captureAmount,
+            authorizedAmount: up.authorizedAmount,
+            isPartial,
+            remainingToPay,
+        });
 
         try {
-            if (!payment) {
-                logger.warn("payment-capture-core", "No Payment record found for PaymentCollection", {
-                    orderId,
-                    paymentCollectionId: pc.id,
-                });
-                failedCount++;
-                continue;
-            }
-
-            if (isSupplementary) {
-                logger.info("payment-capture-core", "Capturing supplementary payment", {
-                    orderId,
-                    paymentCollectionId: pc.id,
-                    paymentId: payment.id,
-                    amount: pc.amount,
-                });
-            } else {
-                logger.info("payment-capture-core", "Capturing original payment", {
-                    orderId,
-                    paymentCollectionId: pc.id,
-                    paymentId: payment.id,
-                    amount: pc.amount,
-                });
-            }
-
             await capturePaymentWorkflow(container).run({
-                input: { payment_id: payment.id },
+                input: {
+                    payment_id: up.paymentId,
+                    amount: captureAmount,
+                },
             });
-
+            remainingToPay -= captureAmount;
             capturedCount++;
-            if (isSupplementary) {
-                logger.info("payment-capture-core", "Supplementary payment captured", {
-                    orderId,
-                    paymentCollectionId: pc.id,
-                    paymentId: payment.id,
-                });
-            } else {
-                logger.info("payment-capture-core", "Original payment captured", {
-                    orderId,
-                    paymentCollectionId: pc.id,
-                    paymentId: payment.id,
-                });
-            }
 
+            logger.info("payment-capture-core", "Payment captured", {
+                orderId,
+                paymentId: up.paymentId,
+                captureAmount,
+                remainingToPay,
+            });
         } catch (error) {
             failedCount++;
-            const errorMessage = error instanceof Error ? error.message : String(error);
-            errors.push(`PaymentCollection ${pc.id}: ${errorMessage}`);
-
-            logger.error("payment-capture-core", "Failed to capture PaymentCollection", {
-                orderId,
-                paymentCollectionId: pc.id,
-                isSupplementary,
+            errors.push(`Payment ${up.paymentId}: ${error instanceof Error ? error.message : String(error)}`);
+            logger.error("payment-capture-core", "Failed to capture payment", {
+                orderId, paymentId: up.paymentId, captureAmount,
             }, error instanceof Error ? error : new Error(String(error)));
-
-            // Don't mark metadata - we'll throw and rollback the fulfillment workflow
-            // The caller is responsible for sending admin notification and handling the error
         }
     }
 
     const totalPayments = order.payment_collections.length;
     const allAlreadyCaptured = capturedCount === 0 && skippedCount > 0 && failedCount === 0;
 
-    logger.info("payment-capture-core", "Capture all payments completed", {
+    logger.info("payment-capture-core", "Smart capture completed", {
         orderId,
         totalPayments,
+        orderTotal,
         capturedCount,
         skippedCount,
         failedCount,
+        remainingToPay,
         allAlreadyCaptured,
     });
 
