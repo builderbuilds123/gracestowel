@@ -249,6 +249,7 @@ export async function captureAllOrderPayments(
             "payment_collections.payments.id",
             "payment_collections.payments.amount",
             "payment_collections.payments.captured_at",
+            "payment_collections.payments.canceled_at",
             "payment_collections.payments.data",
         ],
         filters: { id: orderId },
@@ -319,6 +320,7 @@ export async function captureAllOrderPayments(
                 id: string;
                 amount: number;
                 captured_at?: string | Date | null;
+                canceled_at?: string | Date | null;
                 data?: { id?: string };
             }>;
         };
@@ -335,6 +337,12 @@ export async function captureAllOrderPayments(
         }
 
         if (payment.captured_at) {
+            skippedCount++;
+            continue;
+        }
+
+        // Skip payments that were voided (canceled) in a previous capture run
+        if (payment.canceled_at) {
             skippedCount++;
             continue;
         }
@@ -418,11 +426,15 @@ export async function captureAllOrderPayments(
             });
             try {
                 await paymentModuleService.cancelPayment(up.paymentId);
-                // Also update PC status (cancelPayment doesn't update the collection)
+                // Set PC amount to 0 so Medusa's getLastPaymentStatus() counts it
+                // as fully captured (amount=0 → capturedCount += 1).
+                // Do NOT set status to "canceled" — that breaks payment_status by
+                // excluding this PC from totalPaymentExceptCanceled while still
+                // counting its captured_amount toward capturedCount.
                 await paymentModuleService.updatePaymentCollections(up.paymentCollectionId, {
-                    status: "canceled",
+                    amount: 0,
                 });
-                logger.info("payment-capture-core", "Cancelled excess payment and PC", {
+                logger.info("payment-capture-core", "Voided excess payment and zeroed PC amount", {
                     orderId,
                     paymentId: up.paymentId,
                     paymentCollectionId: up.paymentCollectionId,
