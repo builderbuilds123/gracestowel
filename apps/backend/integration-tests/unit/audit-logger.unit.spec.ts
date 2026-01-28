@@ -59,6 +59,7 @@ describe("logOrderModificationAttempt", () => {
 
       expect(mockLoggerInfoFn).toHaveBeenCalledWith(
         "order-modification-audit",
+        "Log modification attempt",
         expect.objectContaining({
           tokenHash: expectedHash,
         })
@@ -80,6 +81,7 @@ describe("logOrderModificationAttempt", () => {
 
       expect(mockLoggerInfoFn).toHaveBeenCalledWith(
         "order-modification-audit",
+        "Log modification attempt",
         expect.objectContaining({
           tokenHash: null,
         })
@@ -125,6 +127,7 @@ describe("logOrderModificationAttempt", () => {
 
         expect(mockLoggerInfoFn).toHaveBeenCalledWith(
           "order-modification-audit",
+          "Log modification attempt",
           expect.objectContaining({
             action,
           })
@@ -149,6 +152,7 @@ describe("logOrderModificationAttempt", () => {
 
       expect(mockLoggerInfoFn).toHaveBeenCalledWith(
         "order-modification-audit",
+        "Log modification attempt",
         expect.objectContaining({
           authMethod: "customer_session",
           customerId: testCustomerId,
@@ -172,6 +176,7 @@ describe("logOrderModificationAttempt", () => {
 
       expect(mockLoggerInfoFn).toHaveBeenCalledWith(
         "order-modification-audit",
+        "Log modification attempt",
         expect.objectContaining({
           authMethod: "guest_token",
           customerId: null,
@@ -195,6 +200,7 @@ describe("logOrderModificationAttempt", () => {
 
       expect(mockLoggerInfoFn).toHaveBeenCalledWith(
         "order-modification-audit",
+        "Log modification attempt",
         expect.objectContaining({
           authMethod: "none",
           customerId: null,
@@ -219,6 +225,7 @@ describe("logOrderModificationAttempt", () => {
 
       expect(mockLoggerInfoFn).toHaveBeenCalledWith(
         "order-modification-audit",
+        "Log modification attempt",
         expect.objectContaining({
           success: true,
           failureReason: null,
@@ -243,6 +250,7 @@ describe("logOrderModificationAttempt", () => {
 
       expect(mockLoggerInfoFn).toHaveBeenCalledWith(
         "order-modification-audit",
+        "Log modification attempt",
         expect.objectContaining({
           success: false,
           failureReason,
@@ -265,6 +273,7 @@ describe("logOrderModificationAttempt", () => {
 
       expect(mockLoggerInfoFn).toHaveBeenCalledWith(
         "order-modification-audit",
+        "Log modification attempt",
         expect.objectContaining({
           failureReason: null,
         })
@@ -289,6 +298,7 @@ describe("logOrderModificationAttempt", () => {
 
       expect(mockLoggerInfoFn).toHaveBeenCalledWith(
         "order-modification-audit",
+        "Log modification attempt",
         expect.objectContaining({
           orderId: testOrderId,
           action: "edit",
@@ -320,7 +330,7 @@ describe("logOrderModificationAttempt", () => {
       // Get the call arguments from the spy
       expect(mockLoggerInfoFn).toHaveBeenCalled();
       const callArgs = mockLoggerInfoFn.mock.calls[0];
-      const logData = callArgs[1];
+      const logData = callArgs[2]; // index 2: (component, message, data)
       const timestamp = new Date(logData.timestamp);
 
       expect(timestamp.toISOString()).toBe(logData.timestamp);
@@ -394,6 +404,7 @@ describe("logOrderModificationAttempt", () => {
 
       expect(mockLoggerInfoFn).toHaveBeenCalledWith(
         "order-modification-audit",
+        "Log modification attempt",
         expect.objectContaining({
           tokenHash: expectedHash,
         })

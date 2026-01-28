@@ -229,7 +229,7 @@ describe("authenticateOrderAccess", () => {
       expect(result.method).toBe("none");
     });
 
-    it("should not check guest token when order has customer_id", async () => {
+    it("should check modification token even when order has customer_id (no session)", async () => {
       mockReq.headers = {
         "x-modification-token": testToken,
       };
@@ -239,11 +239,18 @@ describe("authenticateOrderAccess", () => {
         customer_id: testCustomerId,
       };
 
+      // Token is valid for this order
+      mockValidateTokenFn.mockReturnValue({
+        valid: true,
+        payload: { order_id: testOrderId },
+      });
+
       const result = await authenticateOrderAccess(mockReq as MedusaRequest, order);
 
-      expect(result.authenticated).toBe(false);
-      expect(result.method).toBe("none");
-      expect(mockValidateTokenFn).not.toHaveBeenCalled();
+      // With no auth_context, the token path is checked and succeeds
+      expect(result.authenticated).toBe(true);
+      expect(result.method).toBe("guest_token");
+      expect(mockValidateTokenFn).toHaveBeenCalledWith(testToken);
     });
 
     it("should not check guest token when token header is missing", async () => {

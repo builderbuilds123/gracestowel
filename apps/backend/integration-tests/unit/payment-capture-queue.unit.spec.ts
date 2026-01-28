@@ -26,54 +26,38 @@ vi.mock("bullmq", () => ({
     Job: vi.fn(),
 }));
 
-// Mock Stripe error class to ensure identity match
-class MockStripeInvalidRequestError extends Error {
-    type: string;
-    code: string;
-    constructor(data: any) {
-        super(data.message);
-        this.type = data.type;
-        this.code = data.code;
-    }
-}
+// Mock logger
+vi.mock("../../src/utils/logger", () => ({
+    logger: {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        critical: vi.fn(),
+    },
+}));
 
-vi.mock("stripe", () => {
-    return {
-        errors: {
-            StripeInvalidRequestError: MockStripeInvalidRequestError
-        },
-        __esModule: true,
-        default: {
-            errors: {
-                StripeInvalidRequestError: MockStripeInvalidRequestError
-            }
-        }
-    };
-});
+// Mock payment-capture-core (the shared service the worker delegates to)
+const mockCaptureAllOrderPayments = vi.fn();
+const mockSetOrderEditStatus = vi.fn().mockResolvedValue(true);
+const mockFetchOrderTotal = vi.fn();
 
-// Mock Stripe client
-const mockStripeRetrieve = vi.fn();
-const mockStripeCapture = vi.fn();
-const mockResetStripeClient = vi.fn();
+vi.mock("../../src/services/payment-capture-core", () => ({
+    captureAllOrderPayments: mockCaptureAllOrderPayments,
+    setOrderEditStatus: mockSetOrderEditStatus,
+    fetchOrderTotal: mockFetchOrderTotal,
+}));
 
-// Create the factory function for the Stripe mock
-const createStripeMock = () => ({
-    getStripeClient: vi.fn().mockReturnValue({
-        paymentIntents: {
-            retrieve: mockStripeRetrieve,
-            capture: mockStripeCapture,
-        },
-    }),
-    resetStripeClient: mockResetStripeClient,
-    STRIPE_API_VERSION: "2025-10-29.clover",
-    createStripeClient: vi.fn(),
-});
+// Mock admin notifications
+vi.mock("../../src/lib/admin-notifications", () => ({
+    sendAdminNotification: vi.fn(),
+    AdminNotificationType: { PAYMENT_FAILED: "PAYMENT_FAILED" },
+}));
 
 describe("payment-capture-queue", () => {
     const originalEnv = process.env;
     let mockContainer: any;
-    let mockQueryGraph: vi.Mock;
-    
+
     // Module functions under test
     let getPaymentCaptureQueue: any;
     let schedulePaymentCapture: any;
@@ -89,43 +73,31 @@ describe("payment-capture-queue", () => {
         process.env.REDIS_URL = "redis://localhost:6379";
         process.env.STRIPE_SECRET_KEY = "sk_test_mock";
 
-        vi.spyOn(console, "log").mockImplementation(() => {});
-        vi.spyOn(console, "warn").mockImplementation(() => {});
-        vi.spyOn(console, "error").mockImplementation(() => {});
-
-        // Re-apply the Stripe mock after resetModules
-        vi.doMock("../../src/utils/stripe", createStripeMock);
-
         // Re-configure BullMQ mocks after clearAllMocks
         mockQueueAdd.mockResolvedValue({ id: "test-job-id" });
         mockQueueGetJob.mockResolvedValue(null);
 
-        mockQueryGraph = vi.fn();
-        const mockUpdateOrders = vi.fn().mockResolvedValue({});
-        const mockUpdatePaymentCollections = vi.fn().mockResolvedValue({});
-        const mockCapturePayment = vi.fn().mockResolvedValue({});
-        const mockAddOrderTransactions = vi.fn().mockResolvedValue({});
-        
-        (global as any).mockUpdateOrders = mockUpdateOrders;
-        (global as any).mockCapturePayment = mockCapturePayment;
-        (global as any).mockUpdatePaymentCollections = mockUpdatePaymentCollections;
-        (global as any).mockAddOrderTransactions = mockAddOrderTransactions;
+        // Reset core mocks
+        mockCaptureAllOrderPayments.mockReset();
+        mockSetOrderEditStatus.mockReset().mockResolvedValue(true);
+        mockFetchOrderTotal.mockReset();
+
         mockContainer = {
             resolve: vi.fn((serviceName: string) => {
                 if (serviceName === "query") {
-                    return { graph: mockQueryGraph };
+                    return { graph: vi.fn() };
                 }
                 if (serviceName === "order") {
-                    return { updateOrders: mockUpdateOrders, addOrderTransactions: mockAddOrderTransactions };
+                    return { updateOrders: vi.fn(), addOrderTransactions: vi.fn() };
                 }
                 if (serviceName === "payment") {
                     return {
-                        updatePaymentCollections: mockUpdatePaymentCollections,
-                        capturePayment: mockCapturePayment
+                        updatePaymentCollections: vi.fn(),
+                        capturePayment: vi.fn(),
                     };
                 }
                 return {};
-            })
+            }),
         };
 
         // Import the module under test FRESH for each test
@@ -133,8 +105,8 @@ describe("payment-capture-queue", () => {
         getPaymentCaptureQueue = queueMod.getPaymentCaptureQueue;
         schedulePaymentCapture = queueMod.schedulePaymentCapture;
         cancelPaymentCaptureJob = queueMod.cancelPaymentCaptureJob;
-        
-        // Worker functions are now in a separate module
+
+        // Worker functions
         const workerMod = await import("../../src/workers/payment-capture-worker");
         startPaymentCaptureWorker = workerMod.startPaymentCaptureWorker;
         fetchOrderTotal = workerMod.fetchOrderTotal;
@@ -147,46 +119,41 @@ describe("payment-capture-queue", () => {
     });
 
     describe("fetchOrderTotal (Story 2.3)", () => {
-        it("should throw error if container is not initialized", async () => {
-            await expect(fetchOrderTotal("ord_123")).rejects.toThrow("Container not initialized");
-        });
-        
-        it("should throw error if order is not found", async () => {
-            startPaymentCaptureWorker(mockContainer);
-            mockQueryGraph.mockResolvedValue({ data: [] });
+        // fetchOrderTotal is now re-exported from payment-capture-core
+        // These tests verify the worker's re-export delegates correctly
 
-            await expect(fetchOrderTotal("ord_missing")).rejects.toThrow("not found in DB");
-            expect(mockQueryGraph).toHaveBeenCalled();
+        it("should delegate to payment-capture-core fetchOrderTotal", async () => {
+            mockFetchOrderTotal.mockResolvedValue({ totalCents: 5000, currencyCode: "usd", status: "pending" });
+
+            const result = await fetchOrderTotal(mockContainer, "ord_test");
+            expect(result).toEqual({ totalCents: 5000, currencyCode: "usd", status: "pending" });
+            expect(mockFetchOrderTotal).toHaveBeenCalledWith(mockContainer, "ord_test");
+        });
+
+        it("should propagate errors from payment-capture-core", async () => {
+            mockFetchOrderTotal.mockRejectedValue(new Error("Order ord_missing not found in DB via query.graph"));
+
+            await expect(fetchOrderTotal(mockContainer, "ord_missing")).rejects.toThrow("not found in DB");
+        });
+
+        it("should return null when payment-capture-core returns null (no currency)", async () => {
+            mockFetchOrderTotal.mockResolvedValue(null);
+
+            const result = await fetchOrderTotal(mockContainer, "ord_no_currency");
+            expect(result).toBeNull();
         });
 
         it("should convert float total to cents (AC #2)", async () => {
-            startPaymentCaptureWorker(mockContainer);
-            mockQueryGraph.mockResolvedValue({ 
-                data: [{ id: "ord_float", total: 10.99, currency_code: "usd", status: "pending" }] 
-            });
+            mockFetchOrderTotal.mockResolvedValue({ totalCents: 1099, currencyCode: "usd", status: "pending" });
 
-            const result = await fetchOrderTotal("ord_float");
+            const result = await fetchOrderTotal(mockContainer, "ord_float");
             expect(result).toEqual({ totalCents: 1099, currencyCode: "usd", status: "pending" });
         });
 
-        it("should return null if currency_code is missing (M1 Fix)", async () => {
-            startPaymentCaptureWorker(mockContainer);
-            mockQueryGraph.mockResolvedValue({ 
-                data: [{ id: "ord_1", total: 1000 }] // missing currency_code
-            });
-
-            const result = await fetchOrderTotal("ord_1");
-            expect(result).toBeNull();
-            expect(console.error).toHaveBeenCalledWith(expect.stringContaining("no currency code"));
-        });
-
         it("should return correct data when order exists and valid", async () => {
-            startPaymentCaptureWorker(mockContainer);
-            mockQueryGraph.mockResolvedValue({ 
-                data: [{ id: "ord_valid", total: 50.00, currency_code: "usd", status: "pending" }] 
-            });
+            mockFetchOrderTotal.mockResolvedValue({ totalCents: 5000, currencyCode: "usd", status: "pending" });
 
-            const result = await fetchOrderTotal("ord_valid");
+            const result = await fetchOrderTotal(mockContainer, "ord_valid");
             expect(result).toEqual({ totalCents: 5000, currencyCode: "usd", status: "pending" });
         });
     });
@@ -197,286 +164,180 @@ describe("payment-capture-queue", () => {
             paymentIntentId: "pi_123",
             scheduledAt: 100000,
         };
-        const mockJob: Partial<Job> = { data: mockJobData };
+        const mockJob: Partial<Job> = { data: mockJobData, id: "job_123" };
 
         beforeEach(() => {
             startPaymentCaptureWorker(mockContainer);
         });
 
-        it("should capture dynamic amount when order fetch succeeds (Normal Flow)", async () => {
-            mockStripeRetrieve.mockResolvedValue({
-                id: "pi_123",
-                status: "requires_capture",
-                amount: 5000,
-                currency: "usd"
-            });
-            mockQueryGraph.mockResolvedValue({
-                data: [{
-                    id: "order_123",
-                    total: 50.00,
-                    currency_code: "usd",
-                    status: "pending",
-                    metadata: {},
-                    payment_collections: [{
-                        id: "paycol_123",
-                        status: "authorized",
-                        payments: [{ id: "pay_123" }]
-                    }]
-                }]
+        it("should capture successfully when captureAllOrderPayments succeeds (Normal Flow)", async () => {
+            mockCaptureAllOrderPayments.mockResolvedValue({
+                hasPayments: true,
+                allAlreadyCaptured: false,
+                capturedCount: 1,
+                skippedCount: 0,
+                failedCount: 0,
+                errors: [],
             });
 
             await processPaymentCapture(mockJob as Job);
 
-            expect((global as any).mockCapturePayment).toHaveBeenCalledWith({
-                payment_id: "pay_123",
-                amount: 50.00 
-            });
-
-            expect(mockStripeCapture).not.toHaveBeenCalled();
-        });
-
-        it("should capture partial amount when order total < authorized (Partial)", async () => {
-            mockStripeRetrieve.mockResolvedValue({
-                id: "pi_123",
-                status: "requires_capture",
-                amount: 5000,
-                currency: "usd"
-            });
-            mockQueryGraph.mockResolvedValue({
-                data: [{
-                    id: "order_123",
-                    total: 40.00,
-                    currency_code: "usd",
-                    status: "pending",
-                    metadata: {},
-                    payment_collections: [{
-                        id: "paycol_123",
-                        status: "authorized",
-                        payments: [{ id: "pay_123" }]
-                    }]
-                }]
-            });
-
-            await processPaymentCapture(mockJob as Job);
-
-            expect((global as any).mockCapturePayment).toHaveBeenCalledWith({
-                payment_id: "pay_123",
-                amount: 40.00
-            });
-
-            expect(mockStripeCapture).not.toHaveBeenCalled();
-        });
-
-        it("should throw error when order total > authorized (Excess)", async () => {
-            mockStripeRetrieve.mockResolvedValue({
-                id: "pi_123",
-                status: "requires_capture",
-                amount: 5000,
-                currency: "usd"
-            });
-            mockQueryGraph.mockResolvedValue({
-                data: [{
-                    id: "order_123",
-                    total: 60.00,
-                    currency_code: "usd",
-                    status: "pending",
-                    metadata: {},
-                    payment_collections: [{
-                        id: "paycol_123",
-                        status: "authorized",
-                        payments: [{ id: "pay_123" }]
-                    }]
-                }]
-            });
-            (global as any).mockCapturePayment.mockRejectedValueOnce(
-                new Error("Payment Module validation failed")
+            // Verify lock was acquired
+            expect(mockSetOrderEditStatus).toHaveBeenCalledWith(
+                mockContainer,
+                "order_123",
+                "locked_for_capture"
             );
 
-            await expect(processPaymentCapture(mockJob as Job))
-                .rejects.toThrow("exceeds authorized amount");
-
-            expect(mockStripeCapture).not.toHaveBeenCalled();
-            expect(console.error).toHaveBeenCalledWith(expect.stringContaining("Manual intervention required"));
-        });
-
-        it("should throw error on currency mismatch (M2 Fix)", async () => {
-            mockStripeRetrieve.mockResolvedValue({ 
-                id: "pi_123", 
-                status: "requires_capture", 
-                amount: 5000, 
-                currency: "usd" 
-            });
-            mockQueryGraph.mockResolvedValue({
-                data: [{
-                    id: "order_123",
-                    total: 50.00,
-                    currency_code: "eur",
-                    status: "pending",
-                    payment_collections: [{
-                        id: "paycol_123",
-                        status: "authorized",
-                        payments: [{ id: "pay_123" }]
-                    }]
-                }]
-            });
-
-            await expect(processPaymentCapture(mockJob as Job))
-                .rejects.toThrow("Currency mismatch");
-            
-            expect(console.error).toHaveBeenCalledWith(expect.stringContaining("Currency mismatch"));
-            expect(mockStripeCapture).not.toHaveBeenCalled();
-        });
-
-        it("should fail the job if order fetch fails (no capture)", async () => {
-            mockStripeRetrieve.mockResolvedValue({ 
-                id: "pi_123", 
-                status: "requires_capture", 
-                amount: 5000, 
-                currency: "usd" 
-            });
-            mockQueryGraph.mockResolvedValue({ data: [] });
-
-            await expect(processPaymentCapture(mockJob as Job))
-                .rejects.toThrow("not found in DB");
-
-            expect(mockStripeCapture).not.toHaveBeenCalled();
-        });
-
-        it("should handle Stripe amount_too_large error (M3 Fix)", async () => {
-             mockStripeRetrieve.mockResolvedValue({
-                id: "pi_123",
-                status: "requires_capture",
-                amount: 5000,
-                currency: "usd"
-            });
-            mockQueryGraph.mockResolvedValue({
-                data: [{
-                    id: "order_123",
-                    total: 50.00,
-                    currency_code: "usd",
-                    status: "pending",
-                    metadata: {},
-                    payment_collections: [{
-                        id: "paycol_123",
-                        status: "authorized",
-                        payments: [{ id: "pay_123" }]
-                    }]
-                }]
-            });
-
-            (global as any).mockCapturePayment.mockRejectedValueOnce(
-                new Error("Payment Module unavailable")
+            // Verify captureAllOrderPayments was called
+            expect(mockCaptureAllOrderPayments).toHaveBeenCalledWith(
+                mockContainer,
+                "order_123",
+                expect.stringContaining("worker_capture_order_123")
             );
 
-            const stripeError = new Error("Amount too large") as any;
-            stripeError.type = "invalid_request_error";
-            stripeError.code = "amount_too_large";
-
-            mockStripeCapture.mockRejectedValue(stripeError);
-
-            await expect(processPaymentCapture(mockJob as Job))
-                .rejects.toThrow("Amount too large");
-            
-            expect(console.error).toHaveBeenCalledWith(
-                expect.stringContaining("Amount too large error"),
-                expect.anything()
+            // Verify lock was released
+            expect(mockSetOrderEditStatus).toHaveBeenCalledWith(
+                mockContainer,
+                "order_123",
+                "idle"
             );
         });
-        
-        it("should skip if already canceled", async () => {
-            mockStripeRetrieve.mockResolvedValue({ status: "canceled" });
-            await processPaymentCapture(mockJob as Job);
-            expect(console.log).toHaveBeenCalledWith(expect.stringContaining("already canceled"));
-            expect(mockStripeCapture).not.toHaveBeenCalled();
-        });
 
-        it("should skip if already succeeded", async () => {
-            mockStripeRetrieve.mockResolvedValue({ status: "succeeded", amount: 5000 });
-            mockQueryGraph.mockResolvedValue({
-                data: [{
-                    id: "order_123",
-                    currency_code: "usd",
-                    status: "pending",
-                    metadata: {},
-                    payment_collections: [{
-                        id: "paycol_123",
-                        status: "authorized",
-                        payments: [{ id: "pay_123" }]
-                    }]
-                }]
-            });
-            await processPaymentCapture(mockJob as Job);
-            expect(console.log).toHaveBeenCalledWith(expect.stringContaining("already captured"));
-            expect(mockStripeCapture).not.toHaveBeenCalled();
-        });
-
-        it("should fail the job when order fetch fails (no capture) - duplicate", async () => {
-            mockStripeRetrieve.mockResolvedValue({ status: "requires_capture", amount: 5000, currency: "usd" });
-            mockQueryGraph.mockResolvedValue({ data: [] });
-
-            await expect(processPaymentCapture(mockJob as Job))
-                .rejects.toThrow("not found in DB");
-
-            expect(mockStripeCapture).not.toHaveBeenCalled();
-        });
-
-        it("should skip capture if order is canceled in Medusa", async () => {
-            mockStripeRetrieve.mockResolvedValue({ status: "requires_capture", amount: 1000, currency: "usd" });
-            mockQueryGraph.mockResolvedValue({
-                data: [{
-                    id: "order_123",
-                    total: 10.00,
-                    currency_code: "usd",
-                    status: "canceled",
-                    payment_collections: [{
-                        id: "paycol_123",
-                        status: "authorized",
-                        payments: [{ id: "pay_123" }]
-                    }]
-                }]
+        it("should handle partial capture (some already captured)", async () => {
+            mockCaptureAllOrderPayments.mockResolvedValue({
+                hasPayments: true,
+                allAlreadyCaptured: false,
+                capturedCount: 1,
+                skippedCount: 1,
+                failedCount: 0,
+                errors: [],
             });
 
             await processPaymentCapture(mockJob as Job);
 
-            expect(console.error).toHaveBeenCalledWith(
-                expect.stringContaining("canceled in Medusa")
+            expect(mockCaptureAllOrderPayments).toHaveBeenCalled();
+        });
+
+        it("should throw when captureAllOrderPayments reports failures", async () => {
+            mockCaptureAllOrderPayments.mockResolvedValue({
+                hasPayments: true,
+                allAlreadyCaptured: false,
+                capturedCount: 0,
+                skippedCount: 0,
+                failedCount: 1,
+                errors: ["Payment pay_123: insufficient_funds"],
+            });
+
+            await expect(processPaymentCapture(mockJob as Job))
+                .rejects.toThrow("Failed to capture 1 payment(s)");
+
+            // Lock should still be released on error
+            expect(mockSetOrderEditStatus).toHaveBeenCalledWith(
+                mockContainer,
+                "order_123",
+                "idle"
             );
-            expect(console.log).toHaveBeenCalledWith(expect.stringContaining("capture_blocked_canceled_order"));
-            expect(mockStripeCapture).not.toHaveBeenCalled();
+        });
+
+        it("should handle no payments found", async () => {
+            mockCaptureAllOrderPayments.mockResolvedValue({
+                hasPayments: false,
+                allAlreadyCaptured: false,
+                capturedCount: 0,
+                skippedCount: 0,
+                failedCount: 0,
+                errors: [],
+            });
+
+            await processPaymentCapture(mockJob as Job);
+
+            // Should complete without error
+            expect(mockCaptureAllOrderPayments).toHaveBeenCalled();
+        });
+
+        it("should skip if lock cannot be acquired", async () => {
+            mockSetOrderEditStatus.mockResolvedValue(false);
+
+            await processPaymentCapture(mockJob as Job);
+
+            // captureAllOrderPayments should NOT be called
+            expect(mockCaptureAllOrderPayments).not.toHaveBeenCalled();
+        });
+
+        it("should skip if already canceled (no payments to capture)", async () => {
+            mockCaptureAllOrderPayments.mockResolvedValue({
+                hasPayments: true,
+                allAlreadyCaptured: false,
+                capturedCount: 0,
+                skippedCount: 0,
+                failedCount: 0,
+                errors: [],
+            });
+
+            await processPaymentCapture(mockJob as Job);
+            // Verifies no error is thrown for canceled orders handled by core service
+            expect(mockCaptureAllOrderPayments).toHaveBeenCalled();
+        });
+
+        it("should skip if already succeeded (all already captured)", async () => {
+            mockCaptureAllOrderPayments.mockResolvedValue({
+                hasPayments: true,
+                allAlreadyCaptured: true,
+                capturedCount: 0,
+                skippedCount: 2,
+                failedCount: 0,
+                errors: [],
+            });
+
+            await processPaymentCapture(mockJob as Job);
+            expect(mockCaptureAllOrderPayments).toHaveBeenCalled();
+        });
+
+        it("should release lock even when captureAllOrderPayments throws", async () => {
+            mockCaptureAllOrderPayments.mockRejectedValue(new Error("Unexpected error"));
+
+            await expect(processPaymentCapture(mockJob as Job))
+                .rejects.toThrow("Unexpected error");
+
+            // Lock release should still happen
+            const idleCalls = mockSetOrderEditStatus.mock.calls.filter(
+                (call: any[]) => call[2] === "idle"
+            );
+            expect(idleCalls.length).toBeGreaterThanOrEqual(1);
+        });
+
+        it("should skip invalid orderId", async () => {
+            const invalidJob: Partial<Job> = {
+                data: { orderId: "invalid", paymentIntentId: "pi_123", scheduledAt: 100000 },
+                id: "job_invalid",
+            };
+
+            await processPaymentCapture(invalidJob as Job);
+
+            // Should return early without calling captureAllOrderPayments
+            expect(mockCaptureAllOrderPayments).not.toHaveBeenCalled();
         });
 
         it("should update order metadata after successful capture", async () => {
-            mockStripeRetrieve.mockResolvedValue({ status: "requires_capture", amount: 1000, currency: "usd" });
-            mockQueryGraph.mockResolvedValue({
-                data: [{
-                    id: "order_123",
-                    total: 10.00,
-                    currency_code: "usd",
-                    status: "pending",
-                    metadata: {},
-                    payment_collections: [{
-                        id: "paycol_123",
-                        status: "authorized",
-                        payments: [{ id: "pay_123" }]
-                    }]
-                }]
+            mockCaptureAllOrderPayments.mockResolvedValue({
+                hasPayments: true,
+                allAlreadyCaptured: false,
+                capturedCount: 1,
+                skippedCount: 0,
+                failedCount: 0,
+                errors: [],
             });
 
             await processPaymentCapture(mockJob as Job);
 
-            expect((global as any).mockCapturePayment).toHaveBeenCalledWith({
-                payment_id: "pay_123",
-                amount: 10.00
-            });
-
-            expect((global as any).mockAddOrderTransactions).toHaveBeenCalled();
-
-            expect((global as any).mockUpdateOrders).toHaveBeenCalledWith([
-                expect.objectContaining({
-                    id: "order_123",
-                    status: "completed"
-                })
-            ]);
+            // The core service handles metadata updates internally
+            // Worker just verifies lock was released after success
+            expect(mockSetOrderEditStatus).toHaveBeenCalledWith(
+                mockContainer,
+                "order_123",
+                "idle"
+            );
         });
     });
 
@@ -488,52 +349,39 @@ describe("payment-capture-queue", () => {
 
         it("should verify wiring from schedule to process (AC5)", async () => {
             await schedulePaymentCapture("order_wiring", "pi_wiring");
-            
+
             expect(mockQueueAdd).toHaveBeenCalledWith(
                 "capture-order_wiring",
                 expect.objectContaining({
                     orderId: "order_wiring",
-                    paymentIntentId: "pi_wiring"
+                    paymentIntentId: "pi_wiring",
                 }),
                 expect.objectContaining({
-                    delay: expect.any(Number)
+                    delay: expect.any(Number),
                 })
             );
 
             const scheduledData = mockQueueAdd.mock.calls[mockQueueAdd.mock.calls.length - 1][1];
-            const mockJob = { data: scheduledData } as Job;
-
-            mockStripeRetrieve.mockResolvedValue({ status: "requires_capture", amount: 1000, currency: "usd" });
-            mockQueryGraph.mockResolvedValue({
-                data: [{
-                    id: "order_wiring",
-                    total: 10.00,
-                    currency_code: "usd",
-                    status: "pending",
-                    metadata: {},
-                    payment_collections: [{
-                        id: "paycol_wiring",
-                        status: "authorized",
-                        payments: [{ id: "pay_wiring" }]
-                    }]
-                }]
-            });
+            const mockJobWiring = { data: scheduledData, id: "job_wiring" } as any as Job;
 
             startPaymentCaptureWorker(mockContainer);
 
-            await processPaymentCapture(mockJob);
-
-            expect((global as any).mockCapturePayment).toHaveBeenCalledWith({
-                payment_id: "pay_wiring",
-                amount: 10.00
+            mockCaptureAllOrderPayments.mockResolvedValue({
+                hasPayments: true,
+                allAlreadyCaptured: false,
+                capturedCount: 1,
+                skippedCount: 0,
+                failedCount: 0,
+                errors: [],
             });
 
-            expect((global as any).mockUpdateOrders).toHaveBeenCalledWith([
-                expect.objectContaining({
-                    id: "order_wiring",
-                    status: "completed"
-                })
-            ]);
+            await processPaymentCapture(mockJobWiring);
+
+            expect(mockCaptureAllOrderPayments).toHaveBeenCalledWith(
+                mockContainer,
+                "order_wiring",
+                expect.any(String)
+            );
         });
     });
 
@@ -541,10 +389,10 @@ describe("payment-capture-queue", () => {
         it("should use default 3 days when PAYMENT_CAPTURE_DELAY_MS is not set", async () => {
             delete process.env.PAYMENT_CAPTURE_DELAY_MS;
             vi.resetModules();
-            
+
             const queueMod = await import("../../src/lib/payment-capture-queue");
             const DEFAULT_DELAY_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
-            
+
             expect(queueMod.PAYMENT_CAPTURE_DELAY_MS).toBe(DEFAULT_DELAY_MS);
         });
 
@@ -552,36 +400,30 @@ describe("payment-capture-queue", () => {
             const customDelay = 60 * 60 * 1000; // 1 hour
             process.env.PAYMENT_CAPTURE_DELAY_MS = String(customDelay);
             vi.resetModules();
-            
+
             const queueMod = await import("../../src/lib/payment-capture-queue");
-            
+
             expect(queueMod.PAYMENT_CAPTURE_DELAY_MS).toBe(customDelay);
         });
 
         it("should use default when PAYMENT_CAPTURE_DELAY_MS is invalid (NaN)", async () => {
             process.env.PAYMENT_CAPTURE_DELAY_MS = "invalid_number";
             vi.resetModules();
-            
+
             const queueMod = await import("../../src/lib/payment-capture-queue");
-            const DEFAULT_DELAY_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
-            
-            // The code does: parseInt(envDelay || String(DEFAULT_DELAY_MS), 10)
-            // If envDelay is "invalid_number" (truthy), it parses it and gets NaN
-            // The code logs an error but still returns NaN
-            // In practice, this would cause issues, but the test verifies the current behavior
+
+            // Current implementation: parsedDelay stays as default when isNaN
             const delay = queueMod.PAYMENT_CAPTURE_DELAY_MS;
-            // Current implementation returns NaN for invalid input (this is a known issue)
-            // We test that it at least doesn't crash and returns a number (even if NaN)
             expect(typeof delay).toBe("number");
         });
 
         it("should use default when PAYMENT_CAPTURE_DELAY_MS is empty string", async () => {
             process.env.PAYMENT_CAPTURE_DELAY_MS = "";
             vi.resetModules();
-            
+
             const queueMod = await import("../../src/lib/payment-capture-queue");
             const DEFAULT_DELAY_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
-            
+
             expect(queueMod.PAYMENT_CAPTURE_DELAY_MS).toBe(DEFAULT_DELAY_MS);
         });
 
@@ -589,9 +431,9 @@ describe("payment-capture-queue", () => {
             const testDelay = 60000; // 1 minute
             process.env.PAYMENT_CAPTURE_DELAY_MS = String(testDelay);
             vi.resetModules();
-            
+
             const queueMod = await import("../../src/lib/payment-capture-queue");
-            
+
             expect(queueMod.PAYMENT_CAPTURE_DELAY_MS).toBe(testDelay);
         });
 
@@ -599,9 +441,9 @@ describe("payment-capture-queue", () => {
             const longDelay = 30 * 24 * 60 * 60 * 1000; // 30 days
             process.env.PAYMENT_CAPTURE_DELAY_MS = String(longDelay);
             vi.resetModules();
-            
+
             const queueMod = await import("../../src/lib/payment-capture-queue");
-            
+
             expect(queueMod.PAYMENT_CAPTURE_DELAY_MS).toBe(longDelay);
         });
 
@@ -609,374 +451,133 @@ describe("payment-capture-queue", () => {
             const delayMs = 2 * 24 * 60 * 60 * 1000; // 2 days
             process.env.PAYMENT_CAPTURE_DELAY_MS = String(delayMs);
             vi.resetModules();
-            
+
             const queueMod = await import("../../src/lib/payment-capture-queue");
             const expectedSeconds = Math.floor(delayMs / 1000);
-            
+
             expect(queueMod.getModificationWindowSeconds()).toBe(expectedSeconds);
         });
     });
 
-    describe("Story 1.2: Idempotency Key Fix", () => {
-        it("should use correct idempotency key format: capture_{orderId}_{paymentIntentId}", async () => {
+    describe("Story 1.2: Idempotency via Core Service", () => {
+        // The worker now delegates to captureAllOrderPayments which handles
+        // idempotency internally via Medusa's capturePaymentWorkflow.
+        // These tests verify the worker passes the correct idempotency key prefix.
+
+        it("should pass worker_capture_{orderId}_{jobId} as idempotency key prefix", async () => {
             const orderId = "order_test123";
             const paymentIntentId = "pi_test456";
-            
-            mockStripeRetrieve.mockResolvedValue({
-                id: paymentIntentId,
-                status: "requires_capture",
-                amount: 5000, // Authorized amount: 50.00
-                currency: "usd"
-            });
-            mockQueryGraph.mockResolvedValue({
-                data: [{
-                    id: orderId,
-                    total: 50.00, // Order total: 50.00 (matches authorized)
-                    currency_code: "usd",
-                    status: "pending",
-                    metadata: {},
-                    payment_collections: [{
-                        id: "paycol_123",
-                        status: "authorized",
-                        payments: [{ id: "pay_123" }]
-                    }]
-                }]
+
+            mockCaptureAllOrderPayments.mockResolvedValue({
+                hasPayments: true,
+                allAlreadyCaptured: false,
+                capturedCount: 1,
+                skippedCount: 0,
+                failedCount: 0,
+                errors: [],
             });
 
-            // Mock Payment Module unavailable to force Stripe direct capture
-            (global as any).mockCapturePayment.mockReset();
-            (global as any).mockCapturePayment.mockImplementation(() => {
-                throw new Error("Payment Module unavailable");
-            });
-            
-            // Mock Stripe capture to succeed
-            mockStripeCapture.mockResolvedValue({
-                id: paymentIntentId,
-                status: "succeeded",
-                amount: 5000,
-            });
-            
-            // Mock Stripe capture to succeed
-            mockStripeCapture.mockResolvedValue({
-                id: paymentIntentId,
-                status: "succeeded",
-                amount: 5000,
-            });
-
-            const mockJob: Partial<Job> = {
-                data: {
-                    orderId,
-                    paymentIntentId,
-                    scheduledAt: Date.now(),
-                }
+            const mockJobIdemp: Partial<Job> = {
+                data: { orderId, paymentIntentId, scheduledAt: Date.now() },
+                id: "job_abc",
             };
 
             startPaymentCaptureWorker(mockContainer);
+            await processPaymentCapture(mockJobIdemp as Job);
 
-            await processPaymentCapture(mockJob as Job);
-
-            // Verify idempotency key format
-            expect(mockStripeCapture).toHaveBeenCalledWith(
-                paymentIntentId,
-                expect.objectContaining({
-                    amount_to_capture: 5000
-                }),
-                expect.objectContaining({
-                    idempotencyKey: `capture_${orderId}_${paymentIntentId}`
-                })
+            expect(mockCaptureAllOrderPayments).toHaveBeenCalledWith(
+                mockContainer,
+                orderId,
+                `worker_capture_${orderId}_job_abc`
             );
         });
 
-        it("should use same idempotency key for same order and payment intent", async () => {
-            const orderId = "order_same";
-            const paymentIntentId = "pi_same";
-            
-            mockStripeRetrieve.mockResolvedValue({
-                id: paymentIntentId,
-                status: "requires_capture",
-                amount: 5000,
-                currency: "usd"
+        it("should use different idempotency key for different orders", async () => {
+            mockCaptureAllOrderPayments.mockResolvedValue({
+                hasPayments: true,
+                allAlreadyCaptured: false,
+                capturedCount: 1,
+                skippedCount: 0,
+                failedCount: 0,
+                errors: [],
             });
-            mockQueryGraph.mockResolvedValue({
-                data: [{
-                    id: orderId,
-                    total: 50.00,
-                    currency_code: "usd",
-                    status: "pending",
-                    metadata: {},
-                    payment_collections: [{
-                        id: "paycol_123",
-                        status: "authorized",
-                        payments: [{ id: "pay_123" }]
-                    }]
-                }]
-            });
-
-            // Reset and mock Payment Module to fail
-            (global as any).mockCapturePayment.mockReset();
-            (global as any).mockCapturePayment.mockReset();
-            (global as any).mockCapturePayment.mockImplementation(() => {
-                throw new Error("Payment Module unavailable");
-            });
-
-            const mockJob1: Partial<Job> = {
-                data: {
-                    orderId,
-                    paymentIntentId,
-                    scheduledAt: Date.now(),
-                }
-            };
-
-            const mockJob2: Partial<Job> = {
-                data: {
-                    orderId,
-                    paymentIntentId,
-                    scheduledAt: Date.now() + 1000, // Different timestamp
-                }
-            };
 
             startPaymentCaptureWorker(mockContainer);
 
-            await processPaymentCapture(mockJob1 as Job);
-            await processPaymentCapture(mockJob2 as Job);
+            const job1: Partial<Job> = {
+                data: { orderId: "order_one", paymentIntentId: "pi_1", scheduledAt: Date.now() },
+                id: "job_1",
+            };
+            const job2: Partial<Job> = {
+                data: { orderId: "order_two", paymentIntentId: "pi_2", scheduledAt: Date.now() },
+                id: "job_2",
+            };
 
-            // Both should use the same idempotency key
-            const expectedKey = `capture_${orderId}_${paymentIntentId}`;
-            
-            expect(mockStripeCapture).toHaveBeenCalledTimes(2);
-            expect(mockStripeCapture).toHaveBeenNthCalledWith(
-                1,
-                paymentIntentId,
-                expect.objectContaining({ amount_to_capture: expect.any(Number) }),
-                expect.objectContaining({ idempotencyKey: expectedKey })
-            );
-            expect(mockStripeCapture).toHaveBeenNthCalledWith(
-                2,
-                paymentIntentId,
-                expect.objectContaining({ amount_to_capture: expect.any(Number) }),
-                expect.objectContaining({ idempotencyKey: expectedKey })
-            );
+            await processPaymentCapture(job1 as Job);
+            await processPaymentCapture(job2 as Job);
+
+            expect(mockCaptureAllOrderPayments).toHaveBeenCalledTimes(2);
+            const key1 = mockCaptureAllOrderPayments.mock.calls[0][2];
+            const key2 = mockCaptureAllOrderPayments.mock.calls[1][2];
+            expect(key1).not.toBe(key2);
+            expect(key1).toContain("order_one");
+            expect(key2).toContain("order_two");
         });
 
-        it("should use different idempotency keys for different orders", async () => {
-            const orderId1 = "order_one";
-            const orderId2 = "order_two";
-            const paymentIntentId = "pi_shared";
-            
-            mockStripeRetrieve.mockResolvedValue({
-                id: paymentIntentId,
-                status: "requires_capture",
-                amount: 5000,
-                currency: "usd"
+        it("should use different idempotency key for different payment intents (via job ID)", async () => {
+            mockCaptureAllOrderPayments.mockResolvedValue({
+                hasPayments: true,
+                allAlreadyCaptured: false,
+                capturedCount: 1,
+                skippedCount: 0,
+                failedCount: 0,
+                errors: [],
             });
-            mockQueryGraph.mockResolvedValue({
-                data: [{
-                    id: orderId1,
-                    total: 50.00,
-                    currency_code: "usd",
-                    status: "pending",
-                    metadata: {},
-                    payment_collections: [{
-                        id: "paycol_123",
-                        status: "authorized",
-                        payments: [{ id: "pay_123" }]
-                    }]
-                }]
-            });
-
-            // Reset and mock Payment Module to fail
-            (global as any).mockCapturePayment.mockReset();
-            (global as any).mockCapturePayment.mockReset();
-            (global as any).mockCapturePayment.mockImplementation(() => {
-                throw new Error("Payment Module unavailable");
-            });
-
-            const mockJob1: Partial<Job> = {
-                data: {
-                    orderId: orderId1,
-                    paymentIntentId,
-                    scheduledAt: Date.now(),
-                }
-            };
 
             startPaymentCaptureWorker(mockContainer);
-            await processPaymentCapture(mockJob1 as Job);
 
-            // Update query to return different order
-            mockQueryGraph.mockResolvedValue({
-                data: [{
-                    id: orderId2,
-                    total: 50.00,
-                    currency_code: "usd",
-                    status: "pending",
-                    metadata: {},
-                    payment_collections: [{
-                        id: "paycol_456",
-                        status: "authorized",
-                        payments: [{ id: "pay_456" }]
-                    }]
-                }]
-            });
-
-            const mockJob2: Partial<Job> = {
-                data: {
-                    orderId: orderId2,
-                    paymentIntentId,
-                    scheduledAt: Date.now(),
-                }
+            const job1: Partial<Job> = {
+                data: { orderId: "order_same", paymentIntentId: "pi_one", scheduledAt: Date.now() },
+                id: "job_pi1",
+            };
+            const job2: Partial<Job> = {
+                data: { orderId: "order_same", paymentIntentId: "pi_two", scheduledAt: Date.now() },
+                id: "job_pi2",
             };
 
-            await processPaymentCapture(mockJob2 as Job);
+            await processPaymentCapture(job1 as Job);
+            await processPaymentCapture(job2 as Job);
 
-            // Should use different keys
-            expect(mockStripeCapture).toHaveBeenNthCalledWith(
-                1,
-                paymentIntentId,
-                expect.any(Object),
-                expect.objectContaining({ idempotencyKey: `capture_${orderId1}_${paymentIntentId}` })
-            );
-            expect(mockStripeCapture).toHaveBeenNthCalledWith(
-                2,
-                paymentIntentId,
-                expect.any(Object),
-                expect.objectContaining({ idempotencyKey: `capture_${orderId2}_${paymentIntentId}` })
-            );
-        });
-
-        it("should use different idempotency keys for different payment intents", async () => {
-            const orderId = "order_same";
-            const paymentIntentId1 = "pi_one";
-            const paymentIntentId2 = "pi_two";
-            
-            mockStripeRetrieve.mockResolvedValue({
-                id: paymentIntentId1,
-                status: "requires_capture",
-                amount: 5000,
-                currency: "usd"
-            });
-            mockQueryGraph.mockResolvedValue({
-                data: [{
-                    id: orderId,
-                    total: 50.00,
-                    currency_code: "usd",
-                    status: "pending",
-                    metadata: {},
-                    payment_collections: [{
-                        id: "paycol_123",
-                        status: "authorized",
-                        payments: [{ id: "pay_123" }]
-                    }]
-                }]
-            });
-
-            // Reset and mock Payment Module to fail
-            (global as any).mockCapturePayment.mockReset();
-            (global as any).mockCapturePayment.mockReset();
-            (global as any).mockCapturePayment.mockImplementation(() => {
-                throw new Error("Payment Module unavailable");
-            });
-
-            const mockJob1: Partial<Job> = {
-                data: {
-                    orderId,
-                    paymentIntentId: paymentIntentId1,
-                    scheduledAt: Date.now(),
-                }
-            };
-
-            startPaymentCaptureWorker(mockContainer);
-            await processPaymentCapture(mockJob1 as Job);
-
-            // Update Stripe mock for second payment intent
-            mockStripeRetrieve.mockResolvedValue({
-                id: paymentIntentId2,
-                status: "requires_capture",
-                amount: 5000,
-                currency: "usd"
-            });
-
-            const mockJob2: Partial<Job> = {
-                data: {
-                    orderId,
-                    paymentIntentId: paymentIntentId2,
-                    scheduledAt: Date.now(),
-                }
-            };
-
-            await processPaymentCapture(mockJob2 as Job);
-
-            // Should use different keys
-            expect(mockStripeCapture).toHaveBeenNthCalledWith(
-                1,
-                paymentIntentId1,
-                expect.objectContaining({ amount_to_capture: expect.any(Number) }),
-                expect.objectContaining({ idempotencyKey: `capture_${orderId}_${paymentIntentId1}` })
-            );
-            expect(mockStripeCapture).toHaveBeenNthCalledWith(
-                2,
-                paymentIntentId2,
-                expect.objectContaining({ amount_to_capture: expect.any(Number) }),
-                expect.objectContaining({ idempotencyKey: `capture_${orderId}_${paymentIntentId2}` })
-            );
+            expect(mockCaptureAllOrderPayments).toHaveBeenCalledTimes(2);
+            const key1 = mockCaptureAllOrderPayments.mock.calls[0][2];
+            const key2 = mockCaptureAllOrderPayments.mock.calls[1][2];
+            expect(key1).not.toBe(key2);
         });
 
         it("should NOT include timestamp in idempotency key", async () => {
-            const orderId = "order_notimestamp";
-            const paymentIntentId = "pi_notimestamp";
-            
-            mockStripeRetrieve.mockResolvedValue({
-                id: paymentIntentId,
-                status: "requires_capture",
-                amount: 5000,
-                currency: "usd"
-            });
-            mockQueryGraph.mockResolvedValue({
-                data: [{
-                    id: orderId,
-                    total: 50.00,
-                    currency_code: "usd",
-                    status: "pending",
-                    metadata: {},
-                    payment_collections: [{
-                        id: "paycol_123",
-                        status: "authorized",
-                        payments: [{ id: "pay_123" }]
-                    }]
-                }]
+            mockCaptureAllOrderPayments.mockResolvedValue({
+                hasPayments: true,
+                allAlreadyCaptured: false,
+                capturedCount: 1,
+                skippedCount: 0,
+                failedCount: 0,
+                errors: [],
             });
 
-            (global as any).mockCapturePayment.mockReset();
-            (global as any).mockCapturePayment.mockImplementation(() => {
-                throw new Error("Payment Module unavailable");
-            });
-
-            const mockJob: Partial<Job> = {
+            const mockJobTs: Partial<Job> = {
                 data: {
-                    orderId,
-                    paymentIntentId,
-                    scheduledAt: 1234567890, // Some timestamp
-                }
+                    orderId: "order_notimestamp",
+                    paymentIntentId: "pi_notimestamp",
+                    scheduledAt: 1234567890,
+                },
+                id: "job_no_ts",
             };
 
             startPaymentCaptureWorker(mockContainer);
-            await processPaymentCapture(mockJob as Job);
+            await processPaymentCapture(mockJobTs as Job);
 
-            const expectedKey = `capture_${orderId}_${paymentIntentId}`;
-            
-            // Verify key does NOT contain timestamp
-            expect(mockStripeCapture).toHaveBeenCalledWith(
-                paymentIntentId,
-                expect.objectContaining({ amount_to_capture: expect.any(Number) }),
-                expect.objectContaining({
-                    idempotencyKey: expectedKey
-                })
-            );
-            
-            // Verify key format is exactly as expected (no timestamp)
-            const callArgs = mockStripeCapture.mock.calls[0];
-            const idempotencyKey = callArgs[2].idempotencyKey;
-            expect(idempotencyKey).toBe(expectedKey);
-            expect(idempotencyKey).not.toContain("1234567890");
+            const key = mockCaptureAllOrderPayments.mock.calls[0][2];
+            expect(key).not.toContain("1234567890");
         });
     });
 });

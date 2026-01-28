@@ -30,6 +30,7 @@ const mockLogger = {
 
 vi.mock("../../src/utils/logger", () => ({
     logger: {
+        debug: vi.fn(),
         info: vi.fn(),
         warn: vi.fn(),
         error: vi.fn(),
@@ -288,12 +289,12 @@ describe("charge.refunded webhook handler", () => {
             }
 
             // Verify PaymentCollection was updated to canceled
-            expect(mockPaymentModuleUpdate).toHaveBeenCalledWith([
+            expect(mockPaymentModuleUpdate).toHaveBeenCalledWith(
+                "paycol_123",
                 {
-                    id: "paycol_123",
                     status: "canceled",
                 },
-            ]);
+            );
 
             // Verify OrderTransaction was created with negative amount and uppercase currency
             expect(mockOrderModuleAdd).toHaveBeenCalledWith({
@@ -369,9 +370,10 @@ describe("charge.refunded webhook handler", () => {
 
             await handleChargeRefunded(chargeEvent.data.object as Stripe.Charge, container);
 
-            expect(mockPaymentModuleUpdate).toHaveBeenCalledWith([
-                { id: "paycol_124", status: "canceled" },
-            ]);
+            expect(mockPaymentModuleUpdate).toHaveBeenCalledWith(
+                "paycol_124",
+                { status: "canceled" },
+            );
             expect(mockOrderServiceUpdate).toHaveBeenCalledWith([
                 { id: "order_124", status: "canceled" },
             ]);
@@ -434,12 +436,10 @@ describe("charge.refunded webhook handler", () => {
             await handleChargeRefunded(chargeEvent.data.object as Stripe.Charge, container);
 
             // Verify PaymentCollection status remains "completed" for partial refund
-            expect(mockPaymentModuleUpdate).toHaveBeenCalledWith([
-                {
-                    id: "paycol_125",
-                    status: "completed",
-                },
-            ]);
+            expect(mockPaymentModuleUpdate).toHaveBeenCalledWith(
+                "paycol_125",
+                { status: "completed" },
+            );
 
             // Verify OrderTransaction was created with partial refund amount and uppercase currency
             expect(mockOrderModuleAdd).toHaveBeenCalledWith({

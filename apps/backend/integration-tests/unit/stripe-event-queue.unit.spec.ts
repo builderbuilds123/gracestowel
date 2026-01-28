@@ -19,27 +19,23 @@ const mocks = vi.hoisted(() => {
 import { Job } from "bullmq";
 
 vi.mock("ioredis", () => {
+    const createRedisMock = () => ({
+        exists: mocks.mockRedisExists,
+        set: mocks.mockRedisSet,
+        get: mocks.mockRedisGet,
+        del: mocks.mockRedisDel,
+        quit: mocks.mockRedisQuit,
+        on: vi.fn().mockReturnThis(),
+    });
     return {
         default: class RedisMock {
             constructor() {
-                return {
-                    exists: mocks.mockRedisExists,
-                    set: mocks.mockRedisSet,
-                    get: mocks.mockRedisGet,
-                    del: mocks.mockRedisDel,
-                    quit: mocks.mockRedisQuit,
-                };
+                return createRedisMock();
             }
         },
         Redis: class RedisMock {
             constructor() {
-                return {
-                    exists: mocks.mockRedisExists,
-                    set: mocks.mockRedisSet,
-                    get: mocks.mockRedisGet,
-                    del: mocks.mockRedisDel,
-                    quit: mocks.mockRedisQuit,
-                };
+                return createRedisMock();
             }
         }
     };
@@ -62,6 +58,17 @@ vi.mock("bullmq", () => {
     };
 });
 
+// Mock logger
+vi.mock("../../src/utils/logger", () => ({
+    logger: {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        critical: vi.fn(),
+    },
+}));
+
 // Import after mocks are set up
 import {
     isEventProcessed,
@@ -72,13 +79,15 @@ import {
     getStripeEventQueue,
     resetStripeEventQueue,
     STRIPE_EVENT_QUEUE,
+    closeStripeEventQueue,
 } from "../../src/lib/stripe-event-queue";
+import { logger } from "../../src/utils/logger";
 import Stripe from "stripe";
 
 describe("Stripe Event Queue - Story 6.1", () => {
     const originalEnv = process.env;
 
-    beforeEach(() => {
+    beforeEach(async () => {
         vi.clearAllMocks();
         mocks.mockRedisExists.mockReset();
         mocks.mockRedisSet.mockReset();
@@ -91,6 +100,8 @@ describe("Stripe Event Queue - Story 6.1", () => {
         mocks.mockWorkerClose.mockReset();
 
         resetStripeEventQueue();
+        // Also reset Redis client to ensure fresh mock is used
+        await closeStripeEventQueue();
         process.env = { ...originalEnv };
         process.env.REDIS_URL = "redis://localhost:6379";
 
@@ -146,7 +157,8 @@ describe("Stripe Event Queue - Story 6.1", () => {
 
             // Should return false to allow processing (fail-open for availability)
             expect(result).toBe(false);
-            expect(console.error).toHaveBeenCalled();
+            // Source uses logger.error, not console.error
+            expect(logger.error).toHaveBeenCalled();
         });
 
         it("should not throw if marking fails (graceful degradation)", async () => {
@@ -154,7 +166,8 @@ describe("Stripe Event Queue - Story 6.1", () => {
 
             // Should not throw (handled in implementation)
             await expect(markEventProcessed("evt_mark_fail")).resolves.not.toThrow();
-            expect(console.error).toHaveBeenCalled();
+            // Source uses logger.error, not console.error
+            expect(logger.error).toHaveBeenCalled();
         });
     });
 
@@ -373,31 +386,37 @@ describe("Stripe Event Queue - Story 6.1", () => {
             }));
 
              vi.doMock("ioredis", () => {
+                const createRedisMock = () => ({
+                    exists: mocks.mockRedisExists,
+                    set: mocks.mockRedisSet,
+                    get: mocks.mockRedisGet,
+                    del: mocks.mockRedisDel,
+                    quit: mocks.mockRedisQuit,
+                    on: vi.fn().mockReturnThis(),
+                });
                 return {
                     default: class RedisMock {
                         constructor() {
-                            return {
-                                exists: mocks.mockRedisExists,
-                                set: mocks.mockRedisSet,
-                                get: mocks.mockRedisGet,
-                                del: mocks.mockRedisDel,
-                                quit: mocks.mockRedisQuit,
-                            };
+                            return createRedisMock();
                         }
                     },
                     Redis: class RedisMock {
                         constructor() {
-                             return {
-                                exists: mocks.mockRedisExists,
-                                set: mocks.mockRedisSet,
-                                get: mocks.mockRedisGet,
-                                del: mocks.mockRedisDel,
-                                quit: mocks.mockRedisQuit,
-                            };
+                            return createRedisMock();
                         }
                     }
                 };
             });
+
+            vi.doMock("../../src/utils/logger", () => ({
+                logger: {
+                    debug: vi.fn(),
+                    info: vi.fn(),
+                    warn: vi.fn(),
+                    error: vi.fn(),
+                    critical: vi.fn(),
+                },
+            }));
         });
         
         it("should log CRITICAL error and release lock when job exhausts all retries", async () => {

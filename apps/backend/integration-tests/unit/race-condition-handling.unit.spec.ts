@@ -15,23 +15,32 @@ vi.setConfig({ hookTimeout: 30000 });
 
 import { Job } from "bullmq";
 
-// Mock Stripe client - use vi.hoisted to ensure these are created before vi.mock runs
-const { mockStripeRetrieve, mockStripeCapture } = vi.hoisted(() => ({
-    mockStripeRetrieve: vi.fn(),
-    mockStripeCapture: vi.fn(),
+// Mock logger
+vi.mock("../../src/utils/logger", () => ({
+    logger: {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        critical: vi.fn(),
+    },
 }));
 
-// Apply the Stripe mock statically (MUST be before module imports)
-vi.mock("../../src/utils/stripe", () => ({
-    getStripeClient: () => ({
-        paymentIntents: {
-            retrieve: mockStripeRetrieve,
-            capture: mockStripeCapture,
-        },
-    }),
-    resetStripeClient: vi.fn(),
-    STRIPE_API_VERSION: "2025-10-29.clover",
-    createStripeClient: vi.fn(),
+// Mock payment-capture-core (the shared service the worker delegates to)
+const mockCaptureAllOrderPayments = vi.fn();
+const mockSetOrderEditStatus = vi.fn().mockResolvedValue(true);
+const mockFetchOrderTotal = vi.fn();
+
+vi.mock("../../src/services/payment-capture-core", () => ({
+    captureAllOrderPayments: mockCaptureAllOrderPayments,
+    setOrderEditStatus: mockSetOrderEditStatus,
+    fetchOrderTotal: mockFetchOrderTotal,
+}));
+
+// Mock admin notifications
+vi.mock("../../src/lib/admin-notifications", () => ({
+    sendAdminNotification: vi.fn(),
+    AdminNotificationType: { PAYMENT_FAILED: "PAYMENT_FAILED" },
 }));
 
 // Mock BullMQ with hoisted mocks
@@ -64,8 +73,6 @@ vi.mock("bullmq", () => ({
 describe("Story 6.3: Race Condition Handling", { timeout: 30000 }, () => {
     const originalEnv = process.env;
     let mockContainer: any;
-    let mockQueryGraph: Mock;
-    let mockUpdateOrders: Mock;
 
     // Module functions under test
     let processPaymentCapture: any;
@@ -88,12 +95,7 @@ describe("Story 6.3: Race Condition Handling", { timeout: 30000 }, () => {
     });
 
     describe("Timing Buffer (Task 1 - 59:30)", () => {
-        // These timing buffer configuration tests are now covered by
-        // payment-capture-config.unit.spec.ts using the calculateCaptureDelayMs function
-        // which doesn't require vi.resetModules()
-
         it("should use calculateCaptureDelayMs for default calculation", async () => {
-            // Import the function and verify it calculates correctly
             const { calculateCaptureDelayMs } = await import("../../src/lib/payment-capture-queue");
 
             // Default: 30s buffer = 59:30 delay
@@ -107,10 +109,6 @@ describe("Story 6.3: Race Condition Handling", { timeout: 30000 }, () => {
     beforeEach(async () => {
         vi.clearAllMocks();
 
-        // DON'T reset modules here - it breaks Vite's module graph in CI
-        // The timing buffer tests call vi.resetModules() internally when needed
-        // Other tests use the static mocks defined at the top level
-
         process.env = { ...originalEnv };
         process.env.REDIS_URL = "redis://localhost:6379";
         process.env.STRIPE_SECRET_KEY = "sk_test_mock";
@@ -119,48 +117,31 @@ describe("Story 6.3: Race Condition Handling", { timeout: 30000 }, () => {
         mockQueueAdd.mockResolvedValue({ id: "test-job-id" });
         mockQueueGetJob.mockResolvedValue(null);
 
-        // Re-configure Stripe mocks after clearAllMocks
-        // Provide a default so tests don't fail if they don't explicitly configure the mock
-        mockStripeRetrieve.mockResolvedValue({
-            id: "pi_default",
-            status: "requires_capture",
-            amount: 5000,
-            currency: "usd",
-        });
-        mockStripeCapture.mockResolvedValue({
-            id: "pi_default",
-            status: "succeeded",
-        });
+        // Reset core mocks
+        mockCaptureAllOrderPayments.mockReset();
+        mockSetOrderEditStatus.mockReset().mockResolvedValue(true);
 
         vi.spyOn(console, "log").mockImplementation(() => {});
         vi.spyOn(console, "warn").mockImplementation(() => {});
         vi.spyOn(console, "error").mockImplementation(() => {});
 
-        mockQueryGraph = vi.fn();
-        mockUpdateOrders = vi.fn().mockResolvedValue({});
-        const mockUpdatePaymentCollections = vi.fn().mockResolvedValue({});
-        const mockCapturePayment = vi.fn().mockResolvedValue({});
-        const mockAddOrderTransactions = vi.fn().mockResolvedValue({});
         mockContainer = {
             resolve: vi.fn((serviceName: string) => {
                 if (serviceName === "query") {
-                    return { graph: mockQueryGraph };
+                    return { graph: vi.fn() };
                 }
                 if (serviceName === "order") {
-                    return { updateOrders: mockUpdateOrders, addOrderTransactions: mockAddOrderTransactions };
+                    return { updateOrders: vi.fn(), addOrderTransactions: vi.fn() };
                 }
-                // Modules.PAYMENT resolves to "payment" not "paymentModuleService"
                 if (serviceName === "payment") {
                     return {
-                        updatePaymentCollections: mockUpdatePaymentCollections,
-                        capturePayment: mockCapturePayment
+                        updatePaymentCollections: vi.fn(),
+                        capturePayment: vi.fn(),
                     };
                 }
                 return {};
             }),
         };
-
-        // Module variables are already populated in beforeAll
     });
 
     afterEach(() => {
@@ -174,118 +155,69 @@ describe("Story 6.3: Race Condition Handling", { timeout: 30000 }, () => {
             paymentIntentId: "pi_lock_test",
             scheduledAt: Date.now(),
         };
-        const mockJob: Partial<Job> = { data: mockJobData };
+        const mockJob: Partial<Job> = { data: mockJobData, id: "job_lock" };
 
         beforeEach(() => {
             startPaymentCaptureWorker(mockContainer);
         });
 
         afterEach(async () => {
-            // Shutdown the worker to clear the cached worker instance
-            // This ensures fresh worker creation in the next test
             await shutdownPaymentCaptureWorker();
         });
 
         it("should set edit_status to locked_for_capture before capture attempt (AC 1, 3)", async () => {
-            mockStripeRetrieve.mockResolvedValue({
-                id: "pi_lock_test",
-                status: "requires_capture",
-                amount: 5000,
-                currency: "usd",
-            });
-            // Order total is in dollars (50.00), which converts to 5000 cents
-            mockQueryGraph.mockResolvedValue({
-                data: [{
-                    id: "order_lock_test",
-                    total: 50.00,
-                    currency_code: "usd",
-                    status: "pending",
-                    metadata: { edit_status: "editable" },
-                    payment_collections: [{
-                        id: "paycol_lock_test",
-                        status: "authorized",
-                        payments: [{ id: "pay_lock_test" }]
-                    }]
-                }],
+            mockCaptureAllOrderPayments.mockResolvedValue({
+                hasPayments: true,
+                allAlreadyCaptured: false,
+                capturedCount: 1,
+                skippedCount: 0,
+                failedCount: 0,
+                errors: [],
             });
 
             await processPaymentCapture(mockJob as Job);
 
-            // Verify edit_status was set to locked_for_capture BEFORE capture
-            const updateCalls = mockUpdateOrders.mock.calls;
-            expect(updateCalls.length).toBeGreaterThanOrEqual(1);
-            
-            // First call should be the lock
-            const lockCall = updateCalls.find((call: any) => 
-                call[0]?.[0]?.metadata?.edit_status === "locked_for_capture"
+            // Verify setOrderEditStatus was called with locked_for_capture BEFORE capture
+            expect(mockSetOrderEditStatus).toHaveBeenCalledWith(
+                mockContainer,
+                "order_lock_test",
+                "locked_for_capture"
+            );
+
+            // Lock should have been the first call
+            const lockCall = mockSetOrderEditStatus.mock.calls.find(
+                (call: any[]) => call[2] === "locked_for_capture"
             );
             expect(lockCall).toBeDefined();
         });
 
         it("should release lock (set edit_status to idle) after successful capture (AC 8)", async () => {
-            mockStripeRetrieve.mockResolvedValue({
-                id: "pi_lock_test",
-                status: "requires_capture",
-                amount: 5000,
-                currency: "usd",
-            });
-            // Mock successful capture
-            mockStripeCapture.mockResolvedValue({
-                id: "pi_lock_test",
-                status: "succeeded",
-                amount: 5000,
-                amount_received: 5000,
-            });
-            // Order total is in dollars (50.00), which converts to 5000 cents
-            mockQueryGraph.mockResolvedValue({
-                data: [{
-                    id: "order_lock_test",
-                    total: 50.00,
-                    currency_code: "usd",
-                    status: "pending",
-                    metadata: {},
-                    payment_collections: [{
-                        id: "paycol_lock_test",
-                        status: "authorized",
-                        payments: [{ id: "pay_lock_test" }]
-                    }]
-                }],
+            mockCaptureAllOrderPayments.mockResolvedValue({
+                hasPayments: true,
+                allAlreadyCaptured: false,
+                capturedCount: 1,
+                skippedCount: 0,
+                failedCount: 0,
+                errors: [],
             });
 
             await processPaymentCapture(mockJob as Job);
 
-            // Verify final update sets edit_status to idle (or removes lock)
-            const updateCalls = mockUpdateOrders.mock.calls;
-            const releaseCall = updateCalls.find((call: any) =>
-                call[0]?.[0]?.metadata?.edit_status === "idle"
+            // Verify final update sets edit_status to idle
+            const releaseCall = mockSetOrderEditStatus.mock.calls.find(
+                (call: any[]) => call[2] === "idle"
             );
             expect(releaseCall).toBeDefined();
         });
 
         it("should release lock even if capture fails (finally block)", async () => {
-            mockStripeRetrieve.mockResolvedValue({
-                id: "pi_lock_test",
-                status: "requires_capture",
-                amount: 5000,
-                currency: "usd",
-            });
-            // Order total is in dollars (60.00), which converts to 6000 cents - exceeds authorized 5000
-            mockQueryGraph.mockResolvedValue({
-                data: [{
-                    id: "order_lock_test",
-                    total: 60.00, // Exceeds authorized - will fail (60.00 * 100 = 6000 > 5000)
-                    currency_code: "usd",
-                    status: "pending",
-                    metadata: {},
-                }],
-            });
+            mockCaptureAllOrderPayments.mockRejectedValue(new Error("Capture failed"));
 
             await expect(processPaymentCapture(mockJob as Job)).rejects.toThrow();
 
             // Verify lock was released despite failure
-            const updateCalls = mockUpdateOrders.mock.calls;
-            const releaseCall = updateCalls.find((call: any) =>
-                call[0]?.[0]?.metadata?.edit_status === "idle"
+            const releaseCall = mockSetOrderEditStatus.mock.calls.find(
+                (call: any[]) => call[2] === "idle"
             );
             expect(releaseCall).toBeDefined();
         });
@@ -293,30 +225,20 @@ describe("Story 6.3: Race Condition Handling", { timeout: 30000 }, () => {
 
     describe("Task 2: Edit Endpoint Guard (AC 4, 5, 6, 7)", () => {
         it("should throw OrderLockedError when edit_status is locked_for_capture (AC 4, 5, 6)", () => {
-            // Note: Full integration test of validatePreconditionsHandler requires complex mocking
-            // that conflicts with workflow registration. Instead, we verify:
-            // 1. OrderLockedError class exists and has correct properties
-            // 2. The error is exported and can be instantiated
-            // 3. The handler function exists and is callable
-            // The actual throwing behavior is verified in integration/E2E tests
-            
             // Verify OrderLockedError exists and has correct structure
             expect(OrderLockedError).toBeDefined();
             expect(typeof OrderLockedError).toBe("function");
-            
+
             // Verify it can be instantiated with correct properties
             const error = new OrderLockedError("ord_test");
             expect(error.code).toBe("ORDER_LOCKED");
             expect(error.httpStatus).toBe(409);
             expect(error.message).toContain("cannot be edited");
             expect(error.orderId).toBe("ord_test");
-            
+
             // Verify validatePreconditionsHandler exists
             expect(validatePreconditionsHandler).toBeDefined();
             expect(typeof validatePreconditionsHandler).toBe("function");
-            
-            // AC 4, 5, 6: The actual throwing of OrderLockedError when edit_status is locked_for_capture
-            // is verified in integration/E2E tests. This unit test verifies the error class structure.
         });
 
         it("should return 409 Conflict error code (AC 7)", async () => {
@@ -341,16 +263,13 @@ describe("Story 6.3: Race Condition Handling", { timeout: 30000 }, () => {
 
     describe("API Route 409 Response (AC 6, 7)", () => {
         it("should have OrderLockedError imported in line-items route", () => {
-            // Verify the import exists (compile-time check)
-            // Note: We can't require the route module here as it would cause workflow registration
-            // The import is verified at compile time via TypeScript
             expect(OrderLockedError).toBeDefined();
             expect(typeof OrderLockedError).toBe("function");
         });
 
         it("OrderLockedError should have correct properties for 409 response", () => {
             const error = new OrderLockedError("ord_test");
-            
+
             // AC 7: Response body contract
             expect(error.code).toBe("ORDER_LOCKED");
             expect(error.message).toBe("Order is processing and cannot be edited");
