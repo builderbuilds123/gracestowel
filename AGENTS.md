@@ -20,6 +20,9 @@ You have superpowers. Superpowers teach you new skills and capabilities. RIGHT N
 - Medusa v2 Docs: https://docs.medusajs.com/v2
 - Project Gotchas: [`docs/project_context.md`](docs/project_context.md)
 
+**Backend Reference:**
+- `docs/llms-full.txt` — Always read this file before working in the backend Medusa system so you stay aligned with the latest documentation dump.
+
 ---
 
 ## Project Overview
@@ -81,14 +84,14 @@ See nested AGENTS.md files for app-specific patterns:
 | Task | Command |
 |------|---------|
 | Dev (all) | `pnpm dev` |
-| Dev (backend) | `pnpm dev:api` |
+| Dev (backend) | `pnpm dev:backend` |
 | Dev (storefront) | `pnpm dev:storefront` |
 | Test | `pnpm test` |
 | Type check | `pnpm typecheck` |
 | Lint | `pnpm lint` |
 | Migrate | `cd apps/backend && npm run migrate` |
 | Deploy storefront | `pnpm deploy:storefront` |
-| Deploy backend | `pnpm deploy:api` |
+| Deploy backend | `pnpm deploy:backend` |
 | Ralph Orchestrator | `./scripts/ralph run` |
 
 ---

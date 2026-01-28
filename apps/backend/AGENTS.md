@@ -9,6 +9,7 @@ alwaysApply: false
 <!-- Inherits from root AGENTS.md. This file contains backend-specific guidance. -->
 
 > **Always consult [Medusa v2 docs](https://docs.medusajs.com/v2) before implementing.**
+> **Always read `docs/llms-full.txt` before touching backend Medusa code so you fully absorb the latest aggregated docs dump.**
 
 ---
 

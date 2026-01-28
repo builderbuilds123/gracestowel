@@ -38,6 +38,7 @@ Grace's Towel is an e-commerce platform for premium Turkish cotton towels, built
 - **Validation**: Validate all input data
 - **API Responses**: Return consistent response formats
 - **Error Handling**: Use proper HTTP status codes
+- **Documentation Pre-Read**: Always read `docs/llms-full.txt` before reviewing or developing backend Medusa work so you have the latest context from the aggregated docs dump.
 
 ### 4. Frontend (React Router v7)
 
