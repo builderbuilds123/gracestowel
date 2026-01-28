@@ -18,6 +18,19 @@ export const CreateStoreReviewSchema = z.object({
 export type CreateStoreReviewBody = z.infer<typeof CreateStoreReviewSchema>
 
 /**
+ * Schema for GET /store/products/:id/reviews list query params.
+ * Compatible with validateAndTransformQuery + req.queryConfig (createFindParams pattern).
+ * sort is kept for backward compatibility; order takes precedence when present.
+ */
+export const GetStoreProductReviewsSchema = z.object({
+  limit: z.coerce.number().optional(),
+  offset: z.coerce.number().optional(),
+  order: z.string().optional(),
+  fields: z.string().optional(),
+  sort: z.enum(["newest", "oldest", "highest", "lowest", "helpful"]).optional(),
+})
+
+/**
  * Sanitize user input to prevent XSS attacks
  * Uses multiple layers of protection:
  * 1. Decode HTML entities to literal characters
@@ -38,48 +51,49 @@ function sanitizeInput(input: string): string {
 
 /**
  * GET /store/products/:id/reviews
- * Get all approved reviews for a product
+ * Get all approved reviews for a product. Uses req.queryConfig when validateAndTransformQuery middleware runs.
  */
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
   const { id } = req.params
-  const { limit = "10", offset = "0", sort = "newest" } = req.query as {
-    limit?: string
-    offset?: string
-    sort?: "newest" | "oldest" | "highest" | "lowest" | "helpful"
-  }
-
   const reviewService = req.scope.resolve<ReviewModuleService>(REVIEW_MODULE)
 
-  // Determine sort order
-  let order: { [key: string]: "ASC" | "DESC" } = { created_at: "DESC" }
-  switch (sort) {
-    case "oldest":
-      order = { created_at: "ASC" }
-      break
-    case "highest":
-      order = { rating: "DESC" }
-      break
-    case "lowest":
-      order = { rating: "ASC" }
-      break
-    case "helpful":
-      order = { helpful_count: "DESC" }
-      break
-  }
+  const pagination = req.queryConfig?.pagination as
+    | { take?: number; skip?: number; order?: Record<string, "ASC" | "DESC"> }
+    | undefined
+  const take = Math.min(pagination?.take ?? 10, 50)
+  const skip = pagination?.skip ?? 0
+  const sort = (req.validatedQuery as { sort?: string } | undefined)?.sort ?? "newest"
 
-  const parsedLimit = Math.min(parseInt(limit) || 10, 50) // Max 50 per page
-  const parsedOffset = parseInt(offset) || 0
+  let order: { [key: string]: "ASC" | "DESC" } =
+    (pagination?.order as { [key: string]: "ASC" | "DESC" }) ?? { created_at: "DESC" }
+  if (!pagination?.order) {
+    switch (sort) {
+      case "oldest":
+        order = { created_at: "ASC" }
+        break
+      case "highest":
+        order = { rating: "DESC" }
+        break
+      case "lowest":
+        order = { rating: "ASC" }
+        break
+      case "helpful":
+        order = { helpful_count: "DESC" }
+        break
+      default:
+        order = { created_at: "DESC" }
+    }
+  }
 
   const { reviews, count } = await reviewService.getProductReviews(id, {
     status: "approved",
-    limit: parsedLimit,
-    offset: parsedOffset,
+    limit: take,
+    offset: skip,
     order,
   })
 
   const stats = await reviewService.getProductRatingStats(id)
 
-  // Response format matching API contract
   res.json({
     reviews: reviews.map((r) => ({
       id: r.id,
@@ -94,9 +108,9 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
     stats,
     pagination: {
       total: count,
-      limit: parsedLimit,
-      offset: parsedOffset,
-      has_more: parsedOffset + parsedLimit < count,
+      limit: take,
+      offset: skip,
+      has_more: skip + take < count,
     },
   })
 }

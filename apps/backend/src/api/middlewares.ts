@@ -5,13 +5,15 @@ import {
     type MedusaResponse,
     authenticate,
     validateAndTransformBody,
+    validateAndTransformQuery,
 } from "@medusajs/framework/http";
 import { MedusaError } from "@medusajs/framework/utils";
 import { trackEvent } from "../utils/analytics";
 import { logger } from "../utils/logger";
 import { orderEditRateLimiter } from "../utils/rate-limiter";
+import { GetAdminReviewsSchema } from "./admin/reviews/route";
 import { PostAdminReviewResponseSchema } from "./admin/reviews/[id]/response/route";
-import { CreateStoreReviewSchema } from "./store/products/[id]/reviews/route";
+import { CreateStoreReviewSchema, GetStoreProductReviewsSchema } from "./store/products/[id]/reviews/route";
 
 interface Address {
     country_code?: string;
@@ -172,6 +174,49 @@ export default defineMiddlewares({
             middlewares: [
                 // Schema type diverges from framework's Zod typing; cast required
                 validateAndTransformBody(PostAdminReviewResponseSchema as any),
+            ],
+        },
+        {
+            // GET /admin/reviews — createFindParams + req.queryConfig for list (P3 / Phase 4)
+            matcher: "/admin/reviews",
+            method: "GET",
+            middlewares: [
+                validateAndTransformQuery(GetAdminReviewsSchema as any, {
+                    isList: true,
+                    defaultLimit: 20,
+                    defaults: [
+                        "id",
+                        "title",
+                        "content",
+                        "rating",
+                        "product_id",
+                        "customer_id",
+                        "status",
+                        "created_at",
+                        "updated_at",
+                    ],
+                }),
+            ],
+        },
+        {
+            // GET /store/products/:id/reviews — createFindParams + req.queryConfig for list (P3 / Phase 4)
+            matcher: "/store/products/:id/reviews",
+            method: "GET",
+            middlewares: [
+                validateAndTransformQuery(GetStoreProductReviewsSchema as any, {
+                    isList: true,
+                    defaultLimit: 10,
+                    defaults: [
+                        "id",
+                        "customer_name",
+                        "rating",
+                        "title",
+                        "content",
+                        "verified_purchase",
+                        "helpful_count",
+                        "created_at",
+                    ],
+                }),
             ],
         },
     ],

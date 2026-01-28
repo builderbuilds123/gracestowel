@@ -176,4 +176,19 @@ All workflows use arrow functions for the composition callback, e.g. `(input: X)
 
 ---
 
+## Remediation update (3.4 + Phase 4)
+
+**Implemented (2026-01-27):**
+
+- **3.4 / P3 list routes:** `createFindParams` + `req.queryConfig` added for:
+  - **GET /admin/reviews:** `GetAdminReviewsSchema`, `validateAndTransformQuery(GetAdminReviewsSchema, { isList: true, defaultLimit: 20, defaults: [...] })`; route uses `req.queryConfig.pagination` (take, skip, order) and `req.filterableFields` (status, product_id).
+  - **GET /store/products/:id/reviews:** `GetStoreProductReviewsSchema`, `validateAndTransformQuery(GetStoreProductReviewsSchema, { isList: true, defaultLimit: 10, defaults: [...] })`; route uses `req.queryConfig.pagination` and supports both `order` (from query config) and legacy `sort` (newest/oldest/highest/lowest/helpful).
+- Schemas are Zod-based (limit, offset, order, fields + admin: status/product_id, store: sort). Middleware uses `as any` for schema type compatibility with framework Zod typing.
+
+**Deferred (optional):**
+
+- **Review–product / review–customer links:** Not implemented. Adding them would require the review module to expose `linkable` and new link files; the current module uses `Module(REVIEW_MODULE, { service })` and does not expose linkable. Left as a future improvement.
+
+---
+
 *Review performed per [Backend Medusa Review Plan](.cursor/plans/backend_medusa_review_0405631a.plan.md). No code changes were made.*
