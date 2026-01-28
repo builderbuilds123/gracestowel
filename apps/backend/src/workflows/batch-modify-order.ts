@@ -776,50 +776,6 @@ const executeBatchOrderEditStep = createStep(
     }
 );
 
-/**
- * Step 5: Update PaymentCollection to match new Order total
- */
-const updateBatchPaymentCollectionStep = createStep(
-    "update-batch-payment-collection",
-    async (
-        input: {
-            paymentCollectionId: string | undefined;
-            amount: number;
-            previousAmount: number;
-        },
-        { container }
-    ) => {
-        if (!input.paymentCollectionId) {
-            return new StepResponse({ updated: false, paymentCollectionId: "", previousAmount: 0 });
-        }
-
-        const paymentModuleService = container.resolve(Modules.PAYMENT);
-        await paymentModuleService.updatePaymentCollections(
-            input.paymentCollectionId,
-            { amount: input.amount }
-        );
-
-        logger.info("batch-modify-order", "Updated PaymentCollection", {
-            paymentCollectionId: input.paymentCollectionId,
-            amount: input.amount,
-        });
-
-        return new StepResponse(
-            { updated: true, paymentCollectionId: input.paymentCollectionId, previousAmount: input.previousAmount },
-            { paymentCollectionId: input.paymentCollectionId, previousAmount: input.previousAmount }
-        );
-    },
-    async (compensation, { container }) => {
-        if (!compensation || !compensation.paymentCollectionId) return;
-
-        const paymentModuleService = container.resolve(Modules.PAYMENT);
-        await paymentModuleService.updatePaymentCollections(
-            compensation.paymentCollectionId,
-            { amount: compensation.previousAmount }
-        );
-    }
-);
-
 interface SupplementaryChargeResult {
     created: boolean;
     paymentCollectionId?: string;
@@ -959,85 +915,6 @@ const createSupplementaryPaymentCollectionStep = createStep(
             // Return as not created - but don't throw (order modification still succeeded)
             return new StepResponse({ created: false });
         }
-    }
-);
-
-interface PaymentSessionUpdateResult {
-    updated: boolean;
-    paymentSessionId: string;
-    previousAmount: number;
-    currencyCode: string;
-}
-
-/**
- * Step 6: Update PaymentSession amount to match new authorization
- *
- * This step updates the PaymentSession's amount field to reflect the new
- * Stripe authorization. This ensures the Medusa admin UI shows the correct
- * amount that can be captured.
- *
- * IMPORTANT: The data field MUST include the PaymentIntent ID (as `id`),
- * otherwise the Stripe provider's updatePayment will fail with
- * "intent must be a string" error.
- */
-const updateBatchPaymentSessionStep = createStep(
-    "update-batch-payment-session",
-    async (
-        input: {
-            paymentSessionId: string | undefined;
-            paymentIntentId: string;
-            amount: number;
-            previousAmount: number;
-            currencyCode: string;
-        },
-        { container }
-    ): Promise<StepResponse<PaymentSessionUpdateResult, PaymentSessionUpdateResult>> => {
-        if (!input.paymentSessionId) {
-            logger.info("batch-modify-order", "No PaymentSession to update", {});
-            return new StepResponse(
-                { updated: false, paymentSessionId: "", previousAmount: 0, currencyCode: input.currencyCode },
-                { updated: false, paymentSessionId: "", previousAmount: 0, currencyCode: input.currencyCode }
-            );
-        }
-
-        const paymentModuleService = container.resolve(Modules.PAYMENT);
-
-        // Pass the PaymentIntent ID in data so Stripe provider can find it
-        // The Stripe provider expects `data.id` to be the PaymentIntent ID
-        await paymentModuleService.updatePaymentSession({
-            id: input.paymentSessionId,
-            amount: input.amount,
-            currency_code: input.currencyCode,
-            data: { id: input.paymentIntentId },
-        });
-
-        logger.info("batch-modify-order", "Updated PaymentSession", {
-            paymentSessionId: input.paymentSessionId,
-            paymentIntentId: input.paymentIntentId,
-            amount: input.amount,
-        });
-
-        const result: PaymentSessionUpdateResult = {
-            updated: true,
-            paymentSessionId: input.paymentSessionId,
-            previousAmount: input.previousAmount,
-            currencyCode: input.currencyCode,
-        };
-
-        return new StepResponse(result, result);
-    },
-    async (compensation, { container }) => {
-        // Note: Compensation would need paymentIntentId too, but since we only
-        // roll back the amount (not the PI itself), we skip provider call on rollback
-        // and just log that we can't fully rollback the session amount
-        if (!compensation || !compensation.paymentSessionId || !compensation.updated) return;
-
-        logger.warn("batch-modify-order", "PaymentSession rollback skipped - amount updated directly in Stripe", {
-            paymentSessionId: compensation.paymentSessionId,
-            previousAmount: compensation.previousAmount,
-        });
-        // Don't try to call updatePaymentSession again as it would fail without PI ID
-        // The Stripe PaymentIntent will be rolled back by incrementStripeBatchStep's compensation
     }
 );
 
@@ -1509,24 +1386,11 @@ export const batchModifyOrderWorkflow = createWorkflow(
         }));
         const editResult = executeBatchOrderEditStep(editInput);
 
-        // Step 5: Update PaymentCollection
-        // When a supplementary charge is needed, the original PC should keep its original amount
-        // (matching the Stripe PI), and the supplementary PC handles the difference.
-        // This ensures PC.amount matches what can actually be captured from the associated PI.
-        const pcInput = transform({ validation, totals, stripeResult }, (data) => ({
-            paymentCollectionId: data.validation.paymentCollectionId,
-            // If supplementary charge is needed, keep original PC at original amount
-            // (it matches the Stripe PI). Otherwise, update to new total.
-            amount: data.stripeResult.requiresSupplementaryCharge
-                ? data.validation.order.total  // Keep at original amount (matches Stripe PI)
-                : data.totals.newOrderTotal,   // No supplementary, update to new total
-            previousAmount: data.validation.order.total,
-        }));
-        updateBatchPaymentCollectionStep(pcInput);
-
-        // Note: When order total increases and IC+ is not available, we create a supplementary
-        // PaymentCollection for the difference. The original PC stays at its original amount
-        // to match the Stripe PaymentIntent that was authorized at checkout.
+        // PC amounts are NOT updated during edits. The capture algorithm
+        // (captureAllOrderPayments) reconciles everything at capture time by:
+        // 1. Fetching the real order total as source of truth
+        // 2. Distributing across all uncaptured PIs (partial captures, excess cancellation)
+        // This avoids PC amount drift bugs when orders are modified multiple times.
 
         // Step 6: Create inventory reservations for new line items
         const reservationInput = transform({ editResult, input }, (data) => ({
