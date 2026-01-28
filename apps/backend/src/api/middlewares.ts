@@ -11,6 +11,7 @@ import { trackEvent } from "../utils/analytics";
 import { logger } from "../utils/logger";
 import { orderEditRateLimiter } from "../utils/rate-limiter";
 import { PostAdminReviewResponseSchema } from "./admin/reviews/[id]/response/route";
+import { CreateStoreReviewSchema } from "./store/products/[id]/reviews/route";
 
 interface Address {
     country_code?: string;
@@ -155,10 +156,21 @@ export default defineMiddlewares({
             ],
         },
         {
-            // Admin review response routes - validate request body
-            matcher: "/admin/reviews/:id/response",
-            method: ["POST", "PUT"],
+            // Store review create: authenticate and validate body
+            matcher: "/store/products/:id/reviews",
+            method: "POST",
             middlewares: [
+                authenticate("customer", ["session", "bearer"]),
+                // Schema type diverges from framework's Zod typing; cast required
+                validateAndTransformBody(CreateStoreReviewSchema as any),
+            ],
+        },
+        {
+            // Admin review response routes - validate request body (POST only; POST upserts create/update)
+            matcher: "/admin/reviews/:id/response",
+            method: "POST",
+            middlewares: [
+                // Schema type diverges from framework's Zod typing; cast required
                 validateAndTransformBody(PostAdminReviewResponseSchema as any),
             ],
         },

@@ -2,6 +2,19 @@ import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { logger } from "../../../../utils/logger";
 import { modificationTokenService } from "../../../../services/modification-token";
 
+/** Minimal type for payment provider data (Stripe stores payment_intent id in data.id) */
+interface StripePaymentData {
+  id?: string;
+}
+
+/** Payment module exposes listPayments; scope resolves by string key */
+interface PaymentModuleLike {
+  listPayments(
+    filters: Record<string, unknown>,
+    options: { take?: number; order?: Record<string, string> }
+  ): Promise<Array<{ data?: unknown; payment_collection_id?: string }>>;
+}
+
 /**
  * GET /store/orders/by-payment-intent?payment_intent_id=pi_xxx
  *
@@ -62,8 +75,8 @@ export async function GET(
         // This is the PRIMARY lookup method for orders created via standard cart completion
         // ==========================================
         try {
-            const paymentModuleService = req.scope.resolve("payment") as any;
-            
+            const paymentModuleService = req.scope.resolve("payment") as PaymentModuleLike;
+
             // Get recent payments (sorted by creation date descending to find newest first)
             // Note: Don't use select[] as it doesn't properly return JSONB data field
             const recentPayments = await paymentModuleService.listPayments(
@@ -72,7 +85,7 @@ export async function GET(
             );
 
             for (const payment of recentPayments) {
-                const paymentData = payment.data as any;
+                const paymentData = payment.data as StripePaymentData | undefined;
                 if (paymentData?.id === paymentIntentId) {
                     // Found the payment! Now find the order linked to this payment collection
                     const paymentCollectionId = payment.payment_collection_id;
@@ -187,12 +200,13 @@ export async function GET(
             retry: true,
         });
 
-    } catch (error: any) {
+    } catch (error: unknown) {
+        const err = error instanceof Error ? error : new Error(String(error));
         logger.error("by-payment-intent", "Failed to fetch order by payment intent", {
             paymentIntentId,
-            errorName: error?.name,
-            errorMessage: error?.message,
-        }, error);
+            errorName: err.name,
+            errorMessage: err.message,
+        }, err);
         res.status(500).json({
             error: "Failed to fetch order",
             code: "FETCH_FAILED",

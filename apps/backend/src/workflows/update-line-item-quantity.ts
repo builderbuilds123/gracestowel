@@ -218,6 +218,7 @@ export const validateUpdatePreconditionsStep = createStep(
         if (!paymentIntentId && paymentCollection?.payments?.length) {
             // Look for PaymentIntent in payment collection
             for (const payment of paymentCollection.payments) {
+                if (!payment) continue;
                 const paymentData = payment.data as Record<string, unknown> | undefined;
                 if (paymentData?.id && typeof paymentData.id === "string" && paymentData.id.startsWith("pi_")) {
                     paymentIntentId = paymentData.id;
@@ -765,7 +766,7 @@ async (compensation, { container }) => {
 
 export const updateLineItemQuantityWorkflow = createWorkflow(
 "update-line-item-quantity",
-(input: UpdateLineItemQuantityInput) => {
+function (input: UpdateLineItemQuantityInput) {
     trackWorkflowEventStep({
         event: "order.edit.update_quantity.started",
         failureEvent: "order.edit.update_quantity.failed",

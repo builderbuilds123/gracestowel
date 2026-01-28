@@ -13,7 +13,7 @@ export type UpdateReviewInput = {
 
 export const updateReviewWorkflow = createWorkflow(
   "update-review",
-  (input: UpdateReviewInput) => {
+  function (input: UpdateReviewInput) {
     const reviews = updateReviewStep(input)
 
     return new WorkflowResponse({

@@ -1001,7 +1001,7 @@ export const updatePaymentCollectionStep = createStep(
 
 export const addItemToOrderWorkflow = createWorkflow(
     "add-item-to-order",
-    (input: AddItemToOrderInput) => {
+    function (input: AddItemToOrderInput) {
         trackWorkflowEventStep({
             event: "order.edit.add_item.started",
             failureEvent: "order.edit.add_item.failed",

@@ -23,7 +23,11 @@ export const createReviewStep = createStep(
   async (input: CreateReviewStepInput, { container }) => {
     const reviewModuleService: ReviewModuleService = container.resolve(REVIEW_MODULE)
 
-    const review = await reviewModuleService.createReviews(input)
+    const created = await reviewModuleService.createReviews(input)
+    const review = Array.isArray(created) ? created[0] : created
+    if (!review) {
+      throw new Error("createReviews returned no review")
+    }
 
     return new StepResponse(review, review.id)
   },

@@ -456,7 +456,7 @@ const createSupplementaryPaymentSessionStep = createStep(
  */
 export const supplementaryChargeWorkflow = createWorkflow(
     "supplementary-charge",
-    (input: SupplementaryChargeInput) => {
+    function (input: SupplementaryChargeInput) {
         // Step 1: Create PaymentCollection and link to order
         const paymentCollectionResult = createSupplementaryPaymentCollectionStep(
             {

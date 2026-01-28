@@ -1,6 +1,8 @@
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { REVIEW_MODULE } from "../../../../modules/review"
 import type ReviewModuleService from "../../../../modules/review/service"
+import { updateReviewWorkflow } from "../../../../workflows/update-review"
+import { deleteReviewWorkflow } from "../../../../workflows/delete-review"
 
 /**
  * GET /admin/reviews/:id
@@ -30,23 +32,23 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     [key: string]: unknown
   }
 
-  const reviewService = req.scope.resolve<ReviewModuleService>(REVIEW_MODULE)
+  const updates: {
+    id: string
+    status?: "pending" | "approved" | "rejected"
+    [key: string]: unknown
+  } = { id, ...updateData }
+  if (status !== undefined) {
+    updates.status = status
+  }
 
   try {
-    // Verify review exists
-    await reviewService.retrieveReview(id)
-
-    // Build update object with proper typing
-    const updates: {
-      status?: "pending" | "approved" | "rejected"
-      [key: string]: unknown
-    } = { ...updateData }
-    if (status) {
-      updates.status = status
+    const { result } = await updateReviewWorkflow(req.scope).run({
+      input: [updates],
+    })
+    const review = result.reviews?.[0]
+    if (!review) {
+      return res.status(404).json({ message: "Review not found" })
     }
-
-    const review = await reviewService.updateReviews({ id, ...updates })
-
     res.json({
       review,
       message: status
@@ -65,10 +67,10 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
 export async function DELETE(req: MedusaRequest, res: MedusaResponse) {
   const { id } = req.params
 
-  const reviewService = req.scope.resolve<ReviewModuleService>(REVIEW_MODULE)
-
   try {
-    await reviewService.deleteReviews(id)
+    await deleteReviewWorkflow(req.scope).run({
+      input: { ids: [id] },
+    })
     res.json({ message: "Review deleted successfully" })
   } catch (error) {
     res.status(404).json({ message: "Review not found" })

@@ -1339,7 +1339,7 @@ const updateBatchReservationsStep = createStep(
 
 export const batchModifyOrderWorkflow = createWorkflow(
     "batch-modify-order",
-    (input: BatchModifyOrderInput) => {
+    function (input: BatchModifyOrderInput) {
         // Step 1: Validate all preconditions
         const validation = validateBatchPreconditionsStep({
             orderId: input.orderId,

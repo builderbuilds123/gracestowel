@@ -284,7 +284,13 @@ const createPaymentCollectionStep = createStep(
                     provider_id: string;
                     data: Record<string, unknown>;
                 }>;
-            }>) => Promise<Array<{ id: string }>>;
+            }>) => Promise<Array<{ id: string; status?: string }>>;
+            createPaymentSession: (paymentCollectionId: string, data: {
+                provider_id: string;
+                amount: number;
+                currency_code: string;
+                data: Record<string, unknown>;
+            }) => Promise<{ id: string }>;
         }
         const paymentModuleService = container.resolve(Modules.PAYMENT) as PaymentModuleService;
 
@@ -332,7 +338,7 @@ const createPaymentCollectionStep = createStep(
             );
 
             return new StepResponse({
-                paymentCollectionId: paymentCollection.id,
+                paymentCollectionId: paymentCollection.id as string | null,
             });
         } catch (error) {
             // REVIEW FIX (Issue #11): Enhanced error handling with metric emission
@@ -351,7 +357,7 @@ const createPaymentCollectionStep = createStep(
             // This allows graceful degradation, but logs the failure for monitoring
             // Operators should monitor the payment_collection_creation_failed metric
             return new StepResponse({
-                paymentCollectionId: null,
+                paymentCollectionId: null as string | null,
                 error: (error as Error).message,
                 errorName: (error as Error).name
             });
@@ -389,7 +395,7 @@ const linkPaymentCollectionStep = createStep(
                     };
                 }) => Promise<void>;
             }
-            const remoteLink = container.resolve("remoteLink") as RemoteLinkService;
+            const remoteLink = container.resolve("remoteLink") as unknown as RemoteLinkService;
             
             await remoteLink.create({
                 [Modules.ORDER]: {
@@ -431,9 +437,8 @@ const emitStripeOrderEventStep = createStep(
                 try {
                     eventBusModuleService = container.resolve("eventBus") as EventBusService;
                 } catch {
-                    // Try using Modules constant
                     const { Modules } = await import("@medusajs/framework/utils");
-                    eventBusModuleService = container.resolve(Modules.EVENT_BUS) as EventBusService;
+                    eventBusModuleService = container.resolve(Modules.EVENT_BUS) as unknown as EventBusService;
                 }
             }
         } catch (err) {
@@ -520,7 +525,7 @@ const resolveInventoryLocationsStep = createStep(
  */
 export const createOrderFromStripeWorkflow = createWorkflow(
     "create-order-from-stripe",
-    (input: CreateOrderFromStripeInput) => {
+    function (input: CreateOrderFromStripeInput) {
         trackWorkflowEventStep({
             event: "order.create.started",
             failureEvent: "order.create.failed",
@@ -576,7 +581,7 @@ export const createOrderFromStripeWorkflow = createWorkflow(
         // Step 6: PAY-01 - Link PaymentCollection to Order
         const linkInput = transform({ order, paymentCollectionResult }, (data) => ({
             orderId: data.order.id,
-            paymentCollectionId: data.paymentCollectionResult.paymentCollectionId,
+            paymentCollectionId: (data.paymentCollectionResult as any).paymentCollectionId,
         }));
         linkPaymentCollectionStep(linkInput);
 

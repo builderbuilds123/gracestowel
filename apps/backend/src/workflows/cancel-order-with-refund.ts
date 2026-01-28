@@ -353,10 +353,7 @@ export const lockOrderHandler = async (
                 if (paymentIntent.status === "succeeded") {
                     if (input.isWithinGracePeriod) {
                         // Within grace period but Stripe shows succeeded = race condition
-                        logger.warn("cancel-order", "PaymentIntent already succeeded during grace period", {
-                            paymentIntentId: input.paymentIntentId,
-                            orderId: input.orderId,
-                        });
+                        logger.warn(`[cancel-order] PaymentIntent already succeeded during grace period for order ${input.orderId} (PI: ${input.paymentIntentId})`);
                         throw new LateCancelError();
                     } else {
                         // Post-grace period: succeeded is expected for refund path
@@ -526,7 +523,7 @@ const prepareReservationReleaseStep = createStep(
 
 export const cancelOrderWithRefundWorkflow = createWorkflow(
     "cancel-order-with-refund",
-    (input: CancelOrderWithRefundInput) => {
+    function (input: CancelOrderWithRefundInput) {
         trackWorkflowEventStep({
             event: "order.cancel.started",
             failureEvent: "order.cancel.failed",

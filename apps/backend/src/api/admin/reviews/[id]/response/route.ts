@@ -22,39 +22,37 @@ export const PostAdminReviewResponseSchema = z.object({
   content: z.string().min(1).max(2000),
 })
 
+export type PostAdminReviewResponseBody = z.infer<typeof PostAdminReviewResponseSchema>
+
 /**
  * POST /admin/reviews/:id/response
- * Create or update an admin response to a review
+ * Create or update an admin response to a review (upsert: use POST for both create and update).
  */
-export async function POST(req: MedusaRequest, res: MedusaResponse) {
+export async function POST(
+  req: MedusaRequest<PostAdminReviewResponseBody>,
+  res: MedusaResponse
+) {
   const { id } = req.params
 
   const reviewService = req.scope.resolve<ReviewModuleService>(REVIEW_MODULE)
 
   try {
-    // Verify review exists
-    const review = await reviewService.retrieveReview(id)
+    await reviewService.retrieveReview(id)
+  } catch {
+    return res.status(404).json({ message: "Review not found" })
+  }
 
-    // Validate and sanitize input
-    const body = req.validatedBody as { content: string }
-    const sanitizedContent = sanitizeInput(body.content)
+  const body = req.validatedBody
+  const sanitizedContent = sanitizeInput(body.content)
+  if (!sanitizedContent) {
+    return res.status(400).json({ message: "Response content cannot be empty" })
+  }
 
-    if (!sanitizedContent) {
-      return res.status(400).json({ message: "Response content cannot be empty" })
-    }
-
-    // Update review with admin response using workflow
+  try {
     const { result } = await updateReviewWorkflow(req.scope).run({
-      input: [
-        {
-          id,
-          admin_response: sanitizedContent,
-        },
-      ],
+      input: [{ id, admin_response: sanitizedContent }],
     })
-
-    const updatedReview = result.reviews[0]
-
+    const updatedReview = result.reviews?.[0]
     res.json({
       review: updatedReview,
       message: "Admin response added successfully",
@@ -64,51 +62,6 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
       return res.status(404).json({ message: "Review not found" })
     }
     res.status(500).json({ message: "Failed to add admin response" })
-  }
-}
-
-/**
- * PUT /admin/reviews/:id/response
- * Update an existing admin response
- */
-export async function PUT(req: MedusaRequest, res: MedusaResponse) {
-  const { id } = req.params
-
-  const reviewService = req.scope.resolve<ReviewModuleService>(REVIEW_MODULE)
-
-  try {
-    // Verify review exists
-    const review = await reviewService.retrieveReview(id)
-
-    // Validate and sanitize input
-    const body = req.validatedBody as { content: string }
-    const sanitizedContent = sanitizeInput(body.content)
-
-    if (!sanitizedContent) {
-      return res.status(400).json({ message: "Response content cannot be empty" })
-    }
-
-    // Update review with admin response using workflow
-    const { result } = await updateReviewWorkflow(req.scope).run({
-      input: [
-        {
-          id,
-          admin_response: sanitizedContent,
-        },
-      ],
-    })
-
-    const updatedReview = result.reviews[0]
-
-    res.json({
-      review: updatedReview,
-      message: "Admin response updated successfully",
-    })
-  } catch (error) {
-    if (error && typeof error === "object" && "message" in error && error.message === "Review not found") {
-      return res.status(404).json({ message: "Review not found" })
-    }
-    res.status(500).json({ message: "Failed to update admin response" })
   }
 }
 
