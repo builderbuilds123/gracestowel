@@ -159,7 +159,7 @@ module.exports = defineConfig({
       options: {
         providers: [
           {
-            resolve: "./src/modules/stripe-partial-capture",
+            resolve: "./src/modules/stripePartialCapture",
             options: {
               apiKey: process.env.STRIPE_SECRET_KEY,
               webhookSecret: process.env.STRIPE_WEBHOOK_SECRET,

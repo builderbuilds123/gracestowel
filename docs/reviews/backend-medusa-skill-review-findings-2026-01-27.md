@@ -48,7 +48,7 @@
 | [`apps/backend/src/api/middlewares.ts`](apps/backend/src/api/middlewares.ts) | `validateAndTransformBody(PostAdminReviewResponseSchema as any)` | Remove `as any`. Use the schema as-is; ensure Zod types are compatible with the middleware. |
 | [`apps/backend/src/api/admin/reviews/[id]/response/route.ts`](apps/backend/src/api/admin/reviews/[id]/response/route.ts) | `req.validatedBody as { content: string }`; no `MedusaRequest<T>` | Export inferred type from schema (e.g. `z.infer<typeof PostAdminReviewResponseSchema>`) and use `MedusaRequest<CreateAdminReviewResponseSchema>`. Use `req.validatedBody` without casting. |
 | [`apps/backend/src/api/store/orders/by-payment-intent/route.ts`](apps/backend/src/api/store/orders/by-payment-intent/route.ts) | `req.scope.resolve("payment") as any` and `payment.data as any` | Resolve payment module with a proper type (e.g. from `@medusajs/medusa` or local types). Type `data` from the payment shape instead of `as any`. |
-| [`apps/backend/src/modules/stripe-partial-capture/index.ts`](apps/backend/src/modules/stripe-partial-capture/index.ts) | `StripePartialCaptureService as any` in ModuleProvider | Comment references protected constructor. Prefer a typed workaround (adapter type or module-provider typing) if available; otherwise document why `as any` is required and keep it minimal. |
+| [`apps/backend/src/modules/stripePartialCapture/index.ts`](apps/backend/src/modules/stripePartialCapture/index.ts) | `StripePartialCaptureService as any` in ModuleProvider | Comment references protected constructor. Prefer a typed workaround (adapter type or module-provider typing) if available; otherwise document why `as any` is required and keep it minimal. |
 
 **Skill rules:** `type-request-schema`, `type-export-schema` — type `req.validatedBody` via `MedusaRequest<T>`; avoid `any`.
 
@@ -144,7 +144,7 @@ All workflows use arrow functions for the composition callback, e.g. `(input: X)
 
 - **Review module:** `resolve: "./src/modules/review"` registered.
 - **Resend:** `resolve: "./src/modules/resend"` as notification provider.
-- **Stripe partial capture:** `resolve: "./src/modules/stripe-partial-capture"` as payment provider.
+- **Stripe partial capture:** `resolve: "./src/modules/stripePartialCapture"` as payment provider.
 - No duplicate or conflicting module entries.
 
 ---
