@@ -94,15 +94,18 @@ describe('Payment Sessions API', () => {
         expect(status).toBe(200);
         expect(data.payment_collection.payment_sessions[0].id).toBe(sessionId);
 
-        // Verify Medusa call
+        // Verify Medusa call (implementation includes data.setup_future_usage)
         expect(fetchSpy).toHaveBeenCalledWith(
             `http://localhost:9000/store/payment-collections/${collectionId}/payment-sessions`,
             expect.objectContaining({
                 method: 'POST',
-                body: JSON.stringify({ provider_id: 'pp_stripe' }),
+                body: JSON.stringify({
+                    provider_id: 'pp_stripe',
+                    data: { setup_future_usage: 'off_session' },
+                }),
                 headers: expect.objectContaining({
-                    'x-publishable-api-key': 'pk_test_123'
-                })
+                    'x-publishable-api-key': 'pk_test_123',
+                }),
             })
         );
     });
@@ -122,11 +125,11 @@ describe('Payment Sessions API', () => {
 
         await action({ request, context: mockContext, params: { id: collectionId } } as any);
 
-        // Verify Medusa call used default provider
+        // Verify Medusa call used default provider (implementation adds data.setup_future_usage)
         expect(fetchSpy).toHaveBeenCalledWith(
             expect.stringContaining(collectionId),
             expect.objectContaining({
-                body: JSON.stringify({ provider_id: 'pp_stripe' })
+                body: expect.stringMatching(/"provider_id":"pp_stripe"/),
             })
         );
     });

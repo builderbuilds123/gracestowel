@@ -125,6 +125,7 @@ interface AppliedPromoBadgeProps {
  */
 function AppliedPromoBadge({
   code,
+  discount,
   isAutomatic = false,
   onRemove,
   isLoading,
@@ -136,6 +137,11 @@ function AppliedPromoBadge({
   const iconStyles = isAutomatic ? "text-purple-600" : "text-green-600";
   const textStyles = isAutomatic ? "text-purple-800" : "text-green-800";
 
+  const discountDisplay =
+    typeof discount === "number" && !Number.isNaN(discount)
+      ? `-$${Number(discount).toFixed(2)}`
+      : null;
+
   return (
     <div 
       className={`flex items-center justify-between ${badgeStyles} border rounded-md px-3 py-2`} 
@@ -144,6 +150,9 @@ function AppliedPromoBadge({
       <div className="flex items-center gap-2">
         <Tag className={`w-4 h-4 ${iconStyles}`} />
         <span className={`text-sm font-medium ${textStyles}`}>{code}</span>
+        {discountDisplay ? (
+          <span className={`text-sm ${textStyles}`}>{discountDisplay}</span>
+        ) : null}
         {isAutomatic ? (
           <span className="text-xs text-purple-500 bg-purple-100 px-1.5 py-0.5 rounded">Auto</span>
         ) : null}

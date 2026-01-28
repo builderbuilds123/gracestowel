@@ -303,4 +303,11 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
     }
 }
 
+/**
+ * Meta tags for checkout success (e.g. referrer policy)
+ */
+export function meta() {
+    return [{ name: "referrer", content: "strict-origin-when-cross-origin" }];
+}
+
 // No default export - this route only has a loader that always redirects

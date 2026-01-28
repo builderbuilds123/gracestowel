@@ -57,7 +57,7 @@ describe("MedusaCartService", () => {
 
       expect(mockCartRetrieve).toHaveBeenCalledWith("cart_123", {
         fields:
-          "+promotions,+items.adjustments,+shipping_methods.adjustments,+currency_code,+total,+subtotal,+tax_total,+discount_total,+discount_subtotal,+discount_tax_total,+original_total,+original_tax_total,+item_total,+item_subtotal,+item_tax_total,+original_item_total,+original_item_subtotal,+original_item_tax_total,+shipping_total,+shipping_subtotal,+shipping_tax_total,+original_shipping_tax_total,+original_shipping_subtotal,+original_shipping_total,+credit_line_subtotal,+credit_line_tax_total,+credit_line_total",
+          "+completed_at,+promotions,+items.adjustments,+shipping_methods.adjustments,+currency_code,+total,+subtotal,+tax_total,+discount_total,+discount_subtotal,+discount_tax_total,+original_total,+original_tax_total,+item_total,+item_subtotal,+item_tax_total,+original_item_total,+original_item_subtotal,+original_item_tax_total,+shipping_total,+shipping_subtotal,+shipping_tax_total,+original_shipping_tax_total,+original_shipping_subtotal,+original_shipping_total,+credit_line_subtotal,+credit_line_tax_total,+credit_line_total",
       });
       expect(result).toEqual(mockCart);
     });

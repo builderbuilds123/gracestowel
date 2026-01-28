@@ -36,6 +36,11 @@ class IntersectionObserverMock {
 
 vi.stubGlobal('IntersectionObserver', IntersectionObserverMock);
 
+// jsdom may lack or mis-implement scrollIntoView; CheckoutForm and others use it
+if (typeof Element !== 'undefined') {
+  Element.prototype.scrollIntoView = vi.fn();
+}
+
 // Factory function to create storage mocks (avoids code duplication)
 const createStorageMock = () => {
   let store: Record<string, string> = {};

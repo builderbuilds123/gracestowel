@@ -151,21 +151,23 @@ describe('Guest Session Cookie Utilities', () => {
             expect(cookieHeader).toContain('guest_order_order_456=');
         });
 
-        it('should scope cookie path to order status route', async () => {
+        it('should scope cookie path to order routes', async () => {
             const token = createTestToken('order_789', 3600);
-            
+
             const cookieHeader = await setGuestToken(token, 'order_789');
-            
-            expect(cookieHeader).toContain('Path=/order/status/order_789');
+
+            // Implementation uses Path=/order to support /order/status/:id and /order/:id/edit
+            expect(cookieHeader).toContain('Path=/order');
         });
 
-        it('should set HttpOnly and SameSite=Strict', async () => {
+        it('should set HttpOnly and SameSite=Lax', async () => {
             const token = createTestToken('order_123', 3600);
-            
+
             const cookieHeader = await setGuestToken(token, 'order_123');
-            
+
             expect(cookieHeader).toContain('HttpOnly');
-            expect(cookieHeader).toContain('SameSite=Strict');
+            // SEC-06: SameSite=Lax for Stripe redirect back; Strict would block cookie on redirect
+            expect(cookieHeader).toContain('SameSite=Lax');
         });
     });
 
