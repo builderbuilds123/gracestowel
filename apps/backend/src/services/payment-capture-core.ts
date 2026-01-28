@@ -366,6 +366,25 @@ export async function captureAllOrderPayments(
         };
     }
 
+    // Guard: total authorized must cover the order total.
+    // If not, throw so the workflow can rollback and compensate previous steps.
+    const totalAuthorized = uncapturedPayments.reduce((sum, p) => sum + p.authorizedAmount, 0);
+    if (totalAuthorized < orderTotal) {
+        const shortfall = orderTotal - totalAuthorized;
+        logger.error("payment-capture-core", "Insufficient authorized amount for capture", {
+            orderId,
+            orderTotal,
+            totalAuthorized,
+            shortfall,
+            uncapturedCount: uncapturedPayments.length,
+        });
+        throw new Error(
+            `Insufficient authorized amount for order ${orderId}: ` +
+            `authorized $${totalAuthorized.toFixed(2)} but order total is $${orderTotal.toFixed(2)} ` +
+            `(shortfall: $${shortfall.toFixed(2)})`
+        );
+    }
+
     // Sort ascending by authorized amount (capture smaller PIs fully first)
     uncapturedPayments.sort((a, b) => a.authorizedAmount - b.authorizedAmount);
 
