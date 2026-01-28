@@ -24,6 +24,7 @@ import {
     transform,
 } from "@medusajs/framework/workflows-sdk";
 import { Modules } from "@medusajs/framework/utils";
+import type { MedusaContainer } from "@medusajs/framework/types";
 import {
     authorizePaymentSessionStep,
 } from "@medusajs/medusa/core-flows";
@@ -50,9 +51,97 @@ export interface SupplementaryChargeInput {
 }
 
 /**
- * Step to create a PaymentCollection for the supplementary charge
- * and link it to the order
+ * Handler: Create a PaymentCollection for the supplementary charge
+ * and link it to the order.
+ * Exported for unit testing.
  */
+export async function createSupplementaryPCHandler(
+    input: {
+        orderId: string;
+        amount: number;
+        currencyCode: string;
+        regionId?: string;
+    },
+    { container }: { container: MedusaContainer }
+) {
+    const stepLogger = container.resolve("logger");
+
+    // Validate input
+    if (!input.amount || input.amount <= 0) {
+        throw new Error(`Invalid supplementary amount: ${input.amount}`);
+    }
+
+    // Convert from cents to major units for Medusa
+    // Input amount is in cents (for Stripe compatibility), but Medusa v2 uses major units
+    const amountInMajorUnits = input.amount / 100;
+
+    // Create PaymentCollection using Payment Module
+    interface PaymentModuleService {
+        createPaymentCollections: (
+            collections: Array<{
+                amount: number;
+                currency_code: string;
+                region_id?: string;
+                metadata?: Record<string, unknown>;
+            }>
+        ) => Promise<Array<{ id: string; status?: string }>>;
+    }
+    const paymentModuleService = container.resolve(
+        Modules.PAYMENT
+    ) as PaymentModuleService;
+
+    const [paymentCollection] =
+        await paymentModuleService.createPaymentCollections([
+            {
+                amount: amountInMajorUnits,
+                currency_code: input.currencyCode.toLowerCase(),
+                region_id: input.regionId,
+                metadata: {
+                    supplementary_charge: true,
+                    source_order_id: input.orderId,
+                    amount_in_cents: input.amount, // Store original cents for reference
+                    created_at: new Date().toISOString(),
+                },
+            },
+        ]);
+
+    if (!paymentCollection?.id) {
+        throw new Error("Failed to create supplementary PaymentCollection");
+    }
+
+    stepLogger.info(
+        `[supplementary-charge] Created PaymentCollection ${paymentCollection.id} ` +
+            `for order ${input.orderId} (amount: ${amountInMajorUnits} ${input.currencyCode}, ${input.amount} cents)`
+    );
+
+    // Link PaymentCollection to Order using remoteLink
+    interface RemoteLinkService {
+        create: (links: {
+            [key: string]: {
+                [idKey: string]: string;
+            };
+        }) => Promise<unknown[]>;
+    }
+    const remoteLink = container.resolve("remoteLink") as unknown as RemoteLinkService;
+
+    await remoteLink.create({
+        [Modules.ORDER]: {
+            order_id: input.orderId,
+        },
+        [Modules.PAYMENT]: {
+            payment_collection_id: paymentCollection.id,
+        },
+    });
+
+    stepLogger.info(
+        `[supplementary-charge] Linked PaymentCollection ${paymentCollection.id} to order ${input.orderId}`
+    );
+
+    return {
+        paymentCollectionId: paymentCollection.id,
+    };
+}
+
 const createSupplementaryPaymentCollectionStep = createStep(
     "create-supplementary-payment-collection",
     async (
@@ -64,86 +153,11 @@ const createSupplementaryPaymentCollectionStep = createStep(
         },
         { container }
     ) => {
-        const stepLogger = container.resolve("logger");
-
-        // Validate input
-        if (!input.amount || input.amount <= 0) {
-            throw new Error(`Invalid supplementary amount: ${input.amount}`);
-        }
-
-        // Convert from cents to major units for Medusa
-        // Input amount is in cents (for Stripe compatibility), but Medusa v2 uses major units
-        const amountInMajorUnits = input.amount / 100;
-
-        // Create PaymentCollection using Payment Module
-        interface PaymentModuleService {
-            createPaymentCollections: (
-                collections: Array<{
-                    amount: number;
-                    currency_code: string;
-                    region_id?: string;
-                    metadata?: Record<string, unknown>;
-                }>
-            ) => Promise<Array<{ id: string; status?: string }>>;
-        }
-        const paymentModuleService = container.resolve(
-            Modules.PAYMENT
-        ) as PaymentModuleService;
-
-        const [paymentCollection] =
-            await paymentModuleService.createPaymentCollections([
-                {
-                    amount: amountInMajorUnits,
-                    currency_code: input.currencyCode.toLowerCase(),
-                    region_id: input.regionId,
-                    metadata: {
-                        supplementary_charge: true,
-                        source_order_id: input.orderId,
-                        amount_in_cents: input.amount, // Store original cents for reference
-                        created_at: new Date().toISOString(),
-                    },
-                },
-            ]);
-
-        if (!paymentCollection?.id) {
-            throw new Error("Failed to create supplementary PaymentCollection");
-        }
-
-        stepLogger.info(
-            `[supplementary-charge] Created PaymentCollection ${paymentCollection.id} ` +
-                `for order ${input.orderId} (amount: ${amountInMajorUnits} ${input.currencyCode}, ${input.amount} cents)`
-        );
-
-        // Link PaymentCollection to Order using remoteLink
-        interface RemoteLinkService {
-            create: (links: {
-                [key: string]: {
-                    [idKey: string]: string;
-                };
-            }) => Promise<unknown[]>;
-        }
-        const remoteLink = container.resolve("remoteLink") as unknown as RemoteLinkService;
-
-        await remoteLink.create({
-            [Modules.ORDER]: {
-                order_id: input.orderId,
-            },
-            [Modules.PAYMENT]: {
-                payment_collection_id: paymentCollection.id,
-            },
-        });
-
-        stepLogger.info(
-            `[supplementary-charge] Linked PaymentCollection ${paymentCollection.id} to order ${input.orderId}`
-        );
-
+        const result = await createSupplementaryPCHandler(input, { container });
         return new StepResponse(
+            result,
             {
-                paymentCollectionId: paymentCollection.id,
-            },
-            // Compensation data: include both IDs needed for rollback
-            {
-                paymentCollectionId: paymentCollection.id,
+                paymentCollectionId: result.paymentCollectionId,
                 orderId: input.orderId,
             }
         );
@@ -228,6 +242,105 @@ const createSupplementaryPaymentCollectionStep = createStep(
  * The actual PaymentIntent creation is handled by Medusa's native
  * createPaymentSessionsWorkflow with the Stripe provider.
  */
+/**
+ * Handler: Prepare Stripe Customer for off-session payments.
+ * Exported for unit testing.
+ */
+export async function prepareStripeCustomerHandler(
+    input: {
+        stripePaymentMethodId: string;
+        customerEmail?: string;
+        orderId: string;
+    },
+    { container }: { container: MedusaContainer }
+) {
+    const stepLogger = container.resolve("logger");
+    const stripe = getStripeClient();
+
+    stepLogger.info(
+        `[supplementary-charge] Preparing Stripe Customer for order ${input.orderId}, pm: ${input.stripePaymentMethodId}`
+    );
+
+    // Step 1: Check if PaymentMethod is already attached to a customer
+    // If so, we MUST use that customer (can't attach PM to multiple customers)
+    let stripeCustomerId: string;
+
+    const paymentMethod = await stripe.paymentMethods.retrieve(input.stripePaymentMethodId);
+
+    if (paymentMethod.customer) {
+        // PaymentMethod already belongs to a customer - use that customer
+        stripeCustomerId = typeof paymentMethod.customer === 'string'
+            ? paymentMethod.customer
+            : paymentMethod.customer.id;
+        stepLogger.info(
+            `[supplementary-charge] PaymentMethod already attached to Customer ${stripeCustomerId}, reusing`
+        );
+    } else {
+        // PaymentMethod not attached - find or create customer
+        if (input.customerEmail) {
+            const existingCustomers = await stripe.customers.list({
+                email: input.customerEmail,
+                limit: 1,
+            });
+
+            if (existingCustomers.data.length > 0) {
+                stripeCustomerId = existingCustomers.data[0].id;
+                stepLogger.info(
+                    `[supplementary-charge] Found existing Stripe Customer: ${stripeCustomerId}`
+                );
+            } else {
+                // Create new customer
+                const newCustomer = await stripe.customers.create({
+                    email: input.customerEmail,
+                    metadata: {
+                        medusa_order_id: input.orderId,
+                        created_for: "supplementary_charge",
+                    },
+                });
+                stripeCustomerId = newCustomer.id;
+                stepLogger.info(
+                    `[supplementary-charge] Created new Stripe Customer: ${stripeCustomerId}`
+                );
+            }
+        } else {
+            // No email - create anonymous customer for this charge
+            const newCustomer = await stripe.customers.create({
+                metadata: {
+                    medusa_order_id: input.orderId,
+                    created_for: "supplementary_charge",
+                    anonymous: "true",
+                },
+            });
+            stripeCustomerId = newCustomer.id;
+            stepLogger.info(
+                `[supplementary-charge] Created anonymous Stripe Customer: ${stripeCustomerId}`
+            );
+        }
+
+        // Attach PaymentMethod to Customer
+        // This is required before using the PaymentMethod for off-session payments
+        try {
+            await stripe.paymentMethods.attach(input.stripePaymentMethodId, {
+                customer: stripeCustomerId,
+            });
+            stepLogger.info(
+                `[supplementary-charge] Attached PaymentMethod ${input.stripePaymentMethodId} to Customer ${stripeCustomerId}`
+            );
+        } catch (attachError: unknown) {
+            // PaymentMethod might already be attached to this customer
+            const errorMessage = attachError instanceof Error ? attachError.message : String(attachError);
+            if (!errorMessage.includes("already been attached")) {
+                throw attachError;
+            }
+            stepLogger.info(
+                `[supplementary-charge] PaymentMethod already attached to customer`
+            );
+        }
+    }
+
+    return { stripeCustomerId };
+}
+
 const prepareStripeCustomerStep = createStep(
     "prepare-stripe-customer",
     async (
@@ -238,94 +351,8 @@ const prepareStripeCustomerStep = createStep(
         },
         { container }
     ) => {
-        const stepLogger = container.resolve("logger");
-        const stripe = getStripeClient();
-
-        stepLogger.info(
-            `[supplementary-charge] Preparing Stripe Customer for order ${input.orderId}, pm: ${input.stripePaymentMethodId}`
-        );
-
-        // Step 1: Check if PaymentMethod is already attached to a customer
-        // If so, we MUST use that customer (can't attach PM to multiple customers)
-        let stripeCustomerId: string;
-
-        const paymentMethod = await stripe.paymentMethods.retrieve(input.stripePaymentMethodId);
-
-        if (paymentMethod.customer) {
-            // PaymentMethod already belongs to a customer - use that customer
-            stripeCustomerId = typeof paymentMethod.customer === 'string'
-                ? paymentMethod.customer
-                : paymentMethod.customer.id;
-            stepLogger.info(
-                `[supplementary-charge] PaymentMethod already attached to Customer ${stripeCustomerId}, reusing`
-            );
-        } else {
-            // PaymentMethod not attached - find or create customer
-            if (input.customerEmail) {
-                const existingCustomers = await stripe.customers.list({
-                    email: input.customerEmail,
-                    limit: 1,
-                });
-
-                if (existingCustomers.data.length > 0) {
-                    stripeCustomerId = existingCustomers.data[0].id;
-                    stepLogger.info(
-                        `[supplementary-charge] Found existing Stripe Customer: ${stripeCustomerId}`
-                    );
-                } else {
-                    // Create new customer
-                    const newCustomer = await stripe.customers.create({
-                        email: input.customerEmail,
-                        metadata: {
-                            medusa_order_id: input.orderId,
-                            created_for: "supplementary_charge",
-                        },
-                    });
-                    stripeCustomerId = newCustomer.id;
-                    stepLogger.info(
-                        `[supplementary-charge] Created new Stripe Customer: ${stripeCustomerId}`
-                    );
-                }
-            } else {
-                // No email - create anonymous customer for this charge
-                const newCustomer = await stripe.customers.create({
-                    metadata: {
-                        medusa_order_id: input.orderId,
-                        created_for: "supplementary_charge",
-                        anonymous: "true",
-                    },
-                });
-                stripeCustomerId = newCustomer.id;
-                stepLogger.info(
-                    `[supplementary-charge] Created anonymous Stripe Customer: ${stripeCustomerId}`
-                );
-            }
-
-            // Attach PaymentMethod to Customer
-            // This is required before using the PaymentMethod for off-session payments
-            try {
-                await stripe.paymentMethods.attach(input.stripePaymentMethodId, {
-                    customer: stripeCustomerId,
-                });
-                stepLogger.info(
-                    `[supplementary-charge] Attached PaymentMethod ${input.stripePaymentMethodId} to Customer ${stripeCustomerId}`
-                );
-            } catch (attachError: unknown) {
-                // PaymentMethod might already be attached to this customer
-                const errorMessage = attachError instanceof Error ? attachError.message : String(attachError);
-                if (!errorMessage.includes("already been attached")) {
-                    throw attachError;
-                }
-                stepLogger.info(
-                    `[supplementary-charge] PaymentMethod already attached to customer`
-                );
-            }
-        }
-
-        return new StepResponse(
-            { stripeCustomerId },
-            { stripeCustomerId }
-        );
+        const result = await prepareStripeCustomerHandler(input, { container });
+        return new StepResponse(result, result);
     }
 );
 
@@ -336,6 +363,80 @@ const prepareStripeCustomerStep = createStep(
  * with the Stripe provider. The Stripe-specific data parameters enable
  * off-session payment with manual capture (authorize-only).
  */
+/**
+ * Handler: Create PaymentSession using Medusa native service.
+ * Exported for unit testing.
+ */
+export async function createSupplementarySessionHandler(
+    input: {
+        paymentCollectionId: string;
+        stripePaymentMethodId: string;
+        stripeCustomerId: string;
+        amount: number;
+        currencyCode: string;
+    },
+    { container }: { container: MedusaContainer }
+) {
+    const stepLogger = container.resolve("logger");
+
+    stepLogger.info(
+        `[supplementary-charge] Creating PaymentSession for collection ${input.paymentCollectionId}, amount: ${input.amount} cents`
+    );
+
+    // Use Payment Module Service directly to create PaymentSession
+    // This bypasses createPaymentSessionsWorkflow which overwrites our context with undefined values
+    //
+    // IMPORTANT: The Stripe provider extracts customer from context.account_holder.data.id
+    // (see stripe-base.ts line 140: intentRequest.customer = context?.account_holder?.data?.id)
+    // So we must pass the Stripe Customer ID in the context
+    interface PaymentModuleService {
+        createPaymentSession: (
+            paymentCollectionId: string,
+            input: {
+                provider_id: string;
+                currency_code: string;
+                amount: number;
+                data: Record<string, unknown>;
+                context: Record<string, unknown>;
+            }
+        ) => Promise<{ id: string }>;
+    }
+    const paymentModuleService = container.resolve(Modules.PAYMENT) as PaymentModuleService;
+
+    // Convert amount from cents to major units for Medusa
+    const amountInMajorUnits = input.amount / 100;
+
+    const paymentSession = await paymentModuleService.createPaymentSession(
+        input.paymentCollectionId,
+        {
+            provider_id: "pp_stripe",  // Match existing provider ID
+            currency_code: input.currencyCode,
+            amount: amountInMajorUnits,
+            data: {
+                // Stripe-specific data for off-session payment with manual capture
+                payment_method: input.stripePaymentMethodId,
+                off_session: true,
+                confirm: true,
+                capture_method: "manual",  // KEY: Authorize only, don't capture
+            },
+            context: {
+                // The Stripe provider expects the customer ID in account_holder.data.id
+                account_holder: {
+                    data: {
+                        id: input.stripeCustomerId,
+                    },
+                },
+            },
+        }
+    );
+
+    stepLogger.info(
+        `[supplementary-charge] Created PaymentSession ${paymentSession.id} via Payment Module Service`
+    );
+
+    return { paymentSessionId: paymentSession.id };
+}
+
 const createSupplementaryPaymentSessionStep = createStep(
     "create-supplementary-payment-session",
     async (
@@ -348,67 +449,8 @@ const createSupplementaryPaymentSessionStep = createStep(
         },
         { container }
     ) => {
-        const stepLogger = container.resolve("logger");
-
-        stepLogger.info(
-            `[supplementary-charge] Creating PaymentSession for collection ${input.paymentCollectionId}, amount: ${input.amount} cents`
-        );
-
-        // Use Payment Module Service directly to create PaymentSession
-        // This bypasses createPaymentSessionsWorkflow which overwrites our context with undefined values
-        //
-        // IMPORTANT: The Stripe provider extracts customer from context.account_holder.data.id
-        // (see stripe-base.ts line 140: intentRequest.customer = context?.account_holder?.data?.id)
-        // So we must pass the Stripe Customer ID in the context
-        interface PaymentModuleService {
-            createPaymentSession: (
-                paymentCollectionId: string,
-                input: {
-                    provider_id: string;
-                    currency_code: string;
-                    amount: number;
-                    data: Record<string, unknown>;
-                    context: Record<string, unknown>;
-                }
-            ) => Promise<{ id: string }>;
-        }
-        const paymentModuleService = container.resolve(Modules.PAYMENT) as PaymentModuleService;
-
-        // Convert amount from cents to major units for Medusa
-        const amountInMajorUnits = input.amount / 100;
-
-        const paymentSession = await paymentModuleService.createPaymentSession(
-            input.paymentCollectionId,
-            {
-                provider_id: "pp_stripe",  // Match existing provider ID
-                currency_code: input.currencyCode,
-                amount: amountInMajorUnits,
-                data: {
-                    // Stripe-specific data for off-session payment with manual capture
-                    payment_method: input.stripePaymentMethodId,
-                    off_session: true,
-                    confirm: true,
-                    capture_method: "manual",  // KEY: Authorize only, don't capture
-                },
-                context: {
-                    // The Stripe provider expects the customer ID in account_holder.data.id
-                    account_holder: {
-                        data: {
-                            id: input.stripeCustomerId,
-                        },
-                    },
-                },
-            }
-        );
-
-        stepLogger.info(
-            `[supplementary-charge] Created PaymentSession ${paymentSession.id} via Payment Module Service`
-        );
-
-        return new StepResponse(
-            { paymentSessionId: paymentSession.id },
-            { paymentSessionId: paymentSession.id }
-        );
+        const result = await createSupplementarySessionHandler(input, { container });
+        return new StepResponse(result, result);
     },
     // Compensation: Delete PaymentSession
     async (compensationData, { container }) => {
