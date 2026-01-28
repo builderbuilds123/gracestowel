@@ -5,8 +5,8 @@
 name: API Contract Tests
 
 on:
-  pull_request:
-    branches: [main, staging]
+  schedule:
+    - cron: "0 3 * * *"
   workflow_dispatch:
     inputs:
       environment:

@@ -53,6 +53,11 @@ This document outlines the testing strategy for the Grace's Towel e-commerce pla
 2. **Search & Filter**: Search for "Towel" → Filter by Color → Verify Results
 3. **Cart Management**: Add item → Open Drawer → Increment Quantity → Remove Item
 
+**PR Smoke Suite** (fast-fail):
+- `apps/e2e/tests/full-checkout.happy.spec.ts`
+- `apps/e2e/tests/storefront/homepage-navigation.spec.ts`
+- `apps/e2e/tests/backend/api-workflows.spec.ts`
+
 ## Running Tests
 
 ```bash
@@ -74,8 +79,8 @@ pnpm typecheck
 
 ## CI/CD Integration
 
-- **Pull Requests**: Run Unit & Integration tests. Block merge on failure.
-- **Nightly/Release**: Run E2E tests against a staging environment.
+- **Pull Requests**: Run Unit & Integration tests plus E2E smoke tests. Block merge on failure.
+- **Nightly/Release**: Run full E2E tests against a staging environment.
 
 ## API Contract Testing with Postman
 
@@ -87,7 +92,7 @@ pnpm typecheck
 
 ### CI/CD Workflow
 The `.github/workflows/api-contract-tests.yml` workflow:
-- Runs on pull requests to `main` and `staging`
+- Runs nightly and on manual dispatch
 - Executes Store API, Admin API, and Custom Endpoints collections
 - Generates HTML reports as build artifacts
-- Blocks PR merge on contract test failures
+- Fails the workflow on contract test failures
