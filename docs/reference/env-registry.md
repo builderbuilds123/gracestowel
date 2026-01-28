@@ -28,6 +28,9 @@ This document tracks all environment variables across deployment environments.
 | `POSTHOG_EVENTS_API_KEY` | No | PostHog events API key (Medusa Analytics) | Dev project | Skip | Staging project | Prod project |
 | `POSTHOG_HOST` | No | PostHog host | `https://app.posthog.com` | Skip | `https://app.posthog.com` | `https://app.posthog.com` |
 | `RESEND_API_KEY` | No | Resend email API key | Test key | `re_test_ci_placeholder_key` | Test key | Live key |
+| `GOOGLE_CLIENT_ID` | No | Google OAuth Client ID | Dev credentials | Skip | Staging credentials | Production credentials |
+| `GOOGLE_CLIENT_SECRET` | No | Google OAuth Client Secret | Dev credentials | Skip | Staging credentials | Production credentials |
+| `GOOGLE_CALLBACK_URL` | No | Frontend OAuth callback URL | `http://localhost:5173/account/auth/google/callback` | Skip | Staging callback URL | `https://gracestowel.com/account/auth/google/callback` |
 | `DATABASE_SSL` | No | Enable SSL for DB | `false` | `false` | `true` | `true` |
 | `DISABLE_MEDUSA_ADMIN` | No | Disable admin UI | `false` | `true` | `false` | `false` |
 

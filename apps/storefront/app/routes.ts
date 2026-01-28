@@ -14,7 +14,10 @@ export default [
     route("account", "routes/account.tsx"),
     route("account/login", "routes/account.login.tsx"),
     route("account/register", "routes/account.register.tsx"),
+    route("account/auth/google/callback", "routes/account.auth.google.callback.tsx"),
     route("order/status/:id", "routes/order_.status.$id.tsx"),
+    route("order/:id/edit", "routes/order_.$id.edit.tsx"),
+    route("order/:id/return", "routes/order_.$id.return.tsx"),
     route("api/shipping-rates", "routes/api.shipping-rates.ts"),
     route("api/checkout-session", "routes/api.checkout-session.ts"),
     // Cart API routes
@@ -28,6 +31,9 @@ export default [
     route("api/payment-collections/:id/sessions", "routes/api.payment-collections.$id.sessions.ts"),
     // Utility routes
     route("api/health", "routes/api.health.ts"),
+    route("api/set-guest-token", "routes/api.set-guest-token.ts"),
+    // Order API routes
+    route("api/orders/:id/batch-modify", "routes/api.orders.$id.batch-modify.ts"),
     route("blog/:id", "routes/blog.$id.tsx"),
     // SEO routes
     route("sitemap.xml", "routes/sitemap[.]xml.tsx"),

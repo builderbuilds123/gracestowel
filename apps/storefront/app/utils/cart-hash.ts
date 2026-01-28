@@ -13,12 +13,13 @@ export function generateCartHash(
   currency: string = "CAD",
   cartTotal: number = 0
 ): string {
+  // Issue #20: Use .toSorted() for immutability
   const itemsString = cartItems
     .map(
       (item) =>
         `${item.id}-${item.variantId}-${item.quantity}`
     )
-    .sort()
+    .toSorted()
     .join("|");
 
   const addressString = address

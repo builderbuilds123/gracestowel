@@ -1,4 +1,5 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
+import { updateOrderWorkflow } from "@medusajs/medusa/core-flows";
 import { modificationTokenService } from "../../../../../services/modification-token";
 import { logger } from "../../../../../utils/logger";
 import { formatModificationWindow } from "../../../../../lib/payment-capture-queue";
@@ -181,25 +182,27 @@ export async function POST(
     }
 
     try {
-        // Update the shipping address
-        const orderService = req.scope.resolve("order");
-        
-        await orderService.updateOrders([{
-            id,
-            shipping_address: {
-                first_name: address.first_name,
-                last_name: address.last_name,
-                address_1: address.address_1,
-                address_2: address.address_2 || "",
-                city: address.city,
-                province: address.province || "",
-                postal_code: address.postal_code,
-                country_code: address.country_code.toLowerCase(),
-                phone: address.phone || "",
+        // Update the shipping address using Medusa v2 workflow
+        // Note: updateOrderWorkflow requires user_id - use "guest" for guest modifications
+        const { result } = await updateOrderWorkflow(req.scope).run({
+            input: {
+                id,
+                user_id: "guest", // Guest order modification
+                shipping_address: {
+                    first_name: address.first_name,
+                    last_name: address.last_name,
+                    address_1: address.address_1,
+                    address_2: address.address_2 || null,
+                    city: address.city,
+                    province: address.province || null,
+                    postal_code: address.postal_code,
+                    country_code: address.country_code.toLowerCase(),
+                    phone: address.phone || null,
+                },
             },
-        }]);
+        });
 
-        logger.info("order-address", "Address updated", { orderId: id });
+        logger.info("order-address", "Address updated via workflow", { orderId: id });
 
         res.status(200).json({
             success: true,
@@ -208,6 +211,17 @@ export async function POST(
             new_address: address,
         });
     } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+
+        // Handle specific workflow errors
+        if (errorMessage.includes("country_code")) {
+            res.status(400).json({
+                code: "COUNTRY_CHANGE_NOT_ALLOWED",
+                message: "Changing the country is not allowed. Please contact support.",
+            });
+            return;
+        }
+
         logger.error("order-address", "Error updating address", { orderId: id }, error instanceof Error ? error : new Error(String(error)));
         res.status(500).json({
             code: "UPDATE_FAILED",

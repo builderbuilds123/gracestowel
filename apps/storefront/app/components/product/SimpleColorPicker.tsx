@@ -1,4 +1,4 @@
-import { Check } from "lucide-react";
+import { Check } from "../../lib/icons";
 
 interface ColorOption {
   name: string;
@@ -46,13 +46,13 @@ export function SimpleColorPicker({
               aria-label={`Select ${color.name}`}
               aria-pressed={isSelected}
             >
-              {isSelected && (
+              {isSelected ? (
                 <span className="absolute inset-0 flex items-center justify-center">
                   <Check
                     className={`w-4 h-4 ${isLight ? "text-text-earthy" : "text-white"}`}
                   />
                 </span>
-              )}
+              ) : null}
             </button>
           );
         })}

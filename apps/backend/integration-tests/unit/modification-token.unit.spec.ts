@@ -213,7 +213,9 @@ describe("ModificationTokenService", () => {
 
   describe("expiry logic - custom createdAt", () => {
     it("should expire token based on provided createdAt", () => {
-      const service = new ModificationTokenService();
+      // Use a service with 1-hour window (3600 seconds) for this test
+      const oneHourWindowSeconds = 60 * 60; // 1 hour
+      const service = new ModificationTokenService(undefined, oneHourWindowSeconds);
       // Order created 2 hours ago
       const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
 
@@ -233,7 +235,9 @@ describe("ModificationTokenService", () => {
 
     // SEC-03 AC1: Token for order created exactly 90 minutes ago should be expired
     it("should expire token for order created exactly 90 minutes ago", () => {
-      const service = new ModificationTokenService();
+      // Use a service with 1-hour window (3600 seconds) for this test
+      const oneHourWindowSeconds = 60 * 60; // 1 hour
+      const service = new ModificationTokenService(undefined, oneHourWindowSeconds);
       // Order created exactly 90 minutes ago (AC1 requirement)
       const ninetyMinutesAgo = new Date(Date.now() - 90 * 60 * 1000);
 

@@ -2,6 +2,8 @@ import { loadEnv, defineConfig } from '@medusajs/framework/utils'
 
 loadEnv(process.env.NODE_ENV || 'development', process.cwd())
 
+const isIntegrationTest = process.env.TEST_TYPE?.startsWith("integration")
+
 module.exports = defineConfig({
   projectConfig: {
     databaseUrl: process.env.DATABASE_URL,
@@ -38,34 +40,57 @@ module.exports = defineConfig({
   },
   modules: [
     {
-      resolve: "@medusajs/medusa/analytics",
+      resolve: "@medusajs/medusa/auth",
       options: {
-        providers: process.env.NODE_ENV === "production"
-          ? [
-              {
-                resolve: "@medusajs/analytics-posthog",
-                id: "posthog",
-                options: {
-                  posthogEventsKey: process.env.POSTHOG_EVENTS_API_KEY,
-                  posthogHost: process.env.POSTHOG_HOST,
-                },
-              },
-            ]
-          : [
-              {
-                resolve: "@medusajs/analytics-local",
-                id: "local",
-              },
-            ],
+        providers: [
+          {
+            resolve: "@medusajs/auth-emailpass",
+            id: "emailpass",
+          },
+          {
+            resolve: "@medusajs/auth-google",
+            id: "google",
+            options: {
+              clientId: process.env.GOOGLE_CLIENT_ID,
+              clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+              callbackUrl: process.env.GOOGLE_CALLBACK_URL,
+            },
+          },
+        ],
       },
     },
+    // Temporarily disabled to debug auth issue
+    // {
+    //   resolve: "@medusajs/medusa/analytics",
+    //   options: {
+    //     providers: process.env.NODE_ENV === "production"
+    //       ? [
+    //           {
+    //             resolve: "@medusajs/analytics-posthog",
+    //             id: "posthog",
+    //             options: {
+    //               posthogEventsKey: process.env.POSTHOG_EVENTS_API_KEY,
+    //               posthogHost: process.env.POSTHOG_HOST,
+    //             },
+    //           },
+    //         ]
+    //       : [
+    //           {
+    //             resolve: "@medusajs/analytics-local",
+    //             id: "local",
+    //           },
+    //         ],
+    //   },
+    // },
     {
       // Event bus backed by Redis for durable cross-instance delivery (useful in dev/staging/prod)
       key: "eventBusService",
-      resolve: "@medusajs/event-bus-redis",
-      options: {
-        redisUrl: process.env.REDIS_URL || "redis://localhost:6379",
-      },
+      resolve: isIntegrationTest ? "@medusajs/event-bus-local" : "@medusajs/event-bus-redis",
+      options: isIntegrationTest
+        ? {}
+        : {
+            redisUrl: process.env.REDIS_URL || "redis://localhost:6379",
+          },
     },
     {
       resolve: "@medusajs/file",
@@ -134,7 +159,7 @@ module.exports = defineConfig({
       options: {
         providers: [
           {
-            resolve: "@medusajs/payment-stripe",
+            resolve: "./src/modules/stripePartialCapture",
             options: {
               apiKey: process.env.STRIPE_SECRET_KEY,
               webhookSecret: process.env.STRIPE_WEBHOOK_SECRET,

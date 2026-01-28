@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Minus, Plus, ShoppingBag, Check } from "lucide-react";
+import React, { useState } from "react";
+import { Minus, Plus, ShoppingBag, Check } from "../../lib/icons";
 import { SimpleColorPicker } from "./SimpleColorPicker";
 import { Accordion, AccordionItem } from "../ui/Accordion";
 import type { ProductDetail } from "../../lib/product-transformer";
@@ -22,8 +22,9 @@ interface ProductInfoProps {
 
 /**
  * Product information panel with purchase controls
+ * ✅ Memoized component to prevent unnecessary re-renders (Issue #7 fix)
  */
-export function ProductInfo({
+export const ProductInfo = React.memo(function ProductInfo({
   product,
   colors,
   selectedColor,
@@ -60,33 +61,33 @@ export function ProductInfo({
         <span className="text-2xl md:text-3xl font-serif text-accent-earthy">
           {product.formattedPrice}
         </span>
-        {product.originalPrice && product.originalPrice > product.price && (
+        {product.originalPrice && product.originalPrice > product.price ? (
           <span className="text-lg text-text-earthy/50 line-through">
             ${product.originalPrice.toFixed(2)}
           </span>
-        )}
+        ) : null}
       </div>
 
       {/* Description */}
-      {product.description && (
+      {product.description ? (
         <p className="text-text-earthy/70 leading-relaxed">
           {product.description}
         </p>
-      )}
+      ) : null}
 
       {/* Color Selection */}
-      {colors.length > 0 && (
+      {colors.length > 0 ? (
         <SimpleColorPicker
           colors={colors}
           selectedColor={selectedColor}
           onColorChange={onColorChange}
         />
-      )}
+      ) : null}
 
       {/* Stock Status */}
-      {isOutOfStock && (
+      {isOutOfStock ? (
         <p className="text-red-600 font-medium">Out of Stock</p>
-      )}
+      ) : null}
 
       {/* Quantity and Add to Cart */}
       <div className="flex flex-col sm:flex-row gap-4">
@@ -147,7 +148,7 @@ export function ProductInfo({
       {/* Features List (if available) */}
        {/* Product Details Accordion */}
        <Accordion>
-         {product.features && product.features.length > 0 && (
+         {product.features && product.features.length > 0 ? (
            <AccordionItem title="Details" defaultOpen={true}>
              <ul className="space-y-2">
                {product.features.map((feature) => (
@@ -158,9 +159,9 @@ export function ProductInfo({
                ))}
              </ul>
            </AccordionItem>
-         )}
+         ) : null}
 
-         {product.dimensions && product.dimensions.length > 0 && (
+         {product.dimensions && product.dimensions.length > 0 ? (
            <AccordionItem title="Dimensions">
              <ul className="space-y-1">
                {product.dimensions.map((dim) => (
@@ -171,9 +172,9 @@ export function ProductInfo({
                ))}
              </ul>
            </AccordionItem>
-         )}
+         ) : null}
 
-         {product.careInstructions && product.careInstructions.length > 0 && (
+         {product.careInstructions && product.careInstructions.length > 0 ? (
            <AccordionItem title="Care Guide">
              <ul className="space-y-2">
                {product.careInstructions.map((instruction) => (
@@ -184,8 +185,19 @@ export function ProductInfo({
                ))}
              </ul>
            </AccordionItem>
-         )}
+         ) : null}
        </Accordion>
     </div>
   );
-}
+}, (prevProps, nextProps) => {
+    // Custom comparison function - only re-render if these props actually changed
+    return (
+        prevProps.product.id === nextProps.product.id &&
+        prevProps.product.price === nextProps.product.price &&
+        prevProps.selectedColor === nextProps.selectedColor &&
+        prevProps.quantity === nextProps.quantity &&
+        prevProps.isOutOfStock === nextProps.isOutOfStock &&
+        prevProps.colors.length === nextProps.colors.length &&
+        prevProps.colors.every((c, i) => c.name === nextProps.colors[i]?.name && c.hex === nextProps.colors[i]?.hex)
+    );
+});

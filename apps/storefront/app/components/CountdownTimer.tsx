@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Clock } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Clock } from "../lib/icons";
 
 interface CountdownTimerProps {
     /** Remaining time in seconds */
@@ -16,6 +16,13 @@ interface CountdownTimerProps {
  */
 export function CountdownTimer({ remainingSeconds, onExpire, className = "" }: CountdownTimerProps) {
     const [timeLeft, setTimeLeft] = useState(remainingSeconds);
+    // Issue #40: Use useRef to stabilize callback and avoid unnecessary effect re-runs
+    const onExpireRef = useRef(onExpire);
+
+    // Update ref when callback changes
+    useEffect(() => {
+        onExpireRef.current = onExpire;
+    }, [onExpire]);
 
     useEffect(() => {
         // Reset timer when remainingSeconds prop changes
@@ -24,7 +31,7 @@ export function CountdownTimer({ remainingSeconds, onExpire, className = "" }: C
 
     useEffect(() => {
         if (timeLeft <= 0) {
-            onExpire?.();
+            onExpireRef.current?.();
             return;
         }
 
@@ -32,7 +39,7 @@ export function CountdownTimer({ remainingSeconds, onExpire, className = "" }: C
             setTimeLeft((prev) => {
                 if (prev <= 1) {
                     clearInterval(timer);
-                    onExpire?.();
+                    onExpireRef.current?.();
                     return 0;
                 }
                 return prev - 1;
@@ -40,7 +47,7 @@ export function CountdownTimer({ remainingSeconds, onExpire, className = "" }: C
         }, 1000);
 
         return () => clearInterval(timer);
-    }, [timeLeft, onExpire]);
+    }, [timeLeft]); // Issue #40: Removed onExpire from dependencies
 
     // Format time as MM:SS
     const minutes = Math.floor(timeLeft / 60);

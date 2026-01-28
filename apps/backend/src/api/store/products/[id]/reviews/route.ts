@@ -1,9 +1,34 @@
-import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
-import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
+import type {
+  MedusaRequest,
+  MedusaResponse,
+  AuthenticatedMedusaRequest,
+} from "@medusajs/framework/http"
+import { ContainerRegistrationKeys, MedusaError } from "@medusajs/framework/utils"
 import { REVIEW_MODULE } from "../../../../../modules/review"
 import type ReviewModuleService from "../../../../../modules/review/service"
-
+import { createReviewWorkflow } from "../../../../../workflows/create-review"
+import { z } from "zod"
 import sanitizeHtml from "sanitize-html"
+
+export const CreateStoreReviewSchema = z.object({
+  rating: z.number().min(1).max(5),
+  title: z.string().min(3).max(100),
+  content: z.string().min(10).max(1000),
+})
+export type CreateStoreReviewBody = z.infer<typeof CreateStoreReviewSchema>
+
+/**
+ * Schema for GET /store/products/:id/reviews list query params.
+ * Compatible with validateAndTransformQuery + req.queryConfig (createFindParams pattern).
+ * sort is kept for backward compatibility; order takes precedence when present.
+ */
+export const GetStoreProductReviewsSchema = z.object({
+  limit: z.coerce.number().optional(),
+  offset: z.coerce.number().optional(),
+  order: z.string().optional(),
+  fields: z.string().optional(),
+  sort: z.enum(["newest", "oldest", "highest", "lowest", "helpful"]).optional(),
+})
 
 /**
  * Sanitize user input to prevent XSS attacks
@@ -25,75 +50,50 @@ function sanitizeInput(input: string): string {
 }
 
 /**
- * Validate email format
- */
-function isValidEmail(email: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
-}
-
-interface OrderItem {
-  variant?: {
-    product_id?: string
-    product?: {
-      id?: string
-    }
-  }
-  product_id?: string
-}
-
-interface Order {
-  id: string
-  email?: string
-  customer_id?: string
-  status?: string
-  fulfillment_status?: string
-  items?: OrderItem[]
-}
-
-/**
  * GET /store/products/:id/reviews
- * Get all approved reviews for a product
+ * Get all approved reviews for a product. Uses req.queryConfig when validateAndTransformQuery middleware runs.
  */
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
   const { id } = req.params
-  const { limit = "10", offset = "0", sort = "newest" } = req.query as {
-    limit?: string
-    offset?: string
-    sort?: "newest" | "oldest" | "highest" | "lowest" | "helpful"
-  }
-
   const reviewService = req.scope.resolve<ReviewModuleService>(REVIEW_MODULE)
 
-  // Determine sort order
-  let order: { [key: string]: "ASC" | "DESC" } = { created_at: "DESC" }
-  switch (sort) {
-    case "oldest":
-      order = { created_at: "ASC" }
-      break
-    case "highest":
-      order = { rating: "DESC" }
-      break
-    case "lowest":
-      order = { rating: "ASC" }
-      break
-    case "helpful":
-      order = { helpful_count: "DESC" }
-      break
-  }
+  const pagination = req.queryConfig?.pagination as
+    | { take?: number; skip?: number; order?: Record<string, "ASC" | "DESC"> }
+    | undefined
+  const take = Math.min(pagination?.take ?? 10, 50)
+  const skip = pagination?.skip ?? 0
+  const sort = (req.validatedQuery as { sort?: string } | undefined)?.sort ?? "newest"
 
-  const parsedLimit = Math.min(parseInt(limit) || 10, 50) // Max 50 per page
-  const parsedOffset = parseInt(offset) || 0
+  let order: { [key: string]: "ASC" | "DESC" } =
+    (pagination?.order as { [key: string]: "ASC" | "DESC" }) ?? { created_at: "DESC" }
+  if (!pagination?.order) {
+    switch (sort) {
+      case "oldest":
+        order = { created_at: "ASC" }
+        break
+      case "highest":
+        order = { rating: "DESC" }
+        break
+      case "lowest":
+        order = { rating: "ASC" }
+        break
+      case "helpful":
+        order = { helpful_count: "DESC" }
+        break
+      default:
+        order = { created_at: "DESC" }
+    }
+  }
 
   const { reviews, count } = await reviewService.getProductReviews(id, {
     status: "approved",
-    limit: parsedLimit,
-    offset: parsedOffset,
+    limit: take,
+    offset: skip,
     order,
   })
 
   const stats = await reviewService.getProductRatingStats(id)
 
-  // Response format matching API contract
   res.json({
     reviews: reviews.map((r) => ({
       id: r.id,
@@ -108,72 +108,33 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
     stats,
     pagination: {
       total: count,
-      limit: parsedLimit,
-      offset: parsedOffset,
-      has_more: parsedOffset + parsedLimit < count,
+      limit: take,
+      offset: skip,
+      has_more: skip + take < count,
     },
   })
 }
 
 /**
  * POST /store/products/:id/reviews
- * Create a new review for a product
- *
- * Requirements:
- * - Customer must be authenticated
- * - Customer must have purchased the product (verified buyer)
- * - Customer cannot have already reviewed this product
- * - 4-5 star reviews auto-approve, 1-3 star require moderation
+ * Create a new review for a product.
+ * Validation, duplicate check, purchase verification, and approval logic run in the workflow.
  */
-export async function POST(req: MedusaRequest, res: MedusaResponse) {
+export async function POST(
+  req: AuthenticatedMedusaRequest<CreateStoreReviewBody>,
+  res: MedusaResponse
+) {
   const { id: productId } = req.params
-  const { rating, title, content } = req.body as {
-    rating: number
-    title: string
-    content: string
-  }
+  const { rating, title, content } = req.validatedBody
 
-  // 1. Check authentication - customer must be logged in
-  const customerId = (req as any).auth_context?.actor_id
+  const customerId = req.auth_context?.actor_id
   if (!customerId) {
     return res.status(401).json({
       message: "You must be logged in to submit a review"
     })
   }
 
-  // 2. Validate input
-  if (!rating || rating < 1 || rating > 5) {
-    return res.status(400).json({ message: "Rating must be between 1 and 5" })
-  }
-
-  if (!title || title.length < 3) {
-    return res.status(400).json({ message: "Title must be at least 3 characters" })
-  }
-
-  if (title.length > 100) {
-    return res.status(400).json({ message: "Title must be at most 100 characters" })
-  }
-
-  if (!content || content.length < 10) {
-    return res.status(400).json({ message: "Review content must be at least 10 characters" })
-  }
-
-  if (content.length > 1000) {
-    return res.status(400).json({ message: "Review content must be at most 1000 characters" })
-  }
-
-  const reviewService = req.scope.resolve<ReviewModuleService>(REVIEW_MODULE)
   const query = req.scope.resolve(ContainerRegistrationKeys.QUERY)
-
-  // 3. Check for duplicate review
-  const hasReviewed = await reviewService.hasCustomerReviewed(productId, customerId)
-  if (hasReviewed) {
-    return res.status(400).json({
-      message: "You have already reviewed this product"
-    })
-  }
-
-  // 4. Get customer details
   const { data: customers } = await query.graph({
     entity: "customer",
     fields: ["id", "email", "first_name", "last_name"],
@@ -181,98 +142,60 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
   })
 
   if (!customers || customers.length === 0) {
-    return res.status(401).json({
-      message: "Customer not found"
-    })
+    return res.status(401).json({ message: "Customer not found" })
   }
 
-  const customer = customers[0]
-  const customerEmail = customer.email || ""
-  const customerName = [customer.first_name, customer.last_name]
-    .filter(Boolean)
-    .join(" ") || "Anonymous"
+  const customer = customers[0] as { email?: string; first_name?: string; last_name?: string }
+  const customerName =
+    [customer.first_name, customer.last_name].filter(Boolean).join(" ") || "Anonymous"
+  const customerEmail = customer.email ?? ""
 
-  // 5. Verify purchase - check if customer has a completed/fulfilled order with this product
-  const { data: orders } = await query.graph({
-    entity: "order",
-    fields: [
-      "id",
-      "email",
-      "customer_id",
-      "status",
-      "fulfillment_status",
-      "items.variant.product_id",
-      "items.variant.product.id",
-    ],
-    filters: {
-      customer_id: customerId,
-    },
-  }) as { data: Order[] }
-
-  // Find an order that:
-  // 1. Has matching customer_id (already filtered)
-  // 2. Has status completed OR fulfillment_status fulfilled/shipped
-  // 3. Contains an item with the product being reviewed
-  const matchingOrder = orders.find((order) => {
-    // Check if order is completed/fulfilled
-    const isCompleted =
-      order.status === "completed" ||
-      order.fulfillment_status === "fulfilled" ||
-      order.fulfillment_status === "shipped"
-
-    if (!isCompleted) return false
-
-    // Check if order contains the product
-    return order.items?.some((item) => {
-      const itemProductId =
-        item.variant?.product_id ||
-        item.variant?.product?.id ||
-        item.product_id
-      return itemProductId === productId
-    })
-  })
-
-  if (!matchingOrder) {
-    return res.status(403).json({
-      message: "You must purchase this product before reviewing"
-    })
-  }
-
-  // 6. Sanitize input (XSS prevention)
   const sanitizedTitle = sanitizeInput(title)
   const sanitizedContent = sanitizeInput(content)
 
-  // 7. Determine approval status (smart approval)
-  // 4-5 star reviews from verified buyers auto-approve
-  const status = reviewService.getAutoApprovalStatus(Math.round(rating), true)
+  try {
+    const { result } = await createReviewWorkflow(req.scope).run({
+      input: {
+        product_id: productId,
+        customer_id: customerId,
+        customer_name: customerName,
+        customer_email: customerEmail,
+        rating: Math.round(rating),
+        title: sanitizedTitle,
+        content: sanitizedContent,
+      },
+    })
 
-  // 8. Create the review
-  const review = await reviewService.createReviews({
-    product_id: productId,
-    customer_id: customerId,
-    customer_name: customerName,
-    customer_email: customerEmail,
-    order_id: matchingOrder.id ? String(matchingOrder.id) : undefined, // Audit trail
-    rating: Math.round(rating),
-    title: sanitizedTitle,
-    content: sanitizedContent,
-    verified_purchase: true, // Always true for verified-only system
-    status,
-  })
+    const review = result.review
+    const status = (review as { status?: string }).status ?? "pending"
+    const message =
+      status === "approved"
+        ? "Thank you for your verified review!"
+        : "Thank you for your review! It will be visible after approval."
 
-  const message = status === "approved"
-    ? "Thank you for your verified review!"
-    : "Thank you for your review! It will be visible after approval."
-
-  res.status(201).json({
-    review: {
-      id: review.id,
-      rating: review.rating,
-      title: review.title,
-      verified_purchase: review.verified_purchase,
-      created_at: review.created_at,
-    },
-    message,
-  })
+    res.status(201).json({
+      review: {
+        id: review.id,
+        rating: review.rating,
+        title: review.title,
+        verified_purchase: review.verified_purchase,
+        created_at: review.created_at,
+      },
+      message,
+    })
+  } catch (error) {
+    if (error instanceof MedusaError) {
+      if (error.type === MedusaError.Types.INVALID_DATA) {
+        return res.status(400).json({ message: error.message })
+      }
+      if (error.type === MedusaError.Types.CONFLICT) {
+        return res.status(400).json({ message: error.message })
+      }
+      if (error.type === MedusaError.Types.NOT_ALLOWED) {
+        return res.status(403).json({ message: error.message })
+      }
+    }
+    throw error
+  }
 }
 

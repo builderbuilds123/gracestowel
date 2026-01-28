@@ -63,6 +63,7 @@ export interface ProductVariant {
         amount: number;
         currency_code: string;
     }>;
+    images?: string[];
 }
 
 /**

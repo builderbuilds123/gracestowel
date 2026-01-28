@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { Check } from "lucide-react";
+import { Check } from "../../lib/icons";
 import { useInViewReveal } from "./hooks";
 
 interface ColorOption {
@@ -73,7 +73,7 @@ export function ColorMorpher({
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
           {/* Color preview - shows product in selected color */}
-          {productImage && (
+          {productImage ? (
             <div
               className={`relative aspect-square rounded-3xl overflow-hidden shadow-soft-lg transition-all duration-700 ${
                 isInView ? "opacity-100 scale-100" : "opacity-0 scale-95"
@@ -96,7 +96,7 @@ export function ColorMorpher({
                 style={{ backgroundColor: displayColorData?.hex || "transparent" }}
               />
             </div>
-          )}
+          ) : null}
 
           {/* Color selection area */}
           <div className="space-y-8">
@@ -141,7 +141,7 @@ export function ColorMorpher({
                     aria-pressed={selectedColor === color.name}
                   >
                     {/* Check mark for selected */}
-                    {selectedColor === color.name && (
+                    {selectedColor === color.name ? (
                       <span className="absolute inset-0 flex items-center justify-center">
                         <Check
                           className={`w-6 h-6 ${
@@ -149,12 +149,12 @@ export function ColorMorpher({
                           }`}
                         />
                       </span>
-                    )}
+                    ) : null}
 
                     {/* Ripple effect on hover */}
-                    {hoveredColor === color.name && selectedColor !== color.name && (
+                    {hoveredColor === color.name && selectedColor !== color.name ? (
                       <span className="absolute inset-0 rounded-full border-2 border-current opacity-50 animate-pulse-soft" />
-                    )}
+                    ) : null}
                   </button>
                 ))}
               </div>
@@ -201,7 +201,7 @@ export function ColorMorpher({
                 className="w-6 h-6 rounded-full border-2 border-text-earthy/20 transition-all duration-300"
                 style={{ backgroundColor: colors.find((c) => c.name === selectedColor)?.hex }}
               />
-              {hoveredColor && hoveredColor !== selectedColor && (
+              {hoveredColor && hoveredColor !== selectedColor ? (
                 <>
                   <span className="text-sm text-text-earthy/50">→</span>
                   <span
@@ -209,7 +209,7 @@ export function ColorMorpher({
                     style={{ backgroundColor: displayColorData?.hex }}
                   />
                 </>
-              )}
+              ) : null}
             </div>
           </div>
         </div>

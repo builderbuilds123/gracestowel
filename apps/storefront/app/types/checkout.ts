@@ -1,4 +1,12 @@
-import type { ShippingOption } from "../components/CheckoutForm";
+// ShippingOption type - extracted from CheckoutForm to avoid static imports
+export interface ShippingOption {
+    id: string;
+    displayName: string;
+    amount: number;
+    originalAmount?: number;
+    isFree?: boolean;
+    deliveryEstimate?: string;
+}
 
 export type CheckoutStatus = 
   | 'idle'

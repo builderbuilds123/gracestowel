@@ -1,4 +1,4 @@
-import { Truck, Gift, PartyPopper } from "lucide-react";
+import { Truck, Gift, PartyPopper } from "../lib/icons";
 import { formatCurrency } from "../utils/format-currency";
 
 interface CartProgressBarProps {

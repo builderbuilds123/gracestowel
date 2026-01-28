@@ -4,56 +4,85 @@ import { Product } from "../../support/factories/product-factory";
 // Skip tests if MEDUSA_PUBLISHABLE_KEY is not configured (e.g., local dev without full setup)
 const skipIfNoKey = !process.env.MEDUSA_PUBLISHABLE_KEY;
 
+// Check if backend is available
+const backendUrl = process.env.API_URL || process.env.BACKEND_URL || "http://localhost:9000";
+const skipIfNoBackend = skipIfNoKey; // Will be updated if we can't connect
+
 test.describe("Backend API workflows (admin)", () => {
   test.skip(skipIfNoKey, "MEDUSA_PUBLISHABLE_KEY environment variable is required for backend API tests");
+  
+  // Add a setup test to check backend availability
+  test.beforeAll(async ({ request }) => {
+    try {
+      const response = await request.get(`${backendUrl}/health`, { timeout: 5000 });
+      if (!response.ok()) {
+        test.skip(true, `Backend not available at ${backendUrl} (status: ${response.status()})`);
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes('ECONNREFUSED') || errorMessage.includes('fetch failed') || errorMessage.includes('timeout')) {
+        test.skip(true, `Backend not running at ${backendUrl}. Start with: pnpm dev:backend`);
+      }
+    }
+  });
 
   test("products catalog CRUD with publish/unpublish and pricing updates", async ({
     apiRequest,
     productFactory,
   }) => {
     const product = await productFactory.createProduct();
-    test.skip(!product.id, "Product creation endpoint unavailable");
+    test.skip(!product.id || product.id === 'mock-product-id', "Backend not available or product creation endpoint unavailable");
+    const originalTitle = product.title;
+    const originalStatus = product.status || "published";
 
-    const published = await apiRequest<{ product: { status: string } }>({
-      method: "POST",
-      url: `/admin/products/${product.id}`,
-      data: { status: "published", title: `${product.title} Updated` },
-    });
-    expect(published.product.status).toBe("published");
+    try {
+      const published = await apiRequest<{ product: { status: string } }>({
+        method: "POST",
+        url: `/admin/products/${product.id}`,
+        data: { status: "published", title: `${product.title} Updated` },
+      });
+      expect(published.product.status).toBe("published");
 
-    const unpublished = await apiRequest<{ product: { status: string } }>({
-      method: "POST",
-      url: `/admin/products/${product.id}`,
-      data: { status: "draft" },
-    });
-    expect(unpublished.product.status).toBe("draft");
+      const unpublished = await apiRequest<{ product: { status: string } }>({
+        method: "POST",
+        url: `/admin/products/${product.id}`,
+        data: { status: "draft" },
+      });
+      expect(unpublished.product.status).toBe("draft");
 
-    // Verify update (V2 style: update variant price via variant endpoint)
-    const variantId = product.variants?.[0]?.id || (product as any).variant_id;
-    const existingUsdPrice = product.variants?.[0]?.prices?.find((p: any) => p.currency_code === "usd");
-    
-    await apiRequest({
-      method: "POST",
-      url: `/admin/products/${product.id}/variants/${variantId}`,
-      data: {
-        prices: [
-          {
-            id: existingUsdPrice?.id,
-            amount: 1500,
-            currency_code: "usd",
-          },
-        ],
-      },
-    });
+      // Verify update (V2 style: update variant price via variant endpoint)
+      const variantId = product.variants?.[0]?.id || (product as any).variant_id;
+      const existingUsdPrice = product.variants?.[0]?.prices?.find((p: any) => p.currency_code === "usd");
+      
+      await apiRequest({
+        method: "POST",
+        url: `/admin/products/${product.id}/variants/${variantId}`,
+        data: {
+          prices: [
+            {
+              id: existingUsdPrice?.id,
+              amount: 1500,
+              currency_code: "usd",
+            },
+          ],
+        },
+      });
 
-    const updatedResponse = await apiRequest<{ product: Product }>({
-      method: "GET",
-      url: `/admin/products/${product.id}`,
-    });
+      const updatedResponse = await apiRequest<{ product: Product }>({
+        method: "GET",
+        url: `/admin/products/${product.id}`,
+      });
 
-    const updatedVariant = updatedResponse.product.variants?.[0];
-    const usdPrice = updatedVariant?.prices?.find((p: any) => p.currency_code === "usd");
-    expect(usdPrice?.amount).toBe(1500);
+      const updatedVariant = updatedResponse.product.variants?.[0];
+      const usdPrice = updatedVariant?.prices?.find((p: any) => p.currency_code === "usd");
+      expect(usdPrice?.amount).toBe(1500);
+    } finally {
+      await apiRequest({
+        method: "POST",
+        url: `/admin/products/${product.id}`,
+        data: { status: originalStatus, title: originalTitle },
+      });
+    }
   });
 
   test("customers issue tokens and manage addresses", async ({
@@ -87,7 +116,7 @@ test.describe("Backend API workflows (admin)", () => {
     paymentFactory,
   }) => {
     const product = await productFactory.createProduct();
-    test.skip(!product.id, "Product creation failed");
+    test.skip(!product.id || product.id === 'mock-product-id', "Backend not available or product creation failed");
 
     const variantId = product.variants?.[0]?.id || (product as any).variant_id;
 

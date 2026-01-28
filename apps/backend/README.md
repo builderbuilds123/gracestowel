@@ -78,6 +78,13 @@ REDIS_URL=${{Redis.REDIS_PRIVATE_URL}}
    railway run npx medusa user create
    ```
 
+## Local Product Images (uploads)
+
+- **Storage:** `apps/backend/uploads` is used for local product image files when using `@medusajs/file-local` (e.g. no S3 in dev).
+- **Config:** `medusa-config.ts` sets `upload_dir: "uploads"` and `backend_url` for the file-local provider.
+- **Serving:** `GET /uploads/:filename` is implemented in `src/api/uploads/[filename]/route.ts` and serves files from `uploads/`. The seed stores image URLs as `/uploads/...`; the storefront rewrites these to `MEDUSA_BACKEND_URL + /uploads/...` and loads them from the backend.
+- **Note:** `uploads/` is in `.gitignore`. Seed or copy scripts must populate it; see `seed-images.unit.spec.ts` and `src/scripts/seed.ts`.
+
 ## Key Configuration Files
 
 - **`medusa-config.ts`**: Main Medusa configuration, includes Redis and database URLs

@@ -559,3 +559,70 @@ development_status:
     meta: "Customer address CRUD: reuse EditAddressDialog, add/edit/delete in account. 3-5 points. HIGH PRIORITY."
     created: "2026-01-19"
   cust-epic-1-retrospective: optional
+
+  # --- Order Modification V2 (from docs/product/epics/order-modification-v2.md) ---
+  # Epic ID: OM-V2
+  # Date: 2025-01-23
+  # Status: Comprehensive review completed, all critical issues fixed, ready for implementation
+  om-v2-epic-1: backlog
+  om-v2-1-1-make-payment-capture-delay-configurable:
+    status: backlog
+    meta: "Make capture delay configurable via PAYMENT_CAPTURE_DELAY_MS env var, default 3 days (259200000ms)"
+  om-v2-1-2-fix-idempotency-key:
+    status: backlog
+    meta: "CRITICAL BUG FIX: Change idempotency key from time-based to order+PI based (capture_{orderId}_{paymentIntentId})"
+  om-v2-1-3-implement-fulfillment-triggered-capture:
+    status: backlog
+    meta: "Capture payment immediately when fulfillment is created, remove scheduled fallback job"
+  om-v2-1-4-implement-order-edit-eligibility-check:
+    status: backlog
+    meta: "Validate unfulfilled + requires_capture status before allowing edits, return specific error codes"
+  om-v2-1-5-migrate-to-medusa-native-order-edit-workflows:
+    status: backlog
+    meta: "Use Medusa v2 workflows: beginOrderEditOrderWorkflow, updateOrderWorkflow, updateOrderEditShippingMethodWorkflow, confirmOrderEditRequestWorkflow"
+  om-v2-1-6-add-token-security-ceiling:
+    status: backlog
+    meta: "Token expiry = min(captureDelay, TOKEN_MAX_AGE), default TOKEN_MAX_AGE_HOURS=168 (7 days)"
+  om-v2-1-7-add-rate-limiting-for-order-edit-endpoints:
+    status: backlog
+    meta: "Rate limit: 10 requests per minute per order, configurable via ORDER_EDIT_RATE_LIMIT_PER_MINUTE"
+  om-v2-epic-1-retrospective: optional
+
+  om-v2-epic-2: backlog
+  om-v2-2-1-guest-authentication-verification:
+    status: backlog
+    meta: "Verification only - ensure existing guest token auth works with 3-day window"
+  om-v2-2-2-add-medusa-auth-middleware-for-customer-authentication:
+    status: backlog
+    meta: "Add authenticate() middleware to order routes, allowUnauthenticated: true for dual auth support"
+  om-v2-2-3-create-unified-authentication-function:
+    status: backlog
+    meta: "Create authenticateOrderAccess() function handling both customer session and guest token auth"
+  om-v2-2-4-frontend-detect-auth-method-in-order-status-loader:
+    status: backlog
+    meta: "Frontend loader checks customer session first, then guest token, sets appropriate auth headers"
+  om-v2-2-5-add-audit-logging-for-modification-attempts:
+    status: backlog
+    meta: "Log all modification attempts: orderId, action, authMethod, customerId, tokenHash, IP, userAgent, success/failure"
+  om-v2-epic-2-retrospective: optional
+
+  om-v2-epic-3: backlog
+  om-v2-3-1-add-order-state-to-cartcontext:
+    status: backlog
+    meta: "Add activeOrder state to CartContext with sessionStorage, 24-hour expiry, clears on fulfillment"
+  om-v2-3-2-update-cartdrawer-for-order-modification:
+    status: backlog
+    meta: "Show 'Modify Order' header, 'Order Confirmed' banner, order items, 'Update Order' button"
+  om-v2-3-3-implement-checkout-edit-mode:
+    status: backlog
+    meta: "Reuse checkout page for editing: pre-fill fields, disable email/payment, show 'Save Changes' button"
+  om-v2-epic-3-retrospective: optional
+
+  om-v2-epic-4: backlog
+  om-v2-4-1-implement-user-friendly-error-messages:
+    status: backlog
+    meta: "Map error codes to human-readable messages with call-to-action, no internal details exposed"
+  om-v2-4-2-remove-countdown-timer:
+    status: backlog
+    meta: "Replace countdown timer with simple status message: 'You can modify this order until it ships.'"
+  om-v2-epic-4-retrospective: optional

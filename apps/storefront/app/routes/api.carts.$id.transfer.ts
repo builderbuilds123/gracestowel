@@ -2,12 +2,16 @@ import { type ActionFunctionArgs, data } from "react-router";
 import { medusaFetch } from "../lib/medusa-fetch";
 import type { CloudflareEnv } from "../utils/monitored-fetch";
 import { resolveCSRFSecret, validateCSRFToken } from "../utils/csrf.server";
+import { createLogger, getTraceIdFromRequest } from "../lib/logger";
 
 /**
  * POST /api/carts/:id/transfer
  * Transfer a guest cart to an authenticated customer
  */
 export async function action({ request, params, context }: ActionFunctionArgs) {
+  const traceId = getTraceIdFromRequest(request);
+  const logger = createLogger({ traceId, context: "api.carts.transfer" });
+
   if (request.method !== "POST") {
     return data({ error: "Method not allowed" }, { status: 405 });
   }
@@ -52,13 +56,13 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
     const payload = (await response.json()) as { cart?: unknown };
     return data({ success: true, cart: payload.cart }, { status: 200 });
   } catch (error: any) {
-    console.error(`Error transferring cart ${cartId}:`, error);
-    
+    logger.error("Error transferring cart", error instanceof Error ? error : new Error(String(error)), { cartId });
+
     // Check if it's already transferred or other client error
     const status = error.status || 500;
-    return data({ 
-      error: "Failed to transfer cart", 
-      details: error.message 
+    return data({
+      error: "Failed to transfer cart",
+      details: error.message
     }, { status });
   }
 }

@@ -7,7 +7,7 @@ const logger = createLogger({ context: "medusa-lib" })
 export const createMedusaClient = (backendUrl: string, publishableKey: string) => {
   return new Medusa({
     baseUrl: backendUrl,
-    debug: import.meta.env.DEV,
+    debug: true, // Enable SDK debug logging for request/response visibility
     publishableKey
   })
 }
@@ -55,6 +55,7 @@ export interface MedusaProduct {
         hs_code?: string;
         origin_country?: string;
         material?: string;
+        images: Array<{ id: string; url: string }>;
     }>;
     options: Array<{
         id: string;

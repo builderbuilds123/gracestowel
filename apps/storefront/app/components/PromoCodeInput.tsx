@@ -1,6 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { X, Tag, Loader2 } from "lucide-react";
-import { formatCurrencyFixed } from "../utils/format-currency";
+import { X, Tag, Loader2 } from "../lib/icons";
 
 interface PromoCodeInputProps {
   cartId: string | undefined;
@@ -45,7 +44,7 @@ export function PromoCodeInput({
       </div>
 
       {/* Applied promo code badges */}
-      {appliedCodes.length > 0 && (
+      {appliedCodes.length > 0 ? (
         <div className="space-y-2 mb-3">
           {appliedCodes.map((appliedCode) => (
             <AppliedPromoBadge
@@ -58,7 +57,7 @@ export function PromoCodeInput({
             />
           ))}
         </div>
-      )}
+      ) : null}
 
       {/* Promo code input - always visible */}
       <form onSubmit={handleSubmit} className="flex gap-2">
@@ -96,18 +95,18 @@ export function PromoCodeInput({
       </form>
 
       {/* Success message */}
-      {successMessage && (
+      {successMessage ? (
         <p className="mt-2 text-sm text-green-600 flex items-center gap-1" data-testid="promo-success-message">
           <span>✓</span> {successMessage}
         </p>
-      )}
+      ) : null}
 
       {/* Error message */}
-      {error && (
+      {error ? (
         <p className="mt-2 text-sm text-red-600" role="alert" data-testid="promo-error-message">
           {error}
         </p>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -131,15 +130,17 @@ function AppliedPromoBadge({
   onRemove,
   isLoading,
 }: AppliedPromoBadgeProps) {
-  const formattedDiscount = formatCurrencyFixed(discount);
-
   // Style variants for automatic vs manual promos
   const badgeStyles = isAutomatic
     ? "bg-purple-50 border-purple-200"
     : "bg-green-50 border-green-200";
   const iconStyles = isAutomatic ? "text-purple-600" : "text-green-600";
   const textStyles = isAutomatic ? "text-purple-800" : "text-green-800";
-  const discountStyles = isAutomatic ? "text-purple-600" : "text-green-600";
+
+  const discountDisplay =
+    typeof discount === "number" && !Number.isNaN(discount)
+      ? `-$${Number(discount).toFixed(2)}`
+      : null;
 
   return (
     <div 
@@ -149,14 +150,14 @@ function AppliedPromoBadge({
       <div className="flex items-center gap-2">
         <Tag className={`w-4 h-4 ${iconStyles}`} />
         <span className={`text-sm font-medium ${textStyles}`}>{code}</span>
-        {isAutomatic && (
+        {discountDisplay ? (
+          <span className={`text-sm ${textStyles}`}>{discountDisplay}</span>
+        ) : null}
+        {isAutomatic ? (
           <span className="text-xs text-purple-500 bg-purple-100 px-1.5 py-0.5 rounded">Auto</span>
-        )}
-        {discount > 0 && (
-          <span className={`text-sm ${discountStyles}`}>-{formattedDiscount}</span>
-        )}
+        ) : null}
       </div>
-      {!isAutomatic && (
+      {!isAutomatic ? (
         <button
           type="button"
           onClick={onRemove}
@@ -172,7 +173,7 @@ function AppliedPromoBadge({
             <X className="w-4 h-4" />
           )}
         </button>
-      )}
+      ) : null}
     </div>
   );
 }

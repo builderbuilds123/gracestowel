@@ -1,15 +1,45 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { loader, meta } from "./checkout.success";
 
-const buildContext = () => ({
+const buildContext = (overrides: Record<string, string> = {}) => ({
     cloudflare: {
         env: {
             STRIPE_PUBLISHABLE_KEY: "pk_test_123",
+            STRIPE_SECRET_KEY: "sk_test_123",
             MEDUSA_BACKEND_URL: "https://api.example.com",
             MEDUSA_PUBLISHABLE_KEY: "medusa_pk",
+            ...overrides,
         },
     },
 });
+
+vi.mock("../lib/stripe.server", () => ({
+    getStripeServerSide: () => ({
+        paymentIntents: {
+            retrieve: () => Promise.resolve({ status: "succeeded" }),
+        },
+    }),
+}));
+
+vi.mock("../lib/medusa-fetch", () => ({
+    medusaFetch: () =>
+        Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ order: { id: "order_123" }, modification_token: "tok_123" }),
+        }),
+}));
+
+vi.mock("../utils/monitored-fetch", () => ({
+    monitoredFetch: () =>
+        Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({}),
+        }),
+}));
+
+vi.mock("../utils/guest-session.server", () => ({
+    setGuestToken: () => Promise.resolve("guest_token=xyz; Path=/order; Max-Age=600; SameSite=Lax; Secure; HttpOnly"),
+}));
 
 describe("checkout.success loader", () => {
     it("strips sensitive query params via redirect and stores them in a short-lived cookie", async () => {
@@ -29,7 +59,7 @@ describe("checkout.success loader", () => {
         expect(setCookie).toContain("HttpOnly");
     });
 
-    it("returns params from cookie and clears it", async () => {
+    it("validates params from cookie, completes flow, and redirects to order status", async () => {
         const cookieValue = encodeURIComponent(
             JSON.stringify({
                 paymentIntentId: "pi_abc",
@@ -45,41 +75,33 @@ describe("checkout.success loader", () => {
 
         const response = await loader({ request, context: buildContext() } as any);
 
-        expect(response.status).toBe(200);
-        const data = await response.json();
-        expect(data.initialParams).toEqual({
-            paymentIntentId: "pi_abc",
-            paymentIntentClientSecret: "sec_def",
-            redirectStatus: "succeeded",
-        });
+        expect(response.status).toBe(302);
+        expect(response.headers.get("location")).toBe("/order/status/order_123");
         const setCookie = response.headers.get("set-cookie") ?? "";
         expect(setCookie).toContain("checkout_params=");
         expect(setCookie).toContain("Max-Age=0");
-        // Verify all cookie flags are present when clearing (must match setting flags)
         expect(setCookie).toContain("SameSite=Lax");
         expect(setCookie).toContain("Secure");
         expect(setCookie).toContain("HttpOnly");
     });
 
-    it("returns null params when none provided", async () => {
+    it("redirects to checkout when no params provided", async () => {
         const request = new Request("https://example.com/checkout/success");
         const response = await loader({ request, context: buildContext() } as any);
 
-        expect(response.status).toBe(200);
-        const data = await response.json();
-        expect(data.initialParams).toBeNull();
+        expect(response.status).toBe(302);
+        expect(response.headers.get("location")).toMatch(/^\/checkout\?error=PAYMENT_FAILED/);
     });
 
-    it("does not redirect when payment_intent_client_secret is missing", async () => {
+    it("redirects to checkout when payment_intent_client_secret is missing", async () => {
         const request = new Request(
             "https://example.com/checkout/success?payment_intent=pi_123&redirect_status=succeeded"
         );
 
         const response = await loader({ request, context: buildContext() } as any);
 
-        expect(response.status).toBe(200);
-        const data = await response.json();
-        expect(data.initialParams).toBeNull();
+        expect(response.status).toBe(302);
+        expect(response.headers.get("location")).toMatch(/^\/checkout\?error=PAYMENT_FAILED/);
     });
 });
 

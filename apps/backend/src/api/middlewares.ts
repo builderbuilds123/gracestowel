@@ -3,26 +3,46 @@ import {
     MedusaNextFunction,
     type MedusaRequest,
     type MedusaResponse,
+    authenticate,
+    validateAndTransformBody,
+    validateAndTransformQuery,
 } from "@medusajs/framework/http";
 import { MedusaError } from "@medusajs/framework/utils";
 import { trackEvent } from "../utils/analytics";
 import { logger } from "../utils/logger";
+import { orderEditRateLimiter } from "../utils/rate-limiter";
+import { GetAdminReviewsSchema } from "./admin/reviews/route";
+import { PostAdminReviewResponseSchema } from "./admin/reviews/[id]/response/route";
+import { CreateStoreReviewSchema, GetStoreProductReviewsSchema } from "./store/products/[id]/reviews/route";
+
+interface Address {
+    country_code?: string;
+    [key: string]: unknown;
+}
+
+interface RequestBody {
+    shipping_address?: Address;
+    billing_address?: Address;
+    [key: string]: unknown;
+}
 
 function normalizeCartCountryCodesMiddleware(
     req: MedusaRequest,
     res: MedusaResponse,
     next: MedusaNextFunction
 ) {
-    const body = (req as any).body as any;
+    const body = req.body as RequestBody | undefined;
 
-    const normalizeAddress = (address: any) => {
+    const normalizeAddress = (address: Address | undefined): void => {
         if (address?.country_code && typeof address.country_code === "string") {
             address.country_code = address.country_code.toLowerCase();
         }
     };
 
-    normalizeAddress(body?.shipping_address);
-    normalizeAddress(body?.billing_address);
+    if (body) {
+        normalizeAddress(body.shipping_address);
+        normalizeAddress(body.billing_address);
+    }
 
     next();
 }
@@ -76,10 +96,20 @@ export function errorHandlerMiddleware(
     });
 
     // Return JSON error response for debugging
-    const status = (error as any).status || (error as any).statusCode || 500;
+    // MedusaError has status and code properties, but Error doesn't
+    interface ErrorWithStatus extends Error {
+        status?: number;
+        statusCode?: number;
+        code?: string;
+    }
+    
+    const errorWithStatus = error as ErrorWithStatus;
+    const status = errorWithStatus.status || errorWithStatus.statusCode || 500;
+    const code = errorWithStatus.code || (error instanceof MedusaError ? error.type : 'INTERNAL_ERROR');
+    
     res.status(status).json({
         message: error.message,
-        code: (error as any).code || 'INTERNAL_ERROR',
+        code,
         stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
 }
@@ -99,12 +129,95 @@ export default defineMiddlewares({
             bodyParser: false,
         },
         {
+            // Admin routes require authentication
+            matcher: "/admin/*",
+            middlewares: [
+                authenticate("user", ["session", "bearer", "api-key"]),
+            ],
+        },
+        {
             matcher: "/store/carts*",
             middlewares: [normalizeCartCountryCodesMiddleware],
         },
         {
             matcher: "/store/orders/:id*",
             middlewares: [moveTokenToHeaderMiddleware],
+        },
+        {
+            // Story 1.7: Rate limiting for order edit endpoints
+            // Includes eligibility endpoint to prevent enumeration attacks
+            matcher: /^\/store\/orders\/[^/]+\/(edit|cancel|address|eligibility)$/,
+            middlewares: [orderEditRateLimiter],
+        },
+        {
+            // Story 2.2: Allow both authenticated customers and guests with tokens
+            // This allows customer sessions OR guest tokens (via x-modification-token header)
+            matcher: /^\/store\/orders\/[^/]+$/,
+            middlewares: [
+                authenticate("customer", ["session", "bearer"], { allowUnauthenticated: true }),
+            ],
+        },
+        {
+            // Store review create: authenticate and validate body
+            matcher: "/store/products/:id/reviews",
+            method: "POST",
+            middlewares: [
+                authenticate("customer", ["session", "bearer"]),
+                // Schema type diverges from framework's Zod typing; cast required
+                validateAndTransformBody(CreateStoreReviewSchema as any),
+            ],
+        },
+        {
+            // Admin review response routes - validate request body (POST only; POST upserts create/update)
+            matcher: "/admin/reviews/:id/response",
+            method: "POST",
+            middlewares: [
+                // Schema type diverges from framework's Zod typing; cast required
+                validateAndTransformBody(PostAdminReviewResponseSchema as any),
+            ],
+        },
+        {
+            // GET /admin/reviews — createFindParams + req.queryConfig for list (P3 / Phase 4)
+            matcher: "/admin/reviews",
+            method: "GET",
+            middlewares: [
+                validateAndTransformQuery(GetAdminReviewsSchema as any, {
+                    isList: true,
+                    defaultLimit: 20,
+                    defaults: [
+                        "id",
+                        "title",
+                        "content",
+                        "rating",
+                        "product_id",
+                        "customer_id",
+                        "status",
+                        "created_at",
+                        "updated_at",
+                    ],
+                }),
+            ],
+        },
+        {
+            // GET /store/products/:id/reviews — createFindParams + req.queryConfig for list (P3 / Phase 4)
+            matcher: "/store/products/:id/reviews",
+            method: "GET",
+            middlewares: [
+                validateAndTransformQuery(GetStoreProductReviewsSchema as any, {
+                    isList: true,
+                    defaultLimit: 10,
+                    defaults: [
+                        "id",
+                        "customer_name",
+                        "rating",
+                        "title",
+                        "content",
+                        "verified_purchase",
+                        "helpful_count",
+                        "created_at",
+                    ],
+                }),
+            ],
         },
     ],
     errorHandler: errorHandlerMiddleware,

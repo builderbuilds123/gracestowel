@@ -2,38 +2,37 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import { usePromoCode } from "./usePromoCode";
 
-// Create mock functions that persist across getMedusaClient calls
-const mockCartUpdate = vi.fn();
+const mockMonitoredFetch = vi.hoisted(() => vi.fn());
 
-// Mock the Medusa client - returns same mock functions each time
-vi.mock("../lib/medusa", () => ({
-  getMedusaClient: () => ({
-    store: {
-      cart: {
-        update: mockCartUpdate,
-      },
-    },
-  }),
+vi.mock("../utils/monitored-fetch", () => ({
+  monitoredFetch: (...args: unknown[]) => mockMonitoredFetch(...args),
 }));
+
+function jsonResponse(body: object, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
 
 describe("usePromoCode", () => {
   const mockCartId = "cart_123";
 
+  const defaultCart = {
+    id: mockCartId,
+    discount_total: 10,
+    promotions: [{ code: "TEST10", is_automatic: false, id: "promo_1" }],
+    items: [] as object[],
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
-    mockCartUpdate.mockReset();
+    mockMonitoredFetch.mockReset();
   });
 
   describe("applyPromoCode", () => {
     it("should apply a valid promo code successfully", async () => {
-      mockCartUpdate.mockResolvedValue({
-        cart: {
-          id: mockCartId,
-          discount_total: 10,
-          promotions: [{ code: "TEST10", is_automatic: false, id: "promo_1" }],
-          items: []
-        },
-      });
+      mockMonitoredFetch.mockResolvedValue(jsonResponse({ cart: defaultCart }));
 
       const { result } = renderHook(() =>
         usePromoCode({ cartId: mockCartId })
@@ -51,9 +50,7 @@ describe("usePromoCode", () => {
     });
 
     it("should normalize code to uppercase", async () => {
-      mockCartUpdate.mockResolvedValue({
-        cart: { id: mockCartId, discount_total: 5, promotions: [{ code: "TEST10", is_automatic: false, id: "promo_1" }], items: [] },
-      });
+      mockMonitoredFetch.mockResolvedValue(jsonResponse({ cart: defaultCart }));
 
       const { result } = renderHook(() =>
         usePromoCode({ cartId: mockCartId })
@@ -63,9 +60,13 @@ describe("usePromoCode", () => {
         await result.current.applyPromoCode("test10");
       });
 
-      expect(mockCartUpdate).toHaveBeenCalledWith(mockCartId, {
-        promo_codes: ["TEST10"],
-      });
+      expect(mockMonitoredFetch).toHaveBeenCalledWith(
+        `/api/carts/${mockCartId}`,
+        expect.objectContaining({
+          method: "PATCH",
+          body: JSON.stringify({ promo_codes: ["TEST10"] }),
+        })
+      );
     });
 
     it("should return error for empty code", async () => {
@@ -79,6 +80,7 @@ describe("usePromoCode", () => {
       });
 
       expect(result.current.error).toBe("Please enter a promo code");
+      expect(mockMonitoredFetch).not.toHaveBeenCalled();
     });
 
     it("should return error when cart is not available", async () => {
@@ -92,23 +94,20 @@ describe("usePromoCode", () => {
       });
 
       expect(result.current.error).toBe("Cart not available");
+      expect(mockMonitoredFetch).not.toHaveBeenCalled();
     });
 
     it("should prevent duplicate promo codes", async () => {
-      mockCartUpdate.mockResolvedValueOnce({
-        cart: { id: mockCartId, discount_total: 10, promotions: [{ code: "TEST10", is_automatic: false, id: "promo_1" }], items: [] },
-      });
+      mockMonitoredFetch.mockResolvedValueOnce(jsonResponse({ cart: defaultCart }));
 
       const { result } = renderHook(() =>
         usePromoCode({ cartId: mockCartId })
       );
 
-      // Apply first time
       await act(async () => {
         await result.current.applyPromoCode("TEST10");
       });
 
-      // Try to apply same code again
       await act(async () => {
         const success = await result.current.applyPromoCode("TEST10");
         expect(success).toBe(false);
@@ -118,8 +117,8 @@ describe("usePromoCode", () => {
     });
 
     it("should handle API errors gracefully", async () => {
-      mockCartUpdate.mockRejectedValue(
-        new Error("Promotion not found")
+      mockMonitoredFetch.mockResolvedValue(
+        jsonResponse({ error: "Promotion not found" }, 404)
       );
 
       const { result } = renderHook(() =>
@@ -135,9 +134,7 @@ describe("usePromoCode", () => {
     });
 
     it("should call onCartUpdate callback on success", async () => {
-      mockCartUpdate.mockResolvedValue({
-        cart: { id: mockCartId, discount_total: 10, promotions: [{ code: "TEST10", is_automatic: false, id: "promo_1" }], items: [] },
-      });
+      mockMonitoredFetch.mockResolvedValue(jsonResponse({ cart: defaultCart }));
 
       const onCartUpdate = vi.fn();
       const { result } = renderHook(() =>
@@ -154,27 +151,29 @@ describe("usePromoCode", () => {
 
   describe("removePromoCode", () => {
     it("should remove an applied promo code", async () => {
-      // 1. Initial Apply TEST10
-      mockCartUpdate.mockResolvedValueOnce({
-        cart: { id: mockCartId, discount_total: 10, promotions: [{ code: "TEST10", is_automatic: false, id: "promo_1" }], items: [] },
-      });
-      // 2. Remove TEST10
-      mockCartUpdate.mockResolvedValueOnce({
-        cart: { id: mockCartId, discount_total: 0, promotions: [], items: [] },
-      });
+      mockMonitoredFetch
+        .mockResolvedValueOnce(jsonResponse({ cart: defaultCart }))
+        .mockResolvedValueOnce(
+          jsonResponse({
+            cart: {
+              id: mockCartId,
+              discount_total: 0,
+              promotions: [],
+              items: [],
+            },
+          })
+        );
 
       const { result } = renderHook(() =>
         usePromoCode({ cartId: mockCartId })
       );
 
-      // First apply a code
       await act(async () => {
         await result.current.applyPromoCode("TEST10");
       });
 
       expect(result.current.appliedCodes).toHaveLength(1);
 
-      // Then remove it
       await act(async () => {
         const success = await result.current.removePromoCode("TEST10");
         expect(success).toBe(true);
@@ -200,9 +199,7 @@ describe("usePromoCode", () => {
 
   describe("clearMessages", () => {
     it("should clear error and success messages", async () => {
-      mockCartUpdate.mockResolvedValue({
-        cart: { id: mockCartId, discount_total: 10, promotions: [{ code: "TEST10", is_automatic: false, id: "promo_1" }], items: [] },
-      });
+      mockMonitoredFetch.mockResolvedValue(jsonResponse({ cart: defaultCart }));
 
       const { result } = renderHook(() =>
         usePromoCode({ cartId: mockCartId })
@@ -225,12 +222,12 @@ describe("usePromoCode", () => {
 
   describe("loading state", () => {
     it("should set isLoading during API calls", async () => {
-      let resolvePromise: (value: unknown) => void;
+      let resolvePromise!: (value: unknown) => void;
       const promise = new Promise((resolve) => {
         resolvePromise = resolve;
       });
 
-      mockCartUpdate.mockReturnValue(promise);
+      mockMonitoredFetch.mockReturnValue(promise);
 
       const { result } = renderHook(() =>
         usePromoCode({ cartId: mockCartId })
@@ -247,7 +244,7 @@ describe("usePromoCode", () => {
       });
 
       await act(async () => {
-        resolvePromise!({ cart: { id: mockCartId, discount_total: 10, promotions: [{ code: "TEST10", is_automatic: false, id: "promo_1" }], items: [] } });
+        resolvePromise(jsonResponse({ cart: defaultCart }));
       });
 
       await waitFor(() => {
@@ -258,8 +255,8 @@ describe("usePromoCode", () => {
 
   describe("stacking and campaign errors", () => {
     it("should handle stacking error gracefully", async () => {
-      mockCartUpdate.mockRejectedValue(
-        new Error("Promotions cannot be combined")
+      mockMonitoredFetch.mockResolvedValue(
+        jsonResponse({ error: "Promotions cannot be combined" }, 400)
       );
 
       const { result } = renderHook(() =>
@@ -277,8 +274,8 @@ describe("usePromoCode", () => {
     });
 
     it("should handle expired campaign error", async () => {
-      mockCartUpdate.mockRejectedValue(
-        new Error("Promotion has ended")
+      mockMonitoredFetch.mockResolvedValue(
+        jsonResponse({ error: "Promotion has ended" }, 400)
       );
 
       const { result } = renderHook(() =>
@@ -294,8 +291,8 @@ describe("usePromoCode", () => {
     });
 
     it("should handle not-yet-started campaign error", async () => {
-      mockCartUpdate.mockRejectedValue(
-        new Error("Promotion has not started yet")
+      mockMonitoredFetch.mockResolvedValue(
+        jsonResponse({ error: "Promotion has not started yet" }, 400)
       );
 
       const { result } = renderHook(() =>
@@ -311,8 +308,8 @@ describe("usePromoCode", () => {
     });
 
     it("should handle usage limit exceeded error", async () => {
-      mockCartUpdate.mockRejectedValue(
-        new Error("Budget exceeded for this promotion")
+      mockMonitoredFetch.mockResolvedValue(
+        jsonResponse({ error: "Budget exceeded for this promotion" }, 400)
       );
 
       const { result } = renderHook(() =>
@@ -332,52 +329,88 @@ describe("usePromoCode", () => {
 
   describe("multiple codes", () => {
     it("should send all codes when adding new one", async () => {
-      mockCartUpdate.mockResolvedValueOnce({
-        cart: { id: mockCartId, discount_total: 5, promotions: [{ code: "CODE1", is_automatic: false, id: "p1" }], items: [] },
-      });
-      mockCartUpdate.mockResolvedValueOnce({
-        cart: { id: mockCartId, discount_total: 15, promotions: [{ code: "CODE1", is_automatic: false, id: "p1" }, { code: "CODE2", is_automatic: false, id: "p2" }], items: [] },
-      });
+      mockMonitoredFetch
+        .mockResolvedValueOnce(
+          jsonResponse({
+            cart: {
+              id: mockCartId,
+              discount_total: 5,
+              promotions: [{ code: "CODE1", is_automatic: false, id: "p1" }],
+              items: [],
+            },
+          })
+        )
+        .mockResolvedValueOnce(
+          jsonResponse({
+            cart: {
+              id: mockCartId,
+              discount_total: 15,
+              promotions: [
+                { code: "CODE1", is_automatic: false, id: "p1" },
+                { code: "CODE2", is_automatic: false, id: "p2" },
+              ],
+              items: [],
+            },
+          })
+        );
 
       const { result } = renderHook(() =>
         usePromoCode({ cartId: mockCartId })
       );
 
-      // Apply first code
       await act(async () => {
         await result.current.applyPromoCode("CODE1");
       });
 
-      // Apply second code
       await act(async () => {
         await result.current.applyPromoCode("CODE2");
       });
 
-      // Second call should include both codes
-      expect(mockCartUpdate).toHaveBeenLastCalledWith(mockCartId, {
-        promo_codes: ["CODE1", "CODE2"],
-      });
+      const lastCall = mockMonitoredFetch.mock.calls[mockMonitoredFetch.mock.calls.length - 1];
+      const body = JSON.parse((lastCall[1] as RequestInit).body as string);
+      expect(body.promo_codes).toEqual(["CODE1", "CODE2"]);
     });
 
     it("should send remaining codes when removing one", async () => {
-      // 1. Initial Apply CODE1
-      mockCartUpdate.mockResolvedValueOnce({
-        cart: { id: mockCartId, discount_total: 10, promotions: [{ code: "CODE1", is_automatic: false, id: "p1" }], items: [] },
-      });
-      // 2. Add CODE2
-      mockCartUpdate.mockResolvedValueOnce({
-        cart: { id: mockCartId, discount_total: 15, promotions: [{ code: "CODE1", is_automatic: false, id: "p1" }, { code: "CODE2", is_automatic: false, id: "p2" }], items: [] },
-      });
-      // 3. Remove CODE1 -> should return only CODE2
-      mockCartUpdate.mockResolvedValueOnce({
-        cart: { id: mockCartId, discount_total: 5, promotions: [{ code: "CODE2", is_automatic: false, id: "p2" }], items: [] },
-      });
+      mockMonitoredFetch
+        .mockResolvedValueOnce(
+          jsonResponse({
+            cart: {
+              id: mockCartId,
+              discount_total: 10,
+              promotions: [{ code: "CODE1", is_automatic: false, id: "p1" }],
+              items: [],
+            },
+          })
+        )
+        .mockResolvedValueOnce(
+          jsonResponse({
+            cart: {
+              id: mockCartId,
+              discount_total: 15,
+              promotions: [
+                { code: "CODE1", is_automatic: false, id: "p1" },
+                { code: "CODE2", is_automatic: false, id: "p2" },
+              ],
+              items: [],
+            },
+          })
+        )
+        .mockResolvedValueOnce(
+          jsonResponse({
+            cart: {
+              id: mockCartId,
+              discount_total: 5,
+              promotions: [{ code: "CODE2", is_automatic: false, id: "p2" }],
+              items: [],
+            },
+          })
+        );
 
       const { result } = renderHook(() =>
         usePromoCode({ cartId: mockCartId })
       );
 
-      // Apply two codes
       await act(async () => {
         await result.current.applyPromoCode("CODE1");
       });
@@ -385,16 +418,14 @@ describe("usePromoCode", () => {
         await result.current.applyPromoCode("CODE2");
       });
 
-      // Remove first code
       await act(async () => {
         const success = await result.current.removePromoCode("CODE1");
         expect(success).toBe(true);
       });
 
-      // Should only send CODE2 in the last update call
-      expect(mockCartUpdate).toHaveBeenLastCalledWith(mockCartId, {
-        promo_codes: ["CODE2"],
-      });
+      const removeCall = mockMonitoredFetch.mock.calls[2];
+      const body = JSON.parse((removeCall[1] as RequestInit).body as string);
+      expect(body.promo_codes).toEqual(["CODE2"]);
 
       expect(result.current.appliedCodes).toHaveLength(1);
       expect(result.current.appliedCodes[0].code).toBe("CODE2");

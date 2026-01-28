@@ -1,6 +1,7 @@
 import { type LoaderFunctionArgs, type ActionFunctionArgs, data } from "react-router";
 import { monitoredFetch, type CloudflareEnv } from "../../utils/monitored-fetch";
 import { resolveCSRFSecret, validateCSRFToken } from "../../utils/csrf.server";
+import { createLogger } from "../../lib/logger";
 
 export async function loader({ request, context }: LoaderFunctionArgs) {
     return handleProxy(request, context);
@@ -24,6 +25,7 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
 }
 
 async function handleProxy(request: Request, context: any) {
+    const logger = createLogger({ context: "api-proxy" });
     const url = new URL(request.url);
     const path = url.pathname.replace("/api", ""); // Strip /api prefix
     const query = url.search;
@@ -75,7 +77,7 @@ async function handleProxy(request: Request, context: any) {
         });
 
     } catch (error) {
-        console.error("Proxy Error:", error);
+        logger.error("Proxy error", error instanceof Error ? error : new Error(String(error)), { path });
         return new Response(JSON.stringify({ error: "Backend unavailable" }), {
             status: 502,
             headers: { "Content-Type": "application/json" },

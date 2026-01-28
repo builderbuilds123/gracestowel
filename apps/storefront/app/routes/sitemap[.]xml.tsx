@@ -1,5 +1,6 @@
 import type { Route } from "./+types/sitemap[.]xml";
 import { getMedusaClient, castToMedusaProduct, type MedusaProduct } from "../lib/medusa";
+import { createLogger } from "../lib/logger";
 
 const SITE_URL = "https://gracestowel.com";
 
@@ -12,20 +13,22 @@ const staticPages = [
 ];
 
 export async function loader({ context }: Route.LoaderArgs) {
+    const logger = createLogger({ context: "sitemap-loader" });
+
     // Fetch all products for dynamic URLs
     let productUrls: { url: string; priority: string; changefreq: string }[] = [];
-    
+
     try {
         const medusa = getMedusaClient(context);
         const { products } = await medusa.store.product.list({ limit: 100, fields: "+handle" });
-        
+
         productUrls = products.map(castToMedusaProduct).map((product: MedusaProduct) => ({
             url: `/products/${product.handle}`,
             priority: "0.8",
             changefreq: "weekly",
         }));
     } catch (error) {
-        console.error("Failed to fetch products for sitemap:", error);
+        logger.error("Failed to fetch products for sitemap", error instanceof Error ? error : new Error(String(error)));
     }
 
     const allUrls = [...staticPages, ...productUrls];

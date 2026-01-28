@@ -1,5 +1,5 @@
 import { test, expect } from "../support/fixtures";
-import { request } from "@playwright/test";
+import { APIRequestContext } from "@playwright/test";
 import jwt from "jsonwebtoken";
 
 /**
@@ -27,7 +27,7 @@ let EXPIRED_TOKEN = "";
 let INVALID_SIGNATURE_TOKEN = "";
 let EXPIRED_FOR_DIFFERENT_ORDER_TOKEN = "";
 
-test.beforeEach(async () => {
+test.beforeEach(async ({ request }) => {
     // Reset ALL state for each test
     TEST_ORDER_ID = process.env.TEST_ORDER_ID || "";
     TEST_TOKEN = process.env.TEST_MODIFICATION_TOKEN || "";
@@ -40,24 +40,50 @@ test.beforeEach(async () => {
   if (!TEST_TOKEN && !TEST_ORDER_ID) {
       console.log("DEBUG: No test data provided. Seeding new order...");
       try {
-          const api = await request.newContext({
-              baseURL: process.env.API_URL || "http://localhost:9000",
-              extraHTTPHeaders: {
-                  "x-publishable-api-key": process.env.MEDUSA_PUBLISHABLE_KEY || "",
-              },
-          });
-
+          const backendUrl = process.env.API_URL || process.env.BACKEND_URL || "http://localhost:9000";
+          
+          // Check if backend is available
+          try {
+            const healthResponse = await request.get(`${backendUrl}/health`, { timeout: 5000 });
+            if (!healthResponse.ok()) {
+              test.skip(true, `Backend not available at ${backendUrl} (status: ${healthResponse.status()})`);
+              return;
+            }
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            if (errorMessage.includes('ECONNREFUSED') || errorMessage.includes('fetch failed') || errorMessage.includes('timeout')) {
+              test.skip(true, `Backend not running at ${backendUrl}. Start with: pnpm dev:backend`);
+              return;
+            }
+            throw error;
+          }
+          
+          // Use the request fixture directly (it's already an APIRequestContext)
+          const api = request;
+          
           // Fetch regions and sales channels first (Required for Medusa V2)
-          const regionsRes = await api.get("/admin/regions");
+          const regionsRes = await api.get(`${backendUrl}/admin/regions`, {
+            headers: {
+              "x-publishable-api-key": process.env.MEDUSA_PUBLISHABLE_KEY || "",
+            },
+          });
           const regions = await regionsRes.json();
           const regionId = regions.regions?.[0]?.id;
 
-          const scRes = await api.get("/admin/sales-channels");
+          const scRes = await api.get(`${backendUrl}/admin/sales-channels`, {
+            headers: {
+              "x-publishable-api-key": process.env.MEDUSA_PUBLISHABLE_KEY || "",
+            },
+          });
           const scs = await scRes.json();
           const salesChannelId = scs.sales_channels?.[0]?.id;
 
           // Fetch a product to get variant ID
-          const productsRes = await api.get("/store/products");
+          const productsRes = await api.get(`${backendUrl}/store/products`, {
+            headers: {
+              "x-publishable-api-key": process.env.MEDUSA_PUBLISHABLE_KEY || "",
+            },
+          });
           const products = await productsRes.json();
           
           // Log handles for debugging
@@ -74,11 +100,14 @@ test.beforeEach(async () => {
               console.log(`DEBUG: Using product ${product.handle} and variant ${variantId}`);
               
               // Create Cart with region and sales channel
-              const cartRes = await api.post("/store/carts", { 
+              const cartRes = await api.post(`${backendUrl}/store/carts`, { 
                   data: {
                       region_id: regionId,
                       sales_channel_id: salesChannelId
-                  } 
+                  },
+                  headers: {
+                      "x-publishable-api-key": process.env.MEDUSA_PUBLISHABLE_KEY || "",
+                  },
               });
               const cartData = await cartRes.json();
               if (!cartData.cart) {
@@ -87,8 +116,11 @@ test.beforeEach(async () => {
               const cart = cartData.cart;
 
               // Add Item
-              const itemRes = await api.post(`/store/carts/${cart.id}/line-items`, {
-                  data: { variant_id: variantId, quantity: 1 }
+              const itemRes = await api.post(`${backendUrl}/store/carts/${cart.id}/line-items`, {
+                  data: { variant_id: variantId, quantity: 1 },
+                  headers: {
+                      "x-publishable-api-key": process.env.MEDUSA_PUBLISHABLE_KEY || "",
+                  },
               });
               if (itemRes.status() >= 400) {
                   const error = await itemRes.text();
@@ -96,18 +128,25 @@ test.beforeEach(async () => {
               }
 
               // Add Email/Shipping (Required for completion)
-               await api.post(`/store/carts/${cart.id}`, {
+               await api.post(`${backendUrl}/store/carts/${cart.id}`, {
                   data: {
                       email: "test@example.com",
                       shipping_address: {
                           first_name: "Test", last_name: "User",
                           address_1: "123 Test St", city: "Toronto", country_code: "ca", postal_code: "M5V 2H1"
                       }
-                  }
+                  },
+                  headers: {
+                      "x-publishable-api-key": process.env.MEDUSA_PUBLISHABLE_KEY || "",
+                  },
                });
 
                // Complete Cart
-               const completeRes = await api.post(`/store/carts/${cart.id}/complete`);
+               const completeRes = await api.post(`${backendUrl}/store/carts/${cart.id}/complete`, {
+                  headers: {
+                      "x-publishable-api-key": process.env.MEDUSA_PUBLISHABLE_KEY || "",
+                  },
+               });
                const orderData = await completeRes.json();
               
               if (orderData.type === "order" && orderData.data?.id) {
@@ -128,6 +167,11 @@ test.beforeEach(async () => {
               }
           }
       } catch (e) {
+          const errorMessage = e instanceof Error ? e.message : String(e);
+          if (errorMessage.includes('ECONNREFUSED') || errorMessage.includes('ConnectionError') || errorMessage.includes('fetch failed')) {
+              test.skip(true, `Backend not running. Start with: pnpm dev:backend`);
+              return;
+          }
           console.error("DEBUG: Seeding failed:", e);
       }
   }

@@ -1,7 +1,16 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState, useRef } from "react";
 import { monitoredFetch } from "../utils/monitored-fetch";
 import type { CartWithPromotions } from "../types/promotion";
 import { useLocale } from "./LocaleContext";
+import {
+  getCachedStorage,
+  setCachedStorage,
+  removeCachedStorage,
+  getCachedSessionStorage,
+  setCachedSessionStorage,
+  removeCachedSessionStorage,
+  clearStorageCache
+} from "../lib/storage-cache";
 
 interface MedusaCartContextValue {
   cartId?: string;
@@ -15,59 +24,87 @@ interface MedusaCartContextValue {
 
 const MedusaCartContext = createContext<MedusaCartContextValue | undefined>(undefined);
 
+/**
+ * MedusaCartProvider - Single source of truth for cart state
+ *
+ * ARCHITECTURE:
+ * - The API is the single source of truth for cart validity
+ * - localStorage/sessionStorage are used for persistence across page loads
+ * - Cookie is set for server-side access (checkout success flow)
+ * - If API returns 404/410, cart is cleared from ALL storage
+ *
+ * HYDRATION:
+ * - Initialize state as undefined to match SSR (no hydration mismatch)
+ * - Load from storage after mount
+ * - Validate with API - this is the authoritative check
+ */
 export function MedusaCartProvider({ children }: { children: React.ReactNode }) {
-  const [cartId, setCartIdState] = useState<string | undefined>(() => {
-    if (typeof window === "undefined") return undefined;
-    return (
-      sessionStorage.getItem("medusa_cart_id") ||
-      localStorage.getItem("medusa_cart_id") ||
-      undefined
-    );
-  });
+  // Initialize undefined to match SSR - avoids hydration mismatch
+  const [cartId, setCartIdState] = useState<string | undefined>(undefined);
   const [cart, setCart] = useState<CartWithPromotions | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const regionSyncInFlight = React.useRef<string | null>(null);
+  // Track last fetched cart ID to prevent duplicate fetches
+  const lastFetchedCartId = useRef<string | undefined>(undefined);
+  const regionSyncInFlight = useRef<string | null>(null);
   const { regionId } = useLocale();
 
-  const persistCartId = useCallback((nextId?: string) => {
+  // Clear cart from all storage locations
+  const clearCart = useCallback(() => {
     if (typeof window === "undefined") return;
-    if (nextId) {
-      sessionStorage.setItem("medusa_cart_id", nextId);
-      localStorage.setItem("medusa_cart_id", nextId);
-    } else {
-      sessionStorage.removeItem("medusa_cart_id");
-      localStorage.removeItem("medusa_cart_id");
-    }
+
+    clearStorageCache("medusa_cart_id");
+    removeCachedSessionStorage("medusa_cart_id");
+    removeCachedStorage("medusa_cart_id");
+    document.cookie = "medusa_cart_id=; path=/; max-age=0; SameSite=Lax";
+    setCartIdState(undefined);
+    setCart(null);
+    lastFetchedCartId.current = undefined;
   }, []);
 
+  // Persist cart ID to all storage locations
+  const persistCartId = useCallback((nextId: string) => {
+    if (typeof window === "undefined") return;
+
+    clearStorageCache("medusa_cart_id");
+    setCachedSessionStorage("medusa_cart_id", nextId);
+    setCachedStorage("medusa_cart_id", nextId);
+    document.cookie = `medusa_cart_id=${nextId}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
+  }, []);
+
+  // Public setter - persists and updates state
   const setCartId = useCallback(
     (nextId?: string) => {
-      setCartIdState(nextId);
-      persistCartId(nextId);
+      if (nextId) {
+        setCartIdState(nextId);
+        persistCartId(nextId);
+      } else {
+        clearCart();
+      }
     },
-    [persistCartId]
+    [persistCartId, clearCart]
   );
 
-  const refreshCart = useCallback(async () => {
-    if (!cartId) {
-      setCart(null);
-      return;
+  // Fetch and validate cart with API
+  const fetchCart = useCallback(async (id: string): Promise<boolean> => {
+    // Skip if we just fetched this cart
+    if (lastFetchedCartId.current === id) {
+      return true;
     }
 
     setIsLoading(true);
     setError(null);
 
     try {
-      const response = await monitoredFetch(`/api/carts/${cartId}`, {
+      const response = await monitoredFetch(`/api/carts/${id}`, {
         method: "GET",
         label: "medusa-cart-retrieve",
       });
 
-      if (response.status === 404) {
-        setCart(null);
-        setCartId(undefined);
-        return;
+      // API is the source of truth: 404/410 means cart is invalid
+      if (response.status === 404 || response.status === 410) {
+        clearCart();
+        return false;
       }
 
       if (!response.ok) {
@@ -77,21 +114,73 @@ export function MedusaCartProvider({ children }: { children: React.ReactNode }) 
 
       const payload = (await response.json()) as CartWithPromotions;
       setCart(payload);
+      lastFetchedCartId.current = id;
+      return true;
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to retrieve cart";
       setError(message);
+      return false;
     } finally {
       setIsLoading(false);
     }
-  }, [cartId, setCartId]);
+  }, [clearCart]);
 
+  // Refresh cart - forces re-fetch by clearing lastFetchedCartId
+  const refreshCart = useCallback(async () => {
+    if (!cartId) {
+      setCart(null);
+      return;
+    }
+    // Clear to force re-fetch
+    lastFetchedCartId.current = undefined;
+    await fetchCart(cartId);
+  }, [cartId, fetchCart]);
+
+  // Initialize: Load from storage and validate with API (runs once on mount)
   useEffect(() => {
-    void refreshCart();
-  }, [refreshCart]);
+    if (typeof window === "undefined") return;
+
+    // Check if server cleared the cart cookie (checkout success)
+    // If cookie is missing/empty but storage has a cart ID, the server cleared it
+    const cookieMatch = document.cookie.match(/medusa_cart_id=([^;]+)/);
+    const cookieCartId = cookieMatch?.[1] || null;
+
+    // Read from storage (sessionStorage has priority)
+    const storedCartId = getCachedSessionStorage("medusa_cart_id") ||
+      getCachedStorage("medusa_cart_id") ||
+      undefined;
+
+    // If cookie is cleared but storage exists, server cleared the cart - clear everything
+    if (!cookieCartId && storedCartId) {
+      clearStorageCache("medusa_cart_id");
+      removeCachedSessionStorage("medusa_cart_id");
+      removeCachedStorage("medusa_cart_id");
+      setCartIdState(undefined);
+      setCart(null);
+      return;
+    }
+
+    if (storedCartId) {
+      setCartIdState(storedCartId);
+      // Validate with API - this will clear if cart is completed/invalid
+      // NOTE: Do NOT restore cookie here - let fetchCart handle persistence after validation
+      void fetchCart(storedCartId);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally runs once on mount
+  }, []);
+
+  // Fetch when cartId changes externally (e.g., new cart created via setCartId)
+  useEffect(() => {
+    if (!cartId) return;
+    // fetchCart has built-in deduplication via lastFetchedCartId
+    void fetchCart(cartId);
+  }, [cartId, fetchCart]);
 
   // Sync region if it changes and cart exists
+  // Use primitive dependency (cart?.region_id) to avoid re-runs on cart object changes
+  const cartRegionId = cart?.region_id;
   useEffect(() => {
-    if (!cart || !cartId || !regionId || cart.region_id === regionId) return;
+    if (!cartRegionId || !cartId || !regionId || cartRegionId === regionId) return;
     if (regionSyncInFlight.current === regionId) return;
 
     void (async () => {
@@ -112,7 +201,7 @@ export function MedusaCartProvider({ children }: { children: React.ReactNode }) 
         regionSyncInFlight.current = null;
       }
     })();
-  }, [cart, cartId, regionId, refreshCart]);
+  }, [cartRegionId, cartId, regionId, refreshCart]);
 
   const value = useMemo(
     () => ({

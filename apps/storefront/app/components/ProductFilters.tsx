@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronDown, X } from "lucide-react";
+import { ChevronDown, X } from "../lib/icons";
 
 interface FilterOption {
     value: string;
@@ -47,7 +47,7 @@ export function ProductFilters({
                 {/* Header */}
                 <div className="flex items-center justify-between mb-4">
                     <h3 className="font-medium text-text-earthy">Filters</h3>
-                    {hasActiveFilters && (
+                    {hasActiveFilters ? (
                         <button
                             onClick={onClearFilters}
                             className="text-sm text-accent-earthy hover:underline flex items-center gap-1"
@@ -55,7 +55,7 @@ export function ProductFilters({
                             <X className="w-3 h-3" />
                             Clear
                         </button>
-                    )}
+                    ) : null}
                 </div>
 
                 {/* Color Filter */}
@@ -68,7 +68,7 @@ export function ProductFilters({
                         <ChevronDown className={`w-4 h-4 transition-transform ${showColors ? 'rotate-180' : ''}`} />
                     </button>
                     
-                    {showColors && (
+                    {showColors ? (
                         <div className="space-y-2">
                             {colors.map((color) => (
                                 <label key={color.value} className="flex items-center gap-2 cursor-pointer group">
@@ -82,13 +82,13 @@ export function ProductFilters({
                                     <span className="text-sm text-text-earthy/80 group-hover:text-text-earthy">
                                         {color.label}
                                     </span>
-                                    {color.count !== undefined && (
+                                    {color.count !== undefined ? (
                                         <span className="text-xs text-text-earthy/50">({color.count})</span>
-                                    )}
+                                    ) : null}
                                 </label>
                             ))}
                         </div>
-                    )}
+                    ) : null}
                 </div>
 
                 {/* Price Range Filter */}
@@ -101,7 +101,7 @@ export function ProductFilters({
                         <ChevronDown className={`w-4 h-4 transition-transform ${showPrice ? 'rotate-180' : ''}`} />
                     </button>
                     
-                    {showPrice && (
+                    {showPrice ? (
                         <div className="space-y-3">
                             <div className="flex items-center gap-2">
                                 <div className="flex-1">
@@ -140,7 +140,7 @@ export function ProductFilters({
                                 ${selectedPriceRange.min} — ${selectedPriceRange.max}
                             </p>
                         </div>
-                    )}
+                    ) : null}
                 </div>
             </div>
         </div>

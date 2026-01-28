@@ -63,13 +63,15 @@ const translations: Record<Language, Record<string, string>> = {
     }
 };
 
+import { getCachedStorage, setCachedStorage } from '../lib/storage-cache';
+
 /**
- * Get initial value from localStorage (client-side only)
+ * Get initial value from localStorage (client-side only) (Issue #33: Use cached storage)
  */
 function getStoredValue<T>(key: string, fallback: T): T {
     if (typeof window === 'undefined') return fallback;
     try {
-        const stored = localStorage.getItem(key);
+        const stored = getCachedStorage(key); // Cached read
         return stored ? (JSON.parse(stored) as T) : fallback;
     } catch {
         return fallback;
@@ -133,21 +135,21 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
         }
     }, [regions, regionId, getRegionById, getRegionByCurrency]);
 
-    // Persist regionId to localStorage
+    // Persist regionId to localStorage (Issue #33: Use cached storage)
     useEffect(() => {
         if (typeof window === 'undefined') return;
         if (regionId) {
-            localStorage.setItem(REGION_STORAGE_KEY, JSON.stringify(regionId));
+            setCachedStorage(REGION_STORAGE_KEY, JSON.stringify(regionId)); // Cached write
             if (isDevelopment) {
                 console.log('[LocaleContext] Persisted regionId:', regionId);
             }
         }
     }, [regionId]);
 
-    // Persist language to localStorage
+    // Persist language to localStorage (Issue #33: Use cached storage)
     useEffect(() => {
         if (typeof window === 'undefined') return;
-        localStorage.setItem(LANGUAGE_STORAGE_KEY, JSON.stringify(language));
+        setCachedStorage(LANGUAGE_STORAGE_KEY, JSON.stringify(language)); // Cached write
     }, [language]);
 
     const setLanguage = useCallback((lang: Language) => {

@@ -14,6 +14,7 @@ import { startPaymentCaptureWorker } from "../workers/payment-capture-worker"
 import { startEmailWorker } from "../workers/email-worker"
 import { sendAdminNotification, AdminNotificationType } from "../lib/admin-notifications"
 import { logger } from "../utils/logger"
+import { extractStripePaymentIntentId, shouldPersistStripePaymentIntentId } from "../utils/payment-intent"
 
 interface OrderPlacedEventData {
   id: string;
@@ -173,8 +174,32 @@ export default async function orderPlacedHandler({
                     logger.info("customer-sync", "Successfully created new addresses", { count: newAddresses.length });
                 }
 
-            } catch (custErr: any) {
-                logger.error("customer-sync", "Failed to sync customer data", { order_id: order.id }, custErr);
+            } catch (custErr: unknown) {
+                logger.error("customer-sync", "Failed to sync customer data", { order_id: order.id }, custErr instanceof Error ? custErr : new Error(String(custErr)));
+            }
+        }
+
+        const paymentIntentId = extractStripePaymentIntentId(order);
+        if (shouldPersistStripePaymentIntentId(order.metadata as Record<string, unknown> | undefined, paymentIntentId)) {
+            try {
+                const orderService = container.resolve("order");
+                await orderService.updateOrders([{
+                    id: order.id,
+                    metadata: {
+                        ...(order.metadata || {}),
+                        stripe_payment_intent_id: paymentIntentId,
+                    },
+                }]);
+                logger.info("order-placed", "Stored Stripe PaymentIntent ID on order metadata", {
+                    order_id: order.id,
+                });
+            } catch (updateError: unknown) {
+                logger.error(
+                    "order-placed",
+                    "Failed to store Stripe PaymentIntent ID on order metadata",
+                    { order_id: order.id },
+                    updateError instanceof Error ? updateError : new Error(String(updateError))
+                );
             }
         }
 
@@ -182,24 +207,6 @@ export default async function orderPlacedHandler({
         let magicLink: string | null = null
         if (isGuest) {
             try {
-                // Get payment_intent_id from order
-                const paymentCollection = order.payment_collections?.[0];
-                const payment = paymentCollection?.payments?.[0];
-                const paymentData = payment?.data as any;
-
-                const paymentIntentIdFromPaymentCollection =
-                  typeof paymentData?.id === "string" && paymentData.id.startsWith("pi_")
-                    ? paymentData.id
-                    : undefined
-
-                const paymentIntentIdFromMetadata =
-                  typeof order.metadata?.stripe_payment_intent_id === "string" &&
-                  order.metadata.stripe_payment_intent_id.startsWith("pi_")
-                    ? order.metadata.stripe_payment_intent_id
-                    : undefined
-
-                const paymentIntentId = paymentIntentIdFromPaymentCollection || paymentIntentIdFromMetadata
-
                 if (paymentIntentId) {
                      // Resolve service from container for dependency injection
                      const modificationTokenService = container.resolve("modificationTokenService") as ModificationTokenService;
@@ -220,10 +227,11 @@ export default async function orderPlacedHandler({
                 } else {
                     logger.warn("email-magic-link", "Could not find payment intent ID - magic link skipped", { order_id: order.id });
                 }
-            } catch (error: any) {
+            } catch (error: unknown) {
                 // Log warning but continue - email will be sent without magic link
                 // Sanitize error message to avoid PII leak
-                const safeErrorMessage = error.message ? error.message.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, '***') : 'Unknown error';
+                const errorObj = error instanceof Error ? error : new Error(String(error));
+                const safeErrorMessage = errorObj.message ? errorObj.message.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, '***') : 'Unknown error';
                 logger.warn("email-magic-link", "Failed to generate magic link", { order_id: order.id, error: safeErrorMessage });
             }
         }
@@ -231,6 +239,31 @@ export default async function orderPlacedHandler({
         // Prepare email payload matching OrderPlacedEmailProps interface
         // Template must be "order-placed" to match Templates.ORDER_PLACED enum
         // Note: Medusa v2 stores prices in MAJOR currency units (e.g., $34.00 not 3400 cents)
+        
+        // In Medusa V2: order.items has direct access to line item properties
+        // Handle both flat structure (Medusa v2) and nested structure (test mocks)
+        interface OrderItem {
+          item?: {
+            product_title?: string;
+            title?: string;
+            variant_title?: string;
+            unit_price?: number;
+            metadata?: {
+              color?: string;
+              cart_data?: { color?: string };
+            };
+          };
+          product_title?: string;
+          title?: string;
+          variant_title?: string;
+          quantity?: number;
+          unit_price?: number;
+          metadata?: {
+            color?: string;
+            cart_data?: { color?: string };
+          };
+        }
+        
         const emailPayload = {
             entityId: order.id,
             template: Templates.ORDER_PLACED,
@@ -245,18 +278,22 @@ export default async function orderPlacedHandler({
                 subtotal: order.subtotal,
                 shipping_total: order.shipping_total,
                 tax_total: order.tax_total,
-                // In Medusa V2: order.items has direct access to line item properties
-                // Handle both flat structure (Medusa V2) and nested structure (test mocks)
-                items: (order.items || []).map((orderItem: any) => {
-                  const lineItem = orderItem.item || orderItem;
-                  return {
-                    title: lineItem.product_title || lineItem.title || orderItem.product_title || orderItem.title || 'Unknown Product',
-                    variant_title: lineItem.variant_title || orderItem.variant_title,
-                    color: lineItem.metadata?.color || lineItem.metadata?.cart_data?.color || orderItem.metadata?.color || orderItem.metadata?.cart_data?.color,
-                    quantity: Number(orderItem.quantity) || 1,
-                    unit_price: Number(orderItem.unit_price) || Number(lineItem.unit_price) || 0,
-                  };
-                }),
+                items: (order.items || [])
+                  .filter((item): item is NonNullable<typeof item> => item !== null && item !== undefined)
+                  .map((orderItem) => {
+                    // Type assertion needed because Medusa OrderLineItem type may not have all properties
+                    const typedItem = orderItem as unknown as OrderItem;
+                    // Handle both nested (item.item) and flat structures
+                    const lineItem = typedItem.item || typedItem;
+                    const metadata = (lineItem.metadata || typedItem.metadata) as { color?: string; cart_data?: { color?: string } } | undefined;
+                    return {
+                      title: lineItem.product_title || lineItem.title || typedItem.product_title || typedItem.title || 'Unknown Product',
+                      variant_title: lineItem.variant_title || typedItem.variant_title,
+                      color: metadata?.color || metadata?.cart_data?.color,
+                      quantity: Number(typedItem.quantity) || 1,
+                      unit_price: Number(typedItem.unit_price) || Number(lineItem.unit_price) || 0,
+                    };
+                  }),
                 shipping_address: order.shipping_address ? {
                   first_name: order.shipping_address.first_name ?? undefined,
                   last_name: order.shipping_address.last_name ?? undefined,
@@ -338,7 +375,11 @@ export default async function orderPlacedHandler({
       // Primary: Get from payment_collections.payments.data.id
       const paymentCollection = order.payment_collections?.[0]
       const payment = paymentCollection?.payments?.[0]
-      const paymentData = payment?.data as any
+      interface PaymentData {
+        id?: string;
+        [key: string]: unknown;
+      }
+      const paymentData = payment?.data as PaymentData | undefined
       const paymentIntentIdFromPayment = 
         typeof paymentData?.id === "string" && paymentData.id.startsWith("pi_")
           ? paymentData.id
@@ -359,12 +400,16 @@ export default async function orderPlacedHandler({
           logger.info("payment-capture", "Attempting to schedule payment capture", { order_id: data.id, pi: paymentIntentId })
           await schedulePaymentCapture(data.id, paymentIntentId)
           logger.info("payment-capture", "Payment capture scheduled", { order_id: data.id, delay: formatModificationWindow(), pi: paymentIntentId })
-        } catch (scheduleError: any) {
+        } catch (scheduleError: unknown) {
           // Story 6.2: Handle Redis connection failures gracefully
-          const isRedisError = ['ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND'].includes(scheduleError?.code)
+          interface ErrorWithCode extends Error {
+            code?: string;
+          }
+          const errorWithCode = scheduleError instanceof Error ? scheduleError as ErrorWithCode : null;
+          const isRedisError = errorWithCode?.code && ['ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND'].includes(errorWithCode.code);
           
           if (isRedisError) {
-            logger.error("payment-capture", "Redis connection failed - flagging for recovery", { order_id: data.id }, scheduleError)
+            logger.error("payment-capture", "Redis connection failed - flagging for recovery", { order_id: data.id }, scheduleError instanceof Error ? scheduleError : new Error(String(scheduleError)))
             
             // Update order metadata with recovery flag
             const orderService = container.resolve("order")
@@ -396,21 +441,26 @@ export default async function orderPlacedHandler({
             total: order.total,
             currency: order.currency_code,
             item_count: order.items?.length || 0,
-            items: order.items?.map((item: any) => ({
-              product_id: item.product_id,
-              quantity: item.quantity,
-              unit_price: item.unit_price,
-            })) || [],
+            items: order.items
+              ?.filter((item): item is NonNullable<typeof item> => item !== null && item !== undefined)
+              .map((item) => {
+                const typedItem = item as { product_id?: string; quantity?: number; unit_price?: number };
+                return {
+                  product_id: typedItem.product_id,
+                  quantity: typedItem.quantity,
+                  unit_price: typedItem.unit_price,
+                };
+              }) || [],
           },
         })
 
         logger.info("analytics", "order.placed event tracked", { order_id: data.id })
-      } catch (error: any) {
-        logger.error("analytics", "Failed to track order.placed event", { order_id: data.id }, error)
+      } catch (error: unknown) {
+        logger.error("analytics", "Failed to track order.placed event", { order_id: data.id }, error instanceof Error ? error : new Error(String(error)))
       }
     }
-  } catch (error: any) {
-    logger.error("payment-capture", "Failed to schedule payment capture", { order_id: data.id }, error)
+  } catch (error: unknown) {
+    logger.error("payment-capture", "Failed to schedule payment capture", { order_id: data.id }, error instanceof Error ? error : new Error(String(error)))
   }
 }
 

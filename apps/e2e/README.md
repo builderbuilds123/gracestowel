@@ -271,12 +271,16 @@ This framework follows patterns from the TEA (Test Architecture) knowledge base:
 - Verify app is running: `pnpm dev:storefront`
 - Increase timeout if needed (but prefer fixing root cause)
 
-### API Seeding Fails
+### API Seeding Fails / Backend Not Available
 
-- Check `API_URL` or `BACKEND_URL` in `.env`
-- Verify backend is running: `pnpm dev:api`
-- API endpoints may need adjustment based on Medusa API structure
-- Factories gracefully fall back to UI-only mode if API fails
+- **Symptoms**: Tests show "Backend not available" messages or ConnectionError
+- **Solution**: 
+  1. Start backend: `pnpm dev:backend` (from project root)
+  2. Verify `API_URL` or `BACKEND_URL` in `apps/e2e/.env` points to running backend (default: `http://localhost:9000`)
+  3. Ensure backend is seeded: `cd apps/backend && pnpm seed`
+  4. Check backend health: `curl http://localhost:9000/health`
+
+**Note**: Tests that require backend API will be automatically skipped when backend is unavailable. Tests that only need the storefront UI will continue to run with mock products.
 
 ### Flaky Tests
 

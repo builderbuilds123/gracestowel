@@ -7,6 +7,7 @@
 
 import { Queue, Job } from "bullmq";
 import { PaymentCaptureJobData, JobActiveError } from "../types/queue-types";
+import { logger } from "../utils/logger";
 
 // Re-export types for backwards compatibility
 export { PaymentCaptureJobData, JobActiveError } from "../types/queue-types";
@@ -33,19 +34,63 @@ export const CAPTURE_BUFFER_SECONDS = parseInt(
     10
 );
 
-// Delay for payment capture - configurable via env, defaults to 59:30 (3570000ms)
-// Story 6.3: Uses 30s buffer before full hour to prevent edit/capture race
+// Story 1.1: Payment capture delay - configurable via env, defaults to 3 days (259200000ms)
+// Using 3 days as conservative window to accommodate shorter card network periods (e.g., Visa's 5-day window)
+export const DEFAULT_CAPTURE_DELAY_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
+
 const envDelay = process.env.PAYMENT_CAPTURE_DELAY_MS;
+
+// DEBUG: Log environment variable state at module load time
+logger.debug("capture-queue", "Module loading", {
+    timestamp: new Date().toISOString(),
+    envDelay: envDelay,
+    envDelayType: typeof envDelay,
+    nodeEnv: process.env.NODE_ENV,
+    bufferSeconds: CAPTURE_BUFFER_SECONDS
+});
+
+let parsedDelay = DEFAULT_CAPTURE_DELAY_MS;
+
 if (!envDelay) {
-    console.error("[CRITICAL] PAYMENT_CAPTURE_DELAY_MS environment variable is missing. Using default of 59:30.");
-} else if (isNaN(parseInt(envDelay, 10))) {
-    console.error(`[CRITICAL] PAYMENT_CAPTURE_DELAY_MS environment variable is invalid: "${envDelay}". Using default of 59:30.`);
+    logger.info("capture-queue", "PAYMENT_CAPTURE_DELAY_MS not set, using default", {
+        delayMs: DEFAULT_CAPTURE_DELAY_MS,
+        delayDays: DEFAULT_CAPTURE_DELAY_MS / (1000 * 60 * 60 * 24)
+    });
+} else {
+    const parsed = parseInt(envDelay, 10);
+    if (isNaN(parsed)) {
+        logger.error("capture-queue", "PAYMENT_CAPTURE_DELAY_MS environment variable is invalid - using default", {
+            invalidValue: envDelay,
+            defaultMs: DEFAULT_CAPTURE_DELAY_MS
+        });
+    } else {
+        parsedDelay = parsed;
+    }
 }
 
-export const PAYMENT_CAPTURE_DELAY_MS = parseInt(
-    envDelay || String(calculateCaptureDelayMs(CAPTURE_BUFFER_SECONDS)),
-    10
-);
+export const PAYMENT_CAPTURE_DELAY_MS = parsedDelay;
+
+// Log at module load for debugging
+const delayDays = PAYMENT_CAPTURE_DELAY_MS / (1000 * 60 * 60 * 24);
+logger.info("capture-queue", "Capture delay configured", {
+    delayMs: PAYMENT_CAPTURE_DELAY_MS,
+    delayDays
+});
+
+// DEBUG: Log final computed value (inline calculation to avoid forward reference)
+const _debugDelaySeconds = Math.floor(PAYMENT_CAPTURE_DELAY_MS / 1000);
+const _debugDelayMinutes = Math.floor(_debugDelaySeconds / 60);
+const _debugDelayRemainingSeconds = _debugDelaySeconds % 60;
+const _debugDelayHours = Math.floor(_debugDelayMinutes / 60);
+const _debugDelayDays = Math.floor(_debugDelayHours / 24);
+
+logger.debug("capture-queue", "Final delay configuration details", {
+    days: _debugDelayDays,
+    hours: _debugDelayHours % 24,
+    minutes: _debugDelayMinutes % 60,
+    seconds: _debugDelayRemainingSeconds,
+    totalMs: PAYMENT_CAPTURE_DELAY_MS
+});
 
 /**
  * Get the modification window duration in seconds
@@ -166,7 +211,14 @@ export async function schedulePaymentCapture(
         throw new Error(`Invalid paymentIntentId for scheduling payment capture: ${paymentIntentId}`);
     }
 
-    console.log(`[CAPTURE_QUEUE] 📋 Scheduling payment capture for order ${orderId}, PI: ${paymentIntentId}`);
+    logger.info("capture-queue", "Scheduling payment capture", { orderId, paymentIntentId });
+
+    // DEBUG: Log delay configuration
+    logger.debug("capture-queue", "Scheduling capture job", {
+        orderId,
+        paymentCaptureDelayMs: PAYMENT_CAPTURE_DELAY_MS,
+        delayOverride: delayOverride !== undefined ? delayOverride : undefined,
+    });
 
     const queue = getPaymentCaptureQueue();
 
@@ -181,6 +233,15 @@ export async function schedulePaymentCapture(
     const delayMinutes = Math.round(delaySeconds / 60);
     const captureTime = new Date(Date.now() + finalDelay).toISOString();
 
+    // DEBUG: Log final delay being used
+    logger.debug("capture-queue", "Final delay configuration", {
+        finalDelay,
+        delaySeconds,
+        delayMinutes,
+        currentTime: new Date().toISOString(),
+        expectedCaptureTime: captureTime,
+    });
+
     let job: Job<PaymentCaptureJobData> | null = null;
     try {
         job = await queue.add(
@@ -191,18 +252,19 @@ export async function schedulePaymentCapture(
                 jobId: `capture-${orderId}`, // Unique job ID to prevent duplicates
             }
         );
-    } catch (err: any) {
-        const message = err?.message || "";
-        const isDuplicate = err?.name === "JobIdAlreadyExistsError" || message.includes("already exists");
+    } catch (err: unknown) {
+        const error = err instanceof Error ? err : new Error(String(err));
+        const message = error.message || "";
+        const isDuplicate = error.name === "JobIdAlreadyExistsError" || message.includes("already exists");
         if (isDuplicate) {
             const existing = await queue.getJob(`capture-${orderId}`);
             if (existing) {
-                job = existing as any;
+                job = existing as Job<PaymentCaptureJobData>;
             } else {
-                throw err;
+                throw error;
             }
         } else {
-            throw err;
+            throw error;
         }
     }
 
@@ -210,12 +272,14 @@ export async function schedulePaymentCapture(
         throw new Error(`Failed to schedule payment capture job for order ${orderId}`);
     }
 
-    console.log(`[CAPTURE_QUEUE] ✅ Payment capture scheduled successfully!`);
-    console.log(`[CAPTURE_QUEUE]   Order: ${orderId}`);
-    console.log(`[CAPTURE_QUEUE]   Payment Intent: ${paymentIntentId}`);
-    console.log(`[CAPTURE_QUEUE]   Job ID: ${job.id}`);
-    console.log(`[CAPTURE_QUEUE]   Delay: ${delayMinutes} minutes (${delaySeconds} seconds)`);
-    console.log(`[CAPTURE_QUEUE]   Scheduled capture time: ${captureTime}`);
+    logger.info("capture-queue", "Payment capture scheduled successfully", {
+        orderId,
+        paymentIntentId,
+        jobId: job.id,
+        delayMinutes,
+        delaySeconds,
+        scheduledCaptureTime: captureTime,
+    });
 
     return job;
 }
@@ -235,12 +299,18 @@ export async function cancelPaymentCaptureJob(orderId: string): Promise<boolean>
         // If job is already active (being processed), we cannot safely remove it.
         // The worker is running concurrently. We must abort cancellation.
         if (state === "active") {
-            console.warn(`[CancelOrder] Cannot cancel capture job for ${orderId}: Job is active/processing`);
+            logger.warn("capture-queue", "Cannot cancel capture job - job is active/processing", {
+                orderId,
+                jobState: state,
+            });
             throw new JobActiveError(orderId);
         }
 
         await job.remove();
-        console.log(`Canceled payment capture job for order ${orderId} (state: ${state})`);
+        logger.info("capture-queue", "Canceled payment capture job", {
+            orderId,
+            jobState: state,
+        });
         return true;
     }
     
@@ -256,7 +326,13 @@ export async function getJobState(orderId: string): Promise<"waiting" | "active"
     const queue = getPaymentCaptureQueue();
     const job = await queue.getJob(`capture-${orderId}`);
     if (!job) return "missing";
-    return await job.getState() as any;
+    const state = await job.getState();
+    // BullMQ returns specific state types, but we need to handle all possible values
+    const validStates = ["waiting", "active", "delayed", "failed", "completed", "unknown"] as const;
+    if (validStates.includes(state as typeof validStates[number])) {
+        return state as typeof validStates[number];
+    }
+    return "unknown";
 }
 
 /**

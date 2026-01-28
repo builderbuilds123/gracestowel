@@ -14,7 +14,7 @@ import { useAutomaticPromotions, type AutomaticPromotionInfo } from '../../hooks
 import { generateTraceId, createLogger } from '../../lib/logger';
 import { parsePrice } from '../../lib/price';
 import { CHECKOUT_CONSTANTS } from '../../constants/checkout';
-import { type ShippingOption } from '../CheckoutForm';
+import type { ShippingOption } from '../../types/checkout';
 import type { CartItem, ProductId } from '../../types/product';
 import type { CartWithPromotions, AppliedPromoCode } from '../../types/promotion';
 import type { CheckoutState } from '../../types/checkout';
@@ -63,6 +63,7 @@ interface CheckoutContextType {
   promoError: string | null;
   promoSuccessMessage: string | null;
   automaticPromotions: AutomaticPromotionInfo[];
+  hasActiveDiscount: boolean; // Stable flag for discount row visibility
   
   // Methods
   fetchShippingRates: ReturnType<typeof useShippingRates>['fetchShippingRates'];
@@ -91,7 +92,11 @@ export function useCheckout() {
   return context;
 }
 
-export function CheckoutProvider({ children }: { children: React.ReactNode }) {
+interface CheckoutProviderProps {
+  children: React.ReactNode;
+}
+
+export function CheckoutProvider({ children }: CheckoutProviderProps) {
   const { items, cartTotal, updateQuantity, removeFromCart, isLoaded, isSyncing } = useCart();
   const { currency, regionId } = useLocale();
   const { customer, isAuthenticated } = useCustomer();
@@ -122,7 +127,13 @@ export function CheckoutProvider({ children }: { children: React.ReactNode }) {
     removePromoCode,
     refreshDiscount,
     syncFromCart: syncPromoFromCart,
-  } = usePromoCode({ cartId });
+  } = usePromoCode({
+    cartId,
+    // Directly update medusaCart with the response from promo code API
+    // This ensures CheckoutProvider gets the updated discount_total immediately
+    // without making an extra API call
+    onCartUpdated: setMedusaCart,
+  });
 
   const {
     fetchShippingRates,
@@ -161,17 +172,41 @@ export function CheckoutProvider({ children }: { children: React.ReactNode }) {
     }, [setError, clearError])
   });
 
-  const { 
-    isShippingPersisted, 
+  const {
+    isShippingPersisted,
     setIsShippingPersisted,
-    shippingPersistError, 
+    shippingPersistError,
     setShippingPersistError,
-    persistShippingOption 
-  } = useShippingPersistence(cartId, sessionTraceId);
+    persistShippingOption
+  } = useShippingPersistence({
+    cartId,
+    traceId: sessionTraceId,
+    // Update cart state when shipping is persisted to reflect new totals
+    onCartUpdated: React.useCallback((cart: CartWithPromotions) => {
+      setMedusaCart(cart);
+      logger.info('Cart updated after shipping persist', {
+        shipping_total: cart.shipping_total,
+        total: cart.total
+      });
+    }, [setMedusaCart, logger])
+  });
 
   const isCalculatingShipping = state.status === 'fetching_shipping';
   const isCartSynced = state.status !== 'idle' && state.status !== 'initializing' && state.status !== 'syncing_cart';
   const cartSyncError = errorList.find(e => e.type === 'CART_SYNC')?.message || null;
+
+  // =============================================================================
+  // PRICING DISPLAY STRATEGY (Industry Best Practice)
+  // =============================================================================
+  //
+  // Following Shopify Hydrogen's optimistic cart pattern and skeleton loading best practices:
+  // @see https://shopify.dev/docs/api/hydrogen/2024-10/hooks/useoptimisticcart
+  // @see https://blog.logrocket.com/ux-design/skeleton-loading-screen-design/
+  //
+  // 1. SUBTOTAL: Always show local calculation immediately (user sees instant feedback)
+  // 2. DISCOUNT/SHIPPING/TOTAL: Show loading skeleton when syncing, actual values when synced
+  // 3. No value flicker - either show correct value or loading indicator
+  // =============================================================================
 
   // Medusa v2 Totals are in Major Units (Dollars) - No conversion needed
   const medusaSubtotal = typeof medusaCart?.subtotal === 'number' ? medusaCart.subtotal : null;
@@ -179,62 +214,59 @@ export function CheckoutProvider({ children }: { children: React.ReactNode }) {
   const medusaShipping = typeof medusaCart?.shipping_total === 'number' ? medusaCart.shipping_total : null;
   const medusaTotal = typeof medusaCart?.total === 'number' ? medusaCart.total : null;
 
-  // Optimistic calculation to prevent jumpy UI during sync
-  const displayCartTotal = useMemo(() => {
-    const localSubtotal = cartTotal;
-    
-    // If not syncing, prefer the backend's precise total if available
-    if (!isSyncing && medusaSubtotal !== null) {
-      return medusaSubtotal;
+  // Store confirmed backend values - only update when not syncing
+  const confirmedDiscountRef = useRef<number>(0);
+  const confirmedTotalRef = useRef<number>(0);
+
+  // Update confirmed values when sync completes
+  if (!isSyncing) {
+    if (medusaDiscount !== null) {
+      confirmedDiscountRef.current = medusaDiscount;
     }
-
-    if (medusaCart && items.length > 0) {
-      // Logic for multi-item correct discount preservation:
-      // 1. Identify if we have fixed or percentage discounts
-      // 2. If percentage: preserve the RATIO (medusaDiscount / lastMedusaSubtotal)
-      // 3. If fixed: preserve the ABSOLUTE value (clamped to not exceed subtotal)
-      
-      const lastMedusaDiscountTotal = medusaCart.discount_total || 0;
-      const lastMedusaSubtotalRaw = medusaCart.item_total || medusaCart.subtotal || 1;
-      
-      // Determine if a fixed amount discount is likely (Medusa v2 specific check would be better but ratio approach is safer)
-      // We look at the first promotion to guess intent if multiple exist
-      const isFixedAmount = medusaCart.promotions?.some(p => p.application_method?.type === 'fixed');
-
-      if (isFixedAmount) {
-        // Fixed discount: subtract absolute amount from new local subtotal
-        return Math.max(0, localSubtotal - lastMedusaDiscountTotal);
-      } else {
-        // Percentage discount (or mixed): apply the previous RATIO to the new subtotal
-        const discountRatio = lastMedusaDiscountTotal / lastMedusaSubtotalRaw;
-        return localSubtotal * (1 - discountRatio);
-      }
+    if (medusaTotal !== null) {
+      confirmedTotalRef.current = medusaTotal;
     }
-    
-    return localSubtotal;
-  }, [cartTotal, medusaCart, items.length, isSyncing, medusaSubtotal]);
+  }
 
+  // SUBTOTAL: Always use local calculation for immediate feedback
+  // This is the one value that can be calculated purely from local items
+  const displayCartTotal = cartTotal;
+
+  // DISCOUNT: Use confirmed backend value when not syncing, otherwise UI will show loading
+  // The actual display logic (showing loading vs value) is in OrderSummary
   const displayDiscountTotal = useMemo(() => {
-    if (!isSyncing && medusaDiscount !== null) return medusaDiscount;
-
-    if (medusaCart && items.length > 0) {
-      const lastMedusaDiscountTotal = medusaCart.discount_total || 0;
-      const lastMedusaSubtotalRaw = medusaCart.item_total || medusaCart.subtotal || 1;
-      const isFixedAmount = medusaCart.promotions?.some(p => p.application_method?.type === 'fixed');
-
-      if (isFixedAmount) return lastMedusaDiscountTotal;
-      
-      const ratio = lastMedusaDiscountTotal / lastMedusaSubtotalRaw;
-      return cartTotal * ratio;
+    if (!isSyncing && medusaDiscount !== null) {
+      return medusaDiscount;
     }
-    return totalDiscount;
-  }, [medusaDiscount, isSyncing, medusaCart, items.length, cartTotal, totalDiscount]);
+    // Return last confirmed value (or 0) - UI will show loading indicator when isSyncing
+    return confirmedDiscountRef.current;
+  }, [medusaDiscount, isSyncing]);
 
+  // SHIPPING: Use selected shipping amount or backend value
   const displayShippingCost = (selectedShipping && 'amount' in selectedShipping)
     ? (medusaShipping ?? (selectedShipping.amount ?? 0))
     : 0;
 
-  const displayFinalTotal = medusaTotal ?? (displayCartTotal + displayShippingCost);
+  // TOTAL: Use confirmed backend value when not syncing, otherwise UI will show loading
+  const displayFinalTotal = useMemo(() => {
+    if (!isSyncing && medusaTotal !== null) {
+      return medusaTotal;
+    }
+    // Return last confirmed value (or calculated) - UI will show loading indicator when isSyncing
+    if (confirmedTotalRef.current > 0) {
+      return confirmedTotalRef.current;
+    }
+    // Fallback calculation when no backend data yet
+    return displayCartTotal - displayDiscountTotal + displayShippingCost;
+  }, [medusaTotal, isSyncing, displayCartTotal, displayDiscountTotal, displayShippingCost]);
+
+  // Stable flag for discount row visibility - show row if any discount exists or promo codes applied
+  const hasActiveDiscount = useMemo(() => {
+    return appliedPromoCodes.length > 0 ||
+           confirmedDiscountRef.current > 0 ||
+           (medusaDiscount !== null && medusaDiscount > 0) ||
+           totalDiscount > 0;
+  }, [appliedPromoCodes.length, medusaDiscount, totalDiscount]);
 
   const {
     promotions: automaticPromotions,
@@ -250,37 +282,51 @@ export function CheckoutProvider({ children }: { children: React.ReactNode }) {
     return total + originalPrice * item.quantity;
   }, 0), [items]);
 
-  const { 
-    paymentCollectionId, 
+  const {
+    paymentCollectionId,
     initialPaymentSession,
-    error: collectionError 
+    error: collectionError
   } = usePaymentCollection(cartId, isCartSynced);
 
-  const { 
-    clientSecret, 
-    error: sessionError 
-  } = usePaymentSession(paymentCollectionId, isCartSynced, initialPaymentSession);
+  const {
+    clientSecret,
+    error: sessionError
+  } = usePaymentSession(
+    paymentCollectionId,
+    isCartSynced,
+    initialPaymentSession
+  );
 
   const paymentError = collectionError || sessionError;
 
-  // Stable dependency for promo codes to prevent infinite loops
+  // Best Practice: rerender-dependencies - Use primitive dependencies for effects
+  // Stable string hash to prevent infinite loops when array reference changes
   const promoCodesHash = useMemo(() => {
-    return JSON.stringify(appliedPromoCodes.map(c => c.code).sort());
+    return JSON.stringify([...appliedPromoCodes.map(c => c.code)].toSorted());
   }, [appliedPromoCodes]);
 
+  // Best Practice: rerender-dependencies - Derive primitive dependencies
+  // to minimize effect re-runs (only re-run when these actually change)
+  const itemsLength = items.length;
+  const addressKey = shippingAddress
+    ? `${shippingAddress.address?.line1 ?? ''}-${shippingAddress.address?.postal_code ?? ''}-${shippingAddress.address?.country ?? ''}`
+    : '';
+
   useEffect(() => {
-    if (items.length === 0) return;
+    if (itemsLength === 0) return;
     const timer = setTimeout(() => {
       fetchShippingRates(
-        items, 
-        shippingAddress, 
-        cartTotal, 
-        guestEmail, 
+        items,
+        shippingAddress,
+        cartTotal,
+        guestEmail,
         appliedPromoCodes.map(c => ({ code: c.code, isAutomatic: c.isAutomatic ?? false }))
       );
     }, CHECKOUT_CONSTANTS.ADDRESS_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [items, shippingAddress, cartTotal, fetchShippingRates, guestEmail, promoCodesHash]);
+    // Use primitive dependencies for stability, but include actual objects in deps array for linter
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itemsLength, addressKey, cartTotal, fetchShippingRates, guestEmail, promoCodesHash]);
 
   const value = useMemo(() => ({
     state,
@@ -312,6 +358,7 @@ export function CheckoutProvider({ children }: { children: React.ReactNode }) {
     promoError,
     promoSuccessMessage,
     automaticPromotions,
+    hasActiveDiscount,
     fetchShippingRates,
     persistShippingOption,
     applyPromoCode,
@@ -325,15 +372,15 @@ export function CheckoutProvider({ children }: { children: React.ReactNode }) {
     logger,
     sessionTraceId
   }), [
-    state, actions, items, displayCartTotal, displayDiscountTotal, 
+    state, actions, items, displayCartTotal, displayDiscountTotal,
     displayShippingCost, displayFinalTotal, originalTotal, isLoaded,
     errorList, cartSyncError, paymentError, shippingPersistError, hasBlockingError,
     cartId, medusaCart, isLoading, isCalculatingShipping, isCartSynced, isSyncing,
     isShippingPersisted, paymentCollectionId, initialPaymentSession, clientSecret,
-    appliedPromoCodes, isPromoLoading, promoError, promoSuccessMessage, 
-    automaticPromotions, fetchShippingRates, persistShippingOption, applyPromoCode,
-    removePromoCode, updateQuantity, removeFromCart, setMedusaCart, setCartId,
-    clearError, setError, logger, sessionTraceId
+    appliedPromoCodes, isPromoLoading, promoError, promoSuccessMessage,
+    automaticPromotions, hasActiveDiscount, fetchShippingRates, persistShippingOption,
+    applyPromoCode, removePromoCode, updateQuantity, removeFromCart, setMedusaCart,
+    setCartId, clearError, setError, logger, sessionTraceId
   ]);
 
   return (

@@ -1,6 +1,6 @@
 import { useParams, Link } from "react-router";
 import { posts } from "../data/blogPosts";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft } from "../lib/icons";
 
 export default function BlogPost() {
     const { id } = useParams();

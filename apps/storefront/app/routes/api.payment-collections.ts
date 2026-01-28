@@ -101,13 +101,22 @@ export async function action({ request, context }: ActionFunctionArgs) {
       collectionId: collection.id 
     });
 
-    // 2. Create Stripe session
-    const sessionRes = await medusaFetch(`/store/payment-collections/${collection.id}/sessions`, {
+    // 2. Create Stripe session with setup_future_usage for off-session charges
+    // This enables reusing the payment method for supplementary charges when
+    // items are added to the order (since incremental authorization requires IC+ pricing)
+    // @see https://docs.stripe.com/payments/save-during-payment
+    const sessionRes = await medusaFetch(`/store/payment-collections/${collection.id}/payment-sessions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ provider_id: "pp_stripe" }),
+      body: JSON.stringify({
+        provider_id: "pp_stripe",
+        data: {
+          // Save payment method for future off-session charges (e.g., order modifications)
+          setup_future_usage: "off_session",
+        },
+      }),
       label: "create-missing-stripe-session",
       context,
     });
@@ -128,18 +137,19 @@ export async function action({ request, context }: ActionFunctionArgs) {
   try {
     let paymentCollection: MedusaPaymentCollection | undefined;
 
-    // A. Check for existing payment collection first (Idempotency)
-    const existingCheckResponse = await medusaFetch(`/store/payment-collections?cart_id=${cartId}`, {
+    // A. Check for existing payment collection by fetching cart with payment_collection field
+    // Note: GET /store/payment-collections?cart_id=... doesn't exist in Medusa v2
+    // Instead, we get payment_collection from the cart response
+    const cartCheckResponse = await medusaFetch(`/store/carts/${cartId}?fields=payment_collection.*`, {
       method: "GET",
-      label: "check-existing-payment-collection",
+      label: "check-existing-payment-collection-via-cart",
       context,
     });
 
-    if (existingCheckResponse.ok) {
-      const existingData = await existingCheckResponse.json();
-      const collections = (existingData as { payment_collections?: MedusaPaymentCollection[] })?.payment_collections;
-      if (Array.isArray(collections) && collections.length > 0) {
-        paymentCollection = collections[0];
+    if (cartCheckResponse.ok) {
+      const cartData = await cartCheckResponse.json() as { cart?: { payment_collection?: MedusaPaymentCollection } };
+      if (cartData.cart?.payment_collection?.id) {
+        paymentCollection = cartData.cart.payment_collection;
         logger.info("Found existing payment collection", { id: paymentCollection.id });
       }
     }
@@ -159,17 +169,18 @@ export async function action({ request, context }: ActionFunctionArgs) {
       if (!createRes.ok) {
         // Handle 409 Conflict race condition (created by another request)
         if (createRes.status === 409) {
-           const retryCheck = await medusaFetch(`/store/payment-collections?cart_id=${cartId}`, {
+           // Retry by fetching cart to get the payment collection
+           const retryCheck = await medusaFetch(`/store/carts/${cartId}?fields=payment_collection.*`, {
             method: "GET",
-            label: "retry-fetch-payment-collection",
+            label: "retry-fetch-payment-collection-via-cart",
             context,
           });
           if (retryCheck.ok) {
-            const retryData = await retryCheck.json();
-            paymentCollection = (retryData as { payment_collections?: MedusaPaymentCollection[] })?.payment_collections?.[0];
+            const retryData = await retryCheck.json() as { cart?: { payment_collection?: MedusaPaymentCollection } };
+            paymentCollection = retryData.cart?.payment_collection;
           }
         }
-        
+
         if (!paymentCollection) {
            const errorText = await createRes.text();
            const errorMessage = errorText || "Failed to create payment collection";

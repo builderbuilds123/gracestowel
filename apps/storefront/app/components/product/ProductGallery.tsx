@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { Image } from "../ui/Image";
+import { createLogger } from "../../lib/logger";
 
 interface ProductGalleryProps {
   images: string[];
@@ -11,25 +13,58 @@ interface ProductGalleryProps {
 export function ProductGallery({ images, title }: ProductGalleryProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
 
-  const mainImage = images[selectedIndex] || images[0] || "/placeholder-towel.jpg";
-  const hasMultipleImages = images.length > 1;
+  // Reset index when images array changes (e.g. variant change)
+  useEffect(() => {
+    setSelectedIndex(0);
+  }, [images]);
+
+  // ✅ Memoize filtered images array (Issue #6 fix)
+  const validImages = useMemo(
+    () => images.filter(img => img && typeof img === 'string' && img.trim() !== ''),
+    [images] // Only recalculate when images array reference changes
+  );
+  
+  // ✅ Memoize derived values
+  const mainImage = useMemo(
+    () => validImages[selectedIndex] || validImages[0] || "/placeholder-towel.jpg",
+    [validImages, selectedIndex]
+  );
+  
+  const hasMultipleImages = useMemo(
+    () => validImages.length > 1,
+    [validImages]
+  );
+
+  // Log if we have no valid images
+  useEffect(() => {
+    if (validImages.length === 0) {
+      const logger = createLogger({ context: "product-gallery" });
+      logger.warn("No valid images found for product", {
+        productTitle: title,
+        providedImageCount: images.length,
+        invalidImages: images.filter(img => !img || typeof img !== 'string' || img.trim() === '')
+      });
+    }
+  }, [validImages.length, title, images]);
 
   return (
     <div className="space-y-4">
       {/* Main Image */}
       <div className="relative aspect-[4/5] overflow-hidden rounded-2xl bg-card-earthy/10">
-        <img
+        <Image
           src={mainImage}
           alt={title}
+          width={600}
+          height={750}
+          priority={true} // Main image should load eagerly
           className="w-full h-full object-cover transition-opacity duration-300"
-          loading="eager"
         />
       </div>
 
       {/* Thumbnail Strip */}
-      {hasMultipleImages && (
+      {hasMultipleImages ? (
         <div className="flex gap-3 overflow-x-auto pb-2 hide-scrollbar">
-          {images.map((image, index) => (
+          {validImages.map((image, index) => (
             <button
               key={index}
               onClick={() => setSelectedIndex(index)}
@@ -41,16 +76,17 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
               aria-label={`View image ${index + 1}`}
               aria-current={index === selectedIndex ? "true" : undefined}
             >
-              <img
+              <Image
                 src={image}
                 alt={`${title} - view ${index + 1}`}
+                width={80}
+                height={80}
                 className="w-full h-full object-cover"
-                loading="lazy"
               />
             </button>
           ))}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

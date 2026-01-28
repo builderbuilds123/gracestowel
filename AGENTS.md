@@ -20,6 +20,9 @@ You have superpowers. Superpowers teach you new skills and capabilities. RIGHT N
 - Medusa v2 Docs: https://docs.medusajs.com/v2
 - Project Gotchas: [`docs/project_context.md`](docs/project_context.md)
 
+**Backend Reference:**
+- `docs/llms-full.txt` — Always read this file before working in the backend Medusa system so you stay aligned with the latest documentation dump.
+
 ---
 
 ## Project Overview
@@ -81,15 +84,83 @@ See nested AGENTS.md files for app-specific patterns:
 | Task | Command |
 |------|---------|
 | Dev (all) | `pnpm dev` |
-| Dev (backend) | `pnpm dev:api` |
+| Dev (backend) | `pnpm dev:backend` |
 | Dev (storefront) | `pnpm dev:storefront` |
 | Test | `pnpm test` |
 | Type check | `pnpm typecheck` |
 | Lint | `pnpm lint` |
 | Migrate | `cd apps/backend && npm run migrate` |
 | Deploy storefront | `pnpm deploy:storefront` |
-| Deploy backend | `pnpm deploy:api` |
+| Deploy backend | `pnpm deploy:backend` |
 | Ralph Orchestrator | `./scripts/ralph run` |
+
+---
+
+## Server Process Management
+
+### Cleanup Before Starting Servers
+
+**ALWAYS clean up existing processes before starting dev servers:**
+
+```bash
+# Kill processes on common ports
+lsof -ti:5173 | xargs kill -9 2>/dev/null  # Storefront
+lsof -ti:9000 | xargs kill -9 2>/dev/null  # Backend API
+lsof -ti:9001 | xargs kill -9 2>/dev/null  # Stripe webhooks
+```
+
+### Stripe Webhook Forwarding
+
+**CRITICAL for checkout testing:** Stripe webhooks must be forwarded locally:
+
+```bash
+# Start Stripe CLI webhook forwarding
+stripe listen --forward-to localhost:9000/webhooks/stripe
+```
+
+Without this, checkout will appear to succeed but orders won't be created (Medusa won't receive payment confirmation).
+
+### Log Output for Agent Inspection
+
+**ALWAYS write logs to temp files when starting servers:**
+
+```bash
+# ALWAYS start servers with logs persisted to temp directory
+pnpm dev:api 2>&1 | tee /tmp/gracestowel-api.log
+pnpm dev:storefront 2>&1 | tee /tmp/gracestowel-storefront.log
+
+# Check logs in real-time
+tail -f /tmp/gracestowel-api.log
+tail -f /tmp/gracestowel-storefront.log
+
+# Check recent log entries
+tail -100 /tmp/gracestowel-storefront.log
+```
+
+Log files persist across restarts for post-session debugging.
+
+---
+
+## Structured Logging
+
+**NEVER use `console.log/warn/error` directly unless specifically instructed.** Always use structured logger:
+
+```typescript
+import { createLogger, getTraceIdFromRequest } from "../lib/logger";
+
+// In route handlers
+const traceId = getTraceIdFromRequest(request);
+const logger = createLogger({ traceId, context: "api.carts" });
+
+logger.info("Cart completed", { cartId, orderId });
+logger.error("Failed to process", error, { cartId });
+```
+
+**Why:**
+- Trace IDs correlate requests across services
+- JSON format enables log search/aggregation
+- Prevents accidental PII exposure
+- Consistent debugging experience
 
 ---
 
@@ -189,7 +260,9 @@ CI runs: Lint → Type Check → Security Scan → Unit Tests → E2E → Deploy
 | Ignore catch errors | Log and handle properly |
 | Send email synchronously | Use BullMQ queue |
 | Log raw PII | Mask: `****@domain.com` |
-| Use `console.log` | Use structured logger |
+| Use `console.log/warn/error` | Use `createLogger()` from `lib/logger.ts` (unless specifically instructed) |
+| Start servers without cleanup | Kill existing port processes first |
+| Test checkout without Stripe CLI | Run `stripe listen --forward-to localhost:9000/webhooks/stripe` |
 
 ---
 

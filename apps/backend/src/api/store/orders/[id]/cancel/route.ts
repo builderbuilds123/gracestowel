@@ -71,7 +71,10 @@ export async function POST(
 
     // Verify the token is for this order (check payload even if expired)
     if (validation.payload?.order_id !== id) {
-        console.warn(`[CancelOrder] Token mismatch. Token Order ID: ${validation.payload?.order_id}, Request Order ID: ${id}`);
+        logger.warn("order-cancel", "Token mismatch", {
+            tokenOrderId: validation.payload?.order_id,
+            requestOrderId: id,
+        });
         res.status(403).json({
             code: "TOKEN_MISMATCH",
             message: "Token does not match this order",

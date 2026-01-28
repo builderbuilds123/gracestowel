@@ -4,7 +4,7 @@ import { retry } from "../utils/retry";
 import { generateCartHash } from "../utils/cart-hash";
 import { CHECKOUT_CONSTANTS } from "../constants/checkout";
 import { createLogger } from "../lib/logger";
-import type { ShippingOption } from "../components/CheckoutForm";
+import type { ShippingOption } from "../types/checkout";
 import type { CartItem } from "../types/product";
 import type { CartWithPromotions } from "../types/promotion";
 
@@ -64,6 +64,9 @@ export function useShippingRates({
   // Caching mechanism for shipping rates
   const shippingCache = useRef<Map<string, { options: ShippingOption[], cartId: string | undefined }>>(new Map());
 
+  // ✅ Request deduplication: Track pending requests (Issue #10 fix)
+  const pendingRequests = useRef<Map<string, Promise<void>>>(new Map());
+
   // AbortController for cancelling stale shipping requests
   const abortControllerRef = useRef<AbortController | null>(null);
   const requestIdRef = useRef(0);
@@ -101,6 +104,7 @@ export function useShippingRates({
       postal_code: address.address?.postal_code
     } : undefined, currency, currentTotal);
     
+    // Check cache first
     if (shippingCache.current.has(cacheKey)) {
       const cached = shippingCache.current.get(cacheKey)!;
       setShippingOptions(cached.options);
@@ -112,6 +116,14 @@ export function useShippingRates({
       return;
     }
 
+    // ✅ Check for pending request - deduplication (Issue #10 fix)
+    if (pendingRequests.current.has(cacheKey)) {
+      // Return existing promise - deduplication
+      return pendingRequests.current.get(cacheKey);
+    }
+
+    // Create new request promise
+    const requestPromise = (async () => {
     try {
       // Step 1: Create or get cart
       let currentCartId = cartId;
@@ -315,10 +327,17 @@ export function useShippingRates({
       logger.error('Shipping rates error', error as Error);
       onCartSyncError?.(error.message);
     } finally {
+      // Clean up pending request
+      pendingRequests.current.delete(cacheKey);
       if (abortControllerRef.current === controller) {
          setIsCalculating(false);
       }
     }
+    })();
+
+    // Store pending request
+    pendingRequests.current.set(cacheKey, requestPromise);
+    return requestPromise;
   }, [
     currency, 
     cartId, 

@@ -16,6 +16,9 @@
  */
 
 import { monitoredFetch, type MonitoredFetchOptions } from '../utils/monitored-fetch';
+import { createLogger } from './logger';
+
+const logger = createLogger({ context: 'medusa-fetch' });
 
 interface MedusaFetchContext {
     cloudflare?: {
@@ -99,7 +102,7 @@ export async function medusaFetch(
     const headers = new Headers(fetchOptions.headers || {});
     
     if (!publishableKey && import.meta.env.DEV) {
-        console.warn("medusaFetch: missing MEDUSA_PUBLISHABLE_KEY; Medusa Store API calls may fail");
+        logger.warn("medusaFetch: missing MEDUSA_PUBLISHABLE_KEY; Medusa Store API calls may fail");
     }
     if (publishableKey && !headers.has('x-publishable-api-key')) {
         headers.set('x-publishable-api-key', publishableKey);

@@ -169,14 +169,16 @@ export const validateUpdatePreconditionsStep = createStep(
         const { data: orders } = await query.graph({
             entity: "order",
             fields: [
-                "id", 
-                "status", 
+                "id",
+                "status",
                 "total", // ORD-02: Order.total is source of truth
-                "currency_code", 
-                "metadata", 
+                "currency_code",
+                "metadata",
                 "items.*",
                 "payment_collections.id", // ORD-02: For Payment Collection sync
-                "payment_collections.status"
+                "payment_collections.status",
+                "payment_collections.payments.id",
+                "payment_collections.payments.data", // Contains provider_id reference to Stripe PI
             ],
             filters: { id: input.orderId },
         });
@@ -208,23 +210,52 @@ export const validateUpdatePreconditionsStep = createStep(
         }
 
         // 5. Payment Intent Check
-        const paymentIntentId = order.metadata?.stripe_payment_intent_id;
-        if (!paymentIntentId) throw new PaymentIntentMissingError(input.orderId);
+        // Try multiple sources for PaymentIntent ID:
+        // 1. Order metadata (custom workflow)
+        // 2. Payment collection payments data (standard Medusa flow)
+        let paymentIntentId = order.metadata?.stripe_payment_intent_id as string | undefined;
+
+        if (!paymentIntentId && paymentCollection?.payments?.length) {
+            // Look for PaymentIntent in payment collection
+            for (const payment of paymentCollection.payments) {
+                if (!payment) continue;
+                const paymentData = payment.data as Record<string, unknown> | undefined;
+                if (paymentData?.id && typeof paymentData.id === "string" && paymentData.id.startsWith("pi_")) {
+                    paymentIntentId = paymentData.id;
+                    logger.info("update-line-item-quantity", "Found PaymentIntent via payment collection", {
+                        orderId: input.orderId,
+                        paymentIntentId,
+                        paymentId: payment.id,
+                    });
+                    break;
+                }
+            }
+        }
+
+        if (!paymentIntentId) {
+            logger.error("update-line-item-quantity", "No PaymentIntent found for order", {
+                orderId: input.orderId,
+                hasMetadataPI: !!order.metadata?.stripe_payment_intent_id,
+                hasPaymentCollection: !!paymentCollection,
+                paymentCollectionPaymentsCount: paymentCollection?.payments?.length || 0,
+            });
+            throw new PaymentIntentMissingError(input.orderId);
+        }
 
         const stripe = getStripeClient();
         let paymentIntent: { id: string; status: string; amount: number; };
 
-        if ((paymentIntentId as string).startsWith("pi_mock_")) {
+        if (paymentIntentId.startsWith("pi_mock_")) {
              logger.info("update-line-item-quantity", "Using mock Payment Intent for validation");
              paymentIntent = {
-                 id: paymentIntentId as string,
+                 id: paymentIntentId,
                  status: "requires_capture",
                  amount: 2000 // Match the unit price * quantity of 1 from test order
              };
         } else {
-            paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId as string);
+            paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
             if (paymentIntent.status !== "requires_capture") {
-                throw new InvalidPaymentStateError(paymentIntentId as string, paymentIntent.status);
+                throw new InvalidPaymentStateError(paymentIntentId, paymentIntent.status);
             }
         }
 
@@ -735,7 +766,7 @@ async (compensation, { container }) => {
 
 export const updateLineItemQuantityWorkflow = createWorkflow(
 "update-line-item-quantity",
-(input: UpdateLineItemQuantityInput) => {
+function (input: UpdateLineItemQuantityInput) {
     trackWorkflowEventStep({
         event: "order.edit.update_quantity.started",
         failureEvent: "order.edit.update_quantity.failed",

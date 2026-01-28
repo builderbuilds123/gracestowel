@@ -38,6 +38,7 @@ Grace's Towel is an e-commerce platform for premium Turkish cotton towels, built
 - **Validation**: Validate all input data
 - **API Responses**: Return consistent response formats
 - **Error Handling**: Use proper HTTP status codes
+- **Documentation Pre-Read**: Always read `docs/llms-full.txt` before reviewing or developing backend Medusa work so you have the latest context from the aggregated docs dump.
 
 ### 4. Frontend (React Router v7)
 
@@ -151,6 +152,78 @@ This project uses a **dual tracking system**:
 3. Update `SPRINT.md` as you complete tasks
 4. Commit with `/commit-smart` when task is done
 5. Update story status in `sprint-status.yaml` when story is complete
+
+## Server Process Management
+
+**IMPORTANT:** Before starting any development server, always clean up existing processes:
+
+```bash
+# Kill existing processes on common ports before starting servers
+lsof -ti:5173 | xargs kill -9 2>/dev/null  # Storefront
+lsof -ti:9000 | xargs kill -9 2>/dev/null  # Backend API
+lsof -ti:9001 | xargs kill -9 2>/dev/null  # Stripe webhook forwarding
+```
+
+### Stripe Webhook Tunneling
+
+**CRITICAL:** For checkout testing, ensure Stripe CLI is forwarding webhooks:
+
+```bash
+# Check if Stripe CLI is forwarding webhooks
+stripe listen --forward-to localhost:9000/webhooks/stripe
+
+# Or use the convenience script
+pnpm stripe:listen
+```
+
+Without webhook forwarding, checkout completion will fail because Medusa won't receive payment confirmations.
+
+### Writing Logs to Temp Directory
+
+**ALWAYS write logs to temp files when starting servers.** This enables agents and developers to inspect logs for debugging:
+
+```bash
+# ALWAYS start servers with logs persisted to temp directory
+pnpm dev:api 2>&1 | tee /tmp/gracestowel-api.log
+pnpm dev:storefront 2>&1 | tee /tmp/gracestowel-storefront.log
+
+# Check logs in real-time
+tail -f /tmp/gracestowel-api.log
+tail -f /tmp/gracestowel-storefront.log
+
+# Check recent log entries
+tail -100 /tmp/gracestowel-storefront.log
+```
+
+The log files persist across restarts, making it easy to review what happened during a session.
+
+## Logging Guidelines
+
+**NEVER use `console.log`, `console.warn`, or `console.error` directly unless specifically instructed.**
+
+Always use the structured logger from `apps/storefront/app/lib/logger.ts`:
+
+```typescript
+import { createLogger, getTraceIdFromRequest } from "../lib/logger";
+
+// In route handlers - use trace ID from request for correlation
+const traceId = getTraceIdFromRequest(request);
+const logger = createLogger({ traceId, context: "my-route" });
+
+// In other modules - just use context
+const logger = createLogger({ context: "my-module" });
+
+// Log with structured data
+logger.info("Operation completed", { orderId, cartId, customerId });
+logger.warn("Potential issue detected", { reason, details });
+logger.error("Operation failed", error, { context: "additional-info" });
+```
+
+**Why structured logging?**
+- Trace IDs enable request correlation across services
+- JSON format enables log aggregation and search
+- Consistent format makes debugging easier
+- No sensitive data accidentally logged
 
 ## Commands
 

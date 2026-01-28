@@ -80,7 +80,10 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
   }
 
   try {
-    // 3. Create fresh session
+    // 3. Create fresh session with setup_future_usage for off-session charges
+    // This enables reusing the payment method for supplementary charges when
+    // items are added to the order (since incremental authorization requires IC+ pricing)
+    // @see https://docs.stripe.com/payments/save-during-payment
     const createUrl = `${medusaBackendUrl}/store/payment-collections/${collectionId}/payment-sessions`;
     const response = await monitoredFetch(createUrl, {
       method: "POST",
@@ -88,7 +91,13 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
         "Content-Type": "application/json",
         "x-publishable-api-key": publishableKey,
       },
-      body: JSON.stringify({ provider_id }),
+      body: JSON.stringify({
+        provider_id,
+        data: {
+          // Save payment method for future off-session charges (e.g., order modifications)
+          setup_future_usage: "off_session",
+        },
+      }),
       label: "create-payment-session",
       cloudflareEnv: env,
     });

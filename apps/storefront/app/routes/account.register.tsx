@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { useCustomer } from '../context/CustomerContext';
 import { useMedusaCart } from '../context/MedusaCartContext';
-import { Eye, EyeOff, Mail, Lock, User } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock, User } from '../lib/icons';
 
 export function meta() {
     return [
@@ -77,11 +77,11 @@ export default function RegisterPage() {
 
                 {/* Register Form */}
                 <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-lg p-8 space-y-5">
-                    {error && (
+                    {error ? (
                         <div className="bg-red-50 text-red-700 px-4 py-3 rounded-lg text-sm">
                             {error}
                         </div>
-                    )}
+                    ) : null}
 
                     {/* Name Fields */}
                     <div className="grid grid-cols-2 gap-4">

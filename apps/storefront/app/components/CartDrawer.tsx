@@ -1,16 +1,24 @@
-import { X, Minus, Plus, Sparkles } from 'lucide-react';
-import { Towel } from '@phosphor-icons/react';
+import { X, Minus, Plus, Sparkles, Towel } from '../lib/icons';
 import { useCart } from '../context/CartContext';
 import { useLocale } from '../context/LocaleContext';
 import { Link } from 'react-router';
 import { CartProgressBar } from './CartProgressBar';
 import { ProductPrice } from './ProductPrice';
 import { useAutomaticPromotions } from '../hooks/useAutomaticPromotions';
+import { Image } from './ui/Image';
 
 export function CartDrawer() {
-    const { items, isOpen, toggleCart, removeFromCart, updateQuantity, cartTotal, isSyncing } = useCart();
+    const {
+        items,
+        isOpen,
+        toggleCart,
+        removeFromCart,
+        updateQuantity,
+        cartTotal,
+        isSyncing,
+    } = useCart();
     const { formatPrice, t } = useLocale();
-    
+
     // PROMO-1 Phase 3: Fetch free shipping threshold from backend
     const { freeShippingThreshold } = useAutomaticPromotions({
         cartSubtotal: cartTotal,
@@ -44,13 +52,13 @@ export function CartDrawer() {
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-6">
-                    {items.length > 0 && freeShippingThreshold !== null && (
-                        <CartProgressBar 
+                    {items.length > 0 && freeShippingThreshold !== null ? (
+                        <CartProgressBar
                             currentAmount={cartTotal}
                             threshold={freeShippingThreshold}
                             type="free_shipping"
                         />
-                    )}
+                    ) : null}
                     {items.length === 0 ? (
                         <div className="h-full flex flex-col items-center justify-center text-text-earthy/60">
                             <Towel size={64} weight="thin" className="mb-4 opacity-20" />
@@ -67,18 +75,18 @@ export function CartDrawer() {
                             {items.map((item) => (
                                 <div key={`${item.id}-${item.color || 'default'}`} className="flex gap-4">
                                     <div className="w-24 h-24 bg-card-earthy/30 rounded-md overflow-hidden flex-shrink-0">
-                                        <img src={item.image} alt={item.title} className="w-full h-full object-cover" />
+                                        <Image src={item.image} alt={item.title} width={96} height={96} className="w-full h-full object-cover" />
                                     </div>
                                     <div className="flex-1">
                                         <div className="flex justify-between items-start mb-2">
                                             <div>
                                                 <h3 className="font-medium text-text-earthy">{item.title}</h3>
-                                                {item.embroidery && (
+                                                {item.embroidery ? (
                                                     <div className="flex items-center gap-1 mt-1">
                                                         <Sparkles className="w-3 h-3 text-accent-earthy" />
                                                         <span className="text-xs text-accent-earthy">Custom Embroidery</span>
                                                     </div>
-                                                )}
+                                                ) : null}
                                             </div>
                                             <button
                                                 onClick={() => removeFromCart(item.id, item.color, item.variantId)}
@@ -88,10 +96,10 @@ export function CartDrawer() {
                                                 <X className="w-4 h-4" />
                                             </button>
                                         </div>
-                                        {item.color && (
+                                        {item.color ? (
                                             <p className="text-xs text-text-earthy/60 mb-2">Color: {item.color}</p>
-                                        )}
-                                        {item.embroidery && (
+                                        ) : null}
+                                        {item.embroidery ? (
                                             <div className="mb-3 p-2 bg-accent-earthy/5 rounded border border-accent-earthy/20">
                                                 {item.embroidery.type === 'text' ? (
                                                     <div
@@ -112,7 +120,7 @@ export function CartDrawer() {
                                                     />
                                                 )}
                                             </div>
-                                        )}
+                                        ) : null}
                                         <ProductPrice
                                             price={item.price}
                                             originalPrice={item.originalPrice}
@@ -142,18 +150,17 @@ export function CartDrawer() {
                     )}
                 </div>
 
-                {items.length > 0 && (
+                {items.length > 0 ? (
                     <div className="p-6 border-t border-gray-100 bg-gray-50">
                         <div className="flex justify-between items-center mb-4">
-                            <div className="flex flex-col">
-                                <span className="text-text-earthy/60">{t('cart.subtotal')}</span>
-                                {isSyncing && (
-                                    <span className="text-[10px] text-accent-earthy animate-pulse">Syncing...</span>
-                                )}
-                            </div>
-                            <span className="text-xl font-bold text-text-earthy">{formatPrice(cartTotal)}</span>
+                            <span className="text-text-earthy/60">{t('cart.subtotal')}</span>
+                            {isSyncing ? (
+                                <span className="inline-block w-20 h-7 bg-gray-200 rounded animate-pulse" />
+                            ) : (
+                                <span className="text-xl font-bold text-text-earthy">{formatPrice(cartTotal)}</span>
+                            )}
                         </div>
-                        <p className="text-xs text-text-earthy/40 mb-6 text-center">Shipping and taxes calculated at checkout.</p>
+                        <p className="text-xs text-text-earthy/40 mb-4 text-center">Shipping and taxes calculated at checkout.</p>
                         <Link
                             to="/checkout"
                             onClick={toggleCart}
@@ -163,7 +170,7 @@ export function CartDrawer() {
                             {t('cart.checkout')}
                         </Link>
                     </div>
-                )}
+                ) : null}
             </div>
         </>
     );

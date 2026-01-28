@@ -181,7 +181,7 @@ export function TextureDiscovery({
             ))}
 
             {/* Hotspot tooltip */}
-            {activeHotspot && (
+            {activeHotspot ? (
               <div
                 id={`hotspot-desc-${activeHotspot}`}
                 role="tooltip"
@@ -199,7 +199,7 @@ export function TextureDiscovery({
                   {hotspots.find((h) => h.id === activeHotspot)?.description}
                 </p>
               </div>
-            )}
+            ) : null}
           </div>
 
           {/* Texture facts */}

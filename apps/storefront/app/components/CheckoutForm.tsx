@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
     useStripe,
     useElements,
@@ -14,46 +14,28 @@ import type {
     StripeLinkAuthenticationElementChangeEvent,
 } from '@stripe/stripe-js';
 import { useCheckout } from './checkout/CheckoutProvider';
-import type { CartItem } from '../context/CartContext';
 import { createLogger } from '../lib/logger';
 import { monitoredFetch } from '../utils/monitored-fetch';
 import { ShippingSection } from './checkout/ShippingSection';
 import { PaymentSection } from './checkout/PaymentSection';
-
-export interface ShippingOption {
-    id: string;
-    displayName: string;
-    amount: number;
-    originalAmount?: number;
-    isFree?: boolean;
-    deliveryEstimate?: string;
-}
-
-export interface CustomerData {
-    email?: string;
-    firstName?: string;
-    lastName?: string;
-    phone?: string;
-    address?: {
-        line1?: string;
-        line2?: string;
-        city?: string;
-        state?: string;
-        postal_code?: string;
-        country?: string;
-    };
-}
+import { setCachedSessionStorage } from '../lib/storage-cache';
+// Re-export ShippingOption from types for backward compatibility
+export type { ShippingOption } from '../types/checkout';
 
 export interface CheckoutFormProps {
     onAddressChange?: (event: StripeAddressElementChangeEvent) => void;
     onEmailChange?: (email: string) => void;
-    customerData?: CustomerData;
 }
 
+/**
+ * CheckoutForm - Pure checkout form with Stripe integration
+ *
+ * Note: Order editing is now handled by the dedicated /order/{id}/edit route.
+ * This form is for new checkouts only.
+ */
 export function CheckoutForm({
     onAddressChange,
     onEmailChange,
-    customerData,
 }: CheckoutFormProps) {
     const {
         items,
@@ -88,15 +70,8 @@ export function CheckoutForm({
     const paymentRef = useRef<HTMLDivElement>(null);
 
     // Track component completeness
-    // Initialize based on customerData if available (for returning customers)
-    const [isEmailComplete, setIsEmailComplete] = useState(!!customerData?.email);
-    const [isAddressComplete, setIsAddressComplete] = useState(
-        !!(customerData?.address?.line1 && 
-           customerData?.address?.city && 
-           customerData?.address?.state && 
-           customerData?.address?.postal_code && 
-           customerData?.address?.country)
-    );
+    const [isEmailComplete, setIsEmailComplete] = useState(false);
+    const [isAddressComplete, setIsAddressComplete] = useState(false);
     const [isPaymentComplete, setIsPaymentComplete] = useState(false);
 
     // Track latest email value locally for atomic sync (even if incomplete or parent update lags)
@@ -160,7 +135,8 @@ export function CheckoutForm({
                 appliedPromoCodes: appliedPromoCodes.length,
                 total: orderData.total
             });
-            sessionStorage.setItem('lastOrder', JSON.stringify(orderData));
+            // Issue #42: Use cached sessionStorage for consistency
+            setCachedSessionStorage('lastOrder', JSON.stringify(orderData));
         } catch (error) {
             // Non-critical: storage failures don't block checkout
             // Errors can occur in private browsing mode, storage full, or storage disabled
@@ -233,7 +209,7 @@ export function CheckoutForm({
             // ignoring parent state lag or "complete" event filters.
             
             if (cartId) {
-                const latestEmail = currentEmailRef.current || guestEmail || customerData?.email;
+                const latestEmail = currentEmailRef.current || guestEmail;
                 
                 // Get fully validated address directly from Stripe Element
                 const addressElement = elements.getElement(AddressElement);
@@ -447,23 +423,22 @@ export function CheckoutForm({
             </div>
 
             {/* Contact Section */}
-            <div 
-                ref={emailRef} 
+            <div
+                ref={emailRef}
                 className={`p-4 rounded-lg transition-all ${validationErrors.email ? 'border-2 border-red-500 bg-red-50' : 'border border-transparent'}`}
             >
                 <h2 className="text-lg font-medium mb-4">Contact</h2>
                 <LinkAuthenticationElement
                     id="link-authentication-element"
-                    options={customerData?.email ? { defaultValues: { email: customerData.email } } : undefined}
                     onChange={handleEmailChange}
                 />
-                {validationErrors.email && (
+                {validationErrors.email ? (
                     <p className="text-red-600 text-sm mt-2">{validationErrors.email}</p>
-                )}
+                ) : null}
             </div>
 
             {/* Delivery Section */}
-            <div 
+            <div
                 ref={addressRef}
                 className={`p-4 rounded-lg transition-all ${validationErrors.address ? 'border-2 border-red-500 bg-red-50' : 'border border-transparent'}`}
             >
@@ -472,26 +447,15 @@ export function CheckoutForm({
                     id="address-element"
                     options={{
                         mode: 'shipping',
-                        fields: { phone: 'always' },
-                        // Remove split name to use default full name field (Stripe Standard)
-                        defaultValues: customerData ? {
-                            name: `${customerData.firstName || ''} ${customerData.lastName || ''}`.trim(),
-                            phone: customerData.phone ?? '',
-                            address: customerData.address ? {
-                                line1: customerData.address.line1 ?? '',
-                                line2: customerData.address.line2 ?? '',
-                                city: customerData.address.city ?? '',
-                                state: customerData.address.state ?? '',
-                                postal_code: customerData.address.postal_code ?? '',
-                                country: customerData.address.country ?? 'US',
-                            } : undefined,
-                        } : undefined,
+                        fields: {
+                            phone: 'always',
+                        },
                     }}
                     onChange={handleAddressInternalChange}
                 />
-                {validationErrors.address && (
+                {validationErrors.address ? (
                     <p className="text-red-600 text-sm mt-2">{validationErrors.address}</p>
-                )}
+                ) : null}
             </div>
 
             {/* Shipping Method Section */}
@@ -524,15 +488,14 @@ export function CheckoutForm({
                 </span>
             </button>
 
-            {/* Stripe Badge */}
             <StripeBadge />
 
             {/* Error Message */}
-            {message && (
+            {message ? (
                 <div id="payment-message" className="text-red-500 text-sm mt-2">
                     {message}
                 </div>
-            )}
+            ) : null}
         </form>
     );
 }

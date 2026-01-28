@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Minus, Plus, ShoppingBag, Check, Truck } from "lucide-react";
+import { Minus, Plus, ShoppingBag, Check, Truck } from "../../lib/icons";
 
 interface StickyPurchaseBarProps {
   productTitle: string;
@@ -86,7 +86,7 @@ export function StickyPurchaseBar({
         aria-label="Quick purchase bar"
       >
         {/* Free shipping progress */}
-        {freeShippingThreshold > 0 && amountToFreeShipping > 0 && (
+        {freeShippingThreshold > 0 && amountToFreeShipping > 0 ? (
           <div className="bg-card-earthy/20 py-2 px-4">
             <div className="max-w-5xl mx-auto flex items-center gap-3">
               <Truck className="w-4 h-4 text-accent-earthy flex-shrink-0" />
@@ -104,20 +104,20 @@ export function StickyPurchaseBar({
               </span>
             </div>
           </div>
-        )}
+        ) : null}
 
         {/* Main bar content */}
         <div className="max-w-5xl mx-auto px-4 py-3">
           <div className="flex items-center gap-4 md:gap-6">
             {/* Product info (hidden on very small screens) */}
             <div className="hidden sm:flex items-center gap-3 flex-1 min-w-0">
-              {colorHex && (
+              {colorHex ? (
                 <span
                   className="w-6 h-6 rounded-full border-2 border-text-earthy/20 flex-shrink-0"
                   style={{ backgroundColor: colorHex }}
                   aria-label={`Color: ${selectedColor}`}
                 />
-              )}
+              ) : null}
 
               <div className="min-w-0">
                 <h3 className="font-serif text-text-earthy truncate">
@@ -128,12 +128,12 @@ export function StickyPurchaseBar({
                     {currencySymbol}
                     {price.toFixed(2)}
                   </span>
-                  {originalPrice && originalPrice > price && (
+                  {originalPrice && originalPrice > price ? (
                     <span className="text-sm text-text-earthy/50 line-through">
                       {currencySymbol}
                       {originalPrice.toFixed(2)}
                     </span>
-                  )}
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -194,7 +194,7 @@ export function StickyPurchaseBar({
                 )}
               </button>
 
-              {onViewCart && cartItemCount > 0 && (
+              {onViewCart && cartItemCount > 0 ? (
                 <button
                   onClick={onViewCart}
                   className="relative flex items-center justify-center gap-2 px-4 py-3 rounded-full font-medium border-2 border-accent-earthy text-accent-earthy hover:bg-accent-earthy hover:text-white transition-colors"
@@ -205,7 +205,7 @@ export function StickyPurchaseBar({
                     {cartItemCount > 9 ? "9+" : cartItemCount}
                   </span>
                 </button>
-              )}
+              ) : null}
             </div>
 
             {/* Total (mobile) */}

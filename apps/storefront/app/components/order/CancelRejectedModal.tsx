@@ -1,4 +1,4 @@
-import { X, AlertCircle } from "lucide-react";
+import { X, AlertCircle } from "../../lib/icons";
 
 interface CancelRejectedModalProps {
     isOpen: boolean;

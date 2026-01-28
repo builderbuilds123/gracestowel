@@ -2,7 +2,7 @@
 import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
 import { useCheckoutState } from './useCheckoutState';
-import type { ShippingOption } from '../components/CheckoutForm';
+import type { ShippingOption } from '../types/checkout';
 
 describe('useCheckoutState', () => {
   it('should initialize with default state', () => {

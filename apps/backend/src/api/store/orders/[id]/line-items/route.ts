@@ -132,8 +132,7 @@ export async function POST(
             payment_status: result.result.payment_status,
         });
     } catch (error) {
-        // FIX: Use proper error type checks instead of string matching
-
+        // Check typed errors first (before any normalization)
         // 409 Conflict - Order locked for capture (Story 6.3)
         if (error instanceof OrderLockedError) {
             res.status(409).json({
@@ -282,12 +281,29 @@ export async function POST(
         }
 
         // Generic error handler
+        // Handle various error types - workflows may throw non-Error objects
+        let errorMessage = "Unknown error";
+        let errorDetails: Record<string, unknown> = {};
+
+        if (error instanceof Error) {
+            errorMessage = error.message;
+            errorDetails = { stack: error.stack, name: error.name };
+        } else if (typeof error === "object" && error !== null) {
+            // Medusa workflows may throw plain objects with error info
+            errorMessage = JSON.stringify(error);
+            errorDetails = error as Record<string, unknown>;
+        } else {
+            errorMessage = String(error);
+        }
+
         logger.error("order-line-items", "Error adding item to order", {
             orderId: id,
             variantId: variant_id,
             quantity,
             requestId,
-        }, error instanceof Error ? error : new Error(String(error)));
+            errorMessage,
+            errorDetails,
+        }, error instanceof Error ? error : new Error(errorMessage));
         res.status(500).json({
             code: "ADD_ITEMS_FAILED",
             message: "An error occurred while adding items.",

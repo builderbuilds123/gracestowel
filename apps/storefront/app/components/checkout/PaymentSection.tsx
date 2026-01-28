@@ -13,9 +13,9 @@ export function PaymentSection({ error, forwardedRef }: PaymentSectionProps) {
     >
       <h2 className="text-lg font-medium mb-4">Payment</h2>
       <PaymentElement id="payment-element" options={{ layout: { type: 'tabs' } }} />
-      {error && (
+      {error ? (
         <p className="text-red-600 text-sm mt-2">{error}</p>
-      )}
+      ) : null}
     </div>
   );
 }

@@ -65,8 +65,15 @@ function parseMetadataArray(value: unknown): string[] {
                 return parsed.filter((v): v is string => typeof v === 'string');
             }
         } catch {
-            // Not JSON, treat as comma-separated string
-            return value.split(',').map(s => s.trim()).filter(Boolean);
+            // Not JSON, treat as comma-separated string (Issue #35: Combine iterations)
+            const parts: string[] = [];
+            for (const part of value.split(',')) {
+                const trimmed = part.trim();
+                if (trimmed) {
+                    parts.push(trimmed);
+                }
+            }
+            return parts;
         }
     }
     
@@ -86,8 +93,10 @@ function extractColors(product: MedusaProduct): string[] {
         ?.map(v => v.options?.find(o => o.value)?.value)
         .filter((c): c is string => !!c) || [];
     
-    // Method 2: From product options (for all available colors)
-    const colorOption = product.options?.find(o => o.title.toLowerCase() === 'color');
+    // Method 2: From product options (for all available colors/patterns)
+    const colorOption = product.options?.find(o => 
+        ['color', 'pattern'].includes(o.title.toLowerCase())
+    );
     const colorsFromOptions = colorOption?.values?.map(v => v.value) || [];
     
     // Prefer colors from options as it's the complete list
@@ -196,6 +205,7 @@ export function transformToDetail(
                 : undefined,
             options: v.options,
             prices: v.prices,
+            images: v.images?.map(img => img.url) || [],
         })) || [],
     };
 }

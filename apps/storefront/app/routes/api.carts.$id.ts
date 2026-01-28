@@ -200,6 +200,27 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
       }, { status: 410 }); // 410 Gone - resource no longer available
     }
 
+    // Check for promo code validation errors
+    const msgLower = err.message?.toLowerCase() || '';
+    const isPromoCodeError =
+      msgLower.includes('promotion') ||
+      msgLower.includes('promo') ||
+      msgLower.includes('coupon') ||
+      msgLower.includes('discount code') ||
+      msgLower.includes('not found') ||
+      msgLower.includes('invalid') ||
+      msgLower.includes('expired') ||
+      msgLower.includes('not eligible') ||
+      msgLower.includes('cannot be applied');
+
+    if (isPromoCodeError && promo_codes && promo_codes.length > 0) {
+      return data({
+        error: err.message || "Invalid or expired promo code",
+        details: err.message,
+        code: "PROMO_CODE_ERROR",
+      }, { status: 400 });
+    }
+
     // Forward upstream 4xx errors
     if (status >= 400 && status < 500) {
        return data({
@@ -235,6 +256,17 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
 
     const traceId = getTraceIdFromRequest(request);
     const logger = createLogger({ traceId, context: "api.carts.$id.loader" });
+
+    // Check if cart is already completed
+    const completedAt = (cart as any).completed_at;
+    if (completedAt) {
+      logger.info(`Cart ${cartId} is already completed`, { completed_at: completedAt });
+      return data({
+        error: "Cart is already completed",
+        code: "CART_COMPLETED"
+      }, { status: 410 });
+    }
+
     logger.info(`Fetched cart ${cartId}`, {
       id: cart.id,
       discount_total: cart.discount_total,

@@ -68,12 +68,10 @@ describe('Payment Collections API', () => {
         const cartId = 'cart_01HTEST1234567890';
         const paymentCollectionId = 'pay_col_123';
 
-        // First call: Idempotency check GET (no existing collection)
+        // First call: GET cart to check for existing payment_collection (implementation uses cart, not GET payment-collections)
         fetchSpy.mockResolvedValueOnce({
             ok: true,
-            json: async () => ({
-                payment_collections: []
-            })
+            json: async () => ({ cart: {} }),
         });
 
         // Second call: POST to create new collection
@@ -85,10 +83,10 @@ describe('Payment Collections API', () => {
                     cart_id: cartId,
                     amount: 5000,
                     payment_sessions: [
-                        { id: 'ps_123', provider_id: 'pp_stripe' }
-                    ]
-                }
-            })
+                        { id: 'ps_123', provider_id: 'pp_stripe' },
+                    ],
+                },
+            }),
         });
 
         const request = new Request('http://localhost:3000/api/payment-collections', {
@@ -102,25 +100,20 @@ describe('Payment Collections API', () => {
         expect(status).toBe(200);
         expect(data.payment_collection.id).toBe(paymentCollectionId);
 
-        // Verify both calls were made (idempotency check GET, then POST)
-        // Verify both calls were made (idempotency check GET, then POST)
         expect(fetchSpy).toHaveBeenCalledTimes(2);
 
-        // 1st call inspection
         const [firstUrl, firstOptions] = fetchSpy.mock.calls[0];
-        expect(firstUrl).toBe(`http://localhost:9000/store/payment-collections?cart_id=${cartId}`);
+        expect(firstUrl).toContain(`/store/carts/${cartId}`);
+        expect(firstUrl).toContain('fields=payment_collection');
         expect(firstOptions.method).toBe('GET');
-        // medusaFetch adds cloudflareEnv
         expect(firstOptions.cloudflareEnv).toEqual(mockContext.cloudflare.env);
 
-        // 2nd call inspection
         const [secondUrl, secondOptions] = fetchSpy.mock.calls[1];
         expect(secondUrl).toBe('http://localhost:9000/store/payment-collections');
         expect(secondOptions.method).toBe('POST');
         expect(secondOptions.body).toBe(JSON.stringify({ cart_id: cartId }));
         expect(secondOptions.cloudflareEnv).toEqual(mockContext.cloudflare.env);
 
-        // Verify headers (it's a Headers object now)
         const headers = secondOptions.headers as Headers;
         expect(headers).toBeInstanceOf(Headers);
         expect(headers.get('x-publishable-api-key')).toBe('pk_test_123');
@@ -136,16 +129,14 @@ describe('Payment Collections API', () => {
         const { data, status } = await unwrap(response);
 
         expect(status).toBe(400);
-        expect(data.error).toContain('Cart ID is required');
+        expect(data.error).toMatch(/Cart ID is required|required and must be a string/);
     });
 
     it('should handle Medusa 404 errors (cart not found)', async () => {
-        // First call: Idempotency check GET (no existing collection)
+        // First call: GET cart (no payment_collection)
         fetchSpy.mockResolvedValueOnce({
             ok: true,
-            json: async () => ({
-                payment_collections: []
-            })
+            json: async () => ({ cart: {} }),
         });
 
         // Second call: POST returns 404
@@ -153,7 +144,7 @@ describe('Payment Collections API', () => {
             ok: false,
             status: 404,
             statusText: 'Not Found',
-            text: async () => 'Cart not found'
+            text: async () => 'Cart not found',
         });
 
         const request = new Request('http://localhost:3000/api/payment-collections', {
@@ -171,36 +162,36 @@ describe('Payment Collections API', () => {
     it('should handle payment collection already exists (409) by returning existing collection', async () => {
         const cartId = 'cart_01HTEST1234567890';
         const existingCollectionId = 'pay_col_EXISTING123';
-        
-        // First call: Idempotency check GET (no existing collection found initially)
+
+        // First call: GET cart (no payment_collection yet)
         fetchSpy.mockResolvedValueOnce({
             ok: true,
-            json: async () => ({
-                payment_collections: []
-            })
+            json: async () => ({ cart: {} }),
         });
 
-        // Second call: POST returns 409 (conflict - race condition, another request created it)
+        // Second call: POST returns 409
         fetchSpy.mockResolvedValueOnce({
             ok: false,
             status: 409,
             statusText: 'Conflict',
-            text: async () => 'Payment collection already exists'
+            text: async () => 'Payment collection already exists',
         });
-        
-        // Third call: Fallback GET to fetch existing collection after 409
+
+        // Third call: GET cart again to fetch existing collection after 409
         fetchSpy.mockResolvedValueOnce({
             ok: true,
             json: async () => ({
-                payment_collections: [{
-                    id: existingCollectionId,
-                    cart_id: cartId,
-                    amount: 5000,
-                    payment_sessions: [
-                        { id: 'ps_existing', provider_id: 'pp_stripe' }
-                    ]
-                }]
-            })
+                cart: {
+                    payment_collection: {
+                        id: existingCollectionId,
+                        cart_id: cartId,
+                        amount: 5000,
+                        payment_sessions: [
+                            { id: 'ps_existing', provider_id: 'pp_stripe' },
+                        ],
+                    },
+                },
+            }),
         });
 
         const request = new Request('http://localhost:3000/api/payment-collections', {
@@ -213,28 +204,22 @@ describe('Payment Collections API', () => {
 
         expect(status).toBe(200);
         expect(data.payment_collection.id).toBe(existingCollectionId);
-        
-        // Verify all three calls were made
-        // Verify all three calls were made
+
         expect(fetchSpy).toHaveBeenCalledTimes(3);
 
-        // 1. Initial GET
         const [url1, opt1] = fetchSpy.mock.calls[0];
-        expect(url1).toBe(`http://localhost:9000/store/payment-collections?cart_id=${cartId}`);
+        expect(url1).toContain(`/store/carts/${cartId}`);
         expect(opt1.method).toBe('GET');
 
-        // 2. POST (failed with 409)
         const [url2, opt2] = fetchSpy.mock.calls[1];
         expect(url2).toBe('http://localhost:9000/store/payment-collections');
         expect(opt2.method).toBe('POST');
         const headers2 = opt2.headers as Headers;
         expect(headers2.get('x-publishable-api-key')).toBe('pk_test_123');
 
-        // 3. Retry GET
         const [url3, opt3] = fetchSpy.mock.calls[2];
-        expect(url3).toBe(`http://localhost:9000/store/payment-collections?cart_id=${cartId}`);
+        expect(url3).toContain(`/store/carts/${cartId}`);
         expect(opt3.method).toBe('GET');
-        // Check header on GET too (medusaFetch always adds it)
         const headers3 = opt3.headers as Headers;
         expect(headers3).toBeInstanceOf(Headers);
         expect(headers3.get('x-publishable-api-key')).toBe('pk_test_123');

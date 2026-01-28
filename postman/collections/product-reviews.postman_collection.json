@@ -1,0 +1,215 @@
+{
+	"info": {
+		"_postman_id": "c3e9f1e8-e4a9-43e3-8f3c-8bd3e8138920",
+		"name": "Product Reviews Module",
+		"description": "API contract for the Product Reviews module, including Storefront and Admin endpoints.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Store API",
+			"item": [
+				{
+					"name": "Get Product Reviews",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "x-publishable-api-key",
+								"value": "{{publishable_api_key}}",
+								"type": "text",
+								"description": "Publishable API Key"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/store/products/:id/reviews?limit=10&offset=0&sort=newest",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"store",
+								"products",
+								":id",
+								"reviews"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "10",
+									"description": "Number of reviews to return"
+								},
+								{
+									"key": "offset",
+									"value": "0",
+									"description": "Pagination offset"
+								},
+								{
+									"key": "sort",
+									"value": "newest",
+									"description": "Sort order: newest, oldest, highest, lowest, helpful"
+								}
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "prod_01KFBPF6FJ5S48566E38R5B1WD",
+									"description": "Product ID"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create Review",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "x-publishable-api-key",
+								"value": "{{publishable_api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{customer_token}}",
+								"type": "text",
+								"description": "Customer Session Token (Required)"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"rating\": 5,\n    \"title\": \"Amazing Product\",\n    \"content\": \"I absolutely love this towel! It is so soft and absorbent.\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/store/products/:id/reviews",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"store",
+								"products",
+								":id",
+								"reviews"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "prod_01KFBPF6FJ5S48566E38R5B1WD"
+								}
+							]
+						},
+						"description": "Submit a review for a purchased product. Requires customer authentication and verification of purchase."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Admin API",
+			"item": [
+				{
+					"name": "List Reviews",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{admin_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/admin/reviews?offset=0&limit=15",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"reviews"
+							],
+							"query": [
+								{
+									"key": "offset",
+									"value": "0"
+								},
+								{
+									"key": "limit",
+									"value": "15"
+								},
+                                {
+                                    "key": "status",
+                                    "value": "pending",
+                                    "disabled": true
+                                }
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Review Status (Approve/Reject)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{admin_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"ids\": [\"rev_1\", \"rev_2\"],\n    \"status\": \"approved\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/reviews/status",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"reviews",
+								"status"
+							]
+						},
+						"description": "Bulk approve or reject reviews."
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:9000",
+			"type": "string"
+		},
+		{
+			"key": "publishable_api_key",
+			"value": "pk_35ff7cf24e534ee75b55b2726b21445164bd9ae4b9df3e17ca416e7fcb3e2a57",
+			"type": "string"
+		},
+		{
+			"key": "admin_token",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "customer_token",
+			"value": "",
+			"type": "string"
+		}
+	]
+}

@@ -1,43 +1,67 @@
-import { useParams, Link } from "react-router";
+import { useParams, Link, useLoaderData } from "react-router";
 import { ProductCard } from "../components/ProductCard";
+import { getMedusaClient, getDefaultRegion } from "../lib/medusa";
+import { transformToListItems, type ProductListItem } from "../lib/product-transformer";
+import { createLogger } from "../lib/logger";
+import type { Route } from "./+types/collections.$handle";
 
-export default function Collection() {
-    const { handle } = useParams();
+export async function loader({ params, context }: Route.LoaderArgs) {
+    const { handle } = params;
+    const logger = createLogger({ context: "collections-loader" });
+
+    if (!handle) throw new Response("Not Found", { status: 404 });
+
+    const medusa = getMedusaClient(context);
+    
+    // OPTIMIZATION (Issue #19): Fetch region and products in parallel using Promise.all()
+    // Products can be fetched without region_id (Medusa uses default), then we use region for currency
+    const [regionInfo, productResponse] = await Promise.all([
+        getDefaultRegion(medusa),
+        medusa.store.product.list({
+            category_id: [handle], // Often handle matches category handle in my seed
+            // Don't wait for region_id - Medusa will use default region
+            // We'll use region info for currency display after both resolve
+            fields: "+variants.calculated_price,+variants.prices,+images"
+        })
+    ]);
+    
+    const regionId = regionInfo?.region_id;
+    const currencyCode = regionInfo?.currency_code || "cad";
+    const { products } = productResponse;
+
+    try {
+
+        // If no products found by ID, try searching categories by handle first
+        let collectionProducts = products;
+        if (products.length === 0) {
+            const { product_categories } = await medusa.store.category.list({
+                handle: handle,
+                limit: 1
+            });
+            if (product_categories.length > 0) {
+                const res = await medusa.store.product.list({
+                    category_id: [product_categories[0].id],
+                    region_id: regionId,
+                    fields: "+variants.calculated_price,+variants.prices,+images"
+                });
+                collectionProducts = res.products;
+            }
+        }
+
+        return { 
+            products: transformToListItems(collectionProducts as any, currencyCode),
+            handle 
+        };
+    } catch (error) {
+        logger.error("Failed to fetch collection products", error instanceof Error ? error : new Error(String(error)), { handle });
+        return { products: [], handle };
+    }
+}
+
+export default function Collection({ loaderData }: Route.ComponentProps) {
+    const { products, handle } = loaderData;
     const collectionTitle = handle ? handle.charAt(0).toUpperCase() + handle.slice(1).replace('-', ' ') : 'Collection';
 
-    // Mock products
-    const products = [
-        {
-            id: 1,
-            title: "The Nuzzle",
-            description: "Our signature washcloth. Gentle enough for a baby, durable enough for daily use.",
-            price: "$18.00",
-            image: "/washcloth-nuzzle.jpg",
-            handle: "the-nuzzle",
-            variantId: undefined,
-            sku: undefined,
-        },
-        {
-            id: 2,
-            title: "The Cradle",
-            description: "The perfect hand towel. Soft, absorbent, and ready to comfort your hands.",
-            price: "$25.00",
-            image: "/hand-towel-cradle.jpg",
-            handle: "the-cradle",
-            variantId: undefined,
-            sku: undefined,
-        },
-        {
-            id: 3,
-            title: "The Bear Hug",
-            description: "Wrap yourself in a warm embrace with our oversized, ultra-plush bath towel.",
-            price: "$35.00",
-            image: "/bath-towel-bearhug.jpg",
-            handle: "the-bear-hug",
-            variantId: undefined,
-            sku: undefined,
-        },
-    ];
 
     return (
         <div className="min-h-screen flex flex-col">

@@ -54,6 +54,8 @@ cd apps/backend && npm run migrate
 - **PaymentCollection required** — all orders must have one
 - **No metadata fallback** — `metadata.payment_status` is deprecated
 - **Currency units**: Medusa = dollars, Stripe = cents (conversion automatic)
+- **Capture path**: use Medusa `capturePaymentWorkflow` (no direct Stripe capture)
+- **Requirement**: PaymentCollections must include a Payment record for capture
 
 ### 5. Inventory Patterns (Recent Change)
 - Use `InventoryDecrementService` for atomic updates

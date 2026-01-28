@@ -10,20 +10,12 @@
  */
 
 import { useState } from "react";
-import { Towel } from "@phosphor-icons/react";
+import { Towel } from "../lib/icons";
 import { useCart } from "../context/CartContext";
 import { useLocale } from "../context/LocaleContext";
 
-// Color mapping for swatches
-const COLOR_MAP: Record<string, string> = {
-    "Cloud White": "#F5F5F5",
-    "Sage": "#9CAF88",
-    "Terra Cotta": "#E2725B",
-    "Charcoal": "#36454F",
-    "Navy": "#202A44",
-    "Sand": "#E6DCD0",
-    "Stone": "#9EA3A8"
-};
+import { PRODUCT_COLOR_MAP } from "../lib/colors";
+
 
 interface ProductActionsProps {
     product: {
@@ -94,7 +86,7 @@ export function ProductActions({ product, selectedVariant, selectedColor, onColo
     return (
         <>
             {/* Color Selector */}
-            {product.colors.length > 0 && (
+            {product.colors.length > 0 ? (
                 <div className="mb-8">
                     <span className="block text-sm font-medium text-text-earthy mb-3">
                         Color: <span className="text-text-earthy/60">{selectedColor}</span>
@@ -109,14 +101,14 @@ export function ProductActions({ product, selectedVariant, selectedColor, onColo
                                         ? "border-accent-earthy ring-2 ring-accent-earthy/20 ring-offset-2"
                                         : "border-transparent hover:scale-110"
                                 }`}
-                                style={{ backgroundColor: COLOR_MAP[color] || "#ccc" }}
+                                style={{ backgroundColor: PRODUCT_COLOR_MAP[color] || "#ccc" }}
                                 aria-label={`Select color ${color}`}
                                 title={color}
                             />
                         ))}
                     </div>
                 </div>
-            )}
+            ) : null}
 
             {/* Quantity and Add Button */}
             <div className="flex flex-col sm:flex-row gap-4 mb-10">

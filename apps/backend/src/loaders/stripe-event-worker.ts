@@ -538,12 +538,9 @@ async function updatePaymentCollectionOnRefund(
         // downstream logic. OrderTransactions are the source of truth for refund amounts.
         const newStatus = isFullRefund ? "canceled" : "completed";
 
-        await paymentModuleService.updatePaymentCollections([
-            {
-                id: paymentCollection.id,
-                status: newStatus,
-            },
-        ]);
+        await paymentModuleService.updatePaymentCollections(paymentCollection.id, {
+            status: newStatus,
+        });
 
         logger.info("stripe-worker", "PaymentCollection updated on refund", {
             orderId,
@@ -705,12 +702,12 @@ export function ensureStripeWorkerStarted(container: MedusaContainer): void {
     }
 
     try {
-        console.log("[stripe-worker] Starting Stripe event worker...");
+        logger.info("stripe-worker-loader", "Starting Stripe event worker");
         startStripeEventWorker(container, handleStripeEvent);
         workerStarted = true;
-        console.log("[stripe-worker] Worker started successfully");
+        logger.info("stripe-worker-loader", "Stripe event worker started successfully");
     } catch (error) {
-        logger.critical("stripe-worker", "Failed to start worker", {}, error as Error);
+        logger.critical("stripe-worker-loader", "Failed to start Stripe event worker", {}, error instanceof Error ? error : new Error(String(error)));
     }
 }
 
@@ -719,6 +716,11 @@ export function ensureStripeWorkerStarted(container: MedusaContainer): void {
  * Subscribers are auto-discovered by Medusa v2 from src/subscribers/
  */
 export default async function stripeEventWorkerLoader(container: MedusaContainer): Promise<void> {
+    const isIntegrationTest = process.env.TEST_TYPE?.startsWith("integration");
+    if (isIntegrationTest) {
+        return;
+    }
+
     logger.info("stripe-event-worker-loader", "Stripe event worker loader starting");
 
     // Start worker (subscribers are auto-registered by Medusa v2)

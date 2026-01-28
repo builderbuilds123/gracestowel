@@ -1,4 +1,4 @@
-import { type ShippingOption } from "../CheckoutForm";
+import type { ShippingOption } from "../../types/checkout";
 import { useLocale } from "../../context/LocaleContext";
 
 interface ShippingSectionProps {
@@ -54,11 +54,11 @@ export function ShippingSection({
                   <div className="font-medium text-text-earthy">
                     {option.displayName}
                   </div>
-                  {option.deliveryEstimate && (
+                  {option.deliveryEstimate ? (
                     <div className="text-sm text-gray-500 mt-0.5">
                       {option.deliveryEstimate}
                     </div>
-                  )}
+                  ) : null}
                 </div>
               </div>
               <div className="font-medium text-text-earthy">
@@ -71,9 +71,9 @@ export function ShippingSection({
         <p className="text-gray-500 text-sm italic">Please enter your address to see shipping options.</p>
       )}
 
-      {error && (
+      {error ? (
         <p className="text-red-600 text-sm mt-2">{error}</p>
-      )}
+      ) : null}
     </div>
   );
 }

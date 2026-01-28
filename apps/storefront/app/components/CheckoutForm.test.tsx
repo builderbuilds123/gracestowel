@@ -3,14 +3,34 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // 1. Declare ALL mocks at the very top
 vi.mock('@stripe/react-stripe-js', async () => {
+    const React = await import('react');
     const actual = await vi.importActual('@stripe/react-stripe-js');
+    const LinkAuth = ({ onChange }: any) => {
+        React.useEffect(() => {
+            onChange?.({ complete: true, value: { email: 'test@example.com' } });
+        }, [onChange]);
+        return <div data-testid="link-authentication-element">Link Auth Element</div>;
+    };
+    const AddrEl = ({ onChange }: any) => {
+        React.useEffect(() => {
+            onChange?.({
+                complete: true,
+                value: {
+                    name: 'John Doe',
+                    address: { line1: '123 St', city: 'City', country: 'US', postal_code: '12345', state: 'ST' },
+                    phone: '1234567890',
+                },
+            });
+        }, [onChange]);
+        return <div data-testid="address-element">Address Element</div>;
+    };
     return {
         ...actual,
         useStripe: vi.fn(),
         useElements: vi.fn(),
         PaymentElement: () => <div data-testid="payment-element">Payment Element</div>,
-        LinkAuthenticationElement: () => <div data-testid="link-authentication-element">Link Auth Element</div>,
-        AddressElement: () => <div data-testid="address-element">Address Element</div>,
+        LinkAuthenticationElement: LinkAuth,
+        AddressElement: AddrEl,
         ExpressCheckoutElement: ({ onConfirm }: any) => (
             <div data-testid="express-checkout-element">
                 <button type="button" onClick={() => onConfirm({})} data-testid="express-checkout-button">
@@ -139,18 +159,6 @@ describe('CheckoutForm', () => {
     const defaultProps: CheckoutFormProps = {
         onAddressChange: vi.fn(),
         onEmailChange: vi.fn(),
-        customerData: {
-            email: 'test@example.com',
-            firstName: 'John',
-            lastName: 'Doe',
-            address: {
-                line1: '123 Test St',
-                city: 'Test City',
-                state: 'TS',
-                postal_code: '12345',
-                country: 'US'
-            }
-        }
     };
 
     beforeEach(async () => {

@@ -1,6 +1,7 @@
 import { type LoaderFunctionArgs, data } from "react-router";
 import { MedusaCartService } from "../services/medusa-cart";
 import { CHECKOUT_CONSTANTS } from "../constants/checkout";
+import { createLogger, getTraceIdFromRequest } from "../lib/logger";
 
 /**
  * GET /api/carts/:id/shipping-options
@@ -8,8 +9,11 @@ import { CHECKOUT_CONSTANTS } from "../constants/checkout";
  * 
  * This is a pure read operation - cacheable and safe to retry.
  */
-export async function loader({ params, context }: LoaderFunctionArgs) {
+export async function loader({ params, context, request }: LoaderFunctionArgs) {
   const cartId = params.id;
+  const traceId = getTraceIdFromRequest(request);
+  const logger = createLogger({ traceId, context: "api.carts.shipping-options" });
+
   if (!cartId) {
     return data({ error: "Cart ID is required" }, { status: 400 });
   }
@@ -26,7 +30,11 @@ export async function loader({ params, context }: LoaderFunctionArgs) {
     // Get shipping options for the cart
     const shippingOptions = await service.getShippingOptions(cartId);
 
-    console.log(`Fetched ${shippingOptions.length} shipping options for cart ${cartId} (Total: ${cart.total})`);
+    logger.info("Fetched shipping options", {
+      cartId,
+      optionsCount: shippingOptions.length,
+      cartTotal: cart.total,
+    });
 
     // Format response - amounts are in dollars from Medusa
     const formattedOptions = shippingOptions.map(opt => ({
@@ -49,11 +57,11 @@ export async function loader({ params, context }: LoaderFunctionArgs) {
     });
 
   } catch (error: any) {
-    console.error(`Error fetching shipping options for cart ${cartId}:`, error);
-    
+    logger.error("Error fetching shipping options", error instanceof Error ? error : new Error(String(error)), { cartId });
+
     // Handle specific error cases
     const status = error.status === 404 || error.message?.includes("not found") ? 404 : 500;
-    
+
     return data({
       error: status === 404 ? "Resource not found" : "Failed to fetch shipping options",
       details: (import.meta.env.DEV || import.meta.env.MODE === 'test') ? error.message : undefined,

@@ -1,9 +1,17 @@
-import { CreateInventoryLevelInput, ExecArgs } from "@medusajs/framework/types";
+import { CreateInventoryLevelInput, ExecArgs, IFileModuleService } from "@medusajs/framework/types";
 import {
   ContainerRegistrationKeys,
   Modules,
   ProductStatus,
 } from "@medusajs/framework/utils";
+import * as path from "path";
+import * as fs from "fs";
+import { buildProductUpdate } from "./seed-utils";
+import { uploadProductImages } from "./seed-image-uploader";
+import { 
+  createProductVariantsWorkflow,
+  batchVariantImagesWorkflow
+} from "@medusajs/core-flows";
 import {
   createApiKeysWorkflow,
   createInventoryLevelsWorkflow,
@@ -65,6 +73,34 @@ export default async function seedDemoData({ container }: ExecArgs) {
   const taxModuleService = container.resolve(Modules.TAX);
   const stockLocationModuleService = container.resolve(Modules.STOCK_LOCATION);
   const pricingModuleService = container.resolve(Modules.PRICING);
+  
+  // Detect environment and file storage type
+  const isRailway = !!process.env.RAILWAY_ENVIRONMENT || !!process.env.RAILWAY_PUBLIC_DOMAIN;
+  const useS3 = !!(process.env.S3_ACCESS_KEY_ID && process.env.S3_SECRET_ACCESS_KEY);
+  const environment = isRailway 
+    ? (process.env.RAILWAY_ENVIRONMENT || "staging")
+    : "local";
+  
+  logger.info(`Seed script starting - Environment: ${environment}, Storage: ${useS3 ? "S3/R2" : "local"}`);
+  
+  // Safety check: prevent accidental production runs
+  if (process.env.NODE_ENV === "production" && !process.env.ALLOW_PRODUCTION_SEED) {
+    logger.warn("Production seed blocked. Set ALLOW_PRODUCTION_SEED=true to override.");
+    throw new Error("Seed script blocked in production. Set ALLOW_PRODUCTION_SEED=true if intentional.");
+  }
+  
+  // Resolve file service if using S3
+  let fileService: any | null = null;
+  if (useS3) {
+    try {
+      fileService = container.resolve(Modules.FILE);
+      logger.info("Using S3/R2 file storage for product images");
+    } catch (e) {
+      logger.warn(`S3 credentials found but file service unavailable, falling back to local paths: ${(e as Error).message}`);
+    }
+  } else {
+    logger.info("Using local file storage for product images");
+  }
 
   // Grace Stowel ships to US, Canada, and select European countries
   const countries = ["us", "ca", "gb", "de", "dk", "se", "fr", "es", "it"];
@@ -846,6 +882,69 @@ export default async function seedDemoData({ container }: ExecArgs) {
     material: "50% Wool / 50% Cotton Blend",
   };
 
+  // Product image filenames (will be uploaded to S3/R2 in Railway, or use local paths)
+  // All images are optimized PNG files (~8-20KB each vs 1-1.4MB before)
+  const imageFilenames = {
+    nuzzle: [
+      "nuzzle-cloud-white-01.png",
+      "nuzzle-cloud-white-02.png",
+      "nuzzle-sage-01.png",
+      "nuzzle-sage-02.png",
+      "nuzzle-terra-cotta-01.png",
+      "nuzzle-terra-cotta-02.png"
+    ],
+    cradle: [
+      "cradle-cloud-white-01.png",
+      "cradle-cloud-white-02.png",
+      "cradle-charcoal-01.png",
+      "cradle-charcoal-02.png",
+      "cradle-navy-01.png",
+      "cradle-navy-02.png"
+    ],
+    bearhug: [
+      "bearhug-cloud-white-01.png",
+      "bearhug-cloud-white-02.png",
+      "bearhug-sand-01.png",
+      "bearhug-sand-02.png",
+      "bearhug-stone-01.png",
+      "bearhug-stone-02.png"
+    ],
+    sandbar: [
+      "sandbar-sunset-orange-01.png",
+      "sandbar-sunset-orange-02.png",
+      "sandbar-ocean-blue-01.png",
+      "sandbar-ocean-blue-02.png"
+    ],
+    chefsMate: [
+      "chefs-mate-checkered-red-01.png",
+      "chefs-mate-checkered-red-02.png",
+      "chefs-mate-classic-stripe-01.png",
+      "chefs-mate-classic-stripe-02.png"
+    ],
+    hearth: [
+      "hearth-walnut-01.png",
+      "hearth-walnut-02.png",
+      "hearth-slate-01.png",
+      "hearth-slate-02.png"
+    ],
+    woolDryerBalls: [
+      "wool-dryer-balls-natural-01.png"
+    ]
+  };
+
+  // Upload images to S3/R2 if in Railway, otherwise use local paths
+  logger.info(`Processing product images - Total: ${Object.values(imageFilenames).flat().length}, Storage: ${useS3 ? "S3/R2" : "local"}`);
+
+  const nuzzleImages = await uploadProductImages(imageFilenames.nuzzle, fileService, logger);
+  const cradleImages = await uploadProductImages(imageFilenames.cradle, fileService, logger);
+  const bearhugImages = await uploadProductImages(imageFilenames.bearhug, fileService, logger);
+  const sandbarImages = await uploadProductImages(imageFilenames.sandbar, fileService, logger);
+  const chefsMateImages = await uploadProductImages(imageFilenames.chefsMate, fileService, logger);
+  const hearthImages = await uploadProductImages(imageFilenames.hearth, fileService, logger);
+  const woolDryerBallsImages = await uploadProductImages(imageFilenames.woolDryerBalls, fileService, logger);
+
+  logger.info(`Product images processed - Nuzzle: ${nuzzleImages.length}, Cradle: ${cradleImages.length}, Bearhug: ${bearhugImages.length}, Sandbar: ${sandbarImages.length}, ChefsMate: ${chefsMateImages.length}, Hearth: ${hearthImages.length}, WoolDryerBalls: ${woolDryerBallsImages.length}`);
+
   const productsToCreate = [
       {
           title: "The Nuzzle",
@@ -858,7 +957,7 @@ export default async function seedDemoData({ container }: ExecArgs) {
           collection_id: collectionsMap.get("Bath & Spa"),
           type_id: typesMap.get("Washcloth"),
           tags: getTagIds(["luxury", "organic"]),
-          images: [{ url: "http://localhost:8000/washcloth-nuzzle.jpg" }],
+          images: nuzzleImages,
           metadata: { features: "100% Long-Staple Cotton, Perfect Face Cloth Size, Oeko-Tex Certified, Made in Portugal", care_instructions: "Machine wash warm, Tumble dry low, Do not bleach, Avoid fabric softeners" },
           options: [{ title: "Color", values: ["Cloud White", "Sage", "Terra Cotta"] }],
           variants: [
@@ -879,7 +978,7 @@ export default async function seedDemoData({ container }: ExecArgs) {
           collection_id: collectionsMap.get("Bath & Spa"),
           type_id: typesMap.get("Hand Towel"),
           tags: getTagIds(["luxury", "organic"]),
-          images: [{ url: "http://localhost:8000/hand-towel-cradle.jpg" }],
+          images: cradleImages,
           metadata: { features: "High Absorbency, Quick Drying, Double-Stitched Hems, Sustainably Sourced", care_instructions: "Machine wash warm, Tumble dry low, Do not bleach, Avoid fabric softeners" },
           options: [{ title: "Color", values: ["Cloud White", "Charcoal", "Navy"] }],
           variants: [
@@ -900,7 +999,7 @@ export default async function seedDemoData({ container }: ExecArgs) {
           collection_id: collectionsMap.get("Bath & Spa"),
           type_id: typesMap.get("Bath Towel"),
           tags: getTagIds(["luxury", "cozy"]),
-          images: [{ url: "http://localhost:8000/bath-towel-bearhug.jpg" }, { url: "http://localhost:8000/white_bathtowel_laidout_product.png" }, { url: "http://localhost:8000/white_bathtowel_folded_product.png" }],
+          images: bearhugImages,
           metadata: { features: "Oversized for Comfort, 700 GSM Weight, Cloud-like Softness, Fade Resistant", care_instructions: "Machine wash warm, Tumble dry low, Do not bleach, Avoid fabric softeners" },
           options: [{ title: "Color", values: ["Cloud White", "Sand", "Stone"] }],
           variants: [
@@ -922,7 +1021,7 @@ export default async function seedDemoData({ container }: ExecArgs) {
           collection_id: collectionsMap.get("Bath & Spa"),
           type_id: typesMap.get("Accessory"),
           tags: getTagIds(["eco-friendly", "home"]),
-          images: [{ url: "http://localhost:8000/wood_dryer_balls.png" }],
+          images: woolDryerBallsImages,
           metadata: { features: "100% New Zealand Wool, Reduces Drying Time, Hypoallergenic, Lasts for 1000+ Loads", care_instructions: "Store in a dry place, Recharge in sun monthly", disable_embroidery: "true" },
           options: [{ title: "Type", values: ["Natural"] }],
           variants: [
@@ -942,7 +1041,7 @@ export default async function seedDemoData({ container }: ExecArgs) {
           collection_id: collectionsMap.get("Summer Essentials"),
           type_id: typesMap.get("Beach Towel"),
           tags: getTagIds(["summer", "beach", "outdoor", "luxury"]),
-          images: [{ url: "https://placehold.co/600x800/E89B5F/FFFFFF?text=The+Sandbar" }, { url: "https://placehold.co/600x800/5FA8E8/FFFFFF?text=Ocean+Blue" }],
+          images: sandbarImages,
           metadata: { features: "Oversized Lounger, Velour & Terry Dual-Texture, UV Resistant, Sand Repellent", care_instructions: "Machine wash cold, Tumble dry low, Shake sand before washing" },
           options: [{ title: "Color", values: ["Sunset Orange", "Ocean Blue"] }],
           variants: [
@@ -962,7 +1061,7 @@ export default async function seedDemoData({ container }: ExecArgs) {
           collection_id: collectionsMap.get("Kitchen & Dining"),
           type_id: typesMap.get("Kitchen Towel"),
           tags: getTagIds(["kitchen", "cooking", "home"]),
-          images: [{ url: "https://placehold.co/600x800/B22222/FFFFFF?text=Chef's+Mate" }, { url: "https://placehold.co/600x800/2F4F4F/FFFFFF?text=Classic+Stripe" }],
+          images: chefsMateImages,
           metadata: { features: "Lint Free, Waffle Weave, Hanging Loop, Dries Instantly", care_instructions: "Machine wash hot, Tumble dry medium, Bleach safe (White only)" },
           options: [{ title: "Pattern", values: ["Checkered Red", "Classic Stripe"] }],
           variants: [
@@ -982,12 +1081,12 @@ export default async function seedDemoData({ container }: ExecArgs) {
           collection_id: collectionsMap.get("Living Room"),
           type_id: typesMap.get("Blanket"),
           tags: getTagIds(["cozy", "winter", "living", "luxury"]),
-          images: [{ url: "https://placehold.co/600x800/8B4513/FFFFFF?text=The+Hearth" }],
+          images: hearthImages,
           metadata: { features: "Temperature Regulating, Soft-Touch Wool, Heirloom Quality, Fringed Edges", care_instructions: "Dry clean only, Spot clean spills immediately" },
-          options: [{ title: "Size", values: ["Throw (50x60)", "Queen (90x90)"] }],
+          options: [{ title: "Color", values: ["Walnut", "Slate"] }],
           variants: [
-              { title: "Throw (50x60)", sku: "HEARTH-THROW", options: { Size: "Throw (50x60)" }, ...blanketVariantAttrs, prices: [{ amount: 70, currency_code: "eur" }, { amount: 80, currency_code: "usd" }, { amount: 110, currency_code: "cad" }] },
-              { title: "Queen (90x90)", sku: "HEARTH-QUEEN", options: { Size: "Queen (90x90)" }, ...blanketVariantAttrs, weight: 2000, prices: [{ amount: 125, currency_code: "eur" }, { amount: 140, currency_code: "usd" }, { amount: 195, currency_code: "cad" }] }
+              { title: "Walnut", sku: "HEARTH-WALNUT", options: { Color: "Walnut" }, ...blanketVariantAttrs, prices: [{ amount: 70, currency_code: "eur" }, { amount: 80, currency_code: "usd" }, { amount: 110, currency_code: "cad" }] },
+              { title: "Slate", sku: "HEARTH-SLATE", options: { Color: "Slate" }, ...blanketVariantAttrs, prices: [{ amount: 75, currency_code: "eur" }, { amount: 85, currency_code: "usd" }, { amount: 115, currency_code: "cad" }] }
           ],
           sales_channels: [{ id: defaultSalesChannel[0].id }]
       }
@@ -1021,6 +1120,8 @@ export default async function seedDemoData({ container }: ExecArgs) {
 
   const existingProducts = await productModuleService.listProducts({
       handle: productsToCreate.map(p => p.handle)
+  }, {
+      relations: ["variants", "images"]
   });
   const existingHandles = new Set(existingProducts.map(p => p.handle));
 
@@ -1050,9 +1151,16 @@ export default async function seedDemoData({ container }: ExecArgs) {
     "the-wool-dryer-ball": { usd: 18, eur: 16, cad: 24 },
   };
 
-  // Ensure ALL existing products are linked to the default sales channel, published, and have variant attributes
+  // Re-fetch all products after potentially creating new ones to ensured we have all IDs and relations
+  const allProducts = await productModuleService.listProducts({
+      handle: productsToCreate.map(p => p.handle)
+  }, {
+      relations: ["variants", "images"]
+  });
+
+  // Ensure ALL products are linked to the default sales channel, published, and have variant attributes
   // This fixes products that were created but not properly linked or are in draft status
-  for (const existingProduct of existingProducts) {
+  for (const existingProduct of allProducts) {
     // Use query.graph to check if product is linked to sales channel
     let isLinked = false;
     try {
@@ -1095,27 +1203,11 @@ export default async function seedDemoData({ container }: ExecArgs) {
       }
     }
 
-    // Verify and Update Collection
-    const targetCollectionId = productsToCreate.find(p => p.handle === existingProduct.handle)?.collection_id;
-    if (targetCollectionId && existingProduct.collection_id !== targetCollectionId) {
-        await productModuleService.updateProducts(existingProduct.id, { collection_id: targetCollectionId });
-        logger.info(`Updated collection for "${existingProduct.handle}"`);
+    const productUpdates = buildProductUpdate(existingProduct, productsToCreate);
+    if (Object.keys(productUpdates).length > 0) {
+        await productModuleService.updateProducts(existingProduct.id, productUpdates);
+        logger.info(`Updated details for "${existingProduct.handle}"`);
     }
-
-     // Verify and Update Images
-     const targetImages = productsToCreate.find(p => p.handle === existingProduct.handle)?.images;
-     if (targetImages) {
-        // Simple check: update if image count differs or forced update
-        await productModuleService.updateProducts(existingProduct.id, { images: targetImages });
-        logger.info(`Updated images for "${existingProduct.handle}"`);
-     }
-
-     // Verify and Update Metadata
-     const targetMetadata = productsToCreate.find(p => p.handle === existingProduct.handle)?.metadata;
-     if (targetMetadata) {
-        await productModuleService.updateProducts(existingProduct.id, { metadata: targetMetadata });
-        logger.info(`Updated metadata for "${existingProduct.handle}"`);
-     }
 
     // Update Product & Variant Attributes
     const variantAttrs = variantAttrsByHandle[existingProduct.handle as string];
@@ -1153,6 +1245,89 @@ export default async function seedDemoData({ container }: ExecArgs) {
             } catch (e) {
                 logger.warn(`Failed to update variant attributes for ${variant.sku}: ${(e as Error).message}`);
             }
+        }
+
+        // Native Variant Image Association
+        // Associate images with variants based on naming convention: product-variant-0X.png
+        try {
+            // Re-fetch product images and variants to ensure we have the latest IDs and relations
+            const [productWithImages] = await productModuleService.listProducts(
+                { id: existingProduct.id },
+                { relations: ["images", "variants"] }
+            );
+
+            if (productWithImages) {
+                // Map product handles to image prefixes
+                // "the-nuzzle" -> "nuzzle", "the-bear-hug" -> "bearhug", etc.
+                const handleToPrefix: Record<string, string> = {
+                    "the-nuzzle": "nuzzle",
+                    "the-cradle": "cradle",
+                    "the-bear-hug": "bearhug",
+                    "the-sandbar": "sandbar",
+                    "the-chefs-mate": "chefs-mate",
+                    "the-hearth": "hearth",
+                    "the-wool-dryer-ball": "wool-dryer-balls",
+                };
+                
+                const productPrefix = handleToPrefix[existingProduct.handle] || existingProduct.handle.replace(/^the-/, "").replace(/-/g, "");
+                
+                for (const variant of productWithImages.variants || []) {
+                    const variantTitle = (variant as any).title.toLowerCase();
+                    
+                    // Convert variant title to URL-friendly format
+                    // "Cloud White" -> "cloud-white", "Checkered Red" -> "checkered-red", "Sunset Orange" -> "sunset-orange"
+                    const variantSlug = variantTitle
+                        .replace(/\s+/g, '-')
+                        .replace(/[^a-z0-9-]/g, '');
+                    
+                    // Build search pattern: productPrefix-variantSlug-0X.png
+                    // Examples: "nuzzle-cloud-white-01.png", "sandbar-sunset-orange-01.png"
+                    const primaryPattern = `${productPrefix}-${variantSlug}-`;
+                    
+                    // Also try alternative patterns for edge cases
+                    const searchPatterns = [primaryPattern];
+                    
+                    // Handle special variant name mappings
+                    if (variantTitle.includes("checkered") && variantTitle.includes("red")) {
+                        searchPatterns.push("checkered-red-");
+                    }
+                    if (variantTitle.includes("classic") && variantTitle.includes("stripe")) {
+                        searchPatterns.push("classic-stripe-");
+                    }
+                    if (variantTitle.includes("wool") || variantTitle.includes("dryer") || variantTitle.includes("natural")) {
+                        searchPatterns.push("wool-dryer-balls-natural-");
+                    }
+                    if (variantTitle.includes("terra") && variantTitle.includes("cotta")) {
+                        searchPatterns.push("terra-cotta-");
+                    }
+
+                    const matchingImageIds = (productWithImages.images || [])
+                        .filter(img => {
+                            const url = img.url.toLowerCase();
+                            // Match if URL contains any of the search patterns
+                            return searchPatterns.some(pattern => url.includes(pattern));
+                        })
+                        .map(img => img.id);
+
+                    if (matchingImageIds.length > 0) {
+                        try {
+                            await batchVariantImagesWorkflow(container).run({
+                                input: {
+                                    variant_id: variant.id,
+                                    add: matchingImageIds,
+                                },
+                            });
+                            logger.info(`✓ Associated ${matchingImageIds.length} images with variant "${(variant as any).title}" of "${existingProduct.handle}"`);
+                        } catch (e) {
+                            logger.warn(`Could not associate images with variant "${(variant as any).title}": ${(e as Error).message}`);
+                        }
+                    } else {
+                        logger.warn(`⚠ No matching images found for variant "${(variant as any).title}" of "${existingProduct.handle}" (searched for: ${searchPatterns.join(", ")})`);
+                    }
+                }
+            }
+        } catch (e) {
+            logger.warn(`Failed to associate variant images for "${existingProduct.handle}": ${(e as Error).message}`);
         }
     }
   }
@@ -1217,8 +1392,10 @@ export default async function seedDemoData({ container }: ExecArgs) {
   logger.info("\n========================================");
   logger.info("SEED SCRIPT COMPLETED SUCCESSFULLY");
   logger.info("========================================");
+  logger.info(`Environment: ${environment} (${useS3 ? "S3/R2" : "local"} storage)`);
   logger.info(`Products: ${newProducts.length} created, ${existingProducts.length} existing`);
   logger.info(`Regions: ${regionsToCreate.length} created`);
   logger.info(`Publishable API Key: ${publishableApiKey.id}`);
+  logger.info(`Total Images: ${Object.values(imageFilenames).flat().length} (${useS3 ? "uploaded to S3/R2" : "using local paths"})`);
   logger.info("========================================\n");
 }

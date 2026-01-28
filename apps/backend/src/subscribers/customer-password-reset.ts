@@ -5,7 +5,7 @@ import { getEnv } from "../lib/env"
 import { maskEmail } from "../utils/email-masking"
 
 interface PasswordResetEventData {
-  entity_id: string  // customer_id
+  entity_id: string  // customer email for emailpass
   token: string
   actor_type: string
 }
@@ -15,6 +15,11 @@ export default async function customerPasswordResetHandler({
   container,
 }: SubscriberArgs<PasswordResetEventData>) {
   const logger = container.resolve("logger")
+
+  const isIntegrationTest = process.env.TEST_TYPE?.startsWith("integration")
+  if (isIntegrationTest) {
+    return
+  }
 
   // Only handle customer password resets
   if (data.actor_type !== "customer") {
@@ -26,7 +31,7 @@ export default async function customerPasswordResetHandler({
   const { data: customers } = await query.graph({
     entity: "customer",
     fields: ["id", "email", "first_name"],
-    filters: { id: data.entity_id },
+    filters: { email: data.entity_id },
   })
 
   if (!customers?.length) {

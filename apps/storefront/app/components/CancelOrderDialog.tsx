@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, AlertTriangle, Loader2 } from "lucide-react";
+import { X, AlertTriangle, Loader2 } from "../lib/icons";
 
 interface CancelOrderDialogProps {
     isOpen: boolean;
@@ -66,11 +66,11 @@ export function CancelOrderDialog({ isOpen, onClose, onConfirm, orderNumber }: C
                 </p>
 
                 {/* Error message */}
-                {error && (
+                {error ? (
                     <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
                         {error}
                     </div>
-                )}
+                ) : null}
 
                 {/* Actions */}
                 <div className="flex gap-3">

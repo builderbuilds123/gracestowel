@@ -65,6 +65,7 @@ vi.mock('react-router', async () => {
         ...actual,
         Link: ({ children }: any) => <a>{children}</a>,
         useLoaderData: () => ({ stripePublishableKey: 'pk_test_mock' }),
+        useSearchParams: () => [new URLSearchParams(), vi.fn()],
     };
 });
 

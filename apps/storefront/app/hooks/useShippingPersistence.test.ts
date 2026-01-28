@@ -37,14 +37,14 @@ describe('useShippingPersistence', () => {
     });
 
     it('should initialize with default state', () => {
-        const { result } = renderHook(() => useShippingPersistence('cart_123'));
+        const { result } = renderHook(() => useShippingPersistence({ cartId: 'cart_123' }));
         
         expect(result.current.isShippingPersisted).toBe(false);
         expect(result.current.shippingPersistError).toBeNull();
     });
 
     it('should successfully persist shipping option', async () => {
-        const { result } = renderHook(() => useShippingPersistence('cart_123', 'trace_abc'));
+        const { result } = renderHook(() => useShippingPersistence({ cartId: 'cart_123', traceId: 'trace_abc' }));
         
         await act(async () => {
             await result.current.persistShippingOption(mockOption);
@@ -68,7 +68,7 @@ describe('useShippingPersistence', () => {
             json: async () => ({ error: 'Failed' }),
         });
 
-        const { result } = renderHook(() => useShippingPersistence('cart_123'));
+        const { result } = renderHook(() => useShippingPersistence({ cartId: 'cart_123' }));
         
         await act(async () => {
             await result.current.persistShippingOption(mockOption);
@@ -84,7 +84,7 @@ describe('useShippingPersistence', () => {
             json: async () => ({ error: 'Cart not found', code: 'CART_EXPIRED' }),
         });
 
-        const { result } = renderHook(() => useShippingPersistence('cart_123'));
+        const { result } = renderHook(() => useShippingPersistence({ cartId: 'cart_123' }));
         
         await act(async () => {
             await result.current.persistShippingOption(mockOption);
@@ -95,7 +95,7 @@ describe('useShippingPersistence', () => {
     });
 
     it('should skip persistence if already persisted (race condition check)', async () => {
-        const { result } = renderHook(() => useShippingPersistence('cart_123'));
+        const { result } = renderHook(() => useShippingPersistence({ cartId: 'cart_123' }));
         
         // First call - success
         await act(async () => {
@@ -113,7 +113,7 @@ describe('useShippingPersistence', () => {
     });
 
     it('should skip if cartId is missing', async () => {
-        const { result } = renderHook(() => useShippingPersistence(undefined));
+        const { result } = renderHook(() => useShippingPersistence({ cartId: undefined }));
         
         await act(async () => {
             await result.current.persistShippingOption(mockOption);

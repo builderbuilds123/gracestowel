@@ -1,3 +1,9 @@
+---
+description: 
+globs: apps/storefront/*
+alwaysApply: false
+---
+
 # Storefront AGENTS.md — Cloudflare Workers + React Router v7
 
 <!-- Inherits from root AGENTS.md. This file contains storefront-specific guidance. -->

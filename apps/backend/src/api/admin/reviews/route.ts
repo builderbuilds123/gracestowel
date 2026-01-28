@@ -1,46 +1,48 @@
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
+import { z } from "zod"
 import { REVIEW_MODULE } from "../../../modules/review"
 import type ReviewModuleService from "../../../modules/review/service"
 
 /**
+ * Schema for GET /admin/reviews list query params.
+ * Compatible with validateAndTransformQuery + req.queryConfig (createFindParams pattern).
+ */
+export const GetAdminReviewsSchema = z.object({
+  limit: z.coerce.number().optional(),
+  offset: z.coerce.number().optional(),
+  order: z.string().optional(),
+  fields: z.string().optional(),
+  status: z.enum(["pending", "approved", "rejected"]).optional(),
+  product_id: z.string().optional(),
+})
+
+/**
  * GET /admin/reviews
- * List all reviews with optional filters
+ * List all reviews with optional filters. Uses req.queryConfig when validateAndTransformQuery middleware runs.
  */
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
-  const {
-    limit = "20",
-    offset = "0",
-    status,
-    product_id,
-  } = req.query as {
-    limit?: string
-    offset?: string
-    status?: "pending" | "approved" | "rejected"
-    product_id?: string
-  }
-
   const reviewService = req.scope.resolve<ReviewModuleService>(REVIEW_MODULE)
 
-  // Build filters
-  const filters: Record<string, unknown> = {}
-  if (status) {
-    filters.status = status
-  }
-  if (product_id) {
-    filters.product_id = product_id
-  }
+  const pagination = req.queryConfig?.pagination as
+    | { take?: number; skip?: number; order?: Record<string, "ASC" | "DESC"> }
+    | undefined
+  const take = pagination?.take ?? 20
+  const skip = pagination?.skip ?? 0
+  const order = pagination?.order ?? { created_at: "DESC" }
+
+  const filters: Record<string, unknown> = { ...(req.filterableFields ?? {}) }
 
   const [reviews, count] = await reviewService.listAndCountReviews(filters, {
-    take: parseInt(limit),
-    skip: parseInt(offset),
-    order: { created_at: "DESC" },
+    take,
+    skip,
+    order,
   })
 
   res.json({
     reviews,
     count,
-    limit: parseInt(limit),
-    offset: parseInt(offset),
+    limit: take,
+    offset: skip,
   })
 }
 

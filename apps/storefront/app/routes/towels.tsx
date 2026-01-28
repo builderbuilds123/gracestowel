@@ -4,8 +4,9 @@ import { ProductCard } from "../components/ProductCard";
 import { ProductFilters } from "../components/ProductFilters";
 import { getMedusaClient, castToMedusaProduct, type MedusaProduct, getDefaultRegion } from "../lib/medusa";
 import { productList } from "../data/products";
-import { SlidersHorizontal, X } from "lucide-react";
+import { SlidersHorizontal, X } from "../lib/icons";
 import { transformToListItems, type ProductListItem } from "../lib/product-transformer";
+import { createLogger } from "../lib/logger";
 
 // SEO Meta tags
 export function meta() {
@@ -29,35 +30,58 @@ export async function loader({ context }: Route.LoaderArgs) {
     try {
         const medusa = getMedusaClient(context);
         
-        // Get default region for price calculation (CAD/Canada preferred)
-        const regionInfo = await getDefaultRegion(medusa);
+        // OPTIMIZATION (Issue #18): Fetch region and products in parallel using Promise.all()
+        // Products can be fetched without region_id (Medusa uses default), then we use region for currency
+        const [regionInfo, productResponse] = await Promise.all([
+            getDefaultRegion(medusa),
+            medusa.store.product.list({
+                limit: 50,
+                // Don't wait for region_id - Medusa will use default region
+                // We'll use region info for currency display after both resolve
+                fields: "+variants,+variants.calculated_price,+variants.prices,*variants.inventory_quantity,+options,+options.values,+images,+categories,+metadata"
+            })
+        ]);
+        
         const regionId = regionInfo?.region_id;
         const currencyCode = regionInfo?.currency_code || "cad";
-        
-        const { products } = await medusa.store.product.list({ 
-            limit: 50, 
-            region_id: regionId,
-            fields: "+variants,+variants.calculated_price,+variants.prices,*variants.inventory_quantity,+options,+options.values,+images,+categories,+metadata" 
-        });
+        const { products } = productResponse;
 
         // Transform Medusa products using centralized transformer
         // Use safe casting to ensure type safety matching our MedusaProduct interface
         const safeProducts = products.map(castToMedusaProduct);
         const transformedProducts = transformToListItems(safeProducts, currencyCode);
 
-        // Extract all unique colors
-        const allColors = [...new Set(transformedProducts.flatMap(p => p.colors))].sort();
+        // Extract all unique colors (Issue #20: Use .toSorted() for immutability)
+        const allColors = [...new Set(transformedProducts.flatMap(p => p.colors))].toSorted();
 
-        // Get price range
-        const prices = transformedProducts.map(p => p.priceAmount).filter(p => p > 0);
+        // Get price range (Issue #21: Use loop instead of Math.min/max with spread)
+        let minPrice = 0;
+        let maxPrice = 200;
+        let hasValidPrice = false;
+        
+        for (const product of transformedProducts) {
+            const price = product.priceAmount;
+            if (price > 0) {
+                if (!hasValidPrice) {
+                    minPrice = price;
+                    maxPrice = price;
+                    hasValidPrice = true;
+                } else {
+                    if (price < minPrice) minPrice = price;
+                    if (price > maxPrice) maxPrice = price;
+                }
+            }
+        }
+        
         const priceRange = {
-            min: Math.floor(Math.min(...prices, 0)),
-            max: Math.ceil(Math.max(...prices, 200)),
+            min: Math.floor(minPrice),
+            max: Math.ceil(maxPrice),
         };
 
         return { products: transformedProducts, allColors, priceRange, error: null };
     } catch (error) {
-        console.error("Failed to fetch products from Medusa:", error);
+        const logger = createLogger({ context: "towels-loader" });
+        logger.error("Failed to fetch products from Medusa", error instanceof Error ? error : new Error(String(error)));
         throw new Response("Failed to load products from backend", { status: 500 });
     }
 }
@@ -88,12 +112,32 @@ export default function Collection({ loaderData }: Route.ComponentProps) {
         });
     }, [products, selectedColors, selectedPriceRange]);
 
-    // Create color options with counts
+    // Create color options with counts (Issue #23: Optimize with Map for O(1) lookups)
     const colorOptions = useMemo(() => {
-        return allColors.map(color => ({
+        // Build color count map: O(n×k) where k is colors per product
+        const colorCountMap = new Map<string, number>();
+        
+        for (const product of products) {
+            for (const productColor of product.colors) {
+                const normalizedColor = productColor.toLowerCase();
+                // Check if this color matches any in allColors
+                for (const allColor of allColors) {
+                    if (normalizedColor.includes(allColor.toLowerCase())) {
+                        colorCountMap.set(
+                            allColor,
+                            (colorCountMap.get(allColor) || 0) + 1
+                        );
+                        break; // Only count once per product
+                    }
+                }
+            }
+        }
+        
+        // Map colors with pre-calculated counts: O(m)
+        return allColors.map((color: string) => ({
             value: color,
             label: color,
-            count: products.filter(p => p.colors.some(c => c.toLowerCase().includes(color.toLowerCase()))).length,
+            count: colorCountMap.get(color) || 0,
         }));
     }, [allColors, products]);
 
@@ -127,11 +171,11 @@ export default function Collection({ loaderData }: Route.ComponentProps) {
                     >
                         <SlidersHorizontal className="w-4 h-4" />
                         Filters
-                        {hasActiveFilters && (
+                        {hasActiveFilters ? (
                             <span className="w-5 h-5 bg-accent-earthy text-white text-xs rounded-full flex items-center justify-center">
                                 {selectedColors.length + (selectedPriceRange.min > priceRange.min || selectedPriceRange.max < priceRange.max ? 1 : 0)}
                             </span>
-                        )}
+                        ) : null}
                     </button>
                 </div>
 

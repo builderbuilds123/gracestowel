@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { useCustomer } from '../context/CustomerContext';
-import { Mail, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { Mail, ArrowLeft, CheckCircle2 } from '../lib/icons';
 
 export function meta() {
     return [
@@ -72,11 +72,11 @@ export default function ForgotPasswordPage() {
 
                 {/* Forgot Password Form */}
                 <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-lg p-8 space-y-6">
-                    {error && (
+                    {error ? (
                         <div className="bg-red-50 text-red-700 px-4 py-3 rounded-lg text-sm">
                             {error}
                         </div>
-                    )}
+                    ) : null}
 
                     {/* Email Field */}
                     <div>

@@ -5,169 +5,18 @@ import {
     WorkflowResponse,
     transform,
 } from "@medusajs/framework/workflows-sdk";
-import { Modules } from "@medusajs/framework/utils";
+import { ContainerRegistrationKeys, Modules, QueryContext } from "@medusajs/framework/utils";
 import Stripe from "stripe";
 import { getStripeClient } from "../utils/stripe";
 import { modificationTokenService } from "../services/modification-token";
 import { retryWithBackoff, isRetryableStripeError } from "../utils/stripe-retry";
-import { updateInventoryLevelsStep, createReservationsStep } from "@medusajs/core-flows";
-import type { UpdateInventoryLevelInput, InventoryTypes } from "@medusajs/types";
+import {
+    beginOrderEditOrderWorkflow,
+    orderEditAddNewItemWorkflow,
+} from "@medusajs/core-flows";
 import { logger } from "../utils/logger";
 import { formatModificationWindow } from "../lib/payment-capture-queue";
 import { trackWorkflowEventStep } from "./steps/track-analytics-event";
-
-// Type interface for inventory levels to improve type safety
-interface InventoryLevel {
-    id: string;
-    location_id: string;
-    inventory_item_id: string;
-    stocked_quantity: number | null;
-    reserved_quantity: number | null;
-}
-
-interface InventoryLevelWithAvailable extends InventoryLevel {
-    availableStock: number;
-}
-
-// ... existing code ...
-
-/**
- * Step to prepare inventory adjustments for expected item addition
- * Logic mirrored from create-order-from-stripe workflow
- */
-// ============================================================================
-// Helper Functions - Exported for testing
-// ============================================================================
-
-export function hasValidId(item: any): boolean {
-    return !!(item && typeof item.id === "string" && item.id.length > 0);
-}
-
-export function findNewlyCreatedItem(
-    items: any[],
-    variantId: string,
-    quantity: number,
-    logger?: any
-): any {
-    if (!items || !Array.isArray(items)) {
-        return null;
-    }
-
-    // Try to find exact match by variant_id and quantity
-    const exactMatch = items.find(
-        (item) => item.variant_id === variantId && item.quantity === quantity
-    );
-
-    if (exactMatch) {
-        return exactMatch;
-    }
-
-    // Fallback: This logic handles cases where quantity might have been merged or adjusted,
-    // although strictly speaking for this workflow we expect a new line item.
-    // We log this occurrence if a logger is provided.
-    if (logger) {
-        logger.warn(
-            "add-item-to-order",
-            "findNewlyCreatedItem: No exact match found for variant. Returning default structure.",
-            { variantId, quantity }
-        );
-    }
-
-    return null;
-}
-
-// ============================================================================
-// Workflow Steps & Handlers
-// ============================================================================
-
-export async function prepareInventoryAdjustmentsHandler(
-    state: { variantId: string; quantity: number },
-    { container }: { container: any }
-): Promise<UpdateInventoryLevelInput[]> {
-    const query = container.resolve("query");
-    
-    // Get the inventory item linked to this variant
-    // We assume validationPreconditions already checked existence, but we need the IDs/locations
-    const { data: variants } = await query.graph({
-        entity: "product_variant",
-        fields: ["id", "inventory_items.inventory_item_id"],
-        filters: { id: state.variantId },
-    });
-
-    if (!variants.length) return [];
-
-    const variant = variants[0];
-    const inventoryItemId = variant.inventory_items?.[0]?.inventory_item_id;
-
-    if (!inventoryItemId) return [];
-
-    // Get the stock location for this inventory item
-    // Logic: In simple setup, just take the first location. 
-    // In complex multi-warehouse, we might need to know WHICH location the order is fulfilled from.
-    // However, `add-item-to-order` doesn't currently take location_id as input.
-    // We will assume the primary location or first available.
-    // Note: The precondition check validated total stock across ALL locations.
-    // For reservation, we should ideally reserve from the location that has stock.
-    const { data: inventoryLevels } = await query.graph({
-        entity: "inventory_level",
-        fields: ["id", "location_id", "inventory_item_id", "stocked_quantity", "reserved_quantity"],
-        filters: { inventory_item_id: inventoryItemId },
-    });
-
-    if (!inventoryLevels.length) return [];
-
-    // Inventory reservation strategy:
-    // 1. Try to find a single location with sufficient available stock (stocked - reserved)
-    // 2. If no single location has enough, pick the location with the most available stock
-    // 3. Note: Multi-location allocation (splitting across warehouses) is not supported in this simple flow
-    //    The precondition check already verified total stock across all locations is sufficient
-
-    // Calculate available stock for each location (stocked - reserved)
-    const levelsWithAvailable: InventoryLevelWithAvailable[] = inventoryLevels.map((level: InventoryLevel) => ({
-        ...level,
-        availableStock: (level.stocked_quantity || 0) - (level.reserved_quantity || 0)
-    }));
-
-    // Strategy: Find location with enough available stock
-    let targetLevel = levelsWithAvailable.find((level: InventoryLevelWithAvailable) => level.availableStock >= state.quantity);
-
-    if (!targetLevel) {
-        // Fallback: Use location with most available stock
-        // This handles the case where no single location has enough, but total across locations does
-        // In this case, we'll allocate from the best location and allow it to go slightly negative
-        // (This is acceptable since preconditions verified total stock exists)
-        targetLevel = levelsWithAvailable.reduce((best: InventoryLevelWithAvailable, current: InventoryLevelWithAvailable) =>
-            current.availableStock > best.availableStock ? current : best
-        );
-
-        logger.warn("add-item-to-order", "No single location has sufficient stock, using best available", {
-            variantId: state.variantId,
-            requested: state.quantity,
-            selectedLocation: targetLevel.location_id,
-            availableAtLocation: targetLevel.availableStock
-        });
-    }
-
-    const currentReservedQuantity = targetLevel.reserved_quantity || 0;
-
-    // ORD-01: Reserve inventory by incrementing reserved_quantity
-    // Note: UpdateInventoryLevelInput type may not include reserved_quantity in TypeScript,
-    // but Medusa v2 inventory service supports it at runtime
-    return [{
-        inventory_item_id: inventoryItemId,
-        location_id: targetLevel.location_id,
-        reserved_quantity: currentReservedQuantity + state.quantity, // Reserve stock for this order
-    } as UpdateInventoryLevelInput & { reserved_quantity: number }];
-}
-
-
-export const prepareInventoryAdjustmentsStep = createStep(
-    "prepare-inventory-adjustments-add-item",
-    async (input: { variantId: string; quantity: number }, { container }) => {
-        const adjustments = await prepareInventoryAdjustmentsHandler(input, { container });
-        return new StepResponse(adjustments);
-    }
-);
 
 // ============================================================================
 // Input/Output Types
@@ -187,7 +36,7 @@ interface ValidationResult {
     valid: boolean;
     orderId: string;
     paymentIntentId: string;
-    paymentCollectionId?: string; // PAY-01 Link
+    paymentCollectionId?: string;
     order: {
         id: string;
         status: string;
@@ -217,7 +66,6 @@ export interface TotalsResult {
 }
 
 export interface CalculateTotalsInput {
-    // variant_id is required for line items created via add-item workflow
     variantId: string;
     quantity: number;
     currentTotal: number;
@@ -233,6 +81,11 @@ interface StripeIncrementResult {
     skipped?: boolean;
     paymentIntentId: string;
     idempotencyKey: string;
+}
+
+interface OrderEditResult {
+    orderChangeId: string;
+    orderPreview: any;
 }
 
 // ============================================================================
@@ -302,18 +155,18 @@ export const DECLINE_CODE_MESSAGES: Record<string, string> = {
     generic_decline: "Your card was declined.",
     card_declined: "Your card was declined.",
     do_not_honor: "Your card was declined.",
-    
+
     // Specific issues with user-actionable messages
     insufficient_funds: "Insufficient funds.",
     expired_card: "Your card has expired.",
     incorrect_cvc: "Your card's security code is incorrect.",
     incorrect_number: "Your card number is incorrect.",
-    
+
     // Security-sensitive codes - don't reveal card is lost/stolen
     lost_card: "Your card was declined. Please try another.",
     stolen_card: "Your card was declined. Please try another.",
     fraudulent: "Your card was declined. Please try another.",
-    
+
     // Processing errors
     processing_error: "An error occurred while processing your card.",
     card_not_supported: "Your card is not supported.",
@@ -500,7 +353,6 @@ export class CurrencyMismatchError extends Error {
 // Utility Functions
 // ============================================================================
 
-
 /**
  * Generate a stable idempotency key for Stripe operations.
  * Uses requestId to ensure retries return cached results.
@@ -515,19 +367,15 @@ function generateIdempotencyKey(orderId: string, variantId: string, quantity: nu
 
 /**
  * Step 1: Validate Pre-conditions (Auth, Stock, Status)
- * 
- * FIXES:
- * - Uses proper Token error classes instead of string-prefixed errors
- * - Sums stock across ALL inventory locations, not just the first one
- * 
+ *
  * Handler exported for unit testing.
  */
 export async function validatePreconditionsHandler(
     input: { orderId: string; modificationToken: string; variantId: string; quantity: number },
     context: { container: any }
-): Promise<ValidationResult & { inventoryItemId?: string; locationId?: string }> {
+): Promise<ValidationResult> {
     const { container } = context;
-    const query = container.resolve("query");
+    const query = container.resolve(ContainerRegistrationKeys.QUERY);
 
     // 1. Validate modification token with proper error types
     const tokenValidation = modificationTokenService.validateToken(input.modificationToken);
@@ -543,21 +391,21 @@ export async function validatePreconditionsHandler(
     }
 
     // 2. Fetch order and validate status
-    // TAX-01: Fetch tax_total and subtotal for order-level tax recalculation
-    // PAY-01: Fetch payment_collections to update amount
     const { data: orders } = await query.graph({
         entity: "order",
         fields: [
-            "id", 
-            "status", 
-            "total", 
-            "tax_total", 
-            "subtotal", 
-            "currency_code", 
-            "metadata", 
+            "id",
+            "status",
+            "total",
+            "tax_total",
+            "subtotal",
+            "currency_code",
+            "metadata",
             "items.*",
-            "payment_collections.id", // Fetch linked payment collections
-            "payment_collections.status"
+            "payment_collections.id",
+            "payment_collections.status",
+            "payment_collections.payments.id",
+            "payment_collections.payments.data",
         ],
         filters: { id: input.orderId },
     });
@@ -567,15 +415,38 @@ export async function validatePreconditionsHandler(
     }
 
     const order = orders[0];
-    const paymentCollection = order.payment_collections?.[0]; // Assume the first/primary one
+    const paymentCollection = order.payment_collections?.[0];
 
     if (order.status !== "pending") {
         throw new InvalidOrderStateError(input.orderId, order.status);
     }
 
     // 3. Validate PaymentIntent status
-    const paymentIntentId = order.metadata?.stripe_payment_intent_id;
+    // Try multiple sources for PaymentIntent ID
+    let paymentIntentId = order.metadata?.stripe_payment_intent_id as string | undefined;
+
+    if (!paymentIntentId && paymentCollection?.payments?.length) {
+        for (const payment of paymentCollection.payments) {
+            const paymentData = payment.data as Record<string, unknown> | undefined;
+            if (paymentData?.id && typeof paymentData.id === "string" && paymentData.id.startsWith("pi_")) {
+                paymentIntentId = paymentData.id;
+                logger.info("add-item-to-order", "Found PaymentIntent via payment collection", {
+                    orderId: input.orderId,
+                    paymentIntentId,
+                    paymentId: payment.id,
+                });
+                break;
+            }
+        }
+    }
+
     if (!paymentIntentId) {
+        logger.error("add-item-to-order", "No PaymentIntent found for order", {
+            orderId: input.orderId,
+            hasMetadataPI: !!order.metadata?.stripe_payment_intent_id,
+            hasPaymentCollection: !!paymentCollection,
+            paymentCollectionPaymentsCount: paymentCollection?.payments?.length || 0,
+        });
         throw new PaymentIntentMissingError(input.orderId);
     }
 
@@ -593,7 +464,7 @@ export async function validatePreconditionsHandler(
         throw new OrderLockedError(input.orderId);
     }
 
-    // 4. Check inventory - SUM stock across ALL locations (FIX: was only checking first)
+    // 4. Check inventory - SUM stock across ALL locations
     const { data: variants } = await query.graph({
         entity: "product_variant",
         fields: ["id", "title", "inventory_items.inventory_item_id", "product.title"],
@@ -614,7 +485,6 @@ export async function validatePreconditionsHandler(
             filters: { inventory_item_id: inventoryItemId },
         });
 
-        // FIX: Sum stock across ALL locations instead of just first
         let totalAvailableStock = 0;
         for (const level of inventoryLevels) {
             const locationStock = (level.stocked_quantity || 0) - (level.reserved_quantity || 0);
@@ -629,37 +499,33 @@ export async function validatePreconditionsHandler(
             variantId: input.variantId,
             availableStock: totalAvailableStock,
             locationCount: inventoryLevels.length,
-            requested: input.quantity
+            requested: input.quantity,
         });
-
-        logger.info("add-item-to-order", "Preconditions validated", { orderId: input.orderId });
-
-        return {
-            valid: true,
-            orderId: input.orderId,
-            paymentIntentId,
-            paymentCollectionId: paymentCollection?.id, // Return ID if found
-            inventoryItemId, // Story 7.1: Return for reservation
-            locationId: inventoryLevels[0]?.location_id, // Story 7.1: Return for reservation (use first for now)
-            order: {
-                id: order.id,
-                status: order.status,
-                total: order.total,
-                tax_total: order.tax_total || 0,
-                subtotal: order.subtotal || 0,
-                currency_code: order.currency_code,
-                metadata: order.metadata || {},
-                items: order.items || [],
-            },
-            paymentIntent: {
-                id: paymentIntent.id,
-                status: paymentIntent.status,
-                amount: paymentIntent.amount,
-            },
-        };
     }
 
-    throw new Error(`Variant ${input.variantId} has no inventory items`);
+    logger.info("add-item-to-order", "Preconditions validated", { orderId: input.orderId });
+
+    return {
+        valid: true,
+        orderId: input.orderId,
+        paymentIntentId,
+        paymentCollectionId: paymentCollection?.id,
+        order: {
+            id: order.id,
+            status: order.status,
+            total: order.total,
+            tax_total: order.tax_total || 0,
+            subtotal: order.subtotal || 0,
+            currency_code: order.currency_code,
+            metadata: order.metadata || {},
+            items: order.items || [],
+        },
+        paymentIntent: {
+            id: paymentIntent.id,
+            status: paymentIntent.status,
+            amount: paymentIntent.amount,
+        },
+    };
 }
 
 const validatePreconditionsStep = createStep(
@@ -671,129 +537,9 @@ const validatePreconditionsStep = createStep(
 );
 
 /**
- * Step to update the PaymentCollection amount
- * ENSURES Medusa's payment record stays in sync with Stripe PI and Order totals
- */
-export async function updatePaymentCollectionHandler(
-    input: {
-        paymentCollectionId: string;
-        amount: number;
-        currencyCode?: string;
-    },
-    context: { container: any }
-): Promise<void> {
-    const { container } = context;
-
-    // NOTE: Medusa v2 IPaymentModuleService type is available but has complex overloaded signatures
-    // Using the resolved service directly - the updatePaymentCollections method signature is:
-    // updatePaymentCollections(id: string, data: PaymentCollectionUpdatableFields, sharedContext?: Context)
-    const paymentModuleService = container.resolve(Modules.PAYMENT);
-
-    // Update the payment collection itself
-    // Medusa v2: updatePaymentCollections(id, data, sharedContext?)
-    await paymentModuleService.updatePaymentCollections(
-        input.paymentCollectionId,
-        { amount: input.amount }
-    );
-
-    // ARCHITECTURE: PaymentCollection is Medusa's canonical payment record
-    // - Order.total is the source of truth for order amounts
-    // - PaymentCollection.amount must match Order.total (Medusa canonical)
-    // - Stripe PaymentIntent mirrors PaymentCollection/Order (payment provider state)
-    // - We manually update Stripe PI in incrementStripeAuthStep to keep it in sync
-    // - PaymentCollection update ensures Medusa's payment records match Order.total
-
-    logger.info("add-item-to-order", "Updated PaymentCollection", {
-        paymentCollectionId: input.paymentCollectionId,
-        amount: input.amount
-    });
-}
-
-export const updatePaymentCollectionStep = createStep(
-    "update-payment-collection-add-item",
-    async (
-        input: {
-            paymentCollectionId: string | undefined;
-            amount: number;
-            previousAmount?: number;
-        },
-        { container }
-    ) => {
-        if (!input.paymentCollectionId) {
-            logger.warn("add-item-to-order", "No PaymentCollection ID found, skipping update (legacy order?)");
-            return new StepResponse({ updated: false, paymentCollectionId: "", previousAmount: 0 });
-        }
-
-        // CRITICAL: previousAmount must be provided from order.total (source of truth)
-        // We do NOT query PaymentCollection as fallback because if it's out of sync with order.total,
-        // we would rollback to an incorrect value, causing data inconsistency.
-        // The caller must provide previousAmount from order.total.
-        if (input.previousAmount === undefined) {
-            throw new Error(
-                `previousAmount is required for updatePaymentCollectionStep. ` +
-                `It must be provided from order.total (source of truth) to ensure correct compensation rollback.`
-            );
-        }
-        const previousAmount = input.previousAmount;
-
-        await updatePaymentCollectionHandler({
-             paymentCollectionId: input.paymentCollectionId,
-             amount: input.amount
-        }, { container });
-
-        return new StepResponse(
-            { updated: true, paymentCollectionId: input.paymentCollectionId, previousAmount },
-            { paymentCollectionId: input.paymentCollectionId, previousAmount }
-        );
-    },
-    // Compensation: rollback PaymentCollection amount if downstream steps fail
-    async (compensation, { container }) => {
-        if (!compensation || !compensation.paymentCollectionId) {
-            return;
-        }
-
-        // NOTE: Medusa v2 IPaymentModuleService type is available but has complex overloaded signatures
-        // Using the resolved service directly - the updatePaymentCollections method signature is:
-        // updatePaymentCollections(id: string, data: PaymentCollectionUpdatableFields, sharedContext?: Context)
-        const paymentModuleService = container.resolve(Modules.PAYMENT);
-
-        try {
-            await paymentModuleService.updatePaymentCollections(
-                compensation.paymentCollectionId,
-                { amount: compensation.previousAmount }
-            );
-            logger.info("add-item-to-order", "Rolled back PaymentCollection", {
-                paymentCollectionId: compensation.paymentCollectionId,
-                previousAmount: compensation.previousAmount
-            });
-        } catch (rollbackError) {
-            // CRITICAL: PaymentCollection rollback failure means payment state is inconsistent
-            // This requires immediate attention as PaymentCollection amount may be out of sync
-            logger.critical("add-item-to-order", "Failed to rollback PaymentCollection - payment state inconsistent", {
-                paymentCollectionId: compensation.paymentCollectionId,
-                previousAmount: compensation.previousAmount,
-                alert: "CRITICAL",
-                issue: "PAYMENT_COLLECTION_ROLLBACK_FAILED",
-                actionRequired: "Manual reconciliation required - PaymentCollection amount may be incorrect",
-                error: (rollbackError as Error).message,
-            }, rollbackError instanceof Error ? rollbackError : new Error(String(rollbackError)));
-            
-            // Re-throw to ensure workflow rollback continues, but critical alert is logged
-            throw rollbackError;
-        }
-    }
-);
-
-
-/**
  * Step 2: Calculate Order Totals (Tax, Shipping)
  *
  * TAX-01: Tax calculation using Medusa's calculated_price as source of truth.
- * - For tax-inclusive regions: calculated_amount_with_tax includes tax
- * - For tax-exclusive regions: tax is added separately via tax_total
- * - Tax amount per item is calculated and stored in added_items metadata
- *
- * Per Medusa v2 pricing: calculated_price represents the final price with tax provider logic applied.
  *
  * Handler exported for unit testing.
  */
@@ -801,7 +547,7 @@ export async function calculateTotalsHandler(
     input: CalculateTotalsInput,
     context: { container: any }
 ): Promise<TotalsResult> {
-    const query = context.container.resolve("query");
+    const query = context.container.resolve(ContainerRegistrationKeys.QUERY);
 
     // Fetch variant with calculated price (includes tax if configured)
     const { data: variants } = await query.graph({
@@ -816,6 +562,11 @@ export async function calculateTotalsHandler(
             "product.title",
         ],
         filters: { id: input.variantId },
+        context: {
+            calculated_price: QueryContext({
+                currency_code: input.currencyCode,
+            }),
+        },
     });
 
     if (!variants.length) {
@@ -829,44 +580,23 @@ export async function calculateTotalsHandler(
         throw new PriceNotFoundError(input.variantId, input.currencyCode);
     }
 
-    // Validate currency matches between order and variant price
     if (!price.currency_code) {
         throw new PriceNotFoundError(input.variantId, input.currencyCode);
     }
-    
+
     if (price.currency_code.toLowerCase() !== input.currencyCode.toLowerCase()) {
         throw new CurrencyMismatchError(input.variantId, input.currencyCode, price.currency_code);
     }
 
-    // TAX-01: Calculate tax for the added items
-    // 
-    // Tax calculation handles both tax-inclusive and tax-exclusive regions:
-    // - Tax-inclusive: calculated_amount_with_tax includes tax in the price
-    //   - unitPrice = calculated_amount_with_tax (price already includes tax)
-    //   - taxPerUnit = tax_total (tax component for tracking/reporting)
-    //   - Note: In tax-inclusive regions, taxAmount is tracked separately for accounting
-    //     but the price already includes it, so newOrderTotal is correct
-    // - Tax-exclusive: calculated_amount is base price, tax is added separately
-    //   - unitPrice = calculated_amount_with_tax (base + tax)
-    //   - taxPerUnit = tax_total (tax added on top of base price)
-    //
-    // tax_total is per unit, multiply by quantity for total tax of this addition
     const unitPrice = price.calculated_amount_with_tax || price.calculated_amount;
     const taxPerUnit = price.tax_total || 0;
-    const taxAmount = taxPerUnit * input.quantity; // Total tax for all units (quantity * per-unit tax)
-    
-    // itemTotal uses unitPrice which includes tax (calculated_amount_with_tax)
-    // This is correct for Stripe PaymentIntent amount which should include tax
+    const taxAmount = taxPerUnit * input.quantity;
     const itemTotal = unitPrice * input.quantity;
-    
-    // For subtotal calculation (if needed in future), use:
-    // const itemSubtotal = price.calculated_amount * input.quantity; // Base price without tax
-    
     const newOrderTotal = input.currentTotal + itemTotal;
     const difference = itemTotal;
     const variantTitle = `${variant.product?.title || ""} - ${variant.title || ""}`.trim();
 
-    logger.info("add-item-to-order", "TAX-01: Calculated totals", {
+    logger.info("add-item-to-order", "Calculated totals", {
         variantId: input.variantId,
         unitPrice,
         taxPerUnit,
@@ -898,6 +628,11 @@ const calculateTotalsStep = createStep(
 
 /**
  * Step 3: Increment Stripe Authorization
+ *
+ * IMPORTANT: Medusa's `createOrUpdateOrderPaymentCollectionWorkflow` only updates
+ * the PaymentCollection amount in Medusa, NOT the actual Stripe PaymentIntent.
+ * We must manually increment the Stripe PI authorization to allow capturing the
+ * increased amount.
  */
 const incrementStripeAuthStep = createStep(
     "increment-stripe-auth",
@@ -968,7 +703,6 @@ const incrementStripeAuthStep = createStep(
             });
         } catch (error) {
             if (error instanceof Stripe.errors.StripeCardError) {
-                // Story 6.4: Emit metric for decline tracking
                 logger.info("add-item-to-order", "Payment increment declined", {
                     metric: "payment_increment_decline_count",
                     value: 1,
@@ -1035,214 +769,229 @@ const incrementStripeAuthStep = createStep(
 );
 
 /**
- * Step 4: Update Order Values (DB Commit)
+ * Step 4: Execute Medusa Order Edit Flow
  *
- * TAX-01: Tracks tax in metadata for added items during grace period.
- * Note: Order tax_total and subtotal are computed fields in Medusa v2, calculated
- * from line items. We store tax info in metadata for tracking until these additions
- * are converted to actual line items (e.g., during capture or final reconciliation).
+ * This step uses Medusa's native order edit workflows to:
+ * 1. Begin or reuse an existing order edit (OrderChange with change_type: "edit")
+ * 2. Add the item using orderEditAddNewItemWorkflow (creates OrderChangeAction with action: "ITEM_ADD")
+ * 3. Confirm the order change directly via orderModuleService.confirmOrderChange()
+ *
+ * IMPORTANT: We do NOT use confirmOrderEditRequestWorkflow because it calls
+ * createOrUpdateOrderPaymentCollectionWorkflow which is designed for POST-capture
+ * order edits and will CANCEL uncaptured PaymentIntents. Our use case is PRE-capture
+ * modifications where the PaymentIntent is still in requires_capture state.
+ *
+ * This ensures proper activity tracking in Medusa's OrderChange/OrderChangeAction system
+ * while preserving our Stripe PaymentIntent authorization.
  */
-export async function updateOrderValuesHandler(
+export async function executeOrderEditHandler(
     input: {
         orderId: string;
-        paymentIntentId: string;
         variantId: string;
-        variantTitle: string;
         quantity: number;
-        unitPrice: number;
-        itemTotal: number;
-        taxAmount: number;
-        newTotal: number;
-        stripeIncrementSucceeded: boolean;
-        currentOrderMetadata: Record<string, any>;
+        userId?: string;
     },
     context: { container: any }
-): Promise<{ success: boolean; orderId: string; orderWithItems?: any; newLineItemId?: string }> {
+): Promise<OrderEditResult> {
     const { container } = context;
-    const orderService = container.resolve("order");
-    // const inventoryService = container.resolve("inventoryService"); // If needed later
+    const query = container.resolve(ContainerRegistrationKeys.QUERY);
+    const orderModuleService = container.resolve(Modules.ORDER);
+    const userId = input.userId || "guest_user";
 
-    try {
-        // TAX-01: Prepare the line item object
-        // Note: quantity * unit_price is handled by Medusa or passed as needed.
-        // For createLineItems, we typically pass variant_id, quantity, and potentially metadata/overrides.
-        const lineItemData = {
-            variant_id: input.variantId,
-            title: input.variantTitle,
-            quantity: input.quantity,
-            // If we need to override price or set custom tax amount:
-            unit_price: input.unitPrice, 
-            metadata: {
-                // TAX-01: Store specific tax amount if needed for reconciliation, 
-                // though Medusa v2 might calculate it automatically.
-                tax_amount: input.taxAmount,
-                // created_via: "add-item-workflow" // Optional tracking
-            }
-        };
+    // 1. Check for existing active order edit or create a new one
+    const { data: existingEdits } = await query.graph({
+        entity: "order_change",
+        fields: ["id", "status", "change_type"],
+        filters: {
+            order_id: input.orderId,
+            change_type: "edit",
+            status: ["created", "requested"],
+        },
+    });
 
-        // Create the actual Line Item in Medusa
-        // This is superior to metadata tracking as it integrates with fulfillment/inventory
-        try {
-            await orderService.createLineItems(input.orderId, [lineItemData]);
-        } catch (createError: any) {
-            // Enhanced error handling for createLineItems failures
-            // NOTE: Medusa's orderService.createLineItems() does not throw typed error classes,
-            // so we cannot use instanceof checks. We must rely on error message parsing.
-            // This is a limitation of the Medusa v2 API - we would prefer typed errors for robustness.
-            const errorMessage = createError?.message || String(createError);
-            
-            // Check for common failure scenarios using string matching
-            // (Type-safe instanceof checks are not possible without typed errors from Medusa)
-            if (errorMessage.includes("variant") && errorMessage.includes("not found")) {
-                logger.error("add-item-to-order", "Variant not found when creating line item", {
-                    orderId: input.orderId,
-                    variantId: input.variantId,
-                }, createError instanceof Error ? createError : new Error(errorMessage));
-                throw new VariantNotFoundError(input.variantId);
-            }
-            
-            if (errorMessage.includes("order") && (errorMessage.includes("not found") || errorMessage.includes("does not exist"))) {
-                logger.error("add-item-to-order", "Order not found when creating line item", {
-                    orderId: input.orderId,
-                }, createError instanceof Error ? createError : new Error(errorMessage));
-                throw new OrderNotFoundError(input.orderId);
-            }
-            
-            if (errorMessage.includes("duplicate") || errorMessage.includes("already exists")) {
-                // IDEMPOTENCY CONSIDERATION:
-                // A duplicate line item could indicate:
-                // 1. A retry of a fully completed workflow (idempotent - should succeed)
-                // 2. A retry of a partially completed workflow where payment/inventory were modified
-                //    but line item creation failed (non-idempotent - would cause double-charging)
-                //
-                // Since we cannot distinguish between these cases without additional state tracking,
-                // we choose to throw an error to force investigation rather than silently mask
-                // potential double-charging or double-reservation issues.
-                // This is a safer default than assuming idempotency.
-                logger.warn("add-item-to-order", "Duplicate line item creation attempted", {
-                    orderId: input.orderId,
-                    variantId: input.variantId,
-                    quantity: input.quantity,
-                });
-                throw new DuplicateLineItemError(input.orderId, input.variantId);
-            }
-            
-            if (errorMessage.includes("state") || errorMessage.includes("status")) {
-                logger.error("add-item-to-order", "Order state conflict when creating line item", {
-                    orderId: input.orderId,
-                    error: errorMessage,
-                }, createError instanceof Error ? createError : new Error(errorMessage));
-                throw new InvalidOrderStateError(input.orderId, "unknown");
-            }
-            
-            // Generic error - log with context and rethrow
-            logger.error("add-item-to-order", "Failed to create line item", {
-                orderId: input.orderId,
-                variantId: input.variantId,
-                quantity: input.quantity,
-                error: errorMessage,
-            }, createError instanceof Error ? createError : new Error(errorMessage));
-            throw createError;
-        }
+    let orderChangeId: string;
 
-        // Clean up metadata: Remove added_items if it exists, since we are now using real items
-        // Also update the total explicitly if needed, or let Medusa calculate it.
-        // The requirement says "Update Order Total: Ensure the core order.total is updated".
-        // createLineItems should trigger recalculation, but we might need to enforce the specific newTotal from our calculation step if we trust it more
-        // or just update metadata.updated_total as a legacy/reference field.
-        
-        const metadataUpdate: Record<string, any> = {
-            ...input.currentOrderMetadata,
-            updated_total: input.newTotal,
-            last_modified: new Date().toISOString(),
-        };
-
-        // Remove added_items from metadata to avoid confusion/duplication
-        // NOTE: Since we're creating real line items immediately, we no longer need metadata tracking.
-        // Each add-item operation creates actual line items, so previous metadata entries are obsolete.
-        // If there were items in added_items from previous operations, they should have already been
-        // converted to line items in those operations. This cleanup ensures we don't have stale metadata.
-        delete metadataUpdate.added_items;
-
-        await orderService.updateOrders([
-            {
-                id: input.orderId,
-                metadata: metadataUpdate,
-                // Keep order as system of record; align DB totals with recalculated values
-                total: input.newTotal,
+    if (existingEdits.length > 0) {
+        // Reuse existing order edit
+        orderChangeId = existingEdits[existingEdits.length - 1].id;
+        logger.info("add-item-to-order", "Reusing existing order edit", {
+            orderId: input.orderId,
+            orderChangeId,
+        });
+    } else {
+        // Create new order edit using Medusa's workflow
+        const { result: newEdit } = await beginOrderEditOrderWorkflow(container).run({
+            input: {
+                order_id: input.orderId,
+                created_by: userId,
+                description: "Customer-initiated item addition",
+                internal_note: "Add item via storefront",
             },
-        ]);
-
-        // Retrieve authoritative order with items to return accurate state (line item ids, totals)
-        const updatedOrder = await orderService.retrieve(input.orderId, {
-            relations: ["items"],
         });
-
-        const items = updatedOrder?.items || [];
-        const foundItem = findNewlyCreatedItem(
-            items,
-            input.variantId,
-            input.quantity
-        );
-
-        logger.info("add-item-to-order", "TAX-01: Order updated with line item", {
+        orderChangeId = newEdit.id;
+        logger.info("add-item-to-order", "Created new order edit", {
             orderId: input.orderId,
-            variantId: input.variantId,
-            quantity: input.quantity,
-            newTotal: input.newTotal,
-            metadataCleanedUp: true
+            orderChangeId,
         });
-
-        return {
-            success: true,
-            orderId: input.orderId,
-            orderWithItems: updatedOrder,
-            newLineItemId: foundItem?.id, // Story 7.1: Return ID for native reservation link
-        };
-    } catch (error) {
-        if (input.stripeIncrementSucceeded) {
-            const criticalError = new AuthMismatchError(
-                input.orderId,
-                input.paymentIntentId,
-                `DB commit failed after Stripe increment. Amount: ${input.newTotal}. Error: ${(error as Error).message}`
-            );
-
-            logger.critical("add-item-to-order", "AUTH_MISMATCH_OVERSOLD - DB commit failed after Stripe increment", {
-                alert: "CRITICAL",
-                issue: "AUTH_MISMATCH_OVERSOLD",
-                orderId: input.orderId,
-                paymentIntentId: input.paymentIntentId,
-                intendedAmount: input.newTotal,
-                actionRequired: "Manual reconciliation required"
-            }, error instanceof Error ? error : new Error(String(error)));
-
-            throw criticalError;
-        }
-
-        throw error;
     }
+
+    // 2. Add item to order edit using Medusa's workflow
+    // This creates an OrderChangeAction with action: "ITEM_ADD"
+    await orderEditAddNewItemWorkflow(container).run({
+        input: {
+            order_id: input.orderId,
+            items: [{
+                variant_id: input.variantId,
+                quantity: input.quantity,
+            }],
+        },
+    });
+
+    logger.info("add-item-to-order", "Added item to order edit", {
+        orderId: input.orderId,
+        orderChangeId,
+        variantId: input.variantId,
+        quantity: input.quantity,
+    });
+
+    // 3. Confirm the order change directly using the Order Module Service
+    // This applies the changes to the order WITHOUT triggering payment reconciliation.
+    // We handle Stripe PaymentIntent updates separately in incrementStripeAuthStep.
+    const confirmResult = await orderModuleService.confirmOrderChange({
+        id: orderChangeId,
+        confirmed_by: userId,
+    });
+
+    logger.info("add-item-to-order", "Order edit confirmed - item added", {
+        orderId: input.orderId,
+        orderChangeId,
+        variantId: input.variantId,
+        quantity: input.quantity,
+        itemsChanged: confirmResult.items?.length || 0,
+    });
+
+    // 4. Fetch the updated order to return the current state
+    const { data: updatedOrders } = await query.graph({
+        entity: "order",
+        fields: [
+            "id",
+            "status",
+            "total",
+            "subtotal",
+            "tax_total",
+            "currency_code",
+            "items.*",
+            "items.variant.*",
+        ],
+        filters: { id: input.orderId },
+    });
+
+    const updatedOrder = updatedOrders[0];
+
+    return {
+        orderChangeId,
+        orderPreview: updatedOrder,
+    };
 }
 
-const updateOrderValuesStep = createStep(
-    "update-order-values",
+const executeOrderEditStep = createStep(
+    "execute-order-edit",
     async (
         input: {
             orderId: string;
-            paymentIntentId: string;
             variantId: string;
-            variantTitle: string;
             quantity: number;
-            unitPrice: number;
-            itemTotal: number;
-            taxAmount: number;
-            newTotal: number;
-            stripeIncrementSucceeded: boolean;
-            currentOrderMetadata: Record<string, any>;
+            userId?: string;
         },
         { container }
-    ): Promise<StepResponse<{ success: boolean; orderId: string; newLineItemId?: string }>> => {
-        const result = await updateOrderValuesHandler(input, { container });
+    ): Promise<StepResponse<OrderEditResult>> => {
+        const result = await executeOrderEditHandler(input, { container });
         return new StepResponse(result);
+    }
+    // Note: No compensation handler - Medusa's workflow already has built-in rollback
+);
+
+/**
+ * Step 5: Update PaymentCollection amount to match new Order total
+ *
+ * After Medusa's confirmOrderEditRequestWorkflow runs, it may have created/updated
+ * a PaymentCollection. We need to ensure the PaymentCollection amount matches
+ * the Order total for consistency.
+ */
+export async function updatePaymentCollectionHandler(
+    input: {
+        paymentCollectionId: string;
+        amount: number;
+    },
+    context: { container: any }
+): Promise<void> {
+    const { container } = context;
+    const paymentModuleService = container.resolve(Modules.PAYMENT);
+
+    await paymentModuleService.updatePaymentCollections(
+        input.paymentCollectionId,
+        { amount: input.amount }
+    );
+
+    logger.info("add-item-to-order", "Updated PaymentCollection", {
+        paymentCollectionId: input.paymentCollectionId,
+        amount: input.amount
+    });
+}
+
+export const updatePaymentCollectionStep = createStep(
+    "update-payment-collection-add-item",
+    async (
+        input: {
+            paymentCollectionId: string | undefined;
+            amount: number;
+            previousAmount: number;
+        },
+        { container }
+    ) => {
+        if (!input.paymentCollectionId) {
+            logger.warn("add-item-to-order", "No PaymentCollection ID found, skipping update");
+            return new StepResponse({ updated: false, paymentCollectionId: "", previousAmount: 0 });
+        }
+
+        await updatePaymentCollectionHandler({
+            paymentCollectionId: input.paymentCollectionId,
+            amount: input.amount
+        }, { container });
+
+        return new StepResponse(
+            { updated: true, paymentCollectionId: input.paymentCollectionId, previousAmount: input.previousAmount },
+            { paymentCollectionId: input.paymentCollectionId, previousAmount: input.previousAmount }
+        );
+    },
+    // Compensation: rollback PaymentCollection amount if downstream steps fail
+    async (compensation, { container }) => {
+        if (!compensation || !compensation.paymentCollectionId) {
+            return;
+        }
+
+        const paymentModuleService = container.resolve(Modules.PAYMENT);
+
+        try {
+            await paymentModuleService.updatePaymentCollections(
+                compensation.paymentCollectionId,
+                { amount: compensation.previousAmount }
+            );
+            logger.info("add-item-to-order", "Rolled back PaymentCollection", {
+                paymentCollectionId: compensation.paymentCollectionId,
+                previousAmount: compensation.previousAmount
+            });
+        } catch (rollbackError) {
+            logger.critical("add-item-to-order", "Failed to rollback PaymentCollection - payment state inconsistent", {
+                paymentCollectionId: compensation.paymentCollectionId,
+                previousAmount: compensation.previousAmount,
+                alert: "CRITICAL",
+                issue: "PAYMENT_COLLECTION_ROLLBACK_FAILED",
+                actionRequired: "Manual reconciliation required",
+                error: (rollbackError as Error).message,
+            }, rollbackError instanceof Error ? rollbackError : new Error(String(rollbackError)));
+            throw rollbackError;
+        }
     }
 );
 
@@ -1252,7 +1001,7 @@ const updateOrderValuesStep = createStep(
 
 export const addItemToOrderWorkflow = createWorkflow(
     "add-item-to-order",
-    (input: AddItemToOrderInput) => {
+    function (input: AddItemToOrderInput) {
         trackWorkflowEventStep({
             event: "order.edit.add_item.started",
             failureEvent: "order.edit.add_item.failed",
@@ -1263,6 +1012,7 @@ export const addItemToOrderWorkflow = createWorkflow(
             },
         }).config({ name: "track-order-edit-add-item-started" });
 
+        // Step 1: Validate preconditions (token, order status, payment status, stock)
         const validation = validatePreconditionsStep({
             orderId: input.orderId,
             modificationToken: input.modificationToken,
@@ -1270,46 +1020,23 @@ export const addItemToOrderWorkflow = createWorkflow(
             quantity: input.quantity,
         });
 
-        // TAX-01: Pass current tax_total and subtotal for recalculation
-        // CRITICAL: Medusa Order.total is the source of truth for payment amounts
-        // Stripe PaymentIntent is the mirrored payment provider state
-        // PaymentCollection should always match Order.total (Medusa canonical payment record)
-        const totalsInput = transform({ validation, input }, (data) => {
-            // Validate Order.total and PaymentIntent.amount are in sync
-            // If mismatch detected, log warning but use Order.total as authoritative source
-            const orderTotal = data.validation.order.total;
-            const paymentIntentAmount = data.validation.paymentIntent.amount;
-            const mismatch = Math.abs(orderTotal - paymentIntentAmount) > 1; // 1 cent tolerance for rounding
-
-            if (mismatch) {
-                logger.warn("add-item-to-order", "Order.total and PaymentIntent.amount mismatch detected - using Order.total as source of truth", {
-                    orderId: data.input.orderId,
-                    orderTotal,
-                    paymentIntentAmount,
-                    difference: orderTotal - paymentIntentAmount,
-                    action: "Using Order.total as authoritative source, Stripe will be updated to match"
-                });
-            }
-
-            return {
-                orderId: data.input.orderId,
-                variantId: data.input.variantId,
-                quantity: data.input.quantity,
-                // Use Order.total as source of truth (Medusa canonical)
-                currentTotal: orderTotal,
-                currentTaxTotal: data.validation.order.tax_total,
-                currentSubtotal: data.validation.order.subtotal,
-                currencyCode: data.validation.order.currency_code,
-            };
-        });
+        // Step 2: Calculate totals for the new item
+        const totalsInput = transform({ validation, input }, (data) => ({
+            variantId: data.input.variantId,
+            quantity: data.input.quantity,
+            currentTotal: data.validation.order.total,
+            currentTaxTotal: data.validation.order.tax_total,
+            currentSubtotal: data.validation.order.subtotal,
+            currencyCode: data.validation.order.currency_code,
+        }));
         const totals = calculateTotalsStep(totalsInput);
 
-        // Update Stripe PaymentIntent to mirror the new Order.total
-        // Stripe is the payment provider mirror, Medusa Order is the source of truth
+        // Step 3: Increment Stripe PaymentIntent authorization
+        // This must happen BEFORE the order edit to ensure we can capture the full amount
         const stripeInput = transform({ validation, totals, input }, (data) => ({
             paymentIntentId: data.validation.paymentIntentId,
-            currentAmount: data.validation.paymentIntent.amount, // Current Stripe state (may be out of sync)
-            newAmount: data.totals.newOrderTotal, // New amount from Order.total + itemTotal (source of truth)
+            currentAmount: data.validation.paymentIntent.amount,
+            newAmount: data.totals.newOrderTotal,
             orderId: data.input.orderId,
             variantId: data.input.variantId,
             quantity: data.input.quantity,
@@ -1318,90 +1045,53 @@ export const addItemToOrderWorkflow = createWorkflow(
         }));
         const stripeResult = incrementStripeAuthStep(stripeInput);
 
-        // PAY-01: Update Payment Collection amount to match Order.total (source of truth)
-        // PaymentCollection is Medusa's canonical payment record and must match Order.total
+        // Step 4: Execute Medusa order edit flow
+        // This uses Medusa's native workflows for proper activity tracking and inventory management
+        const orderEditInput = transform({ validation, input }, (data) => ({
+            orderId: data.input.orderId,
+            variantId: data.input.variantId,
+            quantity: data.input.quantity,
+            userId: "guest_user",
+        }));
+        const orderEditResult = executeOrderEditStep(orderEditInput);
+
+        // Step 5: Update PaymentCollection to match new order total
         const pcInput = transform({ validation, totals }, (data) => ({
             paymentCollectionId: data.validation.paymentCollectionId,
-            amount: data.totals.newOrderTotal, // New Order.total (source of truth)
-            previousAmount: data.validation.order.total, // Current Order.total for rollback
+            amount: data.totals.newOrderTotal,
+            previousAmount: data.validation.order.total,
         }));
         updatePaymentCollectionStep(pcInput);
 
-        // TAX-01: Pass per-item tax to update step (stored in added_items metadata)
-        // Note: We don't track accumulated tax_total/subtotal - only per-item tax_amount
-        const updateInput = transform({ validation, totals, stripeResult, input }, (data) => ({
-            orderId: data.input.orderId,
-            paymentIntentId: data.validation.paymentIntentId,
-            variantId: data.input.variantId,
-            variantTitle: data.totals.variantTitle,
-            quantity: data.input.quantity,
-            unitPrice: data.totals.unitPrice,
-            itemTotal: data.totals.itemTotal,
-            taxAmount: data.totals.taxAmount,
-            newTotal: data.totals.newOrderTotal,
-            stripeIncrementSucceeded: data.stripeResult.success && !data.stripeResult.skipped,
-            currentOrderMetadata: data.validation.order.metadata,
-        }));
-        const updateResult = updateOrderValuesStep(updateInput);
-
-        // Story 7.1: Native reservations
-        const reservationsInput = transform({ validation, input, updateResult }, (data) => {
-            if (!data.validation.inventoryItemId || !data.validation.locationId || !data.updateResult.newLineItemId) {
-                logger.warn("add-item-to-order", "Missing data for reservation creation", {
-                    inventoryItemId: data.validation.inventoryItemId,
-                    locationId: data.validation.locationId,
-                    newLineItemId: data.updateResult.newLineItemId
-                });
-                return [];
-            }
-
-            return [{
-                inventory_item_id: data.validation.inventoryItemId,
-                location_id: data.validation.locationId,
-                quantity: data.input.quantity,
-                line_item_id: data.updateResult.newLineItemId,
-                metadata: {
-                    order_id: data.input.orderId,
-                    created_via: "add-item-workflow"
-                }
-            }];
-        });
-
-        createReservationsStep(reservationsInput);
-
+        // Build final result
+        // Note: orderEditResult.orderPreview contains the order state after confirmOrderEditRequestWorkflow
+        // which includes the newly added items. Fall back to validation.order.items if preview is unavailable.
         const result = transform(
-            { validation, totals, stripeResult, updateResult, input },
+            { validation, totals, stripeResult, orderEditResult, input },
             (data) => {
-                const authoritativeOrder = (data.updateResult as any)?.orderWithItems;
-                const items = authoritativeOrder?.items || [];
-                
-                const foundItem = findNewlyCreatedItem(
-                    items,
-                    data.input.variantId,
-                    data.input.quantity
-                );
+                // The orderPreview from confirmOrderEditRequestWorkflow contains the updated order
+                const orderPreview = data.orderEditResult.orderPreview;
+                const updatedItems = orderPreview?.items || data.validation.order.items;
+                const updatedTotal = orderPreview?.total || data.totals.newOrderTotal;
 
-                const newItem = foundItem ?? {
+                return {
+                    order: {
+                        id: data.validation.orderId,
+                        items: updatedItems,
+                        total: updatedTotal,
+                        difference_due: data.totals.difference,
+                    },
+                    added_item: {
                         variant_id: data.input.variantId,
                         title: data.totals.variantTitle,
                         quantity: data.input.quantity,
                         unit_price: data.totals.unitPrice,
                         total: data.totals.itemTotal,
-                    };
-
-                return {
-                    order:
-                        authoritativeOrder && authoritativeOrder.items
-                            ? authoritativeOrder
-                            : {
-                                  id: data.validation.orderId,
-                                  // Include original items plus the newly added item
-                                  items: [...(data.validation.order.items || []), newItem],
-                                  total: data.totals.newOrderTotal,
-                                  difference_due: data.totals.difference,
-                              },
-                    added_item: newItem,
+                    },
                     payment_status: data.stripeResult.skipped ? "unchanged" : "succeeded",
+                    order_edit: {
+                        order_change_id: data.orderEditResult.orderChangeId,
+                    },
                 };
             }
         );

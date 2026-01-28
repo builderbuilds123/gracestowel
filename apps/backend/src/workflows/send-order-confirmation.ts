@@ -15,7 +15,7 @@ type SendOrderConfirmationInput = {
 
 export const sendOrderConfirmationWorkflow = createWorkflow(
   "send-order-confirmation",
-  (input: SendOrderConfirmationInput) => {
+  function (input: SendOrderConfirmationInput) {
     trackWorkflowEventStep({
       event: "email.order_confirmation.started",
       failureEvent: "email.order_confirmation.failed",
