@@ -20,7 +20,7 @@ export class OrderFactory {
     const regionsResponse = await apiRequest<{ regions: any[] }>({
       request: this.request,
       method: "GET",
-      url: "/admin/regions?fields=+countries,+sales_channels",
+      url: "/admin/regions?fields=+countries,+sales_channels,+currency_code",
     });
 
     // 2. Get Sales Channel (Prefer one associated with the product)
@@ -34,18 +34,35 @@ export class OrderFactory {
       salesChannelId = salesChannelsInput.sales_channels?.[0]?.id;
     }
 
-    // 3. Find a region linked to this sales channel
+    // 3. Fetch variant prices to align region currency
+    const variantResponse = await apiRequest<{ variant: any }>({
+      request: this.request,
+      method: "GET",
+      url: `/admin/products/${product.id}/variants/${variantId}?fields=+prices`,
+    });
+    const variantCurrencies = (variantResponse.variant?.prices || [])
+      .map((price: any) => price.currency_code)
+      .filter((code: string | undefined) => Boolean(code));
+
+    // 4. Find a region linked to this sales channel and supported by variant currency
     // In V2, a region is linked to 1 or more sales channels.
-    // 3. Find a region linked to this sales channel
-    let region = regionsResponse.regions.find(r => 
-      r.sales_channels?.some((sc: any) => sc.id === salesChannelId)
+    let region = regionsResponse.regions.find(r =>
+      r.sales_channels?.some((sc: any) => sc.id === salesChannelId) &&
+      (variantCurrencies.length === 0 || variantCurrencies.includes(r.currency_code))
     );
 
     // If no region supports this sales channel, or if we just want to be safe:
     // Pick the first region and use one of ITS sales channels
     if (!region) {
-      console.warn(`[OrderFactory] Sales channel ${salesChannelId} not linked to any fetched region. Falling back to first available region.`);
-      region = regionsResponse.regions[0];
+      if (variantCurrencies.length > 0) {
+        region = regionsResponse.regions.find(r =>
+          variantCurrencies.includes(r.currency_code)
+        );
+      }
+      if (!region) {
+        console.warn(`[OrderFactory] Sales channel ${salesChannelId} not linked to any fetched region. Falling back to first available region.`);
+        region = regionsResponse.regions[0];
+      }
       const compatibleScId = region.sales_channels?.[0]?.id;
       if (compatibleScId) {
         console.warn(`[OrderFactory] Switched to region-compatible sales channel: ${compatibleScId}`);
