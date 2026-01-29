@@ -107,6 +107,58 @@ test.describe("Backend API workflows (admin)", () => {
     expect(fetched.customer.id).toBe(customer.id);
   });
 
+  test("fulfill order and capture payment via admin APIs", async ({
+    apiRequest,
+    orderFactory,
+  }) => {
+    const order = await orderFactory.createOrder();
+    test.skip(!order.id, "Order creation endpoint unavailable");
+
+    const orderResponse = await apiRequest<{ order: any }>({
+      method: "GET",
+      url: `/admin/orders/${order.id}`,
+    });
+
+    const item = orderResponse.order?.items?.[0];
+    test.skip(!item?.id, "Order item not available for fulfillment");
+
+    let locationId: string | undefined;
+    try {
+      const locations = await apiRequest<{ stock_locations: Array<{ id: string }> }>({
+        method: "GET",
+        url: "/admin/stock-locations",
+      });
+      locationId = locations.stock_locations?.[0]?.id;
+    } catch {
+      locationId = undefined;
+    }
+
+    await apiRequest({
+      method: "POST",
+      url: `/admin/orders/${order.id}/fulfillments`,
+      data: {
+        items: [{ id: item.id, quantity: item.quantity || 1 }],
+        ...(locationId ? { location_id: locationId } : {}),
+      },
+    });
+
+    const paymentId = orderResponse.order?.payment_collections?.[0]?.payments?.[0]?.id;
+    test.skip(!paymentId, "Payment record not found for capture");
+
+    await apiRequest({
+      method: "POST",
+      url: `/admin/payments/${paymentId}/capture`,
+      data: {},
+    });
+
+    const payment = await apiRequest<{ payment: { captured_at?: string | null } }>({
+      method: "GET",
+      url: `/admin/payments/${paymentId}`,
+    });
+
+    expect(payment.payment.captured_at).toBeTruthy();
+  });
+
   // FIXME: This test encounters 500 errors when adding line items in CI environment
   // Likely due to backend seeding or inventory configuration issues
   test.fixme("carts and orders apply discounts, shipping, tax, and payment intents", async ({
