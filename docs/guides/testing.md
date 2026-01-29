@@ -49,13 +49,16 @@ This document outlines the testing strategy for the Grace's Towel e-commerce pla
 **Focus**: Full system verification in a browser-like environment.
 
 **Critical Paths**:
-1. **Guest Checkout**: Home → Product → Add to Cart → Checkout → Payment → Success
-2. **Search & Filter**: Search for "Towel" → Filter by Color → Verify Results
-3. **Cart Management**: Add item → Open Drawer → Increment Quantity → Remove Item
+1. **Checkout**: Product → Add to Cart → Checkout
+2. **Promo Codes**: Apply and remove discount code in checkout
+3. **Order Modification**: Edit/cancel availability during grace period
+4. **Order Cancellation**: Cancel during grace period via order status page
+5. **Payment Capture Window**: Post‑grace behavior (processing / no‑cancel)
 
 **PR Smoke Suite** (fast-fail):
-- `apps/e2e/tests/full-checkout.happy.spec.ts`
-- `apps/e2e/tests/storefront/homepage-navigation.spec.ts`
+- `apps/e2e/tests/checkout.spec.ts`
+- `apps/e2e/tests/storefront/promotions.spec.ts`
+- `apps/e2e/tests/grace-period.spec.ts`
 - `apps/e2e/tests/backend/api-workflows.spec.ts`
 
 ## Running Tests
