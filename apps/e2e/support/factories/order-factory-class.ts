@@ -188,10 +188,20 @@ export class OrderFactory {
   async cleanup(): Promise<void> {
     for (const orderId of this.createdOrderIds) {
       try {
+        const orderResponse = await apiRequest<{ order?: { fulfillments?: unknown[]; status?: string } }>({
+          request: this.request,
+          method: "GET",
+          url: `/admin/orders/${orderId}`,
+        });
+        const fulfillmentCount = orderResponse.order?.fulfillments?.length ?? 0;
+        const status = orderResponse.order?.status;
+        if (fulfillmentCount > 0 || status === "canceled") {
+          continue;
+        }
         await apiRequest({
           request: this.request,
-          method: "DELETE",
-          url: `/admin/orders/${orderId}`,
+          method: "POST",
+          url: `/admin/orders/${orderId}/cancel`,
         });
       } catch (error) {
         console.warn(`Order cleanup skipped for ${orderId}.`);
